@@ -29,6 +29,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Install golangci-lint v2
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.1.6
+
       - name: Install tools
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@latest
@@ -36,19 +41,8 @@ jobs:
           curl -fsSL https://dprint.dev/install.sh | sh
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
 
-      - name: Lint Go
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.1.6
-
-      - name: Lint Markdown
-        run: task lint:markdown
-
-      - name: Lint YAML
-        run: task lint:yaml
-
-      - name: Lint Actions
-        run: task lint:actions
+      - name: Lint
+        run: task lint
 
       - name: Check formatting
         run: task fmt:check
