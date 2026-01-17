@@ -13,11 +13,23 @@ var (
 	date    = "unknown"
 )
 
-func main() {
+// run executes the CLI and returns an exit code.
+// This is separated from main() to make testing easier.
+func run() int {
 	cmd := NewRootCmd()
-	cmd.Version = fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date)
+	cmd.Version = formatVersion(version, commit, date)
 
 	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
+		return 1
 	}
+	return 0
+}
+
+// formatVersion creates a version string from components.
+func formatVersion(ver, com, dt string) string {
+	return fmt.Sprintf("%s (commit: %s, built: %s)", ver, com, dt)
+}
+
+func main() {
+	os.Exit(run())
 }

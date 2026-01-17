@@ -4,7 +4,9 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -112,7 +114,12 @@ func (s *Server) Start() error {
 	}
 
 	go func() {
-		_ = s.httpServer.Serve(listener)
+		if err := s.httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("control socket server error",
+				"component", s.component,
+				"error", err,
+			)
+		}
 	}()
 
 	return nil
@@ -128,9 +135,25 @@ func (s *Server) Stop(ctx context.Context) error {
 		}
 	}
 
+	// Close listener if httpServer didn't handle it
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			slog.Warn("failed to close control socket listener",
+				"component", s.component,
+				"error", err,
+			)
+		}
+	}
+
 	// Clean up socket file
 	if s.socketPath != "" {
-		_ = os.Remove(s.socketPath)
+		if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
+			slog.Warn("failed to remove control socket file",
+				"component", s.component,
+				"path", s.socketPath,
+				"error", err,
+			)
+		}
 	}
 
 	return nil
@@ -142,7 +165,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		Status:    "healthy",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
-	writeJSON(w, http.StatusOK, resp)
+	if err := writeJSON(w, http.StatusOK, resp); err != nil {
+		slog.Error("failed to write health response",
+			"component", s.component,
+			"error", err,
+		)
+	}
 }
 
 // handleStatus returns running status.
@@ -153,7 +181,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		UptimeSeconds: int64(time.Since(s.startTime).Seconds()),
 		Component:     s.component,
 	}
-	writeJSON(w, http.StatusOK, resp)
+	if err := writeJSON(w, http.StatusOK, resp); err != nil {
+		slog.Error("failed to write status response",
+			"component", s.component,
+			"error", err,
+		)
+	}
 }
 
 // handleShutdown initiates graceful shutdown.
@@ -161,7 +194,12 @@ func (s *Server) handleShutdown(w http.ResponseWriter, _ *http.Request) {
 	resp := ShutdownResponse{
 		Message: "shutdown initiated",
 	}
-	writeJSON(w, http.StatusOK, resp)
+	if err := writeJSON(w, http.StatusOK, resp); err != nil {
+		slog.Error("failed to write shutdown response",
+			"component", s.component,
+			"error", err,
+		)
+	}
 
 	// Trigger shutdown asynchronously
 	if s.shutdownFunc != nil {
@@ -170,8 +208,14 @@ func (s *Server) handleShutdown(w http.ResponseWriter, _ *http.Request) {
 }
 
 // writeJSON writes a JSON response with the given status code.
-func writeJSON(w http.ResponseWriter, statusCode int, v any) {
+// Returns an error if JSON encoding fails.
+//
+//nolint:unparam // statusCode is always http.StatusOK currently, but API is designed for extensibility
+func writeJSON(w http.ResponseWriter, statusCode int, v any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		return fmt.Errorf("failed to encode JSON response: %w", err)
+	}
+	return nil
 }

@@ -1,9 +1,14 @@
 package control
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -185,4 +190,127 @@ func TestNewServer_SetsRunningTrue(t *testing.T) {
 	if !s.running.Load() {
 		t.Error("server should be running after creation")
 	}
+}
+
+func TestWriteJSON_ReturnsErrorForUnencodableValue(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	// Channel values cannot be encoded to JSON
+	unencodable := make(chan int)
+	err := writeJSON(w, http.StatusOK, unencodable)
+
+	if err == nil {
+		t.Error("writeJSON should return error for unencodable value")
+	}
+
+	if !strings.Contains(err.Error(), "failed to encode JSON response") {
+		t.Errorf("error message should contain 'failed to encode JSON response', got: %v", err)
+	}
+}
+
+func TestWriteJSON_SucceedsForValidValue(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	data := map[string]string{"key": "value"}
+	err := writeJSON(w, http.StatusOK, data)
+
+	if err != nil {
+		t.Errorf("writeJSON should succeed for valid value, got error: %v", err)
+	}
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", contentType, "application/json")
+	}
+}
+
+func TestHandleHealth_LogsErrorOnJSONEncodingFailure(t *testing.T) {
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError})
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(originalLogger)
+
+	s := NewServer("test-component", nil)
+
+	// Create a response writer that will cause encoding to fail
+	w := &failingWriter{ResponseRecorder: httptest.NewRecorder()}
+
+	s.handleHealth(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "failed to write health response") {
+		t.Errorf("expected log to contain 'failed to write health response', got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "test-component") {
+		t.Errorf("expected log to contain component name 'test-component', got: %s", logOutput)
+	}
+}
+
+func TestStop_LogsSocketFileRemovalError(t *testing.T) {
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(originalLogger)
+
+	s := NewServer("test-component", nil)
+	// Set socket path to a directory with contents - os.Remove cannot remove
+	// non-empty directories and will return an error that is NOT IsNotExist
+	tmpDir := t.TempDir()
+	// Create a file inside the directory to make it non-empty
+	f, err := os.Create(tmpDir + "/test.txt") //nolint:gosec // tmpDir is from t.TempDir(), safe path
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	_ = f.Close()
+
+	s.socketPath = tmpDir
+
+	// Stop should not return an error (it logs instead)
+	err = s.Stop(context.Background())
+	if err != nil {
+		t.Errorf("Stop should not return error, got: %v", err)
+	}
+
+	// The error should be logged since it's not IsNotExist
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "failed to remove control socket file") {
+		t.Errorf("expected log to contain 'failed to remove control socket file', got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "test-component") {
+		t.Errorf("expected log to contain component name 'test-component', got: %s", logOutput)
+	}
+}
+
+func TestStop_HandlesNilServerGracefully(t *testing.T) {
+	s := NewServer("test", nil)
+	// httpServer is nil, listener is nil, socketPath is empty
+
+	err := s.Stop(context.Background())
+	if err != nil {
+		t.Errorf("Stop should succeed with nil server components, got: %v", err)
+	}
+}
+
+// failingWriter is a ResponseWriter that fails during Write
+type failingWriter struct {
+	*httptest.ResponseRecorder
+}
+
+func (w *failingWriter) Write([]byte) (int, error) {
+	// Simulate a write failure after headers are written
+	return 0, &writeError{}
+}
+
+type writeError struct{}
+
+func (e *writeError) Error() string {
+	return "simulated write failure"
 }
