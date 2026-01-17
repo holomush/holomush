@@ -1,14 +1,14 @@
 # Getting Started with HoloMUSH
 
-This guide covers setting up, running, and using HoloMUSH in its current Phase 1 state.
+This guide covers setting up, running, and using HoloMUSH.
 
 ## Prerequisites
 
 | Requirement   | Version | Purpose                        |
 | ------------- | ------- | ------------------------------ |
-| Go            | 1.23+   | Build and run the server       |
+| Go            | 1.24+   | Build and run the server       |
 | Task          | Latest  | Task runner for build commands |
-| Docker        | Latest  | Required for integration tests |
+| Docker        | Latest  | Required for PostgreSQL        |
 | Telnet client | Any     | Connect to the server          |
 
 ### Installing Prerequisites
@@ -51,28 +51,14 @@ task build
 
 This creates the `holomush` binary in the project root.
 
-## Running the Server
+## Running HoloMUSH
 
-### Development Mode (In-Memory Store)
+HoloMUSH uses a two-process architecture: **Core** (game engine) and **Gateway** (protocol servers). Both must be running for a functional server.
 
-```bash
-task dev
-```
-
-The server starts on port 4000 by default. All data is stored in memory and lost on restart.
-
-### Custom Port
+### Quick Start
 
 ```bash
-TELNET_ADDR=:4201 task dev
-```
-
-### Production Mode (PostgreSQL)
-
-Phase 1 includes PostgreSQL support, but requires manual database setup:
-
-```bash
-# Start PostgreSQL
+# Terminal 1: Start PostgreSQL
 docker run -d --name holomush-db \
   -e POSTGRES_DB=holomush \
   -e POSTGRES_USER=holomush \
@@ -80,9 +66,96 @@ docker run -d --name holomush-db \
   -p 5432:5432 \
   postgres:16
 
-# Run with PostgreSQL
-DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable" ./holomush
+# Terminal 2: Start Core
+./holomush core --database-url="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable"
+
+# Terminal 3: Start Gateway
+./holomush gateway
 ```
+
+### Development Mode
+
+For development with human-readable logs:
+
+```bash
+# Start Core with text logging
+./holomush core --database-url="..." --log-format=text
+
+# Start Gateway with text logging
+./holomush gateway --log-format=text
+```
+
+## CLI Commands
+
+### Core Commands
+
+| Command                | Description                          |
+| ---------------------- | ------------------------------------ |
+| `holomush core`        | Start the core process               |
+| `holomush core stop`   | Stop running core via control socket |
+| `holomush core status` | Show core health                     |
+
+**Core Flags:**
+
+| Flag             | Description                  | Default          |
+| ---------------- | ---------------------------- | ---------------- |
+| `--grpc-addr`    | gRPC listen address          | `localhost:9000` |
+| `--database-url` | PostgreSQL connection string | (required)       |
+| `--log-format`   | Log format: `json` or `text` | `json`           |
+| `--config-dir`   | Override config directory    | XDG default      |
+
+### Gateway Commands
+
+| Command                   | Description                             |
+| ------------------------- | --------------------------------------- |
+| `holomush gateway`        | Start the gateway process               |
+| `holomush gateway stop`   | Stop running gateway via control socket |
+| `holomush gateway status` | Show gateway health                     |
+
+**Gateway Flags:**
+
+| Flag            | Description                          | Default          |
+| --------------- | ------------------------------------ | ---------------- |
+| `--telnet-addr` | Telnet listen address                | `:4201`          |
+| `--core-addr`   | Core gRPC address                    | `localhost:9000` |
+| `--game-id`     | Expected game_id for cert validation | (from config)    |
+| `--log-format`  | Log format: `json` or `text`         | `json`           |
+
+### Global Commands
+
+| Command           | Description                   |
+| ----------------- | ----------------------------- |
+| `holomush status` | Show health of all components |
+| `holomush --help` | Show all available commands   |
+
+## Configuration
+
+### First Run
+
+On first startup, Core automatically:
+
+1. Initializes the database schema
+2. Generates a unique `game_id` (stored in database)
+3. Creates mTLS certificates in `$XDG_CONFIG_HOME/holomush/certs/`
+4. Writes Gateway configuration to `$XDG_CONFIG_HOME/holomush/gateway.yaml`
+
+### File Locations
+
+HoloMUSH follows the XDG Base Directory Specification:
+
+| Directory                    | Contents                 |
+| ---------------------------- | ------------------------ |
+| `~/.config/holomush/`        | Configuration, TLS certs |
+| `~/.local/state/holomush/`   | Logs, PID files          |
+| `$XDG_RUNTIME_DIR/holomush/` | Control sockets          |
+
+### Environment Variables
+
+| Variable          | Description                                          |
+| ----------------- | ---------------------------------------------------- |
+| `XDG_CONFIG_HOME` | Override config directory (default: `~/.config`)     |
+| `XDG_STATE_HOME`  | Override state directory (default: `~/.local/state`) |
+| `XDG_RUNTIME_DIR` | Override runtime directory                           |
 
 ## Connecting to the Server
 

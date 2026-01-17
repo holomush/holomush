@@ -14,7 +14,142 @@ For complete specifications, see the [full architecture document](../plans/2026-
 | Session persistence | Tmux-style reconnection with event replay          |
 | Platform first      | Built for RP and sandbox gameplay                  |
 
-## System Architecture
+## Two-Process Architecture
+
+HoloMUSH uses a two-process model: **Gateway** and **Core**. This separation enables hot-reload of the core without disconnecting clients.
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                         holomush gateway                        │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │   Telnet    │  │    Web      │  │   Control Socket        │  │
+│  │   Server    │  │   Server    │  │   (/health, /shutdown)  │  │
+│  └──────┬──────┘  └──────┬──────┘  └─────────────────────────┘  │
+│         │                │                                       │
+│         └───────┬────────┘                                       │
+│                 │                                                │
+│         ┌───────▼────────┐                                       │
+│         │  gRPC Client   │                                       │
+│         │  (mTLS, auto-  │                                       │
+│         │   reconnect)   │                                       │
+│         └───────┬────────┘                                       │
+└─────────────────┼───────────────────────────────────────────────┘
+                  │ gRPC over mTLS (localhost:9000)
+┌─────────────────┼───────────────────────────────────────────────┐
+│         ┌───────▼────────┐                      holomush core   │
+│         │  gRPC Server   │                                       │
+│         │  (mTLS)        │                                       │
+│         └───────┬────────┘                                       │
+│                 │                                                │
+│  ┌──────────────┼──────────────┐                                 │
+│  │              │              │                                 │
+│  ▼              ▼              ▼                                 │
+│ ┌────────┐ ┌──────────┐ ┌─────────────┐ ┌─────────────────────┐ │
+│ │ Engine │ │Broadcaster│ │ Plugin Host │ │   Control Socket    │ │
+│ └────────┘ └──────────┘ └─────────────┘ │  (/health, /ready)  │ │
+│      │                                   └─────────────────────┘ │
+│      ▼                                                           │
+│ ┌──────────────────────────────────────────────────────────────┐ │
+│ │                    PostgreSQL Database                        │ │
+│ │            (events, world data, system_info)                  │ │
+│ └──────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Process Responsibilities
+
+| Process | Responsibilities                                               | Database Access |
+| ------- | -------------------------------------------------------------- | --------------- |
+| Gateway | Protocol servers (telnet, web), client connections, forwarding | None            |
+| Core    | Engine, eventing, plugins, sessions, game logic                | PostgreSQL      |
+
+### Communication Flow
+
+1. Clients connect to Gateway via telnet (port 4201) or WebSocket (future)
+2. Gateway forwards commands to Core via gRPC over mTLS
+3. Core processes commands, generates events, returns responses
+4. Core streams events back to Gateway via gRPC server-streaming
+5. Gateway delivers events to connected clients
+
+### Hot-Reload Capability
+
+- Gateway holds client connections and survives Core restarts
+- Gateway's gRPC client auto-reconnects when Core comes back
+- Clients experience brief delay during Core restart, no disconnection
+
+## gRPC over mTLS
+
+Gateway and Core communicate using gRPC with mutual TLS authentication.
+
+### Certificate Hierarchy
+
+```text
+Root CA (self-signed, auto-generated)
+├── Core certificate (server)
+│   └── SAN: localhost, 127.0.0.1, holomush-<game_id>
+└── Gateway certificate (client)
+    └── CN: holomush-gateway
+```
+
+### mTLS Validation
+
+| Validator | Validates             | Checks                                         |
+| --------- | --------------------- | ---------------------------------------------- |
+| Gateway   | Core's server cert    | Trust chain to Root CA, SAN contains `game_id` |
+| Core      | Gateway's client cert | Trust chain to Root CA                         |
+
+Certificates are auto-generated on first run and stored in XDG config directories.
+
+## XDG Directory Layout
+
+HoloMUSH follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for file locations.
+
+| XDG Variable      | Default          | HoloMUSH Usage           |
+| ----------------- | ---------------- | ------------------------ |
+| `XDG_CONFIG_HOME` | `~/.config`      | Configuration, TLS certs |
+| `XDG_DATA_HOME`   | `~/.local/share` | Persistent data          |
+| `XDG_STATE_HOME`  | `~/.local/state` | Logs, PID files          |
+| `XDG_RUNTIME_DIR` | `/run/user/$UID` | Control sockets          |
+
+### Directory Structure
+
+```text
+$XDG_CONFIG_HOME/holomush/
+├── gateway.yaml         # Gateway config (game_id, core_addr)
+└── certs/
+    ├── root-ca.crt      # Root CA certificate
+    ├── root-ca.key      # Root CA private key
+    ├── core.crt         # Core server certificate
+    ├── core.key         # Core server private key
+    ├── gateway.crt      # Gateway client certificate
+    └── gateway.key      # Gateway client private key
+
+$XDG_STATE_HOME/holomush/
+├── core.pid             # Core process ID
+├── gateway.pid          # Gateway process ID
+└── logs/
+    ├── core.log
+    └── gateway.log
+
+$XDG_RUNTIME_DIR/holomush/
+├── core.sock            # Core control socket
+└── gateway.sock         # Gateway control socket
+```
+
+## Control Socket Protocol
+
+Each process exposes a Unix socket for lifecycle management and health checks.
+
+| Endpoint    | Method | Description                  |
+| ----------- | ------ | ---------------------------- |
+| `/health`   | GET    | Health check (200 OK or 503) |
+| `/ready`    | GET    | Readiness check              |
+| `/shutdown` | POST   | Graceful shutdown            |
+
+CLI commands (`holomush core stop`, `holomush gateway status`) communicate via these sockets.
+
+## System Architecture (Detailed)
 
 ```mermaid
 graph TB
@@ -23,13 +158,20 @@ graph TB
         W[Web Client<br/>SvelteKit PWA]
     end
 
-    subgraph Core["Go Core (Event-Oriented)"]
-        TA[Telnet Adapter]
-        WA[Web Adapter]
-        SM[Session Manager<br/>• Per-char buffer<br/>• Reconnect/sync]
-        WE[World Engine<br/>• Locations<br/>• Commands]
-        PH[Plugin Host<br/>• WASM sandbox<br/>• wazero runtime]
-        BC[Broadcaster<br/>• Real-time events]
+    subgraph Gateway["Gateway Process"]
+        TA[Telnet Server]
+        WA[Web Server]
+        GC[gRPC Client]
+        GCS[Control Socket]
+    end
+
+    subgraph Core["Core Process"]
+        GS[gRPC Server]
+        SM[Session Manager]
+        WE[World Engine]
+        PH[Plugin Host<br/>wazero]
+        BC[Broadcaster]
+        CCS[Control Socket]
     end
 
     subgraph Storage
@@ -40,12 +182,14 @@ graph TB
 
     T --> TA
     W --> WA
-    TA --> SM
-    WA --> SM
+    TA --> GC
+    WA --> GC
+    GC -->|gRPC/mTLS| GS
+    GS --> SM
     SM <--> WE
     WE <--> PH
     WE --> BC
-    BC --> SM
+    BC --> GS
     WE --> ES
     WE --> WD
     WE --> ABAC
