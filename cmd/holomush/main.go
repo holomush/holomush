@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -59,7 +60,7 @@ func run() error {
 
 	// Run
 	if err := srv.Run(ctx); err != nil {
-		return err
+		return fmt.Errorf("server run failed: %w", err)
 	}
 
 	slog.Info("Server stopped")

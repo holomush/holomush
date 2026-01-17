@@ -10,6 +10,7 @@ import (
 // EventType identifies the kind of event.
 type EventType string
 
+// Event types for game events.
 const (
 	EventTypeSay    EventType = "say"
 	EventTypePose   EventType = "pose"
@@ -21,6 +22,7 @@ const (
 // ActorKind identifies what type of entity caused an event.
 type ActorKind uint8
 
+// Actor kinds for event sources.
 const (
 	ActorCharacter ActorKind = iota
 	ActorSystem

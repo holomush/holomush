@@ -3,6 +3,12 @@
     "allow": [
       "WebFetch(domain:proxy.golang.org)",
       "WebFetch(domain:sum.golang.org)",
+      "WebFetch(domain:sum.golang.org)",
+      "WebFetch(domain:dprint.dev)",
+      "WebFetch(domain:plugins.dprint.dev)",
+      "WebFetch(domain:release-assets.githubusercontent.com)",
+      "WebFetch(domain:index.crates.io)",
+      "WebFetch(domain:static.crates.io)",
       "Edit(~/Library/Caches/**)",
       "Edit(~/go/pkg/**)"
     ]

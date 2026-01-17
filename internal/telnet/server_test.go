@@ -18,7 +18,7 @@ func TestServer_AcceptsConnections(t *testing.T) {
 
 	srv := NewServer(":0", engine, sessions)
 	go func() {
-		//nolint:errcheck // Server shutdown error is expected when context cancels
+		//nolint:errcheck,gosec // Server shutdown error is expected when context cancels
 		srv.Run(ctx)
 	}()
 
@@ -33,7 +33,9 @@ func TestServer_AcceptsConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close() // Best effort cleanup in tests
+	}()
 
 	err = conn.SetReadDeadline(time.Now().Add(time.Second))
 	if err != nil {

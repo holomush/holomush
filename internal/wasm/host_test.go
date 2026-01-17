@@ -26,7 +26,9 @@ var addWASM = []byte{
 func TestPluginHost_LoadAndCall(t *testing.T) {
 	ctx := context.Background()
 	host := NewPluginHost()
-	defer host.Close(ctx)
+	defer func() {
+		_ = host.Close(ctx) // Best effort cleanup in tests
+	}()
 
 	// Load the add module
 	err := host.LoadPlugin(ctx, "math", addWASM)
@@ -48,7 +50,9 @@ func TestPluginHost_LoadAndCall(t *testing.T) {
 func TestPluginHost_LoadInvalidWASM(t *testing.T) {
 	ctx := context.Background()
 	host := NewPluginHost()
-	defer host.Close(ctx)
+	defer func() {
+		_ = host.Close(ctx) // Best effort cleanup in tests
+	}()
 
 	err := host.LoadPlugin(ctx, "invalid", []byte{0x00, 0x01, 0x02, 0x03})
 	if err == nil {

@@ -37,6 +37,7 @@ func NewMemoryEventStore() *MemoryEventStore {
 	}
 }
 
+// Append persists an event to the in-memory store.
 func (s *MemoryEventStore) Append(_ context.Context, event Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -44,6 +45,7 @@ func (s *MemoryEventStore) Append(_ context.Context, event Event) error {
 	return nil
 }
 
+// Replay returns events from a stream starting after the given ID.
 func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -72,6 +74,7 @@ func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid
 	return result, nil
 }
 
+// LastEventID returns the most recent event ID for a stream.
 func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.ULID, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
