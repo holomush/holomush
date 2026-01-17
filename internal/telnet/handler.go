@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"strings"
@@ -72,6 +74,12 @@ func (h *ConnectionHandler) Handle(ctx context.Context) {
 
 		line, err := h.reader.ReadString('\n')
 		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				slog.Debug("connection read error",
+					"conn_id", h.connID.String(),
+					"error", err,
+				)
+			}
 			if h.authed {
 				h.sessions.Disconnect(h.charID, h.connID)
 			}
@@ -259,5 +267,6 @@ func (h *ConnectionHandler) sendEvent(e core.Event) {
 			"event_id", e.ID.String(),
 			"type", e.Type,
 		)
+		h.send(fmt.Sprintf("[%s] <event: %s>", actorPrefix, e.Type))
 	}
 }

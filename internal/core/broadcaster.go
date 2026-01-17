@@ -52,6 +52,10 @@ func (b *Broadcaster) Broadcast(event Event) {
 		select {
 		case ch <- event:
 		default:
+			// Known limitation: User has already been told their message was sent
+			// before we attempt delivery to subscribers. If a subscriber's buffer
+			// is full, they will miss this event. Future improvement: implement
+			// delivery acknowledgment before confirming to sender.
 			slog.Warn("event dropped: subscriber buffer full",
 				"stream", event.Stream,
 				"event_id", event.ID.String(),
