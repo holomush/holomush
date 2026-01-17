@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   modules-download-mode: readonly
@@ -12,7 +14,6 @@ linters:
 
     # Style
     - revive
-    - gofumpt
     - misspell
 
     # Performance
@@ -67,9 +68,6 @@ linters-settings:
       - name: unused-parameter
       - name: unreachable-code
       - name: redefines-builtin-id
-
-  gofumpt:
-    extra-rules: true
 
   gocritic:
     enabled-tags:

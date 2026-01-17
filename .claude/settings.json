@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:proxy.golang.org)",
+      "WebFetch(domain:sum.golang.org)",
+      "Edit(~/Library/Caches/**)",
+      "Edit(~/go/pkg/**)"
+    ]
+  },
+  "sandbox": {
+    "allowUnsandboxedCommands": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": [
+      "docker",
+      "git",
+      "gh",
+      "bd"
+    ],
+    "network": {
+      "allowAllUnixSockets": true,
+      "allowLocalBinding": true
+    }
+  }
+}

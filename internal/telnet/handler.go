@@ -60,7 +60,11 @@ func NewConnectionHandler(conn net.Conn, engine *core.Engine, sessions *core.Ses
 
 // Handle processes the connection until closed.
 func (h *ConnectionHandler) Handle(ctx context.Context) {
-	defer h.conn.Close()
+	defer func() {
+		if err := h.conn.Close(); err != nil {
+			slog.Debug("error closing connection", "error", err)
+		}
+	}()
 
 	h.send("Welcome to HoloMUSH!")
 	h.send("Use: connect <username> <password>")
@@ -217,7 +221,9 @@ func (h *ConnectionHandler) handleQuit() {
 	if h.authed {
 		h.sessions.Disconnect(h.charID, h.connID)
 	}
-	h.conn.Close()
+	if err := h.conn.Close(); err != nil {
+		slog.Debug("error closing connection on quit", "error", err)
+	}
 }
 
 func (h *ConnectionHandler) send(msg string) {

@@ -54,7 +54,9 @@ func (s *Server) Run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		listener.Close()
+		if err := listener.Close(); err != nil {
+			slog.Debug("error closing listener", "error", err)
+		}
 	}()
 
 	for {
