@@ -38,7 +38,10 @@ func (s *PostgresEventStore) Close() {
 // Migrate runs database migrations.
 func (s *PostgresEventStore) Migrate(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, migrationSQL)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to run database migration: %w", err)
+	}
+	return nil
 }
 
 // Append persists an event.

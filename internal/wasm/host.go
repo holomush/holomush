@@ -4,6 +4,7 @@ package wasm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
@@ -25,12 +26,16 @@ func NewPluginHost() *PluginHost {
 }
 
 // Close shuts down the runtime and all modules.
+// After Close, the PluginHost should not be reused.
 func (h *PluginHost) Close(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if h.runtime != nil {
-		return h.runtime.Close(ctx)
+		err := h.runtime.Close(ctx)
+		h.runtime = nil
+		h.modules = make(map[string]api.Module)
+		return err
 	}
 	return nil
 }
@@ -46,19 +51,26 @@ func (h *PluginHost) LoadPlugin(ctx context.Context, name string, wasm []byte) e
 
 	mod, err := h.runtime.Instantiate(ctx, wasm)
 	if err != nil {
+		slog.Error("failed to instantiate WASM plugin",
+			"plugin", name,
+			"error", err,
+		)
 		return fmt.Errorf("failed to instantiate %s: %w", name, err)
 	}
 
+	slog.Debug("loaded WASM plugin", "plugin", name)
 	h.modules[name] = mod
 	return nil
 }
 
 // CallFunction calls an exported function in a loaded plugin.
+// The read lock is held for the duration of the call to prevent
+// concurrent Close() from invalidating the module mid-execution.
 func (h *PluginHost) CallFunction(ctx context.Context, plugin, function string, args ...uint64) ([]uint64, error) {
 	h.mu.RLock()
-	mod, ok := h.modules[plugin]
-	h.mu.RUnlock()
+	defer h.mu.RUnlock()
 
+	mod, ok := h.modules[plugin]
 	if !ok {
 		return nil, fmt.Errorf("plugin %s not loaded", plugin)
 	}

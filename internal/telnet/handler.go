@@ -14,6 +14,24 @@ import (
 	"github.com/holomush/holomush/internal/core"
 )
 
+// Hardcoded test data for Phase 1 - validated at package init time.
+var (
+	testCharID     ulid.ULID
+	testLocationID ulid.ULID
+)
+
+func init() {
+	var err error
+	testCharID, err = ulid.Parse("01HK153X0006AFVGQT5ZYC0GEK")
+	if err != nil {
+		panic(fmt.Sprintf("invalid test character ULID constant: %v", err))
+	}
+	testLocationID, err = ulid.Parse("01HK153X0006AFVGQT61FPQX3S")
+	if err != nil {
+		panic(fmt.Sprintf("invalid test location ULID constant: %v", err))
+	}
+}
+
 // ConnectionHandler handles a single telnet connection.
 type ConnectionHandler struct {
 	conn       net.Conn
@@ -104,16 +122,9 @@ func (h *ConnectionHandler) handleConnect(ctx context.Context, arg string) {
 		return
 	}
 
-	// Hardcoded test character - panic on invalid constants as they indicate a bug
-	var err error
-	h.charID, err = ulid.Parse("01JTEST001CHRCTR00000001")
-	if err != nil {
-		panic(fmt.Sprintf("invalid test character ULID: %v", err))
-	}
-	h.locationID, err = ulid.Parse("01JTEST001LOCATN00000001")
-	if err != nil {
-		panic(fmt.Sprintf("invalid test location ULID: %v", err))
-	}
+	// Use package-level test data validated at init time
+	h.charID = testCharID
+	h.locationID = testLocationID
 	h.charName = "TestChar"
 	h.authed = true
 
@@ -202,7 +213,12 @@ func (h *ConnectionHandler) handleQuit() {
 }
 
 func (h *ConnectionHandler) send(msg string) {
-	fmt.Fprintln(h.conn, msg)
+	if _, err := fmt.Fprintln(h.conn, msg); err != nil {
+		slog.Debug("failed to send message to client",
+			"conn_id", h.connID.String(),
+			"error", err,
+		)
+	}
 }
 
 func (h *ConnectionHandler) sendEvent(e core.Event) {
@@ -218,6 +234,7 @@ func (h *ConnectionHandler) sendEvent(e core.Event) {
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
 			slog.Error("failed to unmarshal say event",
 				"event_id", e.ID.String(),
+				"stream", e.Stream,
 				"error", err,
 			)
 			h.send(fmt.Sprintf("[%s] <corrupted message>", actorPrefix))
@@ -230,6 +247,7 @@ func (h *ConnectionHandler) sendEvent(e core.Event) {
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
 			slog.Error("failed to unmarshal pose event",
 				"event_id", e.ID.String(),
+				"stream", e.Stream,
 				"error", err,
 			)
 			h.send(fmt.Sprintf("[%s] <corrupted action>", actorPrefix))

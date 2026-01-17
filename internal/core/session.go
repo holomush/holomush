@@ -28,6 +28,7 @@ func NewSessionManager() *SessionManager {
 
 // Connect attaches a connection to a character's session.
 // Creates the session if it doesn't exist.
+// Returns a copy of the session to prevent external modification.
 func (sm *SessionManager) Connect(charID, connID ulid.ULID) *Session {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -43,7 +44,20 @@ func (sm *SessionManager) Connect(charID, connID ulid.ULID) *Session {
 	}
 
 	session.Connections = append(session.Connections, connID)
-	return session
+
+	// Return a copy to prevent external modification
+	cursors := make(map[string]ulid.ULID, len(session.EventCursors))
+	for k, v := range session.EventCursors {
+		cursors[k] = v
+	}
+	connections := make([]ulid.ULID, len(session.Connections))
+	copy(connections, session.Connections)
+
+	return &Session{
+		CharacterID:  session.CharacterID,
+		Connections:  connections,
+		EventCursors: cursors,
+	}
 }
 
 // Disconnect removes a connection from a character's session.
