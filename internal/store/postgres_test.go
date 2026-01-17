@@ -287,3 +287,107 @@ func TestPostgresEventStore_ActorKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresEventStore_SystemInfo(t *testing.T) {
+	store, cleanup := setupPostgresContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	t.Run("GetSystemInfo returns error for missing key", func(t *testing.T) {
+		_, err := store.GetSystemInfo(ctx, "nonexistent")
+		if err == nil {
+			t.Error("expected error for missing key")
+		}
+	})
+
+	t.Run("SetSystemInfo and GetSystemInfo", func(t *testing.T) {
+		err := store.SetSystemInfo(ctx, "test_key", "test_value")
+		if err != nil {
+			t.Fatalf("SetSystemInfo() error = %v", err)
+		}
+
+		value, err := store.GetSystemInfo(ctx, "test_key")
+		if err != nil {
+			t.Fatalf("GetSystemInfo() error = %v", err)
+		}
+		if value != "test_value" {
+			t.Errorf("GetSystemInfo() = %q, want %q", value, "test_value")
+		}
+	})
+
+	t.Run("SetSystemInfo updates existing key", func(t *testing.T) {
+		err := store.SetSystemInfo(ctx, "update_key", "original")
+		if err != nil {
+			t.Fatalf("SetSystemInfo() error = %v", err)
+		}
+
+		err = store.SetSystemInfo(ctx, "update_key", "updated")
+		if err != nil {
+			t.Fatalf("SetSystemInfo() update error = %v", err)
+		}
+
+		value, err := store.GetSystemInfo(ctx, "update_key")
+		if err != nil {
+			t.Fatalf("GetSystemInfo() error = %v", err)
+		}
+		if value != "updated" {
+			t.Errorf("GetSystemInfo() = %q, want %q", value, "updated")
+		}
+	})
+}
+
+func TestPostgresEventStore_InitGameID(t *testing.T) {
+	store, cleanup := setupPostgresContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	t.Run("generates new game_id when none exists", func(t *testing.T) {
+		gameID, err := store.InitGameID(ctx)
+		if err != nil {
+			t.Fatalf("InitGameID() error = %v", err)
+		}
+		if gameID == "" {
+			t.Error("InitGameID() returned empty string")
+		}
+		// Verify it's a valid ULID (26 characters)
+		if len(gameID) != 26 {
+			t.Errorf("InitGameID() returned invalid ULID length: %d", len(gameID))
+		}
+	})
+
+	t.Run("returns existing game_id", func(t *testing.T) {
+		// Get current game_id
+		firstID, err := store.InitGameID(ctx)
+		if err != nil {
+			t.Fatalf("InitGameID() first call error = %v", err)
+		}
+
+		// Call again should return same ID
+		secondID, err := store.InitGameID(ctx)
+		if err != nil {
+			t.Fatalf("InitGameID() second call error = %v", err)
+		}
+
+		if firstID != secondID {
+			t.Errorf("InitGameID() returned different IDs: %q vs %q", firstID, secondID)
+		}
+	})
+
+	t.Run("game_id persists in database", func(t *testing.T) {
+		gameID, err := store.InitGameID(ctx)
+		if err != nil {
+			t.Fatalf("InitGameID() error = %v", err)
+		}
+
+		// Verify via GetSystemInfo
+		storedID, err := store.GetSystemInfo(ctx, "game_id")
+		if err != nil {
+			t.Fatalf("GetSystemInfo() error = %v", err)
+		}
+		if storedID != gameID {
+			t.Errorf("stored game_id %q != returned game_id %q", storedID, gameID)
+		}
+	})
+}

@@ -15,7 +15,10 @@ import (
 )
 
 //go:embed migrations/001_initial.sql
-var migrationSQL string
+var migration001SQL string
+
+//go:embed migrations/002_system_info.sql
+var migration002SQL string
 
 // PostgresEventStore implements EventStore using PostgreSQL.
 type PostgresEventStore struct {
@@ -38,9 +41,11 @@ func (s *PostgresEventStore) Close() {
 
 // Migrate runs database migrations.
 func (s *PostgresEventStore) Migrate(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, migrationSQL)
-	if err != nil {
-		return fmt.Errorf("failed to run database migration: %w", err)
+	migrations := []string{migration001SQL, migration002SQL}
+	for i, sql := range migrations {
+		if _, err := s.pool.Exec(ctx, sql); err != nil {
+			return fmt.Errorf("failed to run migration %03d: %w", i+1, err)
+		}
 	}
 	return nil
 }
@@ -123,4 +128,46 @@ func (s *PostgresEventStore) LastEventID(ctx context.Context, stream string) (ul
 		return ulid.ULID{}, fmt.Errorf("corrupt event ID in stream %s: %w", stream, err)
 	}
 	return id, nil
+}
+
+// GetSystemInfo retrieves a system info value by key.
+func (s *PostgresEventStore) GetSystemInfo(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.pool.QueryRow(ctx,
+		`SELECT value FROM holomush_system_info WHERE key = $1`,
+		key).Scan(&value)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("system info key %q not found", key)
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get system info %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetSystemInfo sets a system info value (upsert).
+func (s *PostgresEventStore) SetSystemInfo(ctx context.Context, key, value string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO holomush_system_info (key, value) VALUES ($1, $2)
+		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+		key, value)
+	if err != nil {
+		return fmt.Errorf("failed to set system info %q: %w", key, err)
+	}
+	return nil
+}
+
+// InitGameID ensures a game_id exists, generating one if needed.
+func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
+	gameID, err := s.GetSystemInfo(ctx, "game_id")
+	if err == nil {
+		return gameID, nil
+	}
+
+	// Generate new game_id
+	gameID = core.NewULID().String()
+	if err := s.SetSystemInfo(ctx, "game_id", gameID); err != nil {
+		return "", err
+	}
+	return gameID, nil
 }
