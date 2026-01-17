@@ -45,6 +45,7 @@ type ConnectionHandler struct {
 	locationID ulid.ULID
 	charName   string
 	authed     bool
+	quitting   bool
 }
 
 // NewConnectionHandler creates a new handler.
@@ -91,6 +92,10 @@ func (h *ConnectionHandler) Handle(ctx context.Context) {
 		}
 
 		h.processLine(ctx, strings.TrimSpace(line))
+
+		if h.quitting {
+			return
+		}
 	}
 }
 
@@ -221,9 +226,7 @@ func (h *ConnectionHandler) handleQuit() {
 	if h.authed {
 		h.sessions.Disconnect(h.charID, h.connID)
 	}
-	if err := h.conn.Close(); err != nil {
-		slog.Debug("error closing connection on quit", "error", err)
-	}
+	h.quitting = true
 }
 
 func (h *ConnectionHandler) send(msg string) {

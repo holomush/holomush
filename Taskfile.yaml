@@ -59,6 +59,11 @@ tasks:
     cmds:
       - go test -short -v ./...
 
+  test:integration:
+    desc: Run integration tests (requires Docker)
+    cmds:
+      - go test -race -v -tags=integration ./...
+
   # Linting
   lint:
     desc: Run all linters
