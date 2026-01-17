@@ -97,3 +97,22 @@ func TestSessionManager_DefensiveCopy(t *testing.T) {
 		t.Errorf("Expected 1 connection after modifying GetSession result, got %d", len(session3.Connections))
 	}
 }
+
+func TestSessionManager_GetConnections_DefensiveCopy(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+
+	sm.Connect(charID, connID)
+
+	// Get connections and modify
+	conns := sm.GetConnections(charID)
+	conns = append(conns, NewULID())
+
+	// Internal state should be unchanged
+	conns2 := sm.GetConnections(charID)
+	if len(conns2) != 1 {
+		t.Errorf("Expected 1 connection, got %d", len(conns2))
+	}
+}

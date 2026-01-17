@@ -1,6 +1,7 @@
 package core
 
 import (
+	"log/slog"
 	"sync"
 
 	"github.com/oklog/ulid/v2"
@@ -11,6 +12,22 @@ type Session struct {
 	CharacterID  ulid.ULID
 	Connections  []ulid.ULID          // Active connection IDs
 	EventCursors map[string]ulid.ULID // Last seen event per stream
+}
+
+// copySession returns a defensive copy of a session to prevent external modification.
+func copySession(s *Session) *Session {
+	cursors := make(map[string]ulid.ULID, len(s.EventCursors))
+	for k, v := range s.EventCursors {
+		cursors[k] = v
+	}
+	connections := make([]ulid.ULID, len(s.Connections))
+	copy(connections, s.Connections)
+
+	return &Session{
+		CharacterID:  s.CharacterID,
+		Connections:  connections,
+		EventCursors: cursors,
+	}
 }
 
 // SessionManager manages character sessions.
@@ -45,19 +62,7 @@ func (sm *SessionManager) Connect(charID, connID ulid.ULID) *Session {
 
 	session.Connections = append(session.Connections, connID)
 
-	// Return a copy to prevent external modification
-	cursors := make(map[string]ulid.ULID, len(session.EventCursors))
-	for k, v := range session.EventCursors {
-		cursors[k] = v
-	}
-	connections := make([]ulid.ULID, len(session.Connections))
-	copy(connections, session.Connections)
-
-	return &Session{
-		CharacterID:  session.CharacterID,
-		Connections:  connections,
-		EventCursors: cursors,
-	}
+	return copySession(session)
 }
 
 // Disconnect removes a connection from a character's session.
@@ -68,6 +73,10 @@ func (sm *SessionManager) Disconnect(charID, connID ulid.ULID) {
 
 	session, exists := sm.sessions[charID]
 	if !exists {
+		slog.Debug("disconnect called for non-existent session",
+			"char_id", charID.String(),
+			"conn_id", connID.String(),
+		)
 		return
 	}
 
@@ -87,6 +96,11 @@ func (sm *SessionManager) UpdateCursor(charID ulid.ULID, stream string, eventID 
 
 	session, exists := sm.sessions[charID]
 	if !exists {
+		slog.Debug("UpdateCursor called for non-existent session",
+			"char_id", charID.String(),
+			"stream", stream,
+			"event_id", eventID.String(),
+		)
 		return
 	}
 	session.EventCursors[stream] = eventID
@@ -103,19 +117,7 @@ func (sm *SessionManager) GetSession(charID ulid.ULID) *Session {
 		return nil
 	}
 
-	// Return a copy to prevent external modification
-	cursors := make(map[string]ulid.ULID, len(session.EventCursors))
-	for k, v := range session.EventCursors {
-		cursors[k] = v
-	}
-	connections := make([]ulid.ULID, len(session.Connections))
-	copy(connections, session.Connections)
-
-	return &Session{
-		CharacterID:  session.CharacterID,
-		Connections:  connections,
-		EventCursors: cursors,
-	}
+	return copySession(session)
 }
 
 // GetConnections returns all connection IDs for a character.

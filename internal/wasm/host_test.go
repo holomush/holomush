@@ -54,3 +54,37 @@ func TestPluginHost_LoadInvalidWASM(t *testing.T) {
 		t.Error("Expected error for invalid WASM")
 	}
 }
+
+func TestPluginHost_ClosedState(t *testing.T) {
+	ctx := context.Background()
+	host := NewPluginHost()
+
+	// Load a plugin first
+	err := host.LoadPlugin(ctx, "math", addWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	// Close the host
+	err = host.Close(ctx)
+	if err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// LoadPlugin should fail on closed host
+	err = host.LoadPlugin(ctx, "math2", addWASM)
+	if err != ErrHostClosed {
+		t.Errorf("Expected ErrHostClosed, got: %v", err)
+	}
+
+	// CallFunction should fail on closed host
+	_, err = host.CallFunction(ctx, "math", "add", 1, 2)
+	if err != ErrHostClosed {
+		t.Errorf("Expected ErrHostClosed, got: %v", err)
+	}
+
+	// HasPlugin should return false after close
+	if host.HasPlugin("math") {
+		t.Error("Expected HasPlugin to return false after close")
+	}
+}

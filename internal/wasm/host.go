@@ -11,9 +11,13 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// ErrHostClosed is returned when operations are attempted on a closed PluginHost.
+var ErrHostClosed = fmt.Errorf("plugin host is closed")
+
 // PluginHost manages WASM plugins.
 type PluginHost struct {
 	mu      sync.RWMutex
+	closed  bool
 	runtime wazero.Runtime
 	modules map[string]api.Module
 }
@@ -26,16 +30,19 @@ func NewPluginHost() *PluginHost {
 }
 
 // Close shuts down the runtime and all modules.
-// After Close, the PluginHost should not be reused.
+// After Close, the PluginHost cannot be reused; further operations return ErrHostClosed.
 func (h *PluginHost) Close(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	h.closed = true
 	if h.runtime != nil {
 		err := h.runtime.Close(ctx)
 		h.runtime = nil
 		h.modules = make(map[string]api.Module)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to close WASM runtime: %w", err)
+		}
 	}
 	return nil
 }
@@ -45,13 +52,17 @@ func (h *PluginHost) LoadPlugin(ctx context.Context, name string, wasm []byte) e
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.closed {
+		return ErrHostClosed
+	}
+
 	if h.runtime == nil {
 		h.runtime = wazero.NewRuntime(ctx)
 	}
 
 	mod, err := h.runtime.Instantiate(ctx, wasm)
 	if err != nil {
-		slog.Error("failed to instantiate WASM plugin",
+		slog.Debug("failed to instantiate WASM plugin",
 			"plugin", name,
 			"error", err,
 		)
@@ -70,6 +81,10 @@ func (h *PluginHost) CallFunction(ctx context.Context, plugin, function string, 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	if h.closed {
+		return nil, ErrHostClosed
+	}
+
 	mod, ok := h.modules[plugin]
 	if !ok {
 		return nil, fmt.Errorf("plugin %s not loaded", plugin)
@@ -80,7 +95,16 @@ func (h *PluginHost) CallFunction(ctx context.Context, plugin, function string, 
 		return nil, fmt.Errorf("function %s not found in %s", function, plugin)
 	}
 
-	return fn.Call(ctx, args...)
+	result, err := fn.Call(ctx, args...)
+	if err != nil {
+		slog.Error("WASM function call failed",
+			"plugin", plugin,
+			"function", function,
+			"error", err,
+		)
+		return nil, fmt.Errorf("failed to call %s.%s: %w", plugin, function, err)
+	}
+	return result, nil
 }
 
 // HasPlugin checks if a plugin is loaded.
