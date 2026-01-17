@@ -140,6 +140,14 @@ type NotFoundError struct {
 
 ## Testing
 
+### Coverage Requirements
+
+| Requirement                       | Description                                          |
+| --------------------------------- | ---------------------------------------------------- |
+| **MUST** maintain >80% coverage   | Per-package coverage must exceed 80%                 |
+| **MUST** run `task test:coverage` | To verify coverage before completing work            |
+| **SHOULD** target 90%+ coverage   | For core packages (`internal/core`, `internal/wasm`) |
+
 ### Test Files
 
 - Tests live next to implementation: `foo.go` → `foo_test.go`
