@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1378,5 +1380,681 @@ func TestLoadClientTLS_InvalidCA(t *testing.T) {
 	_, err = LoadClientTLS(tmpDir, gameID)
 	if err == nil {
 		t.Error("LoadClientTLS() should fail with invalid CA")
+	}
+}
+
+// =============================================================================
+// Session Expiration Tests (e55.36)
+// =============================================================================
+
+func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	sessionStore := &mockSessionStore{
+		sessions: map[string]*SessionInfo{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+			},
+		},
+	}
+
+	server := &CoreServer{
+		sessions:     sessions,
+		broadcaster:  broadcaster,
+		sessionStore: sessionStore,
+	}
+
+	// Create a context with a very short timeout to simulate session inactivity
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "timeout-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Streams:   []string{"location:" + locationID.String()},
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Wait for the timeout to trigger
+	select {
+	case err := <-done:
+		// Should return an error due to context deadline exceeded
+		if err == nil {
+			t.Error("Subscribe() should return error when context times out")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "deadline exceeded") {
+			t.Errorf("Expected deadline exceeded error, got: %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Subscribe did not return after context timeout")
+	}
+}
+
+func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	connID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, connID)
+
+	sessionStore := NewInMemorySessionStore()
+	sessionStore.Set(sessionID.String(), &SessionInfo{
+		CharacterID:  charID,
+		ConnectionID: connID,
+	})
+
+	server := &CoreServer{
+		sessions:     sessions,
+		sessionStore: sessionStore,
+	}
+
+	// Verify session exists before disconnect
+	_, ok := sessionStore.Get(sessionID.String())
+	if !ok {
+		t.Fatal("Session should exist before disconnect")
+	}
+
+	// Disconnect the session
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "cleanup-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	if err != nil {
+		t.Fatalf("Disconnect() error = %v", err)
+	}
+	if !resp.Success {
+		t.Error("Disconnect() should succeed")
+	}
+
+	// Verify session is cleaned up
+	_, ok = sessionStore.Get(sessionID.String())
+	if ok {
+		t.Error("Session should be removed after disconnect")
+	}
+}
+
+func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	sessionStore := &mockSessionStore{
+		sessions: map[string]*SessionInfo{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+			},
+		},
+	}
+
+	server := &CoreServer{
+		engine:       engine,
+		sessions:     sessions,
+		sessionStore: sessionStore,
+	}
+
+	ctx := context.Background()
+
+	// Execute multiple commands to simulate activity
+	for i := 0; i < 3; i++ {
+		req := &corev1.CommandRequest{
+			Meta: &corev1.RequestMeta{
+				RequestId: fmt.Sprintf("activity-test-%d", i),
+				Timestamp: timestamppb.Now(),
+			},
+			SessionId: sessionID.String(),
+			Command:   fmt.Sprintf("say Message %d", i),
+		}
+
+		resp, err := server.HandleCommand(ctx, req)
+		if err != nil {
+			t.Fatalf("HandleCommand() error = %v", err)
+		}
+		if !resp.Success {
+			t.Errorf("HandleCommand() iteration %d failed: %s", i, resp.Error)
+		}
+	}
+
+	// Session should still exist after activity
+	_, ok := sessionStore.Get(sessionID.String())
+	if !ok {
+		t.Error("Session should persist after activity")
+	}
+}
+
+func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+	sessionStore := NewInMemorySessionStore()
+
+	// Create two sessions
+	session1ID := core.NewULID()
+	char1ID := core.NewULID()
+	conn1ID := core.NewULID()
+	location1ID := core.NewULID()
+	sessions.Connect(char1ID, conn1ID)
+	sessionStore.Set(session1ID.String(), &SessionInfo{
+		CharacterID:  char1ID,
+		ConnectionID: conn1ID,
+		LocationID:   location1ID,
+	})
+
+	session2ID := core.NewULID()
+	char2ID := core.NewULID()
+	conn2ID := core.NewULID()
+	location2ID := core.NewULID()
+	sessions.Connect(char2ID, conn2ID)
+	sessionStore.Set(session2ID.String(), &SessionInfo{
+		CharacterID:  char2ID,
+		ConnectionID: conn2ID,
+		LocationID:   location2ID,
+	})
+
+	server := &CoreServer{
+		sessions:     sessions,
+		broadcaster:  broadcaster,
+		sessionStore: sessionStore,
+	}
+
+	// Disconnect only session 1
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "multi-session-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: session1ID.String(),
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	if err != nil {
+		t.Fatalf("Disconnect() error = %v", err)
+	}
+	if !resp.Success {
+		t.Error("Disconnect() should succeed")
+	}
+
+	// Verify session 1 is cleaned up
+	_, ok := sessionStore.Get(session1ID.String())
+	if ok {
+		t.Error("Session 1 should be removed after disconnect")
+	}
+
+	// Verify session 2 still exists
+	_, ok = sessionStore.Get(session2ID.String())
+	if !ok {
+		t.Error("Session 2 should still exist after session 1 disconnect")
+	}
+}
+
+// =============================================================================
+// Command Timeout Tests (e55.37)
+// =============================================================================
+
+func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	// Create a store that simulates a slow operation
+	store := &mockEventStore{
+		appendFunc: func(ctx context.Context, _ core.Event) error {
+			// Simulate slow database operation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+				return nil
+			}
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	// Create a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "timeout-cmd-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "say This should timeout",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() returned error: %v", err)
+	}
+
+	// The command should fail due to timeout
+	if resp.Success {
+		t.Error("HandleCommand() should fail when context times out")
+	}
+	if resp.Error == "" {
+		t.Error("Error message should be present for timeout")
+	}
+}
+
+func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	// Create a store that waits for cancellation
+	store := &mockEventStore{
+		appendFunc: func(ctx context.Context, _ core.Event) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Second):
+				return nil
+			}
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "cancel-cmd-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "say This will be cancelled",
+	}
+
+	// Start command in goroutine
+	done := make(chan *corev1.CommandResponse)
+	go func() {
+		resp, _ := server.HandleCommand(ctx, req)
+		done <- resp
+	}()
+
+	// Cancel after a short delay
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	// Wait for response
+	select {
+	case resp := <-done:
+		if resp.Success {
+			t.Error("HandleCommand() should fail when context is cancelled")
+		}
+		if resp.Error == "" {
+			t.Error("Error message should be present for cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("HandleCommand did not return after context cancellation")
+	}
+}
+
+func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	server := &CoreServer{
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+	streamName := "location:" + locationID.String()
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "cancel-sub-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Streams:   []string{streamName},
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give subscription time to set up
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify subscription is active by sending an event
+	testEvent := core.Event{
+		ID:        core.NewULID(),
+		Stream:    streamName,
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		Payload:   []byte(`{"message":"test"}`),
+	}
+	broadcaster.Broadcast(testEvent)
+
+	// Give time for event to be received
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel the context
+	cancel()
+
+	// Wait for subscription to end
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Subscribe() should return error when cancelled")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	// Verify at least one event was received before cancellation
+	if len(stream.events) == 0 {
+		t.Error("Expected at least one event before cancellation")
+	}
+}
+
+func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
+	tests := []struct {
+		name        string
+		timeout     time.Duration
+		storeDelay  time.Duration
+		expectError bool
+		errorContains string
+	}{
+		{
+			name:        "fast command succeeds",
+			timeout:     500 * time.Millisecond,
+			storeDelay:  10 * time.Millisecond,
+			expectError: false,
+		},
+		{
+			name:        "slow command times out",
+			timeout:     30 * time.Millisecond,
+			storeDelay:  200 * time.Millisecond,
+			expectError: true,
+			errorContains: "context",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			charID := core.NewULID()
+			sessionID := core.NewULID()
+			locationID := core.NewULID()
+			sessions := core.NewSessionManager()
+			sessions.Connect(charID, core.NewULID())
+
+			store := &mockEventStore{
+				appendFunc: func(ctx context.Context, _ core.Event) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(tt.storeDelay):
+						return nil
+					}
+				},
+			}
+
+			broadcaster := core.NewBroadcaster()
+			engine := core.NewEngine(store, sessions, broadcaster)
+
+			server := &CoreServer{
+				engine:   engine,
+				sessions: sessions,
+				sessionStore: &mockSessionStore{
+					sessions: map[string]*SessionInfo{
+						sessionID.String(): {
+							CharacterID: charID,
+							LocationID:  locationID,
+						},
+					},
+				},
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
+			req := &corev1.CommandRequest{
+				Meta: &corev1.RequestMeta{
+					RequestId: "timeout-error-test",
+					Timestamp: timestamppb.Now(),
+				},
+				SessionId: sessionID.String(),
+				Command:   "say Hello",
+			}
+
+			resp, err := server.HandleCommand(ctx, req)
+			if err != nil {
+				t.Fatalf("HandleCommand() returned error: %v", err)
+			}
+
+			if tt.expectError {
+				if resp.Success {
+					t.Error("Expected command to fail with timeout")
+				}
+				if tt.errorContains != "" && !strings.Contains(strings.ToLower(resp.Error), tt.errorContains) {
+					t.Errorf("Error %q should contain %q", resp.Error, tt.errorContains)
+				}
+			} else if !resp.Success {
+				t.Errorf("Expected command to succeed, got error: %s", resp.Error)
+			}
+		})
+	}
+}
+
+func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	server := &CoreServer{
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// Create a stream that blocks on send
+	blockingSendCalled := make(chan struct{})
+	stream := &mockSubscribeStreamWithError{
+		ctx: ctx,
+		sendFunc: func(_ *corev1.Event) error {
+			close(blockingSendCalled)
+			// Block until context is cancelled
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	streamName := "location:" + locationID.String()
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "timeout-send-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Streams:   []string{streamName},
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give subscription time to set up
+	time.Sleep(20 * time.Millisecond)
+
+	// Send an event that will block
+	testEvent := core.Event{
+		ID:        core.NewULID(),
+		Stream:    streamName,
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		Payload:   []byte(`{"message":"test"}`),
+	}
+	broadcaster.Broadcast(testEvent)
+
+	// Wait for send to be called
+	select {
+	case <-blockingSendCalled:
+		// Send was called, now wait for timeout
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Send was not called")
+	}
+
+	// Wait for subscription to timeout
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Subscribe() should return error when send times out")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Subscribe did not return after timeout")
+	}
+}
+
+func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{}
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	// Even with a short timeout, an empty command should fail fast
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "empty-cmd-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if resp.Success {
+		t.Error("Empty command should fail")
+	}
+	if resp.Error == "" {
+		t.Error("Error message should be present")
 	}
 }
