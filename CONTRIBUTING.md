@@ -41,7 +41,7 @@ We use [beads](https://github.com/steveyegge/beads) for task tracking:
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 type(scope): description
 
 Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert

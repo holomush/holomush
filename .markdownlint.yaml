@@ -16,6 +16,9 @@ MD033: false
 # Allow bare URLs
 MD034: false
 
+# Allow emphasis as pseudo-headings (for step-by-step instructions)
+MD036: false
+
 # Fenced code blocks should have a language specified
 MD040: true
 

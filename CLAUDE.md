@@ -32,13 +32,13 @@ HoloMUSH is a modern MUSH platform with:
 
 ### RFC2119 Keywords
 
-| Keyword | Meaning |
-|---------|---------|
-| **MUST** | Absolute requirement |
-| **MUST NOT** | Absolute prohibition |
-| **SHOULD** | Recommended, may ignore with justification |
-| **SHOULD NOT** | Not recommended |
-| **MAY** | Optional |
+| Keyword        | Meaning                                    |
+| -------------- | ------------------------------------------ |
+| **MUST**       | Absolute requirement                       |
+| **MUST NOT**   | Absolute prohibition                       |
+| **SHOULD**     | Recommended, may ignore with justification |
+| **SHOULD NOT** | Not recommended                            |
+| **MAY**        | Optional                                   |
 
 ## Workflow
 
@@ -46,7 +46,7 @@ HoloMUSH is a modern MUSH platform with:
 
 All work is tracked via [beads](https://github.com/steveyegge/beads):
 
-```
+```text
 Spec (docs/specs/)
     ↓
 Epic (bd create "..." --epic)
@@ -86,12 +86,12 @@ bd close <task-id>
 
 All tasks MUST be reviewed by a separate agent before completion:
 
-| Requirement | Description |
-|-------------|-------------|
+| Requirement                                | Description                                          |
+| ------------------------------------------ | ---------------------------------------------------- |
 | **MUST** use `pr-review-toolkit:review-pr` | Launch comprehensive review using specialized agents |
-| **MUST** address all findings | Fix issues or document why not applicable |
-| **MUST NOT** skip review | Even for "simple" changes |
-| **SHOULD** review after each logical chunk | Don't batch too many changes |
+| **MUST** address all findings              | Fix issues or document why not applicable            |
+| **MUST NOT** skip review                   | Even for "simple" changes                            |
+| **SHOULD** review after each logical chunk | Don't batch too many changes                         |
 
 **Review process:**
 
@@ -189,12 +189,13 @@ task build     # Build binary
 task dev       # Run dev server
 ```
 
-| Requirement | Description |
-|-------------|-------------|
-| **MUST** use `task` | Never run Go/lint/fmt commands directly |
-| **MUST** run `task test` | Before claiming any implementation is complete |
-| **MUST** run `task lint` | Before committing changes |
-| **SHOULD** run `task fmt` | Before committing to ensure consistent formatting |
+| Requirement                            | Description                                       |
+| -------------------------------------- | ------------------------------------------------- |
+| **MUST** use `task`                    | Never run Go/lint/fmt commands directly           |
+| **MUST** run `task test`               | Before claiming any implementation is complete    |
+| **MUST** run `task lint`               | Before committing changes                         |
+| **MUST NOT** disable lint/format rules | Without explicit user confirmation                |
+| **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting |
 
 ### Beads Commands
 
@@ -208,7 +209,7 @@ bd dep add <a> <b>    # Add dependency
 
 ## Directory Structure
 
-```
+```text
 cmd/holomush/        # Server entry point
 internal/            # Private implementation
   core/              # Event system, sessions, world engine
@@ -241,7 +242,7 @@ type EventStore interface {
 
 ## Patterns
 
-*This section will evolve as the project develops.*
+_This section will evolve as the project develops._
 
 ### Event Sourcing
 

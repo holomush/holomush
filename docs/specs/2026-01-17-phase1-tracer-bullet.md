@@ -54,7 +54,7 @@ A functional telnet server where multiple users can connect, authenticate, see e
 
 ## Architecture
 
-```
+```text
 ┌─────────────────┐
 │  Telnet Client  │
 └────────┬────────┘

@@ -21,16 +21,16 @@ HoloMUSH is a modern MUSH platform combining classic text-based multiplayer game
 
 ### Process Requirements
 
-| Principle | Requirement |
-|-----------|-------------|
-| Test-Driven | Tests MUST be written first and MUST pass before any task is complete |
-| Spec-Driven | Work MUST NOT start without a spec/design/plan |
+| Principle     | Requirement                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| Test-Driven   | Tests MUST be written first and MUST pass before any task is complete                                    |
+| Spec-Driven   | Work MUST NOT start without a spec/design/plan                                                           |
 | Documentation | Implementation MUST NOT be considered complete until documentation reflects both spec AND implementation |
-| Language | All directives, plans, and designs MUST use RFC2119 keywords |
+| Language      | All directives, plans, and designs MUST use RFC2119 keywords                                             |
 
 ### Workflow
 
-```
+```text
 Spec/Design (RFC2119) → Tests (failing) → Implementation → Tests (passing) → Documentation → Done
 ```
 
@@ -42,7 +42,7 @@ Spec/Design (RFC2119) → Tests (failing) → Implementation → Tests (passing)
 
 ## Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Clients                                 │
 ├──────────────────────┬──────────────────────────────────────────┤
@@ -126,12 +126,12 @@ type Event struct {
 
 ### Stream Types
 
-| Stream | Content | Subscribers |
-|--------|---------|-------------|
-| `location:<id>` | Location activity (poses, says, arrivals, departures) | Characters in location |
-| `channel:<name>` | Channel messages | Channel members |
-| `char:<id>` | Private messages, system notifications | That character |
-| `world` | Global events (connects, disconnects, broadcasts) | Admins, plugins |
+| Stream           | Content                                               | Subscribers            |
+| ---------------- | ----------------------------------------------------- | ---------------------- |
+| `location:<id>`  | Location activity (poses, says, arrivals, departures) | Characters in location |
+| `channel:<name>` | Channel messages                                      | Channel members        |
+| `char:<id>`      | Private messages, system notifications                | That character         |
+| `world`          | Global events (connects, disconnects, broadcasts)     | Admins, plugins        |
 
 ### Delivery Guarantees
 
@@ -161,11 +161,11 @@ type EventStore interface {
 
 #### Implementations
 
-| Implementation | Phase | Use Case |
-|----------------|-------|----------|
-| `PostgresEventStore` | 1 | MVP, single-node |
-| `NATSEventStore` | Future | Scalable, multi-node |
-| `MemoryEventStore` | Testing | Unit/integration tests |
+| Implementation       | Phase   | Use Case               |
+| -------------------- | ------- | ---------------------- |
+| `PostgresEventStore` | 1       | MVP, single-node       |
+| `NATSEventStore`     | Future  | Scalable, multi-node   |
+| `MemoryEventStore`   | Testing | Unit/integration tests |
 
 ## Session & Reconnection
 
@@ -226,28 +226,28 @@ capabilities:
     - world.write.objects
     - events.subscribe.location
   optional:
-    - net.http  # For external dice API
+    - net.http # For external dice API
 ```
 
 ### Capability Model
 
-| Capability | Description |
-|------------|-------------|
-| `world.read` | Read game state (locations, objects, characters) |
-| `world.write.<scope>` | Modify game state (scoped: objects, locations, characters) |
-| `events.subscribe.<stream>` | Subscribe to event streams |
-| `events.emit.<stream>` | Emit events to streams |
-| `net.http` | Outbound HTTP requests |
-| `fs.data` | Read/write plugin's own data directory |
-| `char.notify` | Send messages to characters |
+| Capability                  | Description                                                |
+| --------------------------- | ---------------------------------------------------------- |
+| `world.read`                | Read game state (locations, objects, characters)           |
+| `world.write.<scope>`       | Modify game state (scoped: objects, locations, characters) |
+| `events.subscribe.<stream>` | Subscribe to event streams                                 |
+| `events.emit.<stream>`      | Emit events to streams                                     |
+| `net.http`                  | Outbound HTTP requests                                     |
+| `fs.data`                   | Read/write plugin's own data directory                     |
+| `char.notify`               | Send messages to characters                                |
 
 ### Security Profiles
 
-| Profile | Grants | Use Case |
-|---------|--------|----------|
-| `untrusted` | world.read, events.subscribe.location | User-submitted plugins |
-| `trusted` | All read + scoped write + char.notify | Vetted community plugins |
-| `admin` | All capabilities | Core game systems |
+| Profile     | Grants                                | Use Case                 |
+| ----------- | ------------------------------------- | ------------------------ |
+| `untrusted` | world.read, events.subscribe.location | User-submitted plugins   |
+| `trusted`   | All read + scoped write + char.notify | Vetted community plugins |
+| `admin`     | All capabilities                      | Core game systems        |
 
 ### Override Example
 
@@ -256,9 +256,9 @@ plugins:
   combat-system:
     profile: trusted
     grant:
-      - net.http  # Allow external dice roller
+      - net.http # Allow external dice roller
     revoke:
-      - world.write.characters  # But not char modification
+      - world.write.characters # But not char modification
 ```
 
 ## Access Control (ABAC)
@@ -267,12 +267,12 @@ Attribute-Based Access Control applies across the system - plugins, players, cha
 
 ### ABAC Components
 
-| Component | Description | Example Attributes |
-|-----------|-------------|-------------------|
-| Subject | Who is acting | player.role, character.faction, plugin.name, character.level |
-| Resource | What is accessed | location.zone, object.owner, channel.type, scene.status |
-| Action | What they're doing | read, write, emit, enter, modify, delete |
-| Environment | Context | time, character.scene, connection.protocol |
+| Component   | Description        | Example Attributes                                           |
+| ----------- | ------------------ | ------------------------------------------------------------ |
+| Subject     | Who is acting      | player.role, character.faction, plugin.name, character.level |
+| Resource    | What is accessed   | location.zone, object.owner, channel.type, scene.status      |
+| Action      | What they're doing | read, write, emit, enter, modify, delete                     |
+| Environment | Context            | time, character.scene, connection.protocol                   |
 
 ### Policy Structure
 
@@ -338,22 +338,22 @@ policies:
 
 ### Portal Components
 
-| Component | Description |
-|-----------|-------------|
-| Terminal | Game interface - input, scrollback, ANSI rendering |
-| Wiki | Game documentation, lore, help files |
-| Forum | Player discussions, scene requests, announcements |
+| Component  | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| Terminal   | Game interface - input, scrollback, ANSI rendering    |
+| Wiki       | Game documentation, lore, help files                  |
+| Forum      | Player discussions, scene requests, announcements     |
 | Characters | Public profiles, character sheets (game-configurable) |
-| Scenes | Scene logs, ongoing scene listings |
-| Admin | Game configuration, player management, logs |
+| Scenes     | Scene logs, ongoing scene listings                    |
+| Admin      | Game configuration, player management, logs           |
 
 ### Offline Behavior
 
-| State | Behavior |
-|-------|----------|
-| Online | WebSocket connected, real-time events |
-| Offline | Commands queued in IndexedDB, cached content available |
-| Reconnect | Queued commands sent, server sends catch-up events |
+| State     | Behavior                                               |
+| --------- | ------------------------------------------------------ |
+| Online    | WebSocket connected, real-time events                  |
+| Offline   | Commands queued in IndexedDB, cached content available |
+| Reconnect | Queued commands sent, server sends catch-up events     |
 
 ### PWA Requirements
 
@@ -374,11 +374,11 @@ policies:
 
 ### TLS Requirements
 
-| Protocol | TLS Requirement |
-|----------|-----------------|
-| WebSocket | MUST use TLS 1.3+ |
-| REST/HTTP | MUST use TLS 1.3+ |
-| Telnet | MAY use cleartext; SHOULD offer TLS option |
+| Protocol  | TLS Requirement                            |
+| --------- | ------------------------------------------ |
+| WebSocket | MUST use TLS 1.3+                          |
+| REST/HTTP | MUST use TLS 1.3+                          |
+| Telnet    | MAY use cleartext; SHOULD offer TLS option |
 
 ### Message Integrity
 
@@ -395,11 +395,11 @@ type SignedMessage struct {
 
 ### Message Integrity Scope
 
-| Path | Integrity |
-|------|-----------|
-| Web Client ↔ Server | HMAC-signed messages over TLS |
-| Telnet Client ↔ Telnet Adapter | Line-based text, no signing (legacy protocol) |
-| Telnet Adapter ↔ Core | Internal - adapter is trusted server component |
+| Path                           | Integrity                                      |
+| ------------------------------ | ---------------------------------------------- |
+| Web Client ↔ Server            | HMAC-signed messages over TLS                  |
+| Telnet Client ↔ Telnet Adapter | Line-based text, no signing (legacy protocol)  |
+| Telnet Adapter ↔ Core          | Internal - adapter is trusted server component |
 
 ### Requirements
 
@@ -412,7 +412,7 @@ type SignedMessage struct {
 
 ### Core Entities
 
-```
+```text
 ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
 │   Player    │──1:N──│  Character  │──N:1──│  Location   │
 │  (account)  │       │             │       │             │
@@ -428,23 +428,23 @@ type SignedMessage struct {
 
 ### Tables
 
-| Table | Purpose |
-|-------|---------|
-| `players` | Accounts, auth credentials, OAuth links |
-| `characters` | In-game characters, owned by players |
-| `locations` | Rooms/places in the game world |
-| `exits` | Connections between locations |
-| `objects` | Items, props, anything carriable |
-| `channels` | Communication channels and membership |
-| `wiki_pages` | Wiki/documentation content |
-| `forum_posts` | Forum threads and replies |
-| `scenes` | Scene metadata |
-| `scene_participants` | Character participation in scenes |
-| `sessions` | Character session state |
-| `plugins` | Installed plugins and configuration |
+| Table                   | Purpose                                  |
+| ----------------------- | ---------------------------------------- |
+| `players`               | Accounts, auth credentials, OAuth links  |
+| `characters`            | In-game characters, owned by players     |
+| `locations`             | Rooms/places in the game world           |
+| `exits`                 | Connections between locations            |
+| `objects`               | Items, props, anything carriable         |
+| `channels`              | Communication channels and membership    |
+| `wiki_pages`            | Wiki/documentation content               |
+| `forum_posts`           | Forum threads and replies                |
+| `scenes`                | Scene metadata                           |
+| `scene_participants`    | Character participation in scenes        |
+| `sessions`              | Character session state                  |
+| `plugins`               | Installed plugins and configuration      |
 | `plugin_schema_objects` | Tracks plugin-created schema for cleanup |
-| `events` | Event store (Phase 1) |
-| `policies` | ABAC policies |
+| `events`                | Event store (Phase 1)                    |
+| `policies`              | ABAC policies                            |
 
 ### Extensibility
 
@@ -498,7 +498,7 @@ Scenes are optional narrative instances that phase characters out of real-time.
 
 ### Location Visibility Model
 
-```
+```text
 Location: "The Tavern"
 ├── Real-time layer (no scene)
 │   └── Characters here see each other, new arrivals land here
@@ -512,11 +512,11 @@ Location: "The Tavern"
 
 ### Visibility Rules
 
-| Viewer | Sees |
-|--------|------|
-| Character in real-time | Other real-time characters only |
-| Character in Scene X | Other Scene X participants only |
-| New arrival to location | Real-time layer only |
+| Viewer                  | Sees                            |
+| ----------------------- | ------------------------------- |
+| Character in real-time  | Other real-time characters only |
+| Character in Scene X    | Other Scene X participants only |
+| New arrival to location | Real-time layer only            |
 
 ### Requirements
 
@@ -567,24 +567,24 @@ Thin vertical slice through the system, telnet first.
 
 ### Scope
 
-| Layer | MVP Implementation |
-|-------|-------------------|
-| Protocol | Telnet adapter (cleartext, line-based) |
-| Session | Single character, reconnection with event replay |
-| Events | ULID-based, persisted to PostgreSQL |
-| World | Single location, basic commands |
-| Storage | PostgreSQL for everything |
-| Plugins | One "hello world" WASM plugin (proves wazero integration) |
+| Layer    | MVP Implementation                                        |
+| -------- | --------------------------------------------------------- |
+| Protocol | Telnet adapter (cleartext, line-based)                    |
+| Session  | Single character, reconnection with event replay          |
+| Events   | ULID-based, persisted to PostgreSQL                       |
+| World    | Single location, basic commands                           |
+| Storage  | PostgreSQL for everything                                 |
+| Plugins  | One "hello world" WASM plugin (proves wazero integration) |
 
 ### MVP Commands
 
-| Command | Purpose |
-|---------|---------|
-| `connect <name> <password>` | Authenticate, resume session |
-| `look` | Describe current location |
-| `say <message>` | Emit say event to location |
-| `pose <action>` | Emit pose event to location |
-| `quit` | Disconnect (session persists) |
+| Command                     | Purpose                       |
+| --------------------------- | ----------------------------- |
+| `connect <name> <password>` | Authenticate, resume session  |
+| `look`                      | Describe current location     |
+| `say <message>`             | Emit say event to location    |
+| `pose <action>`             | Emit pose event to location   |
+| `quit`                      | Disconnect (session persists) |
 
 ### Success Criteria
 
@@ -642,10 +642,10 @@ The following items are noted for future design work:
 
 Per [RFC2119](https://www.ietf.org/rfc/rfc2119.txt):
 
-| Keyword | Meaning |
-|---------|---------|
-| **MUST** | Absolute requirement |
-| **MUST NOT** | Absolute prohibition |
-| **SHOULD** | Recommended, may ignore with justification |
+| Keyword        | Meaning                                    |
+| -------------- | ------------------------------------------ |
+| **MUST**       | Absolute requirement                       |
+| **MUST NOT**   | Absolute prohibition                       |
+| **SHOULD**     | Recommended, may ignore with justification |
 | **SHOULD NOT** | Not recommended, may do with justification |
-| **MAY** | Optional |
+| **MAY**        | Optional                                   |

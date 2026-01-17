@@ -33,7 +33,7 @@ jobs:
           npm install -g markdownlint-cli2
           pip install yamllint
           curl -fsSL https://dprint.dev/install.sh | sh
-          echo "$HOME/.dprint/bin" >> $GITHUB_PATH
+          echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
 
       - name: Lint Go
         run: task lint:go

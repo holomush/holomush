@@ -82,7 +82,7 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - markdownlint-cli2 "**/*.md" "#node_modules" "#vendor"
+      - markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.beads"
 
   lint:yaml:
     desc: Lint YAML files
@@ -141,50 +141,50 @@ tasks:
     desc: Create a new spec document
     cmds:
       - |
-        DATE=$(date +%Y-%m-%d)
-        read -p "Spec name (e.g., event-system): " NAME
-        FILE="docs/specs/${DATE}-${NAME}.md"
-        cat > "$FILE" << 'EOF'
-        # {{.NAME}} Specification
+          DATE=$(date +%Y-%m-%d)
+          read -p "Spec name (e.g., event-system): " NAME
+          FILE="docs/specs/${DATE}-${NAME}.md"
+          cat > "$FILE" << 'EOF'
+          # {{.NAME}} Specification
 
-        **Status:** Draft
-        **Date:** {{.DATE}}
-        **Version:** 0.1.0
+          **Status:** Draft
+          **Date:** {{.DATE}}
+          **Version:** 0.1.0
 
-        ## Overview
+          ## Overview
 
-        ## Requirements
+          ## Requirements
 
-        ## Non-Goals
+          ## Non-Goals
 
-        ## Design
+          ## Design
 
-        ## Open Questions
-        EOF
-        echo "Created: $FILE"
+          ## Open Questions
+          EOF
+          echo "Created: $FILE"
 
   plan:
     desc: Create a new plan document
     cmds:
       - |
-        DATE=$(date +%Y-%m-%d)
-        read -p "Plan name (e.g., phase-1-implementation): " NAME
-        FILE="docs/plans/${DATE}-${NAME}.md"
-        cat > "$FILE" << 'EOF'
-        # {{.NAME}} Plan
+          DATE=$(date +%Y-%m-%d)
+          read -p "Plan name (e.g., phase-1-implementation): " NAME
+          FILE="docs/plans/${DATE}-${NAME}.md"
+          cat > "$FILE" << 'EOF'
+          # {{.NAME}} Plan
 
-        **Status:** Draft
-        **Date:** {{.DATE}}
+          **Status:** Draft
+          **Date:** {{.DATE}}
 
-        ## Overview
+          ## Overview
 
-        ## Tasks
+          ## Tasks
 
-        ## Dependencies
+          ## Dependencies
 
-        ## Risks
-        EOF
-        echo "Created: $FILE"
+          ## Risks
+          EOF
+          echo "Created: $FILE"
 
   # Cleanup
   clean:

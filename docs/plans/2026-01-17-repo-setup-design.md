@@ -18,31 +18,31 @@ This document defines the repository structure, tooling, and development workflo
 
 ### Core Tools
 
-| Tool | Purpose |
-|------|---------|
-| Go 1.22+ | Server implementation |
-| Task | Build automation (replaces Make) |
-| golangci-lint | Go linting |
-| Lefthook | Pre-commit hooks |
-| Beads | Task/issue tracking |
-| GitHub Actions | CI/CD |
-| goreleaser | Release automation |
-| release-please | Changelog and versioning |
-| Dependabot | Dependency updates |
+| Tool           | Purpose                          |
+| -------------- | -------------------------------- |
+| Go 1.22+       | Server implementation            |
+| Task           | Build automation (replaces Make) |
+| golangci-lint  | Go linting                       |
+| Lefthook       | Pre-commit hooks                 |
+| Beads          | Task/issue tracking              |
+| GitHub Actions | CI/CD                            |
+| goreleaser     | Release automation               |
+| release-please | Changelog and versioning         |
+| Dependabot     | Dependency updates               |
 
 ### Linting Stack
 
-| Tool | Targets |
-|------|---------|
-| golangci-lint | `*.go` |
-| markdownlint-cli2 | `*.md` |
-| yamllint | `*.yaml`, `*.yml` |
-| dprint | md, json, toml, yaml (formatting) |
-| actionlint | `.github/workflows/*.yaml` |
+| Tool              | Targets                           |
+| ----------------- | --------------------------------- |
+| golangci-lint     | `*.go`                            |
+| markdownlint-cli2 | `*.md`                            |
+| yamllint          | `*.yaml`, `*.yml`                 |
+| dprint            | md, json, toml, yaml (formatting) |
+| actionlint        | `.github/workflows/*.yaml`        |
 
 ## Directory Structure
 
-```
+```text
 holomush/
 ├── cmd/
 │   └── holomush/
@@ -102,7 +102,7 @@ holomush/
 
 All work follows this flow:
 
-```
+```text
 Spec (docs/specs/)
     ↓
 Epic (bd-xyz) - represents the spec
@@ -116,7 +116,7 @@ Tasks (bd-xyz.1, bd-xyz.2, ...) - child tasks of epic
 
 ### Example
 
-```
+```text
 Spec: event-system.md
 Epic: bd-a1b2 "Event System"
     ├── bd-a1b2.1 "Event type definitions"
@@ -140,23 +140,23 @@ Epic: bd-a1b2 "Event System"
 
 ### Taskfile.yaml
 
-| Task | Purpose |
-|------|---------|
-| `task lint` | Run all linters |
-| `task fmt` | Run all formatters |
-| `task test` | Run go test |
-| `task build` | Build server binary |
-| `task dev` | Run server in dev mode |
-| `task plugin:build` | Build WASM plugins |
-| `task spec` | Create new spec from template |
-| `task plan` | Create new plan from template |
+| Task                | Purpose                       |
+| ------------------- | ----------------------------- |
+| `task lint`         | Run all linters               |
+| `task fmt`          | Run all formatters            |
+| `task test`         | Run go test                   |
+| `task build`        | Build server binary           |
+| `task dev`          | Run server in dev mode        |
+| `task plugin:build` | Build WASM plugins            |
+| `task spec`         | Create new spec from template |
+| `task plan`         | Create new plan from template |
 
 ### lefthook.yaml
 
-| Hook | Runs |
-|------|------|
+| Hook       | Runs                            |
+| ---------- | ------------------------------- |
 | pre-commit | `task lint`, `task fmt --check` |
-| commit-msg | cocogitto (`cog verify`) |
+| commit-msg | cocogitto (`cog verify`)        |
 
 ### cog.toml
 
@@ -164,14 +164,14 @@ Cocogitto configuration for conventional commit validation only. Release-please 
 
 ### golangci-lint Linters
 
-| Category | Linters |
-|----------|---------|
-| Bugs | errcheck, govet, staticcheck, nilerr |
-| Style | revive, gofumpt, misspell |
-| Performance | prealloc, unconvert |
-| Security | gosec |
-| Error handling | errorlint, wrapcheck |
-| Maintenance | unparam, gocritic, nolintlint |
+| Category       | Linters                              |
+| -------------- | ------------------------------------ |
+| Bugs           | errcheck, govet, staticcheck, nilerr |
+| Style          | revive, gofumpt, misspell            |
+| Performance    | prealloc, unconvert                  |
+| Security       | gosec                                |
+| Error handling | errorlint, wrapcheck                 |
+| Maintenance    | unparam, gocritic, nolintlint        |
 
 ### .editorconfig
 
@@ -202,20 +202,20 @@ indent_style = tab
 
 Triggers: push to main, pull requests
 
-| Job | Steps |
-|-----|-------|
-| lint | Install tools, run `task lint` |
-| test | Run `task test` with coverage |
+| Job   | Steps                             |
+| ----- | --------------------------------- |
+| lint  | Install tools, run `task lint`    |
+| test  | Run `task test` with coverage     |
 | build | Run `task build`, upload artifact |
 
 ### release.yaml Workflow
 
 Triggers: push to main (release-please), tag push (goreleaser)
 
-| Job | Purpose |
-|-----|---------|
-| release-please | Create release PR, update changelog |
-| goreleaser | Build binaries, Docker images, publish |
+| Job            | Purpose                                |
+| -------------- | -------------------------------------- |
+| release-please | Create release PR, update changelog    |
+| goreleaser     | Build binaries, Docker images, publish |
 
 ### Dependabot
 
@@ -228,16 +228,19 @@ Triggers: push to main (release-please), tag push (goreleaser)
 # HoloMUSH Development Guide
 
 ## Project Overview
+
 - Brief description, link to architecture design
 - Tech stack summary
 
 ## Development Principles
+
 - TDD: Tests MUST pass before completion
 - Spec-driven: No work without spec
 - RFC2119 keywords in all specs/plans
 - Beads for all task tracking
 
 ## Workflow
+
 1. Spec → Epic (`bd create "..." --epic`)
 2. Plan → Tasks (`bd create "..." -p <epic>`)
 3. `bd ready` → find next task
@@ -245,21 +248,25 @@ Triggers: push to main (release-please), tag push (goreleaser)
 5. `bd close` → next task
 
 ## Code Conventions
+
 - Go idioms (accept interfaces, return structs)
 - Error handling patterns
 - Logging conventions
 - Naming conventions
 
 ## Testing
+
 - Table-driven tests
 - Test file placement
 - Mocking patterns
 
 ## Commands
+
 - `task lint/fmt/test/build`
 - `bd` commands reference
 
 ## Patterns
+
 - (Evolves as project grows)
 ```
 
@@ -269,26 +276,26 @@ Apache 2.0 - permissive with patent protection.
 
 ## Files to Create
 
-| File | Purpose |
-|------|---------|
-| `.editorconfig` | Editor settings |
-| `.gitignore` | Go + Node + build artifacts |
-| `.golangci.yaml` | Go linter config |
-| `.goreleaser.yaml` | Release automation |
-| `.markdownlint.yaml` | Markdown lint rules |
-| `.yamllint.yaml` | YAML lint rules |
-| `cog.toml` | Cocogitto commit validation |
-| `dprint.json` | Formatter config |
-| `lefthook.yaml` | Pre-commit hooks |
-| `Taskfile.yaml` | Build automation |
-| `Dockerfile` | Container build |
-| `LICENSE` | Apache 2.0 |
-| `README.md` | Project overview |
-| `CLAUDE.md` | AI coding instructions |
-| `CONTRIBUTING.md` | Contributor guide |
-| `.github/workflows/ci.yaml` | Lint, test, build |
+| File                             | Purpose                     |
+| -------------------------------- | --------------------------- |
+| `.editorconfig`                  | Editor settings             |
+| `.gitignore`                     | Go + Node + build artifacts |
+| `.golangci.yaml`                 | Go linter config            |
+| `.goreleaser.yaml`               | Release automation          |
+| `.markdownlint.yaml`             | Markdown lint rules         |
+| `.yamllint.yaml`                 | YAML lint rules             |
+| `cog.toml`                       | Cocogitto commit validation |
+| `dprint.json`                    | Formatter config            |
+| `lefthook.yaml`                  | Pre-commit hooks            |
+| `Taskfile.yaml`                  | Build automation            |
+| `Dockerfile`                     | Container build             |
+| `LICENSE`                        | Apache 2.0                  |
+| `README.md`                      | Project overview            |
+| `CLAUDE.md`                      | AI coding instructions      |
+| `CONTRIBUTING.md`                | Contributor guide           |
+| `.github/workflows/ci.yaml`      | Lint, test, build           |
 | `.github/workflows/release.yaml` | release-please + goreleaser |
-| `.github/dependabot.yaml` | Dependency updates |
+| `.github/dependabot.yaml`        | Dependency updates          |
 
 ## Requirements
 
