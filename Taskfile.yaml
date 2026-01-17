@@ -203,11 +203,11 @@ tasks:
       - go install github.com/evilmartians/lefthook@latest
       - go install github.com/steveyegge/beads/cmd/bd@latest
       - go install github.com/rhysd/actionlint/cmd/actionlint@latest
-      - go install github.com/goreleaser/goreleaser@latest
-      - npm install -g markdownlint-cli2
-      - pip install --user yamllint
-      - curl -fsSL https://dprint.dev/install.sh | sh
-      - 'cargo install cocogitto || echo "Install Rust/cargo for cocogitto, or use: brew install cocogitto"'
+      - 'go install github.com/goreleaser/goreleaser@latest || echo "⚠ goreleaser: use brew install goreleaser"'
+      - 'npm install -g markdownlint-cli2 || echo "⚠ markdownlint-cli2: fix npm permissions or use brew"'
+      - 'pip install --user yamllint || echo "⚠ yamllint: use pip3 or brew install yamllint"'
+      - 'curl -fsSL https://dprint.dev/install.sh | sh || echo "⚠ dprint: use brew install dprint"'
+      - 'cargo install cocogitto || echo "⚠ cocogitto: use brew install cocogitto"'
       - echo "Tools installed. Run 'lefthook install' to set up git hooks."
 
   # Git hooks
