@@ -36,32 +36,40 @@ func init() {
 
 // ConnectionHandler handles a single telnet connection.
 type ConnectionHandler struct {
-	conn       net.Conn
-	reader     *bufio.Reader
-	engine     *core.Engine
-	sessions   *core.SessionManager
-	connID     ulid.ULID
-	charID     ulid.ULID
-	locationID ulid.ULID
-	charName   string
-	authed     bool
-	quitting   bool
+	conn        net.Conn
+	reader      *bufio.Reader
+	engine      *core.Engine
+	sessions    *core.SessionManager
+	broadcaster *core.Broadcaster
+	connID      ulid.ULID
+	charID      ulid.ULID
+	locationID  ulid.ULID
+	charName    string
+	authed      bool
+	quitting    bool
+	eventCh     chan core.Event
 }
 
 // NewConnectionHandler creates a new handler.
-func NewConnectionHandler(conn net.Conn, engine *core.Engine, sessions *core.SessionManager) *ConnectionHandler {
+func NewConnectionHandler(conn net.Conn, engine *core.Engine, sessions *core.SessionManager, broadcaster *core.Broadcaster) *ConnectionHandler {
 	return &ConnectionHandler{
-		conn:     conn,
-		reader:   bufio.NewReader(conn),
-		engine:   engine,
-		sessions: sessions,
-		connID:   core.NewULID(),
+		conn:        conn,
+		reader:      bufio.NewReader(conn),
+		engine:      engine,
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		connID:      core.NewULID(),
 	}
 }
 
 // Handle processes the connection until closed.
 func (h *ConnectionHandler) Handle(ctx context.Context) {
 	defer func() {
+		// Unsubscribe from events if subscribed
+		if h.eventCh != nil && h.broadcaster != nil {
+			stream := "location:" + h.locationID.String()
+			h.broadcaster.Unsubscribe(stream, h.eventCh)
+		}
 		if err := h.conn.Close(); err != nil {
 			slog.Debug("error closing connection", "error", err)
 		}
@@ -70,15 +78,27 @@ func (h *ConnectionHandler) Handle(ctx context.Context) {
 	h.send("Welcome to HoloMUSH!")
 	h.send("Use: connect <username> <password>")
 
+	// Channel for lines read from the connection
+	lineCh := make(chan string)
+	errCh := make(chan error)
+
+	go func() {
+		for {
+			line, err := h.reader.ReadString('\n')
+			if err != nil {
+				errCh <- err
+				return
+			}
+			lineCh <- strings.TrimSpace(line)
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-		}
 
-		line, err := h.reader.ReadString('\n')
-		if err != nil {
+		case err := <-errCh:
 			if !errors.Is(err, io.EOF) {
 				slog.Debug("connection read error",
 					"conn_id", h.connID.String(),
@@ -89,14 +109,29 @@ func (h *ConnectionHandler) Handle(ctx context.Context) {
 				h.sessions.Disconnect(h.charID, h.connID)
 			}
 			return
-		}
 
-		h.processLine(ctx, strings.TrimSpace(line))
+		case line := <-lineCh:
+			h.processLine(ctx, line)
+			if h.quitting {
+				return
+			}
 
-		if h.quitting {
-			return
+		case event := <-h.eventChanOrNil():
+			// Filter out own events - don't show them via broadcast
+			if event.Actor.ID != h.charID.String() {
+				h.sendEvent(event)
+			}
 		}
 	}
+}
+
+// eventChanOrNil returns the event channel if subscribed, or nil otherwise.
+// Returning nil makes the select case block forever (never selected).
+func (h *ConnectionHandler) eventChanOrNil() <-chan core.Event {
+	if h.eventCh != nil {
+		return h.eventCh
+	}
+	return nil
 }
 
 func (h *ConnectionHandler) processLine(ctx context.Context, line string) {
@@ -146,6 +181,13 @@ func (h *ConnectionHandler) handleConnect(ctx context.Context, arg string) {
 	h.authed = true
 
 	h.sessions.Connect(h.charID, h.connID)
+
+	// Subscribe to location events for real-time updates
+	if h.broadcaster != nil {
+		stream := "location:" + h.locationID.String()
+		h.eventCh = h.broadcaster.Subscribe(stream)
+	}
+
 	h.send(fmt.Sprintf("Welcome back, %s!", h.charName))
 
 	// Replay missed events

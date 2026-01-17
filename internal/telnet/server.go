@@ -13,19 +13,21 @@ import (
 
 // Server is a telnet server.
 type Server struct {
-	addr     string
-	listener net.Listener
-	engine   *core.Engine
-	sessions *core.SessionManager
-	mu       sync.RWMutex
+	addr        string
+	listener    net.Listener
+	engine      *core.Engine
+	sessions    *core.SessionManager
+	broadcaster *core.Broadcaster
+	mu          sync.RWMutex
 }
 
 // NewServer creates a new telnet server.
-func NewServer(addr string, engine *core.Engine, sessions *core.SessionManager) *Server {
+func NewServer(addr string, engine *core.Engine, sessions *core.SessionManager, broadcaster *core.Broadcaster) *Server {
 	return &Server{
-		addr:     addr,
-		engine:   engine,
-		sessions: sessions,
+		addr:        addr,
+		engine:      engine,
+		sessions:    sessions,
+		broadcaster: broadcaster,
 	}
 }
 
@@ -70,7 +72,7 @@ func (s *Server) Run(ctx context.Context) error {
 				continue
 			}
 		}
-		handler := NewConnectionHandler(conn, s.engine, s.sessions)
+		handler := NewConnectionHandler(conn, s.engine, s.sessions, s.broadcaster)
 		go handler.Handle(ctx)
 	}
 }

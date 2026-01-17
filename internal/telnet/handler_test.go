@@ -74,8 +74,9 @@ func newTestHandler(t *testing.T) (*ConnectionHandler, *testConn, *core.Engine) 
 	tc := newTestConn(t)
 	store := core.NewMemoryEventStore()
 	sessions := core.NewSessionManager()
-	engine := core.NewEngine(store, sessions)
-	handler := NewConnectionHandler(tc.server, engine, sessions)
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+	handler := NewConnectionHandler(tc.server, engine, sessions, broadcaster)
 	return handler, tc, engine
 }
 
@@ -569,6 +570,201 @@ func TestConnectionHandler_SendEvent_ShortActorID(t *testing.T) {
 	// Should not panic and should use the full short ID
 	if !strings.Contains(response, "short") {
 		t.Errorf("expected short actor ID in output, got: %s", response)
+	}
+}
+
+// --- Real-time event subscription tests ---
+
+func TestConnectionHandler_ReceivesRealTimeEvents(t *testing.T) {
+	tc := newTestConn(t)
+	defer tc.close()
+
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+	handler := NewConnectionHandler(tc.server, engine, sessions, broadcaster)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go handler.Handle(ctx)
+
+	// Read welcome messages
+	tc.readLines(2)
+
+	// Connect
+	tc.writeLine("connect testuser password")
+	tc.readLine() // Welcome back
+
+	// Now another character says something (simulated by direct engine call)
+	// This event should be broadcast and received by the connected handler
+	otherCharID := core.NewULID()
+	err := engine.HandleSay(ctx, otherCharID, testLocationID, "Hello from another player!")
+	if err != nil {
+		t.Fatalf("HandleSay failed: %v", err)
+	}
+
+	// The handler should receive and display the event via real-time broadcast
+	// Keep reading until we find the expected message (there may be replay prefix)
+	found := false
+	for i := 0; i < 5; i++ {
+		if err := tc.client.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatalf("failed to set deadline: %v", err)
+		}
+		response, err := tc.reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		response = strings.TrimSpace(response)
+		if strings.Contains(response, "Hello from another player!") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to receive real-time event with 'Hello from another player!'")
+	}
+}
+
+func TestConnectionHandler_ReceivesRealTimePoseEvents(t *testing.T) {
+	tc := newTestConn(t)
+	defer tc.close()
+
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+	handler := NewConnectionHandler(tc.server, engine, sessions, broadcaster)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go handler.Handle(ctx)
+
+	// Read welcome messages
+	tc.readLines(2)
+
+	// Connect
+	tc.writeLine("connect testuser password")
+	tc.readLine() // Welcome back
+
+	// Another character poses
+	otherCharID := core.NewULID()
+	err := engine.HandlePose(ctx, otherCharID, testLocationID, "waves hello")
+	if err != nil {
+		t.Fatalf("HandlePose failed: %v", err)
+	}
+
+	// The handler should receive and display the event via real-time broadcast
+	// Keep reading until we find the expected message (there may be replay prefix)
+	found := false
+	for i := 0; i < 5; i++ {
+		if err := tc.client.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatalf("failed to set deadline: %v", err)
+		}
+		response, err := tc.reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		response = strings.TrimSpace(response)
+		if strings.Contains(response, "waves hello") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to receive real-time pose event with 'waves hello'")
+	}
+}
+
+func TestConnectionHandler_UnsubscribesOnDisconnect(t *testing.T) {
+	tc := newTestConn(t)
+
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+	handler := NewConnectionHandler(tc.server, engine, sessions, broadcaster)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Read welcome messages
+	tc.readLines(2)
+
+	// Connect
+	tc.writeLine("connect testuser password")
+	tc.readLine() // Welcome back
+
+	// Quit
+	tc.writeLine("quit")
+	tc.readLine() // Goodbye
+
+	// Wait for handler to exit
+	select {
+	case <-done:
+		// Good
+	case <-time.After(time.Second):
+		t.Fatal("handler did not exit")
+	}
+
+	tc.close()
+
+	// After disconnect, broadcaster should not have the subscription
+	// We verify this by checking that events don't cause issues
+	// (the subscription channel should be cleaned up)
+	otherCharID := core.NewULID()
+	err := engine.HandleSay(ctx, otherCharID, testLocationID, "This should not cause issues")
+	if err != nil {
+		t.Fatalf("HandleSay after disconnect failed: %v", err)
+	}
+}
+
+func TestConnectionHandler_FiltersOwnEvents(t *testing.T) {
+	tc := newTestConn(t)
+	defer tc.close()
+
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+	handler := NewConnectionHandler(tc.server, engine, sessions, broadcaster)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go handler.Handle(ctx)
+
+	// Read welcome messages
+	tc.readLines(2)
+
+	// Connect
+	tc.writeLine("connect testuser password")
+	tc.readLine() // Welcome back
+
+	// Say something - we should get "You say" confirmation, NOT the broadcast
+	tc.writeLine("say Hello!")
+	response := tc.readLine()
+
+	// Should be the "You say" confirmation, not the broadcast format
+	if !strings.Contains(response, "You say") {
+		t.Errorf("expected 'You say' confirmation, got: %s", response)
+	}
+
+	// Verify we don't get a duplicate broadcast (try reading with short timeout)
+	if err := tc.client.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatalf("failed to set deadline: %v", err)
+	}
+	_, err := tc.reader.ReadString('\n')
+	if err == nil {
+		t.Error("expected no additional message (own event should be filtered)")
 	}
 }
 

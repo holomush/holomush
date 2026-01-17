@@ -6,53 +6,91 @@ A modern MUSH platform combining classic text-based multiplayer gameplay with co
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/holomush/holomush)](https://goreportcard.com/report/github.com/holomush/holomush)
 
-## Features
-
-- **Dual Protocol Support**: Simultaneous web and telnet access
-- **Modern Architecture**: Event-oriented Go core with PostgreSQL storage
-- **WASM Plugins**: Language-agnostic plugin system (Rust, Go, Python, etc.)
-- **Resumable Sessions**: Tmux-style reconnection with event replay
-- **Offline-Capable**: PWA web client with sync support
-- **Platform First**: Build for RP and sandbox gameplay
-
 ## Status
 
-🚧 **Early Development** - Not yet ready for production use.
+**Phase 1 Complete** - Telnet server with event-sourced architecture, session persistence, and event replay.
 
-See [docs/plans/](docs/plans/) for architecture and design documents.
+### What Works Now
+
+- Connect via telnet and authenticate
+- Chat using `say` and `pose` commands
+- Disconnect and reconnect with missed event replay
+- Events persisted to PostgreSQL or in-memory store
+- WASM plugin host proof-of-concept
+
+### Planned Features
+
+- Web client (SvelteKit PWA)
+- Multiple locations and movement
+- Character creation and player accounts
+- Full WASM plugin API
+- ABAC access control
 
 ## Quick Start
 
+### Prerequisites
+
+- Go 1.23+
+- [Task](https://taskfile.dev/) (task runner)
+- Docker (for integration tests)
+
+### Build and Run
+
 ```bash
-# Install dependencies
+# Install development tools
 task tools
 
-# Run development server
+# Build the server
+task build
+
+# Run in development mode (in-memory store)
 task dev
+
+# Connect via telnet
+telnet localhost 4000
 ```
+
+### Test Credentials
+
+- Username: `testuser`
+- Password: `password`
+
+### Available Commands
+
+| Command                 | Description                          |
+| ----------------------- | ------------------------------------ |
+| `connect <user> <pass>` | Authenticate and enter the game      |
+| `look`                  | Describe current location            |
+| `say <message>`         | Speak to others in the room          |
+| `pose <action>`         | Emote an action (e.g., `pose waves`) |
+| `quit`                  | Disconnect (session persists)        |
 
 ## Development
 
 This project uses [beads](https://github.com/steveyegge/beads) for task tracking and follows TDD principles.
 
 ```bash
-# Find ready tasks
-bd ready
-
 # Run tests
 task test
 
+# Run tests with coverage
+task test:coverage
+
 # Lint code
 task lint
+
+# Format code
+task fmt
 ```
 
-See [CLAUDE.md](CLAUDE.md) for development guidelines.
+See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
 
 ## Documentation
 
-- [Architecture Design](docs/plans/2026-01-17-holomush-architecture-design.md)
-- [Repository Setup](docs/plans/2026-01-17-repo-setup-design.md)
-- [Contributing](CONTRIBUTING.md)
+- [Getting Started](docs/reference/getting-started.md) - Setup and usage guide
+- [Architecture Overview](docs/reference/architecture-overview.md) - System design summary
+- [Full Architecture Design](docs/plans/2026-01-17-holomush-architecture-design.md) - Detailed specifications
+- [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License
 

@@ -32,6 +32,15 @@ linters:
     - gocritic
     - nolintlint
 
+  # Exclusions for paths that use incompatible patterns
+  exclusions:
+    # TinyGo WASM plugins use patterns incompatible with standard linting:
+    # - //export directives make functions appear unused
+    # - unsafe memory access is required for WASM host communication
+    # - integer conversions are necessary for 32-bit WASM ABI
+    paths:
+      - plugins/
+
 linters-settings:
   errcheck:
     check-type-assertions: true

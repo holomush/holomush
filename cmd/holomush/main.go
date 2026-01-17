@@ -37,14 +37,15 @@ func run() error {
 	// Setup
 	store := core.NewMemoryEventStore()
 	sessions := core.NewSessionManager()
-	engine := core.NewEngine(store, sessions)
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
 
 	// Telnet server
 	addr := os.Getenv("TELNET_ADDR")
 	if addr == "" {
 		addr = ":4201"
 	}
-	srv := telnet.NewServer(addr, engine, sessions)
+	srv := telnet.NewServer(addr, engine, sessions, broadcaster)
 
 	// Graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

@@ -21,15 +21,17 @@ type PosePayload struct {
 
 // Engine is the core game engine.
 type Engine struct {
-	store    EventStore
-	sessions *SessionManager
+	store       EventStore
+	sessions    *SessionManager
+	broadcaster *Broadcaster
 }
 
 // NewEngine creates a new game engine.
-func NewEngine(store EventStore, sessions *SessionManager) *Engine {
+func NewEngine(store EventStore, sessions *SessionManager, broadcaster *Broadcaster) *Engine {
 	return &Engine{
-		store:    store,
-		sessions: sessions,
+		store:       store,
+		sessions:    sessions,
+		broadcaster: broadcaster,
 	}
 }
 
@@ -52,6 +54,12 @@ func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, me
 	if err := e.store.Append(ctx, event); err != nil {
 		return fmt.Errorf("failed to append say event: %w", err)
 	}
+
+	// Broadcast to subscribers (nil-safe)
+	if e.broadcaster != nil {
+		e.broadcaster.Broadcast(event)
+	}
+
 	return nil
 }
 
@@ -74,6 +82,12 @@ func (e *Engine) HandlePose(ctx context.Context, charID, locationID ulid.ULID, a
 	if err := e.store.Append(ctx, event); err != nil {
 		return fmt.Errorf("failed to append pose event: %w", err)
 	}
+
+	// Broadcast to subscribers (nil-safe)
+	if e.broadcaster != nil {
+		e.broadcaster.Broadcast(event)
+	}
+
 	return nil
 }
 

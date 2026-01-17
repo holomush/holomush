@@ -14,9 +14,9 @@ func TestServer_AcceptsConnections(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	sessions := core.NewSessionManager()
-	engine := core.NewEngine(store, sessions)
-
-	srv := NewServer(":0", engine, sessions)
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+	srv := NewServer(":0", engine, sessions, broadcaster)
 	go func() {
 		//nolint:errcheck,gosec // Server shutdown error is expected when context cancels
 		srv.Run(ctx)
