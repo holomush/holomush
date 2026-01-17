@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	cryptotls "crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -25,6 +26,13 @@ type CA struct {
 
 // ServerCert holds a server certificate and private key.
 type ServerCert struct {
+	Certificate *x509.Certificate
+	PrivateKey  *ecdsa.PrivateKey
+	Name        string
+}
+
+// ClientCert holds a client certificate and private key.
+type ClientCert struct {
 	Certificate *x509.Certificate
 	PrivateKey  *ecdsa.PrivateKey
 	Name        string
@@ -232,4 +240,120 @@ func saveKey(path string, key *ecdsa.PrivateKey) error {
 	}
 
 	return nil
+}
+
+// GenerateClientCert creates a client certificate signed by the CA.
+// The clientName is used for the certificate file naming (e.g., "gateway").
+func GenerateClientCert(ca *CA, clientName string) (*ClientCert, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate client key: %w", err)
+	}
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial: %w", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{"HoloMUSH"},
+			CommonName:   "holomush-" + clientName,
+		},
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().AddDate(1, 0, 0), // 1 year
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &key.PublicKey, ca.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client certificate: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse client certificate: %w", err)
+	}
+
+	return &ClientCert{Certificate: cert, PrivateKey: key, Name: clientName}, nil
+}
+
+// SaveClientCert saves a client certificate to the certs directory.
+// Client certificate is saved as {name}.crt and {name}.key.
+func SaveClientCert(certsDir string, clientCert *ClientCert) error {
+	if err := os.MkdirAll(certsDir, 0o700); err != nil {
+		return fmt.Errorf("failed to create certs directory: %w", err)
+	}
+
+	certFile := clientCert.Name + ".crt"
+	keyFile := clientCert.Name + ".key"
+	if err := saveCert(filepath.Join(certsDir, certFile), clientCert.Certificate); err != nil {
+		return fmt.Errorf("failed to save client certificate: %w", err)
+	}
+	if err := saveKey(filepath.Join(certsDir, keyFile), clientCert.PrivateKey); err != nil {
+		return fmt.Errorf("failed to save client key: %w", err)
+	}
+
+	return nil
+}
+
+// LoadServerTLS loads TLS config for the Core gRPC server with mTLS.
+// Requires server cert and CA for client verification.
+func LoadServerTLS(certsDir string, serverName string) (*cryptotls.Config, error) {
+	cert, err := cryptotls.LoadX509KeyPair(
+		filepath.Join(certsDir, serverName+".crt"),
+		filepath.Join(certsDir, serverName+".key"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load server certificate: %w", err)
+	}
+
+	caCert, err := os.ReadFile(filepath.Clean(filepath.Join(certsDir, "root-ca.crt")))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to add CA certificate to pool")
+	}
+
+	return &cryptotls.Config{
+		Certificates: []cryptotls.Certificate{cert},
+		ClientCAs:    caPool,
+		ClientAuth:   cryptotls.RequireAndVerifyClientCert,
+		MinVersion:   cryptotls.VersionTLS13,
+	}, nil
+}
+
+// LoadClientTLS loads TLS config for the Gateway gRPC client with mTLS.
+// Requires client cert and CA for server verification.
+// The expectedGameID is used to set ServerName for cert validation against the server's SAN.
+func LoadClientTLS(certsDir string, clientName string, expectedGameID string) (*cryptotls.Config, error) {
+	cert, err := cryptotls.LoadX509KeyPair(
+		filepath.Join(certsDir, clientName+".crt"),
+		filepath.Join(certsDir, clientName+".key"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+
+	caCert, err := os.ReadFile(filepath.Clean(filepath.Join(certsDir, "root-ca.crt")))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to add CA certificate to pool")
+	}
+
+	return &cryptotls.Config{
+		Certificates: []cryptotls.Certificate{cert},
+		RootCAs:      caPool,
+		ServerName:   "holomush-" + expectedGameID,
+		MinVersion:   cryptotls.VersionTLS13,
+	}, nil
 }

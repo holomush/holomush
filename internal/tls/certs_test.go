@@ -296,3 +296,203 @@ func TestGenerateCA_URIFormat(t *testing.T) {
 		t.Errorf("CA certificate missing URI SAN holomush://game/%s", gameID)
 	}
 }
+
+func TestGenerateClientCert(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	if clientCert.Certificate == nil {
+		t.Fatal("Client certificate is nil")
+	}
+	if clientCert.PrivateKey == nil {
+		t.Fatal("Client private key is nil")
+	}
+	if clientCert.Name != "gateway" {
+		t.Errorf("Client name = %q, want 'gateway'", clientCert.Name)
+	}
+
+	// Verify it's signed by CA
+	if err := clientCert.Certificate.CheckSignatureFrom(ca.Certificate); err != nil {
+		t.Errorf("Client cert not signed by CA: %v", err)
+	}
+
+	// Verify CN
+	expectedCN := "holomush-gateway"
+	if clientCert.Certificate.Subject.CommonName != expectedCN {
+		t.Errorf("Client CN = %q, want %q", clientCert.Certificate.Subject.CommonName, expectedCN)
+	}
+
+	// Verify ExtKeyUsage is ClientAuth
+	hasClientAuth := false
+	for _, usage := range clientCert.Certificate.ExtKeyUsage {
+		if usage == x509.ExtKeyUsageClientAuth {
+			hasClientAuth = true
+			break
+		}
+	}
+	if !hasClientAuth {
+		t.Error("Client certificate missing ClientAuth ExtKeyUsage")
+	}
+}
+
+func TestSaveClientCert(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	if err := SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("SaveClientCert() error = %v", err)
+	}
+
+	// Verify files exist
+	files := []string{"gateway.crt", "gateway.key"}
+	for _, f := range files {
+		path := filepath.Join(tmpDir, f)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("Expected file %s to exist: %v", f, err)
+		}
+	}
+
+	// Verify we can load the certificate
+	cert, err := tls.LoadX509KeyPair(
+		filepath.Join(tmpDir, "gateway.crt"),
+		filepath.Join(tmpDir, "gateway.key"),
+	)
+	if err != nil {
+		t.Fatalf("Failed to load client cert: %v", err)
+	}
+
+	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		t.Fatalf("Failed to parse cert: %v", err)
+	}
+
+	if x509Cert.Subject.CommonName != "holomush-gateway" {
+		t.Errorf("Loaded cert CN = %q, want 'holomush-gateway'", x509Cert.Subject.CommonName)
+	}
+}
+
+func TestLoadServerTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	// Generate and save CA
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate and save server cert
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	if err := SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Load server TLS config
+	config, err := LoadServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("LoadServerTLS() error = %v", err)
+	}
+
+	// Verify config
+	if config.ClientAuth != tls.RequireAndVerifyClientCert {
+		t.Error("Expected mTLS with client cert verification")
+	}
+	if len(config.Certificates) != 1 {
+		t.Errorf("Expected 1 certificate, got %d", len(config.Certificates))
+	}
+	if config.ClientCAs == nil {
+		t.Error("Expected ClientCAs pool")
+	}
+	if config.MinVersion != tls.VersionTLS13 {
+		t.Errorf("Expected TLS 1.3 min version, got %d", config.MinVersion)
+	}
+}
+
+func TestLoadClientTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	// Generate and save CA
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	if err := SaveCertificates(tmpDir, ca, nil); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Generate and save client cert
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	if err := SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("SaveClientCert() error = %v", err)
+	}
+
+	// Load client TLS config
+	config, err := LoadClientTLS(tmpDir, "gateway", gameID)
+	if err != nil {
+		t.Fatalf("LoadClientTLS() error = %v", err)
+	}
+
+	// Verify config
+	if config.RootCAs == nil {
+		t.Error("Expected RootCAs pool")
+	}
+	if len(config.Certificates) != 1 {
+		t.Errorf("Expected 1 certificate, got %d", len(config.Certificates))
+	}
+	expectedServerName := "holomush-" + gameID
+	if config.ServerName != expectedServerName {
+		t.Errorf("ServerName = %q, want %q", config.ServerName, expectedServerName)
+	}
+	if config.MinVersion != tls.VersionTLS13 {
+		t.Errorf("Expected TLS 1.3 min version, got %d", config.MinVersion)
+	}
+}
+
+func TestLoadServerTLS_MissingFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Try to load from empty directory
+	_, err := LoadServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Error("LoadServerTLS() should return error for missing files")
+	}
+}
+
+func TestLoadClientTLS_MissingFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Try to load from empty directory
+	_, err := LoadClientTLS(tmpDir, "gateway", "test-game")
+	if err == nil {
+		t.Error("LoadClientTLS() should return error for missing files")
+	}
+}
