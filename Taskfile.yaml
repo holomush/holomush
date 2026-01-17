@@ -29,7 +29,6 @@ tasks:
     cmds:
       - task: build:linux
       - task: build:darwin
-      - task: build:windows
 
   build:linux:
     desc: Build for Linux
@@ -42,11 +41,6 @@ tasks:
     cmds:
       - GOOS=darwin GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-darwin-amd64 {{.MAIN_PKG}}
       - GOOS=darwin GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-darwin-arm64 {{.MAIN_PKG}}
-
-  build:windows:
-    desc: Build for Windows
-    cmds:
-      - GOOS=windows GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-windows-amd64.exe {{.MAIN_PKG}}
 
   # Testing
   test:
