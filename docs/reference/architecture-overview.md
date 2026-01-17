@@ -16,29 +16,39 @@ For complete specifications, see the [full architecture document](../plans/2026-
 
 ## System Architecture
 
-```text
-+-------------------------------------------------------------------+
-|                         Clients                                    |
-+---------------------------+---------------------------------------+
-|   Telnet Adapter          |           Web (SvelteKit PWA)         |
-|   (ANSI, GMCP)            |   Terminal | Wiki | Forum | Admin     |
-+-----------+---------------+-------------------+-------------------+
-            |                                   |
-            v                                   v
-+-------------------------------------------------------------------+
-|                    Go Core (Event-Oriented)                        |
-+-------------------------------------------------------------------+
-|  Session Manager   |  World Engine   |  Plugin Host (wazero)      |
-|  - Per-char buffer |  - Locations    |  - WASM sandbox            |
-|  - Reconnect/sync  |  - Objects      |  - Capability grants       |
-|  - Protocol adapt  |  - Commands     |  - Multi-language          |
-+--------+--------------------+--------------------+-----------------+
-         |                    |                    |
-         v                    v                    v
-+------------------+ +-----------------+ +------------------------+
-|  Event Store     | |   PostgreSQL    | |  ABAC Policy Engine    |
-|  (PG/NATS)       | |  World + Content| |  Attribute-based ACL   |
-+------------------+ +-----------------+ +------------------------+
+```mermaid
+graph TB
+    subgraph Clients
+        T[Telnet Client<br/>ANSI, GMCP]
+        W[Web Client<br/>SvelteKit PWA]
+    end
+
+    subgraph Core["Go Core (Event-Oriented)"]
+        TA[Telnet Adapter]
+        WA[Web Adapter]
+        SM[Session Manager<br/>• Per-char buffer<br/>• Reconnect/sync]
+        WE[World Engine<br/>• Locations<br/>• Commands]
+        PH[Plugin Host<br/>• WASM sandbox<br/>• wazero runtime]
+        BC[Broadcaster<br/>• Real-time events]
+    end
+
+    subgraph Storage
+        ES[(Event Store<br/>PostgreSQL)]
+        WD[(World Data<br/>PostgreSQL)]
+        ABAC[ABAC Policy<br/>Engine]
+    end
+
+    T --> TA
+    W --> WA
+    TA --> SM
+    WA --> SM
+    SM <--> WE
+    WE <--> PH
+    WE --> BC
+    BC --> SM
+    WE --> ES
+    WE --> WD
+    WE --> ABAC
 ```
 
 ## Core Concepts
@@ -51,6 +61,39 @@ All game activity flows through ordered, persistent event streams:
 - Events are stored before acknowledgment
 - State is derived from event replay
 - Enables reconnection with full catch-up
+
+```mermaid
+flowchart LR
+    subgraph Input
+        C1[say Hello]
+        C2[pose waves]
+        C3[look]
+    end
+
+    subgraph Events["Event Stream (ordered)"]
+        E1[Event 1<br/>say]
+        E2[Event 2<br/>pose]
+        E3[Event 3<br/>look]
+    end
+
+    subgraph Output
+        S1[Current State]
+        R1[Real-time<br/>Delivery]
+        H1[History<br/>Replay]
+    end
+
+    C1 --> E1
+    C2 --> E2
+    C3 --> E3
+    E1 --> S1
+    E2 --> S1
+    E3 --> S1
+    E1 --> R1
+    E2 --> R1
+    E1 --> H1
+    E2 --> H1
+    E3 --> H1
+```
 
 ### Event Structure
 
@@ -89,6 +132,44 @@ type Session struct {
 - Multiple simultaneous connections allowed
 - Session persists even with zero connections
 - Reconnection replays missed events
+
+### Plugin Architecture
+
+WASM plugins extend game functionality in a sandboxed environment:
+
+```mermaid
+flowchart TB
+    subgraph Host["Plugin Host (Go)"]
+        PH[PluginHost]
+        PS[PluginSubscriber]
+    end
+
+    subgraph Plugins["WASM Sandbox"]
+        P1[Echo Plugin]
+        P2[Dice Plugin]
+        P3[Custom Plugin]
+    end
+
+    subgraph Events
+        BC[Broadcaster]
+        ES[(EventStore)]
+    end
+
+    BC -->|subscribe| PS
+    PS -->|DeliverEvent| PH
+    PH -->|JSON event| P1
+    PH -->|JSON event| P2
+    PH -->|JSON event| P3
+    P1 -->|response| PH
+    P2 -->|response| PH
+    P3 -->|response| PH
+    PH -->|EmitEvent| ES
+```
+
+**Plugin contract:**
+
+- `alloc(size) → ptr` - Memory allocation for host
+- `handle_event(ptr, len) → packed` - Event handler returning response
 
 ## Directory Structure
 
@@ -159,24 +240,48 @@ type SessionManager interface {
 
 ### Command Processing
 
-```text
-1. Player types: "say Hello!"
-2. Telnet handler parses command
-3. Engine.HandleSay() creates Event
-4. Event stored via EventStore.Append()
-5. Broadcaster distributes to subscribers
-6. All connected handlers receive and display
+```mermaid
+sequenceDiagram
+    participant P as Player
+    participant H as Telnet Handler
+    participant E as Engine
+    participant S as EventStore
+    participant B as Broadcaster
+    participant O as Other Handlers
+
+    P->>H: say Hello!
+    H->>E: HandleSay(charID, locationID, "Hello!")
+    E->>S: Append(event)
+    S-->>E: success
+    E->>B: Broadcast(event)
+    B->>H: event (filtered as own)
+    B->>O: event
+    H->>P: You say, "Hello!"
+    O->>O: [char] says, "Hello!"
 ```
 
 ### Reconnection Flow
 
-```text
-1. Player reconnects
-2. Session found (or created)
-3. Engine.ReplayEvents() fetches missed events
-4. Events sent to client
-5. Session cursor updated
-6. Real-time subscription resumed
+```mermaid
+sequenceDiagram
+    participant P as Player
+    participant H as Telnet Handler
+    participant SM as SessionManager
+    participant E as Engine
+    participant S as EventStore
+    participant B as Broadcaster
+
+    P->>H: connect testuser password
+    H->>SM: GetSession(charID)
+    SM-->>H: session (with cursors)
+    H->>E: ReplayEvents(charID, stream, cursor)
+    E->>S: Replay(stream, afterID, limit)
+    S-->>E: missed events
+    E-->>H: events[]
+    H->>P: [replays missed messages]
+    H->>SM: UpdateCursor(charID, stream, lastID)
+    H->>B: Subscribe(stream)
+    B-->>H: real-time events
 ```
 
 ## Technology Stack
