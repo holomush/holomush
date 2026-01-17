@@ -60,3 +60,6 @@ dist/
 
 # dprint cache
 .dprint/
+
+# worktrees
+.worktrees/
