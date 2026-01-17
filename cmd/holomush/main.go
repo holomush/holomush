@@ -2,8 +2,14 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/telnet"
 )
 
 // Version information set at build time.
@@ -14,7 +20,41 @@ var (
 )
 
 func main() {
-	fmt.Printf("HoloMUSH %s (%s) built %s\n", version, commit, date)
-	fmt.Println("Server not yet implemented.")
-	os.Exit(0)
+	slog.Info("HoloMUSH starting",
+		"version", version,
+		"commit", commit,
+		"date", date,
+	)
+
+	// Setup
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	engine := core.NewEngine(store, sessions)
+
+	// Telnet server
+	addr := os.Getenv("TELNET_ADDR")
+	if addr == "" {
+		addr = ":4201"
+	}
+	srv := telnet.NewServer(addr, engine, sessions)
+
+	// Graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		slog.Info("Shutting down...")
+		cancel()
+	}()
+
+	// Run
+	if err := srv.Run(ctx); err != nil {
+		slog.Error("Server error", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Server stopped")
 }
