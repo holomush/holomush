@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -482,4 +483,289 @@ func TestClient_CoreClient(t *testing.T) {
 	if !resp.GetSuccess() {
 		t.Error("CoreClient().Authenticate() success = false, want true")
 	}
+}
+
+func TestClient_Subscribe(t *testing.T) {
+	// Start a mock server with Subscribe implementation
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer closeWithCheck(t, lis)
+
+	server := grpc.NewServer()
+	corev1.RegisterCoreServer(server, &mockCoreServerWithSubscribe{})
+
+	go func() {
+		_ = server.Serve(lis)
+	}()
+	defer server.Stop()
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := NewClient(ctx, ClientConfig{
+		Address: lis.Addr().String(),
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	defer closeWithCheck(t, client)
+
+	// Call Subscribe
+	stream, err := client.Subscribe(ctx, &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "subscribe-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "test-session",
+		Streams:   []string{"location:test"},
+	})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
+	// Read one event from the stream
+	event, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("stream.Recv() error = %v", err)
+	}
+	if event.GetId() == "" {
+		t.Error("Received event has empty ID")
+	}
+}
+
+// mockCoreServerWithSubscribe includes Subscribe implementation.
+type mockCoreServerWithSubscribe struct {
+	corev1.UnimplementedCoreServer
+}
+
+func (m *mockCoreServerWithSubscribe) Subscribe(_ *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.Event]) error {
+	// Send one test event
+	if err := stream.Send(&corev1.Event{
+		Id:        "test-event-1",
+		Stream:    "location:test",
+		Type:      "say",
+		Timestamp: timestamppb.Now(),
+		ActorType: "character",
+		ActorId:   "char-123",
+		Payload:   []byte(`{"message":"hello"}`),
+	}); err != nil {
+		return fmt.Errorf("failed to send event: %w", err)
+	}
+	return nil
+}
+
+func TestClient_Close_NilConn(t *testing.T) {
+	// Create a client with nil connection (simulated)
+	client := &Client{
+		conn:   nil,
+		client: nil,
+	}
+
+	err := client.Close()
+	if err != nil {
+		t.Errorf("Close() with nil conn should not error, got: %v", err)
+	}
+}
+
+func TestClient_Authenticate_RPCError(t *testing.T) {
+	// Start a mock server that returns an error
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer closeWithCheck(t, lis)
+
+	mockServer := &mockCoreServer{
+		authenticateFunc: func(_ context.Context, _ *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+			return nil, io.EOF // Simulate RPC error
+		},
+	}
+
+	server := grpc.NewServer()
+	corev1.RegisterCoreServer(server, mockServer)
+
+	go func() {
+		_ = server.Serve(lis)
+	}()
+	defer server.Stop()
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := NewClient(ctx, ClientConfig{
+		Address: lis.Addr().String(),
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	defer closeWithCheck(t, client)
+
+	// Call Authenticate - should get error
+	_, err = client.Authenticate(ctx, &corev1.AuthRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "error-test",
+			Timestamp: timestamppb.Now(),
+		},
+		Username: "testuser",
+		Password: "testpass",
+	})
+	if err == nil {
+		t.Error("Authenticate() should return error when RPC fails")
+	}
+}
+
+func TestClient_HandleCommand_RPCError(t *testing.T) {
+	// Start a mock server that returns an error
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer closeWithCheck(t, lis)
+
+	mockServer := &mockCoreServer{
+		handleCommandFunc: func(_ context.Context, _ *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+			return nil, io.EOF // Simulate RPC error
+		},
+	}
+
+	server := grpc.NewServer()
+	corev1.RegisterCoreServer(server, mockServer)
+
+	go func() {
+		_ = server.Serve(lis)
+	}()
+	defer server.Stop()
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := NewClient(ctx, ClientConfig{
+		Address: lis.Addr().String(),
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	defer closeWithCheck(t, client)
+
+	// Call HandleCommand - should get error
+	_, err = client.HandleCommand(ctx, &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "error-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "test-session",
+		Command:   "say hello",
+	})
+	if err == nil {
+		t.Error("HandleCommand() should return error when RPC fails")
+	}
+}
+
+func TestClient_Disconnect_RPCError(t *testing.T) {
+	// Start a mock server that returns an error
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer closeWithCheck(t, lis)
+
+	mockServer := &mockCoreServer{
+		disconnectFunc: func(_ context.Context, _ *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+			return nil, io.EOF // Simulate RPC error
+		},
+	}
+
+	server := grpc.NewServer()
+	corev1.RegisterCoreServer(server, mockServer)
+
+	go func() {
+		_ = server.Serve(lis)
+	}()
+	defer server.Stop()
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := NewClient(ctx, ClientConfig{
+		Address: lis.Addr().String(),
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	defer closeWithCheck(t, client)
+
+	// Call Disconnect - should get error
+	_, err = client.Disconnect(ctx, &corev1.DisconnectRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "error-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "test-session",
+	})
+	if err == nil {
+		t.Error("Disconnect() should return error when RPC fails")
+	}
+}
+
+func TestClient_Subscribe_StreamError(t *testing.T) {
+	// Start a mock server that returns an error during streaming
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer closeWithCheck(t, lis)
+
+	server := grpc.NewServer()
+	corev1.RegisterCoreServer(server, &mockCoreServerWithSubscribeError{})
+
+	go func() {
+		_ = server.Serve(lis)
+	}()
+	defer server.Stop()
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := NewClient(ctx, ClientConfig{
+		Address: lis.Addr().String(),
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	defer closeWithCheck(t, client)
+
+	// Call Subscribe - connection is established
+	stream, err := client.Subscribe(ctx, &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "error-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "invalid-session",
+		Streams:   []string{"location:test"},
+	})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
+	// The error comes when we try to receive - server returns EOF
+	_, err = stream.Recv()
+	if err == nil {
+		t.Error("stream.Recv() should return error when server returns EOF")
+	}
+}
+
+// mockCoreServerWithSubscribeError returns error for Subscribe.
+type mockCoreServerWithSubscribeError struct {
+	corev1.UnimplementedCoreServer
+}
+
+func (m *mockCoreServerWithSubscribeError) Subscribe(_ *corev1.SubscribeRequest, _ grpc.ServerStreamingServer[corev1.Event]) error {
+	return io.EOF // Simulate error - stream ends immediately
 }

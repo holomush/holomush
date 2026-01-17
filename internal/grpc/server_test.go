@@ -2,7 +2,10 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
+	holomushtls "github.com/holomush/holomush/internal/tls"
 )
 
 // mockEventStore implements core.EventStore for testing.
@@ -384,4 +388,995 @@ func (m *mockSessionStore) Set(sessionID string, info *SessionInfo) {
 
 func (m *mockSessionStore) Delete(sessionID string) {
 	delete(m.sessions, sessionID)
+}
+
+func TestNewCoreServer(t *testing.T) {
+	store := &mockEventStore{}
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+
+	server := NewCoreServer(
+		core.NewEngine(store, sessions, broadcaster),
+		sessions,
+		broadcaster,
+	)
+
+	if server == nil {
+		t.Fatal("NewCoreServer returned nil")
+	}
+	if server.sessionStore == nil {
+		t.Error("sessionStore should be initialized")
+	}
+}
+
+func TestNewCoreServer_WithOptions(t *testing.T) {
+	store := &mockEventStore{}
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+
+	customAuth := &mockAuthenticator{}
+	customStore := NewInMemorySessionStore()
+
+	server := NewCoreServer(
+		core.NewEngine(store, sessions, broadcaster),
+		sessions,
+		broadcaster,
+		WithAuthenticator(customAuth),
+		WithSessionStore(customStore),
+	)
+
+	if server == nil {
+		t.Fatal("NewCoreServer returned nil")
+	}
+	if server.authenticator != customAuth {
+		t.Error("WithAuthenticator option not applied")
+	}
+	if server.sessionStore != customStore {
+		t.Error("WithSessionStore option not applied")
+	}
+}
+
+func TestInMemorySessionStore(t *testing.T) {
+	store := NewInMemorySessionStore()
+
+	sessionID := "test-session-123"
+	info := &SessionInfo{
+		CharacterID:  core.NewULID(),
+		LocationID:   core.NewULID(),
+		ConnectionID: core.NewULID(),
+	}
+
+	// Test Get on non-existent session
+	_, ok := store.Get(sessionID)
+	if ok {
+		t.Error("Get() should return false for non-existent session")
+	}
+
+	// Test Set
+	store.Set(sessionID, info)
+
+	// Test Get on existing session
+	retrieved, ok := store.Get(sessionID)
+	if !ok {
+		t.Error("Get() should return true for existing session")
+	}
+	if retrieved.CharacterID != info.CharacterID {
+		t.Error("Retrieved session info doesn't match")
+	}
+
+	// Test Delete
+	store.Delete(sessionID)
+	_, ok = store.Get(sessionID)
+	if ok {
+		t.Error("Get() should return false after Delete")
+	}
+}
+
+func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
+	sessions := core.NewSessionManager()
+
+	server := &CoreServer{
+		sessions:      sessions,
+		sessionStore:  NewInMemorySessionStore(),
+		authenticator: nil, // No authenticator configured
+	}
+
+	ctx := context.Background()
+	req := &corev1.AuthRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "no-auth-test",
+			Timestamp: timestamppb.Now(),
+		},
+		Username: "testuser",
+		Password: "testpass",
+	}
+
+	resp, err := server.Authenticate(ctx, req)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+
+	if resp.Success {
+		t.Error("Success = true, want false when authenticator not configured")
+	}
+	if resp.Error != "authentication not configured" {
+		t.Errorf("Error = %q, want 'authentication not configured'", resp.Error)
+	}
+}
+
+func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	sessions := core.NewSessionManager()
+
+	auth := &mockAuthenticator{
+		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
+			return &AuthResult{
+				CharacterID:   charID,
+				CharacterName: "TestCharacter",
+			}, nil
+		},
+	}
+
+	server := &CoreServer{
+		sessions:      sessions,
+		authenticator: auth,
+		sessionStore:  NewInMemorySessionStore(),
+		newSessionID:  func() ulid.ULID { return sessionID },
+	}
+
+	ctx := context.Background()
+	req := &corev1.AuthRequest{
+		Meta:     nil, // No meta
+		Username: "testuser",
+		Password: "testpass",
+	}
+
+	resp, err := server.Authenticate(ctx, req)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("Success = false, want true")
+	}
+}
+
+func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	req := &corev1.CommandRequest{
+		Meta:      nil, // No meta
+		SessionId: sessionID.String(),
+		Command:   "say Hello",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("Success = false, want true; error: %s", resp.Error)
+	}
+}
+
+func TestCoreServer_HandleCommand_Pose(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	var appendedEvent core.Event
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, event core.Event) error {
+			appendedEvent = event
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	// Test pose command
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "pose-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "pose waves hello",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("Success = false, want true; error: %s", resp.Error)
+	}
+	if appendedEvent.Type != core.EventTypePose {
+		t.Errorf("Event type = %q, want %q", appendedEvent.Type, core.EventTypePose)
+	}
+
+	// Test : shortcut for pose
+	req2 := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "colon-pose-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   ": nods",
+	}
+
+	resp2, err := server.HandleCommand(ctx, req2)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if !resp2.Success {
+		t.Errorf("Success = false, want true for : shortcut; error: %s", resp2.Error)
+	}
+}
+
+func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{}
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "unknown-cmd-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "unknowncommand args",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if resp.Success {
+		t.Error("Success = true, want false for unknown command")
+	}
+	if resp.Error == "" {
+		t.Error("Error should contain error message for unknown command")
+	}
+}
+
+func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return errors.New("database error")
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "say-fail-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "say Hello",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if resp.Success {
+		t.Error("Success = true, want false when say fails")
+	}
+	if resp.Error == "" {
+		t.Error("Error should contain error message")
+	}
+}
+
+func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return errors.New("database error")
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "pose-fail-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "pose waves",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	if err != nil {
+		t.Fatalf("HandleCommand() error = %v", err)
+	}
+
+	if resp.Success {
+		t.Error("Success = true, want false when pose fails")
+	}
+	if resp.Error == "" {
+		t.Error("Error should contain error message")
+	}
+}
+
+func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
+	sessions := core.NewSessionManager()
+	broadcaster := core.NewBroadcaster()
+
+	server := &CoreServer{
+		sessions:     sessions,
+		broadcaster:  broadcaster,
+		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+	}
+
+	ctx := context.Background()
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "invalid-session-sub",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "non-existent-session",
+		Streams:   []string{"location:test"},
+	}
+
+	err := server.Subscribe(req, stream)
+	if err == nil {
+		t.Error("Subscribe() should return error for invalid session")
+	}
+}
+
+func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	server := &CoreServer{
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta:      nil, // No meta
+		SessionId: sessionID.String(),
+		Streams:   []string{"location:" + locationID.String()},
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give subscription time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel immediately
+	cancel()
+
+	select {
+	case err := <-done:
+		// Context cancellation expected
+		if err == nil {
+			t.Error("Subscribe() should return error on context cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+}
+
+type mockSubscribeStreamWithError struct {
+	grpc.ServerStream
+	ctx      context.Context
+	sendErr  error
+	sendFunc func(*corev1.Event) error
+}
+
+func (m *mockSubscribeStreamWithError) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
+func (m *mockSubscribeStreamWithError) Send(event *corev1.Event) error {
+	if m.sendFunc != nil {
+		return m.sendFunc(event)
+	}
+	return m.sendErr
+}
+
+func TestCoreServer_Subscribe_SendError(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	server := &CoreServer{
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	stream := &mockSubscribeStreamWithError{
+		ctx:     ctx,
+		sendErr: errors.New("send failed"),
+	}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "send-error-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Streams:   []string{"location:" + locationID.String()},
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give subscription time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Send an event that will cause send error
+	testEvent := core.Event{
+		ID:        core.NewULID(),
+		Stream:    "location:" + locationID.String(),
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		Payload:   []byte(`{"message":"test"}`),
+	}
+	broadcaster.Broadcast(testEvent)
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Subscribe() should return error when send fails")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe did not return after send error")
+	}
+}
+
+func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	connID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, connID)
+
+	server := &CoreServer{
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID:  charID,
+					ConnectionID: connID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta:      nil, // No meta
+		SessionId: sessionID.String(),
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	if err != nil {
+		t.Fatalf("Disconnect() error = %v", err)
+	}
+
+	if !resp.Success {
+		t.Error("Success = false, want true")
+	}
+}
+
+func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
+	sessions := core.NewSessionManager()
+
+	server := &CoreServer{
+		sessions:     sessions,
+		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+	}
+
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "non-existent-disc",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "non-existent-session",
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	if err != nil {
+		t.Fatalf("Disconnect() error = %v", err)
+	}
+
+	// Should succeed even for non-existent session (idempotent)
+	if !resp.Success {
+		t.Error("Success = false, want true for non-existent session (idempotent)")
+	}
+}
+
+func TestNewGRPCServerInsecure(t *testing.T) {
+	server := NewGRPCServerInsecure()
+	if server == nil {
+		t.Error("NewGRPCServerInsecure() returned nil")
+	}
+	server.Stop()
+}
+
+func TestMergeChannels_ClosedChannel(t *testing.T) {
+	ctx := context.Background()
+
+	// Create and immediately close a channel
+	ch := make(chan core.Event)
+	close(ch)
+
+	merged := mergeChannels(ctx, []chan core.Event{ch})
+
+	// Should receive closed channel (no events)
+	select {
+	case _, ok := <-merged:
+		if ok {
+			t.Error("Expected channel to be closed")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Timed out waiting for closed channel signal")
+	}
+}
+
+func TestMergeChannels_MultipleChannels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch1 := make(chan core.Event, 1)
+	ch2 := make(chan core.Event, 1)
+
+	event1 := core.Event{ID: core.NewULID(), Stream: "stream1", Type: core.EventTypeSay}
+	event2 := core.Event{ID: core.NewULID(), Stream: "stream2", Type: core.EventTypePose}
+
+	ch1 <- event1
+	ch2 <- event2
+
+	merged := mergeChannels(ctx, []chan core.Event{ch1, ch2})
+
+	// Should receive both events
+	received := make(map[string]bool)
+	for i := 0; i < 2; i++ {
+		select {
+		case e := <-merged:
+			received[e.ID.String()] = true
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Timed out waiting for events")
+		}
+	}
+
+	if !received[event1.ID.String()] || !received[event2.ID.String()] {
+		t.Error("Did not receive both events")
+	}
+}
+
+func TestMergeChannels_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ch := make(chan core.Event)
+	merged := mergeChannels(ctx, []chan core.Event{ch})
+
+	// Cancel context before sending any events
+	cancel()
+
+	// merged channel should eventually close
+	select {
+	case _, ok := <-merged:
+		if ok {
+			t.Error("Expected channel to be closed after context cancel")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Timed out waiting for channel to close")
+	}
+}
+
+func TestLoadServerTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-tls"
+
+	// Generate certificates
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Load TLS config
+	tlsConfig, err := LoadServerTLS(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadServerTLS() error = %v", err)
+	}
+
+	if tlsConfig == nil {
+		t.Fatal("LoadServerTLS() returned nil config")
+	}
+	if len(tlsConfig.Certificates) == 0 {
+		t.Error("TLS config has no certificates")
+	}
+	if tlsConfig.ClientCAs == nil {
+		t.Error("TLS config has no ClientCAs")
+	}
+	if tlsConfig.MinVersion != tls.VersionTLS13 {
+		t.Errorf("MinVersion = %d, want TLS1.3 (%d)", tlsConfig.MinVersion, tls.VersionTLS13)
+	}
+}
+
+func TestLoadServerTLS_MissingCert(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_, err := LoadServerTLS(tmpDir)
+	if err == nil {
+		t.Error("LoadServerTLS() should fail when certificate files are missing")
+	}
+}
+
+func TestLoadServerTLS_MissingCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-tls"
+
+	// Generate and save only server cert (no CA)
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Save only cert, not CA
+	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Remove the CA file
+	if err := os.Remove(filepath.Join(tmpDir, "root-ca.crt")); err != nil {
+		t.Fatalf("Failed to remove CA file: %v", err)
+	}
+
+	_, err = LoadServerTLS(tmpDir)
+	if err == nil {
+		t.Error("LoadServerTLS() should fail when CA file is missing")
+	}
+}
+
+func TestLoadClientTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-client-tls"
+
+	// Generate certificates
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("SaveClientCert() error = %v", err)
+	}
+
+	// Load TLS config
+	tlsConfig, err := LoadClientTLS(tmpDir, gameID)
+	if err != nil {
+		t.Fatalf("LoadClientTLS() error = %v", err)
+	}
+
+	if tlsConfig == nil {
+		t.Fatal("LoadClientTLS() returned nil config")
+	}
+	if len(tlsConfig.Certificates) == 0 {
+		t.Error("TLS config has no certificates")
+	}
+	if tlsConfig.RootCAs == nil {
+		t.Error("TLS config has no RootCAs")
+	}
+	if tlsConfig.ServerName != "holomush-"+gameID {
+		t.Errorf("ServerName = %q, want %q", tlsConfig.ServerName, "holomush-"+gameID)
+	}
+	if tlsConfig.MinVersion != tls.VersionTLS13 {
+		t.Errorf("MinVersion = %d, want TLS1.3 (%d)", tlsConfig.MinVersion, tls.VersionTLS13)
+	}
+}
+
+func TestLoadClientTLS_MissingCert(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_, err := LoadClientTLS(tmpDir, "test-game")
+	if err == nil {
+		t.Error("LoadClientTLS() should fail when certificate files are missing")
+	}
+}
+
+func TestLoadClientTLS_MissingCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-client-tls"
+
+	// Generate certificates
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("SaveClientCert() error = %v", err)
+	}
+
+	// No CA saved
+	_, err = LoadClientTLS(tmpDir, gameID)
+	if err == nil {
+		t.Error("LoadClientTLS() should fail when CA file is missing")
+	}
+}
+
+func TestNewGRPCServer(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-grpc"
+
+	// Generate certificates
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Load TLS config
+	tlsConfig, err := LoadServerTLS(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadServerTLS() error = %v", err)
+	}
+
+	// Create gRPC server with TLS
+	server := NewGRPCServer(tlsConfig)
+	if server == nil {
+		t.Fatal("NewGRPCServer() returned nil")
+	}
+	server.Stop()
+}
+
+func TestLoadServerTLS_InvalidCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-invalid-ca"
+
+	// Generate valid certificates
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Overwrite CA file with invalid content
+	if err := os.WriteFile(filepath.Join(tmpDir, "root-ca.crt"), []byte("invalid certificate"), 0o600); err != nil {
+		t.Fatalf("Failed to write invalid CA: %v", err)
+	}
+
+	_, err = LoadServerTLS(tmpDir)
+	if err == nil {
+		t.Error("LoadServerTLS() should fail with invalid CA")
+	}
+}
+
+func TestLoadClientTLS_InvalidCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game-invalid-ca"
+
+	// Generate valid certificates
+	ca, err := holomushtls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("SaveClientCert() error = %v", err)
+	}
+
+	// Write invalid CA
+	if err := os.WriteFile(filepath.Join(tmpDir, "root-ca.crt"), []byte("invalid certificate"), 0o600); err != nil {
+		t.Fatalf("Failed to write invalid CA: %v", err)
+	}
+
+	_, err = LoadClientTLS(tmpDir, gameID)
+	if err == nil {
+		t.Error("LoadClientTLS() should fail with invalid CA")
+	}
 }
