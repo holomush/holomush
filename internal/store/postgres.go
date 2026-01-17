@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
@@ -23,9 +24,18 @@ var migration002SQL string
 // ErrSystemInfoNotFound is returned when a system info key doesn't exist.
 var ErrSystemInfoNotFound = errors.New("system info key not found")
 
+// poolIface defines the pgxpool methods used by PostgresEventStore.
+// This interface enables testing with mocks.
+type poolIface interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Close()
+}
+
 // PostgresEventStore implements EventStore using PostgreSQL.
 type PostgresEventStore struct {
-	pool *pgxpool.Pool
+	pool poolIface
 }
 
 // NewPostgresEventStore creates a new PostgreSQL event store.

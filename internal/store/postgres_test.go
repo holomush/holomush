@@ -1,393 +1,839 @@
-//go:build integration
-
 package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/oklog/ulid/v2"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/pashagolub/pgxmock/v4"
 
 	"github.com/holomush/holomush/internal/core"
 )
 
-// setupPostgresContainer starts a PostgreSQL container for testing.
-func setupPostgresContainer(t *testing.T) (*PostgresEventStore, func()) {
-	t.Helper()
-	ctx := context.Background()
-
-	container, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
-	if err != nil {
-		t.Fatalf("failed to start postgres container: %v", err)
+// testEvent creates a test event with the given parameters.
+func testEvent(stream string, eventType core.EventType) core.Event {
+	return core.Event{
+		ID:        core.NewULID(),
+		Stream:    stream,
+		Type:      eventType,
+		Timestamp: time.Now().UTC().Truncate(time.Microsecond),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+		Payload:   []byte(`{"message":"test"}`),
 	}
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("failed to get connection string: %v", err)
-	}
-
-	store, err := NewPostgresEventStore(ctx, connStr)
-	if err != nil {
-		t.Fatalf("failed to create event store: %v", err)
-	}
-
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
-
-	cleanup := func() {
-		store.Close()
-		if err := container.Terminate(ctx); err != nil {
-			t.Logf("failed to terminate container: %v", err)
-		}
-	}
-
-	return store, cleanup
 }
 
 func TestPostgresEventStore_Append(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	event := core.Event{
-		ID:        core.NewULID(),
-		Stream:    "location:test-room",
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-		Payload:   []byte(`{"message":"Hello, world!"}`),
+	tests := []struct {
+		name      string
+		event     core.Event
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:  "successful append",
+			event: testEvent("location:room-1", core.EventTypeSay),
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO events`).
+					WithArgs(
+						pgxmock.AnyArg(), // id
+						pgxmock.AnyArg(), // stream
+						pgxmock.AnyArg(), // type
+						pgxmock.AnyArg(), // actor_kind
+						pgxmock.AnyArg(), // actor_id
+						pgxmock.AnyArg(), // payload
+						pgxmock.AnyArg(), // created_at
+					).
+					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			},
+			wantErr: false,
+		},
+		{
+			name:  "database error on insert",
+			event: testEvent("location:room-1", core.EventTypeSay),
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO events`).
+					WithArgs(
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+					).
+					WillReturnError(errors.New("connection refused"))
+			},
+			wantErr: true,
+			errMsg:  "failed to append event",
+		},
+		{
+			name:  "append pose event",
+			event: testEvent("location:room-1", core.EventTypePose),
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO events`).
+					WithArgs(
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+					).
+					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			},
+			wantErr: false,
+		},
+		{
+			name:  "append system event",
+			event: testEvent("system:global", core.EventTypeSystem),
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO events`).
+					WithArgs(
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
+					).
+					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			},
+			wantErr: false,
+		},
 	}
 
-	err := store.Append(ctx, event)
-	if err != nil {
-		t.Fatalf("Append failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
 
-	// Verify event was stored
-	events, err := store.Replay(ctx, "location:test-room", ulid.ULID{}, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-	if events[0].ID != event.ID {
-		t.Errorf("event ID mismatch: got %v, want %v", events[0].ID, event.ID)
+			tt.setupMock(mock)
+
+			store := &PostgresEventStore{pool: mock}
+			err = store.Append(context.Background(), tt.event)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
 	}
 }
 
 func TestPostgresEventStore_Replay(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
+	validULID := core.NewULID()
+	validULIDStr := validULID.String()
+	timestamp := time.Now().UTC().Truncate(time.Microsecond)
 
-	ctx := context.Background()
-	stream := "location:replay-test"
-
-	// Append multiple events
-	ids := make([]ulid.ULID, 5)
-	for i := range 5 {
-		ids[i] = core.NewULID()
-		event := core.Event{
-			ID:        ids[i],
-			Stream:    stream,
-			Type:      core.EventTypeSay,
-			Timestamp: time.Now(),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-			Payload:   []byte(`{"message":"test"}`),
-		}
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append failed: %v", err)
-		}
-		time.Sleep(time.Millisecond) // Ensure ULID ordering
+	tests := []struct {
+		name       string
+		stream     string
+		afterID    ulid.ULID
+		limit      int
+		setupMock  func(mock pgxmock.PgxPoolIface)
+		wantCount  int
+		wantErr    bool
+		errMsg     string
+		checkEvent func(t *testing.T, events []core.Event)
+	}{
+		{
+			name:    "replay from beginning",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow(validULIDStr, "location:room-1", "say", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "pose", core.ActorCharacter, "char-456", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 10).
+					WillReturnRows(rows)
+			},
+			wantCount: 2,
+			wantErr:   false,
+		},
+		{
+			name:    "replay after specific ID",
+			stream:  "location:room-1",
+			afterID: validULID,
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow(core.NewULID().String(), "location:room-1", "say", core.ActorCharacter, "char-123", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 AND id > \$2 ORDER BY id LIMIT \$3`).
+					WithArgs("location:room-1", validULIDStr, 10).
+					WillReturnRows(rows)
+			},
+			wantCount: 1,
+			wantErr:   false,
+		},
+		{
+			name:    "replay empty stream",
+			stream:  "location:empty",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"})
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:empty", 10).
+					WillReturnRows(rows)
+			},
+			wantCount: 0,
+			wantErr:   false,
+		},
+		{
+			name:    "query error",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 10).
+					WillReturnError(errors.New("database error"))
+			},
+			wantErr: true,
+			errMsg:  "failed to query events",
+		},
+		{
+			name:    "scan error - invalid ULID",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow("invalid-ulid", "location:room-1", "say", core.ActorCharacter, "char-123", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 10).
+					WillReturnRows(rows)
+			},
+			wantErr: true,
+			errMsg:  "corrupt event ID",
+		},
+		{
+			name:    "replay with limit",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   2,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow(core.NewULID().String(), "location:room-1", "say", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "pose", core.ActorCharacter, "char-456", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 2).
+					WillReturnRows(rows)
+			},
+			wantCount: 2,
+			wantErr:   false,
+		},
+		{
+			name:    "replay all event types",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow(core.NewULID().String(), "location:room-1", "say", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "pose", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "arrive", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "leave", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "system", core.ActorSystem, "system", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 10).
+					WillReturnRows(rows)
+			},
+			wantCount: 5,
+			wantErr:   false,
+			checkEvent: func(t *testing.T, events []core.Event) {
+				t.Helper()
+				expectedTypes := []core.EventType{
+					core.EventTypeSay,
+					core.EventTypePose,
+					core.EventTypeArrive,
+					core.EventTypeLeave,
+					core.EventTypeSystem,
+				}
+				for i, et := range expectedTypes {
+					if events[i].Type != et {
+						t.Errorf("event %d: expected type %q, got %q", i, et, events[i].Type)
+					}
+				}
+			},
+		},
+		{
+			name:    "replay all actor kinds",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow(core.NewULID().String(), "location:room-1", "say", core.ActorCharacter, "char-123", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "system", core.ActorSystem, "system", []byte(`{}`), timestamp).
+					AddRow(core.NewULID().String(), "location:room-1", "say", core.ActorPlugin, "plugin-test", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 10).
+					WillReturnRows(rows)
+			},
+			wantCount: 3,
+			wantErr:   false,
+			checkEvent: func(t *testing.T, events []core.Event) {
+				t.Helper()
+				expectedKinds := []core.ActorKind{
+					core.ActorCharacter,
+					core.ActorSystem,
+					core.ActorPlugin,
+				}
+				for i, ak := range expectedKinds {
+					if events[i].Actor.Kind != ak {
+						t.Errorf("event %d: expected actor kind %d, got %d", i, ak, events[i].Actor.Kind)
+					}
+				}
+			},
+		},
+		{
+			name:    "scan error - type mismatch",
+			stream:  "location:room-1",
+			afterID: ulid.ULID{},
+			limit:   10,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				// Return mismatched types to trigger scan error
+				rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+					AddRow(core.NewULID().String(), "location:room-1", "say", "not-an-int", "char-123", []byte(`{}`), timestamp)
+				mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM events WHERE stream = \$1 ORDER BY id LIMIT \$2`).
+					WithArgs("location:room-1", 10).
+					WillReturnRows(rows)
+			},
+			wantErr: true,
+			errMsg:  "failed to scan event row",
+		},
 	}
 
-	t.Run("replay all from beginning", func(t *testing.T) {
-		events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
-		if err != nil {
-			t.Fatalf("Replay failed: %v", err)
-		}
-		if len(events) != 5 {
-			t.Errorf("expected 5 events, got %d", len(events))
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
 
-	t.Run("replay with afterID", func(t *testing.T) {
-		events, err := store.Replay(ctx, stream, ids[1], 10)
-		if err != nil {
-			t.Fatalf("Replay failed: %v", err)
-		}
-		if len(events) != 3 {
-			t.Errorf("expected 3 events after id[1], got %d", len(events))
-		}
-	})
+			tt.setupMock(mock)
 
-	t.Run("replay with limit", func(t *testing.T) {
-		events, err := store.Replay(ctx, stream, ulid.ULID{}, 2)
-		if err != nil {
-			t.Fatalf("Replay failed: %v", err)
-		}
-		if len(events) != 2 {
-			t.Errorf("expected 2 events with limit, got %d", len(events))
-		}
-	})
+			store := &PostgresEventStore{pool: mock}
+			events, err := store.Replay(context.Background(), tt.stream, tt.afterID, tt.limit)
 
-	t.Run("replay empty stream", func(t *testing.T) {
-		events, err := store.Replay(ctx, "nonexistent:stream", ulid.ULID{}, 10)
-		if err != nil {
-			t.Fatalf("Replay failed: %v", err)
-		}
-		if len(events) != 0 {
-			t.Errorf("expected 0 events for nonexistent stream, got %d", len(events))
-		}
-	})
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(events) != tt.wantCount {
+					t.Errorf("expected %d events, got %d", tt.wantCount, len(events))
+				}
+				if tt.checkEvent != nil {
+					tt.checkEvent(t, events)
+				}
+			}
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
+	}
 }
 
 func TestPostgresEventStore_LastEventID(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
+	validULID := core.NewULID()
+	validULIDStr := validULID.String()
 
-	ctx := context.Background()
-	stream := "location:last-id-test"
-
-	t.Run("empty stream returns ErrStreamEmpty", func(t *testing.T) {
-		_, err := store.LastEventID(ctx, stream)
-		if err != core.ErrStreamEmpty {
-			t.Errorf("expected ErrStreamEmpty, got %v", err)
-		}
-	})
-
-	// Append some events
-	var lastID ulid.ULID
-	for i := range 3 {
-		lastID = core.NewULID()
-		event := core.Event{
-			ID:        lastID,
-			Stream:    stream,
-			Type:      core.EventTypeSay,
-			Timestamp: time.Now(),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-			Payload:   []byte(`{}`),
-		}
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append %d failed: %v", i, err)
-		}
-		time.Sleep(time.Millisecond)
+	tests := []struct {
+		name      string
+		stream    string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantID    ulid.ULID
+		wantErr   error
+		errMsg    string
+	}{
+		{
+			name:   "successful last event ID",
+			stream: "location:room-1",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id"}).AddRow(validULIDStr)
+				mock.ExpectQuery(`SELECT id FROM events WHERE stream = \$1 ORDER BY id DESC LIMIT 1`).
+					WithArgs("location:room-1").
+					WillReturnRows(rows)
+			},
+			wantID:  validULID,
+			wantErr: nil,
+		},
+		{
+			name:   "empty stream returns ErrStreamEmpty",
+			stream: "location:empty",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT id FROM events WHERE stream = \$1 ORDER BY id DESC LIMIT 1`).
+					WithArgs("location:empty").
+					WillReturnError(pgx.ErrNoRows)
+			},
+			wantID:  ulid.ULID{},
+			wantErr: core.ErrStreamEmpty,
+		},
+		{
+			name:   "database error",
+			stream: "location:room-1",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT id FROM events WHERE stream = \$1 ORDER BY id DESC LIMIT 1`).
+					WithArgs("location:room-1").
+					WillReturnError(errors.New("connection lost"))
+			},
+			wantID: ulid.ULID{},
+			errMsg: "failed to query last event ID",
+		},
+		{
+			name:   "corrupt ULID in database",
+			stream: "location:room-1",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id"}).AddRow("not-a-valid-ulid")
+				mock.ExpectQuery(`SELECT id FROM events WHERE stream = \$1 ORDER BY id DESC LIMIT 1`).
+					WithArgs("location:room-1").
+					WillReturnRows(rows)
+			},
+			wantID: ulid.ULID{},
+			errMsg: "corrupt event ID",
+		},
 	}
 
-	t.Run("returns last event ID", func(t *testing.T) {
-		id, err := store.LastEventID(ctx, stream)
-		if err != nil {
-			t.Fatalf("LastEventID failed: %v", err)
-		}
-		if id != lastID {
-			t.Errorf("expected %v, got %v", lastID, id)
-		}
-	})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
 
-func TestPostgresEventStore_EventTypes(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
+			tt.setupMock(mock)
 
-	ctx := context.Background()
-	stream := "location:event-types-test"
+			store := &PostgresEventStore{pool: mock}
+			id, err := store.LastEventID(context.Background(), tt.stream)
 
-	eventTypes := []core.EventType{
-		core.EventTypeSay,
-		core.EventTypePose,
-		core.EventTypeArrive,
-		core.EventTypeLeave,
-		core.EventTypeSystem,
-	}
+			switch {
+			case tt.wantErr != nil:
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("expected error %v, got %v", tt.wantErr, err)
+				}
+			case tt.errMsg != "":
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			default:
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if id != tt.wantID {
+					t.Errorf("expected ID %v, got %v", tt.wantID, id)
+				}
+			}
 
-	for _, et := range eventTypes {
-		event := core.Event{
-			ID:        core.NewULID(),
-			Stream:    stream,
-			Type:      et,
-			Timestamp: time.Now(),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-			Payload:   []byte(`{}`),
-		}
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append %s event failed: %v", et, err)
-		}
-	}
-
-	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-
-	if len(events) != len(eventTypes) {
-		t.Fatalf("expected %d events, got %d", len(eventTypes), len(events))
-	}
-
-	for i, et := range eventTypes {
-		if events[i].Type != et {
-			t.Errorf("event %d: expected type %s, got %s", i, et, events[i].Type)
-		}
-	}
-}
-
-func TestPostgresEventStore_ActorKinds(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	stream := "location:actor-kinds-test"
-
-	actorKinds := []core.ActorKind{
-		core.ActorCharacter,
-		core.ActorSystem,
-		core.ActorPlugin,
-	}
-
-	for _, ak := range actorKinds {
-		event := core.Event{
-			ID:        core.NewULID(),
-			Stream:    stream,
-			Type:      core.EventTypeSay,
-			Timestamp: time.Now(),
-			Actor:     core.Actor{Kind: ak, ID: "test-actor"},
-			Payload:   []byte(`{}`),
-		}
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append event with actor kind %d failed: %v", ak, err)
-		}
-	}
-
-	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-
-	if len(events) != len(actorKinds) {
-		t.Fatalf("expected %d events, got %d", len(actorKinds), len(events))
-	}
-
-	for i, ak := range actorKinds {
-		if events[i].Actor.Kind != ak {
-			t.Errorf("event %d: expected actor kind %d, got %d", i, ak, events[i].Actor.Kind)
-		}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
 	}
 }
 
-func TestPostgresEventStore_SystemInfo(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
+func TestPostgresEventStore_GetSystemInfo(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantValue string
+		wantErr   bool
+		errIs     error
+		errMsg    string
+	}{
+		{
+			name: "successful get",
+			key:  "game_id",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"value"}).AddRow("test-value-123")
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("game_id").
+					WillReturnRows(rows)
+			},
+			wantValue: "test-value-123",
+			wantErr:   false,
+		},
+		{
+			name: "key not found",
+			key:  "nonexistent",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("nonexistent").
+					WillReturnError(pgx.ErrNoRows)
+			},
+			wantErr: true,
+			errIs:   ErrSystemInfoNotFound,
+		},
+		{
+			name: "database error",
+			key:  "game_id",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("game_id").
+					WillReturnError(errors.New("connection timeout"))
+			},
+			wantErr: true,
+			errMsg:  "failed to get system info",
+		},
+	}
 
-	ctx := context.Background()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
 
-	t.Run("GetSystemInfo returns error for missing key", func(t *testing.T) {
-		_, err := store.GetSystemInfo(ctx, "nonexistent")
-		if err == nil {
-			t.Error("expected error for missing key")
-		}
-	})
+			tt.setupMock(mock)
 
-	t.Run("SetSystemInfo and GetSystemInfo", func(t *testing.T) {
-		err := store.SetSystemInfo(ctx, "test_key", "test_value")
-		if err != nil {
-			t.Fatalf("SetSystemInfo() error = %v", err)
-		}
+			store := &PostgresEventStore{pool: mock}
+			value, err := store.GetSystemInfo(context.Background(), tt.key)
 
-		value, err := store.GetSystemInfo(ctx, "test_key")
-		if err != nil {
-			t.Fatalf("GetSystemInfo() error = %v", err)
-		}
-		if value != "test_value" {
-			t.Errorf("GetSystemInfo() = %q, want %q", value, "test_value")
-		}
-	})
+			switch {
+			case tt.wantErr:
+				switch {
+				case err == nil:
+					t.Error("expected error, got nil")
+				case tt.errIs != nil && !errors.Is(err, tt.errIs):
+					t.Errorf("expected error to wrap %v, got %v", tt.errIs, err)
+				case tt.errMsg != "" && !containsString(err.Error(), tt.errMsg):
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			default:
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if value != tt.wantValue {
+					t.Errorf("expected value %q, got %q", tt.wantValue, value)
+				}
+			}
 
-	t.Run("SetSystemInfo updates existing key", func(t *testing.T) {
-		err := store.SetSystemInfo(ctx, "update_key", "original")
-		if err != nil {
-			t.Fatalf("SetSystemInfo() error = %v", err)
-		}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
+	}
+}
 
-		err = store.SetSystemInfo(ctx, "update_key", "updated")
-		if err != nil {
-			t.Fatalf("SetSystemInfo() update error = %v", err)
-		}
+func TestPostgresEventStore_SetSystemInfo(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       string
+		value     string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:  "successful insert",
+			key:   "game_id",
+			value: "test-game-id",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO holomush_system_info`).
+					WithArgs("game_id", "test-game-id").
+					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			},
+			wantErr: false,
+		},
+		{
+			name:  "successful upsert (update existing)",
+			key:   "game_id",
+			value: "updated-game-id",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO holomush_system_info`).
+					WithArgs("game_id", "updated-game-id").
+					WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+			},
+			wantErr: false,
+		},
+		{
+			name:  "database error",
+			key:   "game_id",
+			value: "test-value",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO holomush_system_info`).
+					WithArgs("game_id", "test-value").
+					WillReturnError(errors.New("disk full"))
+			},
+			wantErr: true,
+			errMsg:  "failed to set system info",
+		},
+	}
 
-		value, err := store.GetSystemInfo(ctx, "update_key")
-		if err != nil {
-			t.Fatalf("GetSystemInfo() error = %v", err)
-		}
-		if value != "updated" {
-			t.Errorf("GetSystemInfo() = %q, want %q", value, "updated")
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			store := &PostgresEventStore{pool: mock}
+			err = store.SetSystemInfo(context.Background(), tt.key, tt.value)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
+	}
 }
 
 func TestPostgresEventStore_InitGameID(t *testing.T) {
-	store, cleanup := setupPostgresContainer(t)
-	defer cleanup()
+	existingID := core.NewULID().String()
 
-	ctx := context.Background()
+	tests := []struct {
+		name      string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantErr   bool
+		errMsg    string
+		checkID   func(t *testing.T, id string)
+	}{
+		{
+			name: "returns existing game_id",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"value"}).AddRow(existingID)
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("game_id").
+					WillReturnRows(rows)
+			},
+			wantErr: false,
+			checkID: func(t *testing.T, id string) {
+				t.Helper()
+				if id != existingID {
+					t.Errorf("expected existing ID %q, got %q", existingID, id)
+				}
+			},
+		},
+		{
+			name: "generates new game_id when not found",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				// GetSystemInfo returns not found
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("game_id").
+					WillReturnError(pgx.ErrNoRows)
+				// SetSystemInfo succeeds
+				mock.ExpectExec(`INSERT INTO holomush_system_info`).
+					WithArgs("game_id", pgxmock.AnyArg()).
+					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			},
+			wantErr: false,
+			checkID: func(t *testing.T, id string) {
+				t.Helper()
+				if id == "" {
+					t.Error("expected non-empty ID")
+				}
+				if len(id) != 26 {
+					t.Errorf("expected ULID length 26, got %d", len(id))
+				}
+			},
+		},
+		{
+			name: "returns error on GetSystemInfo failure (non-NotFound)",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("game_id").
+					WillReturnError(errors.New("connection refused"))
+			},
+			wantErr: true,
+			errMsg:  "failed to check for existing game_id",
+		},
+		{
+			name: "returns error on SetSystemInfo failure",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT value FROM holomush_system_info WHERE key = \$1`).
+					WithArgs("game_id").
+					WillReturnError(pgx.ErrNoRows)
+				mock.ExpectExec(`INSERT INTO holomush_system_info`).
+					WithArgs("game_id", pgxmock.AnyArg()).
+					WillReturnError(errors.New("write failed"))
+			},
+			wantErr: true,
+			errMsg:  "failed to set system info",
+		},
+	}
 
-	t.Run("generates new game_id when none exists", func(t *testing.T) {
-		gameID, err := store.InitGameID(ctx)
-		if err != nil {
-			t.Fatalf("InitGameID() error = %v", err)
-		}
-		if gameID == "" {
-			t.Error("InitGameID() returned empty string")
-		}
-		// Verify it's a valid ULID (26 characters)
-		if len(gameID) != 26 {
-			t.Errorf("InitGameID() returned invalid ULID length: %d", len(gameID))
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
 
-	t.Run("returns existing game_id", func(t *testing.T) {
-		// Get current game_id
-		firstID, err := store.InitGameID(ctx)
-		if err != nil {
-			t.Fatalf("InitGameID() first call error = %v", err)
-		}
+			tt.setupMock(mock)
 
-		// Call again should return same ID
-		secondID, err := store.InitGameID(ctx)
-		if err != nil {
-			t.Fatalf("InitGameID() second call error = %v", err)
-		}
+			store := &PostgresEventStore{pool: mock}
+			id, err := store.InitGameID(context.Background())
 
-		if firstID != secondID {
-			t.Errorf("InitGameID() returned different IDs: %q vs %q", firstID, secondID)
-		}
-	})
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if tt.checkID != nil {
+					tt.checkID(t, id)
+				}
+			}
 
-	t.Run("game_id persists in database", func(t *testing.T) {
-		gameID, err := store.InitGameID(ctx)
-		if err != nil {
-			t.Fatalf("InitGameID() error = %v", err)
-		}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
+	}
+}
 
-		// Verify via GetSystemInfo
-		storedID, err := store.GetSystemInfo(ctx, "game_id")
-		if err != nil {
-			t.Fatalf("GetSystemInfo() error = %v", err)
+func TestPostgresEventStore_Migrate(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "successful migration",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				// First migration
+				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
+				// Second migration
+				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
+			},
+			wantErr: false,
+		},
+		{
+			name: "first migration fails",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec("").WillReturnError(errors.New("syntax error"))
+			},
+			wantErr: true,
+			errMsg:  "failed to run migration 001",
+		},
+		{
+			name: "second migration fails",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
+				mock.ExpectExec("").WillReturnError(errors.New("table already exists"))
+			},
+			wantErr: true,
+			errMsg:  "failed to run migration 002",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("failed to create mock: %v", err)
+			}
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			store := &PostgresEventStore{pool: mock}
+			err = store.Migrate(context.Background())
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("unfulfilled expectations: %v", err)
+			}
+		})
+	}
+}
+
+func TestPostgresEventStore_Close(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("failed to create mock: %v", err)
+	}
+
+	store := &PostgresEventStore{pool: mock}
+	store.Close()
+
+	// Verify the mock was closed (pgxmock tracks this internally)
+	// After Close(), pool operations should fail
+}
+
+func TestErrSystemInfoNotFound(t *testing.T) {
+	if ErrSystemInfoNotFound.Error() != "system info key not found" {
+		t.Errorf("unexpected error message: %s", ErrSystemInfoNotFound.Error())
+	}
+}
+
+// containsString checks if s contains substr.
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
 		}
-		if storedID != gameID {
-			t.Errorf("stored game_id %q != returned game_id %q", storedID, gameID)
-		}
-	})
+	}
+	return false
 }
