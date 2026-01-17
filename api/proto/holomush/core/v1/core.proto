@@ -1,0 +1,89 @@
+// api/proto/holomush/core/v1/core.proto
+syntax = "proto3";
+
+package holomush.core.v1;
+
+option go_package = "github.com/holomush/holomush/internal/proto/holomush/core/v1;corev1";
+
+import "google/protobuf/timestamp.proto";
+
+// RequestMeta contains metadata for request correlation and debugging.
+message RequestMeta {
+  string request_id = 1;                    // ULID for log correlation
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+// ResponseMeta contains metadata echoed back from requests.
+message ResponseMeta {
+  string request_id = 1;                    // Echoed from request
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+// Core is the main game service.
+service Core {
+  // Authenticate validates credentials and creates a session.
+  rpc Authenticate(AuthRequest) returns (AuthResponse);
+
+  // HandleCommand processes a game command.
+  rpc HandleCommand(CommandRequest) returns (CommandResponse);
+
+  // Subscribe opens a stream of events for the session.
+  rpc Subscribe(SubscribeRequest) returns (stream Event);
+
+  // Disconnect ends a session.
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+}
+
+message AuthRequest {
+  RequestMeta meta = 1;
+  string username = 2;
+  string password = 3;
+}
+
+message AuthResponse {
+  ResponseMeta meta = 1;
+  bool success = 2;
+  string session_id = 3;
+  string character_id = 4;
+  string character_name = 5;
+  string error = 6;
+}
+
+message CommandRequest {
+  RequestMeta meta = 1;
+  string session_id = 2;
+  string command = 3;
+}
+
+message CommandResponse {
+  ResponseMeta meta = 1;
+  bool success = 2;
+  string output = 3;
+  string error = 4;
+}
+
+message SubscribeRequest {
+  RequestMeta meta = 1;
+  string session_id = 2;
+  repeated string streams = 3;
+}
+
+message Event {
+  string id = 1;
+  string stream = 2;
+  string type = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  string actor_type = 5;
+  string actor_id = 6;
+  bytes payload = 7;
+}
+
+message DisconnectRequest {
+  RequestMeta meta = 1;
+  string session_id = 2;
+}
+
+message DisconnectResponse {
+  ResponseMeta meta = 1;
+  bool success = 2;
+}

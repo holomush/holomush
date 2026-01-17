@@ -42,6 +42,18 @@ tasks:
       - GOOS=darwin GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-darwin-amd64 {{.MAIN_PKG}}
       - GOOS=darwin GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-darwin-arm64 {{.MAIN_PKG}}
 
+  # Proto generation
+  proto:
+    desc: Generate Go code from protobuf definitions
+    cmds:
+      - buf generate
+    sources:
+      - api/proto/**/*.proto
+      - buf.yaml
+      - buf.gen.yaml
+    generates:
+      - internal/proto/**/*.go
+
   # Testing
   test:
     desc: Run all tests
