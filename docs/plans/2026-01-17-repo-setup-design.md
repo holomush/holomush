@@ -156,7 +156,11 @@ Epic: bd-a1b2 "Event System"
 | Hook | Runs |
 |------|------|
 | pre-commit | `task lint`, `task fmt --check` |
-| commit-msg | Conventional commit validation |
+| commit-msg | cocogitto (`cog verify`) |
+
+### cog.toml
+
+Cocogitto configuration for conventional commit validation only. Release-please handles versioning and changelog generation.
 
 ### golangci-lint Linters
 
@@ -273,6 +277,7 @@ Apache 2.0 - permissive with patent protection.
 | `.goreleaser.yaml` | Release automation |
 | `.markdownlint.yaml` | Markdown lint rules |
 | `.yamllint.yaml` | YAML lint rules |
+| `cog.toml` | Cocogitto commit validation |
 | `dprint.json` | Formatter config |
 | `lefthook.yaml` | Pre-commit hooks |
 | `Taskfile.yaml` | Build automation |

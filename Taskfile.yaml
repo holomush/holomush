@@ -207,6 +207,7 @@ tasks:
       - npm install -g markdownlint-cli2
       - pip install --user yamllint
       - curl -fsSL https://dprint.dev/install.sh | sh
+      - cargo install cocogitto || echo "Install Rust/cargo for cocogitto, or use: brew install cocogitto"
       - echo "Tools installed. Run 'lefthook install' to set up git hooks."
 
   # Git hooks
