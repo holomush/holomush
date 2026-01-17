@@ -1,0 +1,221 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  BINARY_NAME: holomush
+  MAIN_PKG: ./cmd/holomush
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Development
+  dev:
+    desc: Run server in development mode
+    cmds:
+      - go run {{.MAIN_PKG}}
+
+  # Building
+  build:
+    desc: Build the server binary
+    cmds:
+      - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
+
+  build:all:
+    desc: Build for all platforms
+    cmds:
+      - task: build:linux
+      - task: build:darwin
+      - task: build:windows
+
+  build:linux:
+    desc: Build for Linux
+    cmds:
+      - GOOS=linux GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-linux-amd64 {{.MAIN_PKG}}
+      - GOOS=linux GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-linux-arm64 {{.MAIN_PKG}}
+
+  build:darwin:
+    desc: Build for macOS
+    cmds:
+      - GOOS=darwin GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-darwin-amd64 {{.MAIN_PKG}}
+      - GOOS=darwin GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-darwin-arm64 {{.MAIN_PKG}}
+
+  build:windows:
+    desc: Build for Windows
+    cmds:
+      - GOOS=windows GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-windows-amd64.exe {{.MAIN_PKG}}
+
+  # Testing
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -race -v ./...
+
+  test:coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  test:short:
+    desc: Run short tests only
+    cmds:
+      - go test -short -v ./...
+
+  # Linting
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: lint:go
+      - task: lint:markdown
+      - task: lint:yaml
+      - task: lint:actions
+
+  lint:go:
+    desc: Lint Go code
+    cmds:
+      - golangci-lint run
+
+  lint:markdown:
+    desc: Lint Markdown files
+    cmds:
+      - markdownlint-cli2 "**/*.md" "#node_modules" "#vendor"
+
+  lint:yaml:
+    desc: Lint YAML files
+    cmds:
+      - yamllint .
+
+  lint:actions:
+    desc: Lint GitHub Actions workflows
+    cmds:
+      - actionlint
+
+  # Formatting
+  fmt:
+    desc: Format all files
+    cmds:
+      - task: fmt:go
+      - task: fmt:dprint
+
+  fmt:go:
+    desc: Format Go code
+    cmds:
+      - gofumpt -w .
+
+  fmt:dprint:
+    desc: Format with dprint
+    cmds:
+      - dprint fmt
+
+  fmt:check:
+    desc: Check formatting without modifying
+    cmds:
+      - dprint check
+
+  # Dependencies
+  deps:
+    desc: Download and tidy dependencies
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  deps:upgrade:
+    desc: Upgrade all dependencies
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  # Plugins
+  plugin:build:
+    desc: Build all WASM plugins
+    dir: plugins
+    cmds:
+      - echo "Plugin build not yet implemented"
+
+  # Documentation
+  spec:
+    desc: Create a new spec document
+    cmds:
+      - |
+        DATE=$(date +%Y-%m-%d)
+        read -p "Spec name (e.g., event-system): " NAME
+        FILE="docs/specs/${DATE}-${NAME}.md"
+        cat > "$FILE" << 'EOF'
+        # {{.NAME}} Specification
+
+        **Status:** Draft
+        **Date:** {{.DATE}}
+        **Version:** 0.1.0
+
+        ## Overview
+
+        ## Requirements
+
+        ## Non-Goals
+
+        ## Design
+
+        ## Open Questions
+        EOF
+        echo "Created: $FILE"
+
+  plan:
+    desc: Create a new plan document
+    cmds:
+      - |
+        DATE=$(date +%Y-%m-%d)
+        read -p "Plan name (e.g., phase-1-implementation): " NAME
+        FILE="docs/plans/${DATE}-${NAME}.md"
+        cat > "$FILE" << 'EOF'
+        # {{.NAME}} Plan
+
+        **Status:** Draft
+        **Date:** {{.DATE}}
+
+        ## Overview
+
+        ## Tasks
+
+        ## Dependencies
+
+        ## Risks
+        EOF
+        echo "Created: $FILE"
+
+  # Cleanup
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf dist/
+      - rm -f {{.BINARY_NAME}}
+      - rm -f coverage.out coverage.html
+
+  # Install tools
+  tools:
+    desc: Install development tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install mvdan.cc/gofumpt@latest
+      - go install github.com/evilmartians/lefthook@latest
+      - go install github.com/steveyegge/beads/cmd/bd@latest
+      - go install github.com/rhysd/actionlint/cmd/actionlint@latest
+      - go install github.com/goreleaser/goreleaser@latest
+      - npm install -g markdownlint-cli2
+      - pip install --user yamllint
+      - curl -fsSL https://dprint.dev/install.sh | sh
+      - echo "Tools installed. Run 'lefthook install' to set up git hooks."
+
+  # Git hooks
+  hooks:install:
+    desc: Install git hooks
+    cmds:
+      - lefthook install
+
+  hooks:uninstall:
+    desc: Uninstall git hooks
+    cmds:
+      - lefthook uninstall

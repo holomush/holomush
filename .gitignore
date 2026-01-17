@@ -1,0 +1,62 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/holomush
+/cmd/holomush/holomush
+/dist/
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+/build/
+/bin/
+
+# Node (for web client)
+node_modules/
+.svelte-kit/
+.env
+.env.*
+!.env.example
+
+# WASM plugins build output
+plugins/*/*.wasm
+
+# Local development
+*.local
+*.log
+
+# Temporary files
+tmp/
+.tmp/
+
+# goreleaser
+dist/
+
+# dprint cache
+.dprint/
