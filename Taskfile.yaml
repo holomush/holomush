@@ -199,7 +199,7 @@ tasks:
     desc: Install development tools
     cmds:
       - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto markdownlint-cli
-      - go install github.com/steveyegge/beads/cmd/bd@latest
+      - brew install steveyegge/beads/bd
       - 'echo "Tools installed. Run lefthook install to set up git hooks."'
       - 'echo "Note: Use uvx yamllint to run yamllint (no install needed)"'
 
