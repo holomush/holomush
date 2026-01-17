@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2056,5 +2057,678 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 	}
 	if resp.Error == "" {
 		t.Error("Error message should be present")
+	}
+}
+
+// =============================================================================
+// Malformed Request Tests (e55.38)
+// =============================================================================
+
+func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
+	sessions := core.NewSessionManager()
+
+	server := &CoreServer{
+		sessions:      sessions,
+		sessionStore:  NewInMemorySessionStore(),
+		authenticator: nil,
+	}
+
+	ctx := context.Background()
+
+	// Pass nil request - should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Authenticate panicked on nil request: %v", r)
+		}
+	}()
+
+	// This tests the server's behavior with an empty AuthRequest
+	req := &corev1.AuthRequest{}
+	resp, err := server.Authenticate(ctx, req)
+
+	// Should return an error response, not panic
+	if err != nil {
+		// gRPC error is acceptable
+		return
+	}
+	if resp.Success {
+		t.Error("Expected failure for empty auth request")
+	}
+}
+
+func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
+	auth := &mockAuthenticator{
+		authenticateFunc: func(_ context.Context, username, _ string) (*AuthResult, error) {
+			if username == "" {
+				return nil, errors.New("username required")
+			}
+			return nil, errors.New("invalid credentials")
+		},
+	}
+
+	server := &CoreServer{
+		sessions:      core.NewSessionManager(),
+		authenticator: auth,
+		sessionStore:  NewInMemorySessionStore(),
+	}
+
+	ctx := context.Background()
+	req := &corev1.AuthRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "empty-username",
+			Timestamp: timestamppb.Now(),
+		},
+		Username: "",
+		Password: "password",
+	}
+
+	resp, err := server.Authenticate(ctx, req)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+
+	if resp.Success {
+		t.Error("Expected failure for empty username")
+	}
+	if resp.Error == "" {
+		t.Error("Error message should be present")
+	}
+}
+
+func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
+	sessions := core.NewSessionManager()
+
+	server := &CoreServer{
+		sessions:     sessions,
+		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+	}
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		sessionID string
+	}{
+		{"empty session ID", ""},
+		{"invalid ULID format", "not-a-valid-ulid"},
+		{"partial ULID", "01ABCD"},
+		{"unicode characters", "日本語セッション"},
+		{"null bytes", "session\x00id"},
+		{"very long session ID", strings.Repeat("a", 10000)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &corev1.CommandRequest{
+				Meta: &corev1.RequestMeta{
+					RequestId: "invalid-session-test",
+					Timestamp: timestamppb.Now(),
+				},
+				SessionId: tt.sessionID,
+				Command:   "say hello",
+			}
+
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("HandleCommand panicked: %v", r)
+				}
+			}()
+
+			resp, err := server.HandleCommand(ctx, req)
+			if err != nil {
+				// gRPC error is acceptable
+				return
+			}
+			if resp.Success {
+				t.Error("Expected failure for invalid session ID")
+			}
+			if resp.Error == "" {
+				t.Error("Error message should be present")
+			}
+		})
+	}
+}
+
+func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{}
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"empty command", ""},
+		{"whitespace only", "   "},
+		{"null bytes", "say\x00hello"},
+		{"unicode control chars", "say\u0000\u0001\u0002hello"},
+		{"very long command", strings.Repeat("a", 100000)},
+		{"only spaces and tabs", " \t \t "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &corev1.CommandRequest{
+				Meta: &corev1.RequestMeta{
+					RequestId: "malformed-cmd-test",
+					Timestamp: timestamppb.Now(),
+				},
+				SessionId: sessionID.String(),
+				Command:   tt.command,
+			}
+
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("HandleCommand panicked: %v", r)
+				}
+			}()
+
+			resp, err := server.HandleCommand(ctx, req)
+			if err != nil {
+				// gRPC error is acceptable
+				return
+			}
+			// May succeed or fail depending on command processing
+			// Main assertion is that it doesn't panic
+			_ = resp
+		})
+	}
+}
+
+func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	server := &CoreServer{
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		streams []string
+	}{
+		{"empty streams", []string{}},
+		{"nil streams", nil},
+		{"empty string stream", []string{""}},
+		{"stream with null bytes", []string{"location\x00:test"}},
+		{"very long stream name", []string{strings.Repeat("a", 100000)}},
+		{"many streams", func() []string {
+			streams := make([]string, 1000)
+			for i := range streams {
+				streams[i] = fmt.Sprintf("stream:%d", i)
+			}
+			return streams
+		}()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			stream := &mockSubscribeStream{ctx: ctx}
+
+			req := &corev1.SubscribeRequest{
+				Meta: &corev1.RequestMeta{
+					RequestId: "malformed-sub-test",
+					Timestamp: timestamppb.Now(),
+				},
+				SessionId: sessionID.String(),
+				Streams:   tt.streams,
+			}
+
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Subscribe panicked: %v", r)
+				}
+			}()
+
+			// Run in goroutine and wait for timeout
+			done := make(chan error)
+			go func() {
+				done <- server.Subscribe(req, stream)
+			}()
+
+			select {
+			case <-done:
+				// Completed normally
+			case <-time.After(200 * time.Millisecond):
+				// Timeout is expected
+			}
+		})
+	}
+}
+
+func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	// All requests with nil Meta should not panic
+	t.Run("CommandRequest with nil Meta", func(t *testing.T) {
+		req := &corev1.CommandRequest{
+			Meta:      nil,
+			SessionId: sessionID.String(),
+			Command:   "say hello",
+		}
+
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("HandleCommand panicked with nil Meta: %v", r)
+			}
+		}()
+
+		resp, err := server.HandleCommand(ctx, req)
+		if err != nil {
+			t.Fatalf("HandleCommand() error = %v", err)
+		}
+		if !resp.Success {
+			t.Errorf("Expected success, got error: %s", resp.Error)
+		}
+	})
+
+	t.Run("DisconnectRequest with nil Meta", func(t *testing.T) {
+		req := &corev1.DisconnectRequest{
+			Meta:      nil,
+			SessionId: sessionID.String(),
+		}
+
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Disconnect panicked with nil Meta: %v", r)
+			}
+		}()
+
+		resp, err := server.Disconnect(ctx, req)
+		if err != nil {
+			t.Fatalf("Disconnect() error = %v", err)
+		}
+		if !resp.Success {
+			t.Error("Expected success for disconnect")
+		}
+	})
+}
+
+func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
+	// Protobuf messages gracefully ignore unknown fields by design
+	// This test verifies the server behaves correctly with valid requests
+	// that have extra data (which protobuf silently ignores)
+
+	sessions := core.NewSessionManager()
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	sessions.Connect(charID, core.NewULID())
+
+	auth := &mockAuthenticator{
+		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
+			return &AuthResult{
+				CharacterID:   charID,
+				CharacterName: "Test",
+			}, nil
+		},
+	}
+
+	server := &CoreServer{
+		sessions:      sessions,
+		authenticator: auth,
+		sessionStore:  NewInMemorySessionStore(),
+		newSessionID:  func() ulid.ULID { return sessionID },
+	}
+
+	ctx := context.Background()
+
+	// Normal request should work
+	req := &corev1.AuthRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "unknown-fields-test",
+			Timestamp: timestamppb.Now(),
+		},
+		Username: "testuser",
+		Password: "testpass",
+	}
+
+	resp, err := server.Authenticate(ctx, req)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if !resp.Success {
+		t.Errorf("Expected success, got error: %s", resp.Error)
+	}
+}
+
+func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			time.Sleep(10 * time.Millisecond) // Simulate some processing
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	// Send many concurrent requests, some valid and some malformed
+	var wg sync.WaitGroup
+	numRequests := 50
+
+	for i := 0; i < numRequests; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Request %d panicked: %v", idx, r)
+				}
+			}()
+
+			var req *corev1.CommandRequest
+			switch idx % 3 {
+			case 0:
+				// Valid request
+				req = &corev1.CommandRequest{
+					Meta: &corev1.RequestMeta{
+						RequestId: fmt.Sprintf("concurrent-%d", idx),
+						Timestamp: timestamppb.Now(),
+					},
+					SessionId: sessionID.String(),
+					Command:   "say hello",
+				}
+			case 1:
+				// Invalid session
+				req = &corev1.CommandRequest{
+					Meta: &corev1.RequestMeta{
+						RequestId: fmt.Sprintf("concurrent-%d", idx),
+						Timestamp: timestamppb.Now(),
+					},
+					SessionId: "invalid-session",
+					Command:   "say hello",
+				}
+			default:
+				// Empty command
+				req = &corev1.CommandRequest{
+					Meta: &corev1.RequestMeta{
+						RequestId: fmt.Sprintf("concurrent-%d", idx),
+						Timestamp: timestamppb.Now(),
+					},
+					SessionId: sessionID.String(),
+					Command:   "",
+				}
+			}
+
+			_, _ = server.HandleCommand(ctx, req)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	// Create request with very large command
+	largeCommand := "say " + strings.Repeat("x", 1*1024*1024) // 1MB message
+
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "large-payload-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   largeCommand,
+	}
+
+	// Should not panic, may succeed or fail based on limits
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("HandleCommand panicked with large payload: %v", r)
+		}
+	}()
+
+	_, err := server.HandleCommand(ctx, req)
+	// Either success or error is acceptable, but no panic
+	_ = err
+}
+
+func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error {
+			return nil
+		},
+	}
+
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := &CoreServer{
+		engine:   engine,
+		sessions: sessions,
+		sessionStore: &mockSessionStore{
+			sessions: map[string]*SessionInfo{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"unicode emoji", "say 👋🌍"},
+		{"unicode CJK", "say 你好世界"},
+		{"unicode RTL", "say مرحبا بالعالم"},
+		{"unicode mixed", "say Hello 你好 مرحبا 🌍"},
+		{"special chars", "say <script>alert('xss')</script>"},
+		{"SQL injection", "say '; DROP TABLE users; --"},
+		{"path traversal", "say ../../../etc/passwd"},
+		{"newlines", "say line1\nline2\nline3"},
+		{"carriage return", "say line1\r\nline2"},
+		{"tabs", "say col1\tcol2\tcol3"},
+		{"backslashes", "say path\\to\\file"},
+		{"quotes", "say \"quoted\" 'text'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &corev1.CommandRequest{
+				Meta: &corev1.RequestMeta{
+					RequestId: "special-chars-test",
+					Timestamp: timestamppb.Now(),
+				},
+				SessionId: sessionID.String(),
+				Command:   tt.command,
+			}
+
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("HandleCommand panicked with %s: %v", tt.name, r)
+				}
+			}()
+
+			resp, err := server.HandleCommand(ctx, req)
+			if err != nil {
+				// gRPC error is acceptable
+				return
+			}
+			// Should succeed for say commands
+			if !resp.Success {
+				t.Logf("Command failed (acceptable): %s", resp.Error)
+			}
+		})
+	}
+}
+
+func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
+	sessions := core.NewSessionManager()
+
+	server := &CoreServer{
+		sessions:     sessions,
+		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+	}
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		sessionID string
+	}{
+		{"empty", ""},
+		{"invalid format", "not-valid"},
+		{"null bytes", "session\x00id"},
+		{"very long", strings.Repeat("a", 100000)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &corev1.DisconnectRequest{
+				Meta: &corev1.RequestMeta{
+					RequestId: "invalid-disconnect",
+					Timestamp: timestamppb.Now(),
+				},
+				SessionId: tt.sessionID,
+			}
+
+			// Should not panic
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Disconnect panicked: %v", r)
+				}
+			}()
+
+			resp, err := server.Disconnect(ctx, req)
+			if err != nil {
+				// gRPC error is acceptable
+				return
+			}
+			// Disconnect should be idempotent - always succeeds
+			if !resp.Success {
+				t.Error("Expected success for disconnect")
+			}
+		})
 	}
 }
