@@ -2,24 +2,31 @@
 package telnet
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"sync"
+
+	"github.com/holomush/holomush/internal/core"
 )
 
 // Server is a telnet server.
 type Server struct {
 	addr     string
 	listener net.Listener
+	engine   *core.Engine
+	sessions *core.SessionManager
 	mu       sync.RWMutex
 }
 
 // NewServer creates a new telnet server.
-func NewServer(addr string) *Server {
-	return &Server{addr: addr}
+func NewServer(addr string, engine *core.Engine, sessions *core.SessionManager) *Server {
+	return &Server{
+		addr:     addr,
+		engine:   engine,
+		sessions: sessions,
+	}
 }
 
 // Addr returns the server's listen address.
@@ -61,34 +68,7 @@ func (s *Server) Run(ctx context.Context) error {
 				continue
 			}
 		}
-		go s.handleConnection(ctx, conn)
-	}
-}
-
-func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
-
-	slog.Info("New connection", "remote", conn.RemoteAddr())
-
-	// Send welcome
-	fmt.Fprintln(conn, "Welcome to HoloMUSH!")
-	fmt.Fprintln(conn, "Use: connect <username> <password>")
-
-	reader := bufio.NewReader(conn)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			slog.Info("Connection closed", "remote", conn.RemoteAddr())
-			return
-		}
-
-		// Echo for now (will be replaced with command handling)
-		fmt.Fprintf(conn, "You said: %s", line)
+		handler := NewConnectionHandler(conn, s.engine, s.sessions)
+		go handler.Handle(ctx)
 	}
 }

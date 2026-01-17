@@ -5,16 +5,20 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/holomush/holomush/internal/core"
 )
 
 func TestServer_AcceptsConnections(t *testing.T) {
 	ctx := t.Context()
 
-	// Start server on random port
-	srv := NewServer(":0")
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	engine := core.NewEngine(store, sessions)
+
+	srv := NewServer(":0", engine, sessions)
 	go srv.Run(ctx)
 
-	// Wait for server to start
 	time.Sleep(50 * time.Millisecond)
 
 	addr := srv.Addr()
@@ -22,14 +26,12 @@ func TestServer_AcceptsConnections(t *testing.T) {
 		t.Fatal("Server has no address")
 	}
 
-	// Connect
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
 
-	// Should receive welcome message
 	conn.SetReadDeadline(time.Now().Add(time.Second))
 	reader := bufio.NewReader(conn)
 	line, err := reader.ReadString('\n')
