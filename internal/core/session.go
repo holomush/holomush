@@ -78,11 +78,30 @@ func (sm *SessionManager) UpdateCursor(charID ulid.ULID, stream string, eventID 
 	session.EventCursors[stream] = eventID
 }
 
-// GetSession returns a character's session, or nil if none exists.
+// GetSession returns a copy of a character's session, or nil if none exists.
+// Returns a copy to prevent external modification of internal state.
 func (sm *SessionManager) GetSession(charID ulid.ULID) *Session {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	return sm.sessions[charID]
+
+	session, exists := sm.sessions[charID]
+	if !exists {
+		return nil
+	}
+
+	// Return a copy to prevent external modification
+	cursors := make(map[string]ulid.ULID, len(session.EventCursors))
+	for k, v := range session.EventCursors {
+		cursors[k] = v
+	}
+	connections := make([]ulid.ULID, len(session.Connections))
+	copy(connections, session.Connections)
+
+	return &Session{
+		CharacterID:  session.CharacterID,
+		Connections:  connections,
+		EventCursors: cursors,
+	}
 }
 
 // GetConnections returns all connection IDs for a character.

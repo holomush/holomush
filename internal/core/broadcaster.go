@@ -1,6 +1,9 @@
 package core
 
-import "sync"
+import (
+	"log/slog"
+	"sync"
+)
 
 // Broadcaster distributes events to subscribers.
 type Broadcaster struct {
@@ -49,7 +52,11 @@ func (b *Broadcaster) Broadcast(event Event) {
 		select {
 		case ch <- event:
 		default:
-			// Drop if buffer full
+			slog.Warn("event dropped: subscriber buffer full",
+				"stream", event.Stream,
+				"event_id", event.ID.String(),
+				"event_type", event.Type,
+			)
 		}
 	}
 }

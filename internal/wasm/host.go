@@ -4,6 +4,7 @@ package wasm
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -11,6 +12,7 @@ import (
 
 // PluginHost manages WASM plugins.
 type PluginHost struct {
+	mu      sync.RWMutex
 	runtime wazero.Runtime
 	modules map[string]api.Module
 }
@@ -24,6 +26,9 @@ func NewPluginHost() *PluginHost {
 
 // Close shuts down the runtime and all modules.
 func (h *PluginHost) Close(ctx context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if h.runtime != nil {
 		return h.runtime.Close(ctx)
 	}
@@ -32,6 +37,9 @@ func (h *PluginHost) Close(ctx context.Context) error {
 
 // LoadPlugin loads a WASM module.
 func (h *PluginHost) LoadPlugin(ctx context.Context, name string, wasm []byte) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if h.runtime == nil {
 		h.runtime = wazero.NewRuntime(ctx)
 	}
@@ -47,7 +55,10 @@ func (h *PluginHost) LoadPlugin(ctx context.Context, name string, wasm []byte) e
 
 // CallFunction calls an exported function in a loaded plugin.
 func (h *PluginHost) CallFunction(ctx context.Context, plugin, function string, args ...uint64) ([]uint64, error) {
+	h.mu.RLock()
 	mod, ok := h.modules[plugin]
+	h.mu.RUnlock()
+
 	if !ok {
 		return nil, fmt.Errorf("plugin %s not loaded", plugin)
 	}
@@ -62,6 +73,9 @@ func (h *PluginHost) CallFunction(ctx context.Context, plugin, function string, 
 
 // HasPlugin checks if a plugin is loaded.
 func (h *PluginHost) HasPlugin(name string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
 	_, ok := h.modules[name]
 	return ok
 }

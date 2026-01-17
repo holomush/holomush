@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	_ "embed"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,7 +25,7 @@ type PostgresEventStore struct {
 func NewPostgresEventStore(ctx context.Context, dsn string) (*PostgresEventStore, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 	return &PostgresEventStore{pool: pool}, nil
 }
@@ -53,7 +54,10 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 		event.Payload,
 		event.Timestamp,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to append event (id=%s, stream=%s): %w", event.ID.String(), event.Stream, err)
+	}
+	return nil
 }
 
 // Replay returns events from a stream after the given ID.
@@ -73,7 +77,7 @@ func (s *PostgresEventStore) Replay(ctx context.Context, stream string, afterID 
 			stream, afterID.String(), limit)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query events (stream=%s): %w", stream, err)
 	}
 	defer rows.Close()
 
@@ -83,13 +87,19 @@ func (s *PostgresEventStore) Replay(ctx context.Context, stream string, afterID 
 		var idStr string
 		var typeStr string
 		if err := rows.Scan(&idStr, &e.Stream, &typeStr, &e.Actor.Kind, &e.Actor.ID, &e.Payload, &e.Timestamp); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan event row: %w", err)
 		}
-		e.ID, _ = ulid.Parse(idStr)
+		e.ID, err = ulid.Parse(idStr)
+		if err != nil {
+			return nil, fmt.Errorf("corrupt event ID in database (stream=%s, id=%s): %w", stream, idStr, err)
+		}
 		e.Type = core.EventType(typeStr)
 		events = append(events, e)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating events: %w", err)
+	}
+	return events, nil
 }
 
 // LastEventID returns the most recent event ID for a stream.
@@ -102,7 +112,11 @@ func (s *PostgresEventStore) LastEventID(ctx context.Context, stream string) (ul
 		return ulid.ULID{}, core.ErrStreamEmpty
 	}
 	if err != nil {
-		return ulid.ULID{}, err
+		return ulid.ULID{}, fmt.Errorf("failed to query last event ID (stream=%s): %w", stream, err)
 	}
-	return ulid.Parse(idStr)
+	id, err := ulid.Parse(idStr)
+	if err != nil {
+		return ulid.ULID{}, fmt.Errorf("corrupt event ID in stream %s: %w", stream, err)
+	}
+	return id, nil
 }

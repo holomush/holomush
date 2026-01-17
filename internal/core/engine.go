@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -34,7 +35,10 @@ func NewEngine(store EventStore, sessions *SessionManager) *Engine {
 
 // HandleSay processes a say command.
 func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, message string) error {
-	payload, _ := json.Marshal(SayPayload{Message: message})
+	payload, err := json.Marshal(SayPayload{Message: message})
+	if err != nil {
+		return fmt.Errorf("failed to marshal say payload: %w", err)
+	}
 
 	event := Event{
 		ID:        NewULID(),
@@ -50,7 +54,10 @@ func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, me
 
 // HandlePose processes a pose command.
 func (e *Engine) HandlePose(ctx context.Context, charID, locationID ulid.ULID, action string) error {
-	payload, _ := json.Marshal(PosePayload{Action: action})
+	payload, err := json.Marshal(PosePayload{Action: action})
+	if err != nil {
+		return fmt.Errorf("failed to marshal pose payload: %w", err)
+	}
 
 	event := Event{
 		ID:        NewULID(),

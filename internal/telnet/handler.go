@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 
@@ -103,9 +104,16 @@ func (h *ConnectionHandler) handleConnect(ctx context.Context, arg string) {
 		return
 	}
 
-	// Hardcoded test character
-	h.charID, _ = ulid.Parse("01JTEST001CHRCTR00000001")
-	h.locationID, _ = ulid.Parse("01JTEST001LOCATN00000001")
+	// Hardcoded test character - panic on invalid constants as they indicate a bug
+	var err error
+	h.charID, err = ulid.Parse("01JTEST001CHRCTR00000001")
+	if err != nil {
+		panic(fmt.Sprintf("invalid test character ULID: %v", err))
+	}
+	h.locationID, err = ulid.Parse("01JTEST001LOCATN00000001")
+	if err != nil {
+		panic(fmt.Sprintf("invalid test location ULID: %v", err))
+	}
 	h.charName = "TestChar"
 	h.authed = true
 
@@ -114,7 +122,15 @@ func (h *ConnectionHandler) handleConnect(ctx context.Context, arg string) {
 
 	// Replay missed events
 	stream := "location:" + h.locationID.String()
-	events, _ := h.engine.ReplayEvents(ctx, h.charID, stream, 50)
+	events, err := h.engine.ReplayEvents(ctx, h.charID, stream, 50)
+	if err != nil {
+		slog.Error("failed to replay events on connect",
+			"char_id", h.charID.String(),
+			"stream", stream,
+			"error", err,
+		)
+		h.send("Warning: Could not retrieve missed events.")
+	}
 	if len(events) > 0 {
 		h.send(fmt.Sprintf("--- %d missed events ---", len(events)))
 		for _, e := range events {
@@ -145,7 +161,15 @@ func (h *ConnectionHandler) handleSay(ctx context.Context, message string) {
 		return
 	}
 
-	h.engine.HandleSay(ctx, h.charID, h.locationID, message)
+	if err := h.engine.HandleSay(ctx, h.charID, h.locationID, message); err != nil {
+		slog.Error("failed to process say command",
+			"char_id", h.charID.String(),
+			"error", err,
+		)
+		h.send("Error: Your message could not be sent. Please try again.")
+		return
+	}
+	h.send(fmt.Sprintf("You say, \"%s\"", message))
 }
 
 func (h *ConnectionHandler) handlePose(ctx context.Context, action string) {
@@ -158,11 +182,19 @@ func (h *ConnectionHandler) handlePose(ctx context.Context, action string) {
 		return
 	}
 
-	h.engine.HandlePose(ctx, h.charID, h.locationID, action)
+	if err := h.engine.HandlePose(ctx, h.charID, h.locationID, action); err != nil {
+		slog.Error("failed to process pose command",
+			"char_id", h.charID.String(),
+			"error", err,
+		)
+		h.send("Error: Your action could not be sent. Please try again.")
+		return
+	}
+	h.send(fmt.Sprintf("%s %s", h.charName, action))
 }
 
 func (h *ConnectionHandler) handleQuit() {
-	h.send("Goodbye! Your session has been saved.")
+	h.send("Goodbye!")
 	if h.authed {
 		h.sessions.Disconnect(h.charID, h.connID)
 	}
@@ -174,14 +206,40 @@ func (h *ConnectionHandler) send(msg string) {
 }
 
 func (h *ConnectionHandler) sendEvent(e core.Event) {
+	// Safe substring for actor ID prefix
+	actorPrefix := e.Actor.ID
+	if len(actorPrefix) > 8 {
+		actorPrefix = actorPrefix[:8]
+	}
+
 	switch e.Type {
 	case core.EventTypeSay:
 		var p core.SayPayload
-		json.Unmarshal(e.Payload, &p)
-		h.send(fmt.Sprintf("[%s] %s says, \"%s\"", e.Actor.ID[:8], h.charName, p.Message))
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			slog.Error("failed to unmarshal say event",
+				"event_id", e.ID.String(),
+				"error", err,
+			)
+			h.send(fmt.Sprintf("[%s] <corrupted message>", actorPrefix))
+			return
+		}
+		// Note: Using actorPrefix as display name until character lookup is implemented
+		h.send(fmt.Sprintf("[%s] %s says, \"%s\"", actorPrefix, actorPrefix, p.Message))
 	case core.EventTypePose:
 		var p core.PosePayload
-		json.Unmarshal(e.Payload, &p)
-		h.send(fmt.Sprintf("[%s] %s %s", e.Actor.ID[:8], h.charName, p.Action))
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			slog.Error("failed to unmarshal pose event",
+				"event_id", e.ID.String(),
+				"error", err,
+			)
+			h.send(fmt.Sprintf("[%s] <corrupted action>", actorPrefix))
+			return
+		}
+		h.send(fmt.Sprintf("[%s] %s %s", actorPrefix, actorPrefix, p.Action))
+	default:
+		slog.Warn("unknown event type in sendEvent",
+			"event_id", e.ID.String(),
+			"type", e.Type,
+		)
 	}
 }
