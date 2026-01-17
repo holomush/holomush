@@ -49,7 +49,7 @@ type Actor struct {
 // Event represents something that happened in the game world.
 type Event struct {
 	ID        ulid.ULID
-	Stream    string    // e.g., "location:01ABC", "char:01XYZ"
+	Stream    string // e.g., "location:01ABC", "char:01XYZ"
 	Type      EventType
 	Timestamp time.Time
 	Actor     Actor

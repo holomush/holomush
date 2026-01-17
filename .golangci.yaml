@@ -38,6 +38,8 @@ linters-settings:
 
   govet:
     enable-all: true
+    disable:
+      - fieldalignment  # Optimization hint, not a bug - can be addressed later
 
   revive:
     rules:
@@ -74,6 +76,8 @@ linters-settings:
       - diagnostic
       - style
       - performance
+    disabled-checks:
+      - hugeParam  # Event struct (120 bytes) is passed by value by design
 
   gosec:
     excludes:

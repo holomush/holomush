@@ -180,7 +180,7 @@ func (h *ConnectionHandler) handleSay(ctx context.Context, message string) {
 		h.send("Error: Your message could not be sent. Please try again.")
 		return
 	}
-	h.send(fmt.Sprintf("You say, \"%s\"", message))
+	h.send(fmt.Sprintf("You say, %q", message))
 }
 
 func (h *ConnectionHandler) handlePose(ctx context.Context, action string) {
@@ -241,7 +241,7 @@ func (h *ConnectionHandler) sendEvent(e core.Event) {
 			return
 		}
 		// Note: Using actorPrefix as display name until character lookup is implemented
-		h.send(fmt.Sprintf("[%s] %s says, \"%s\"", actorPrefix, actorPrefix, p.Message))
+		h.send(fmt.Sprintf("[%s] %s says, %q", actorPrefix, actorPrefix, p.Message))
 	case core.EventTypePose:
 		var p core.PosePayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {

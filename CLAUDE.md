@@ -177,7 +177,9 @@ func TestEventType_String(t *testing.T) {
 
 ## Commands
 
-### Task Commands
+### Task Commands (Required)
+
+**MUST use `task` for all build, test, lint, and format operations.** Do NOT run `go build`, `go test`, `golangci-lint`, etc. directly.
 
 ```bash
 task lint      # Run all linters
@@ -186,6 +188,13 @@ task test      # Run tests
 task build     # Build binary
 task dev       # Run dev server
 ```
+
+| Requirement | Description |
+|-------------|-------------|
+| **MUST** use `task` | Never run Go/lint/fmt commands directly |
+| **MUST** run `task test` | Before claiming any implementation is complete |
+| **MUST** run `task lint` | Before committing changes |
+| **SHOULD** run `task fmt` | Before committing to ensure consistent formatting |
 
 ### Beads Commands
 

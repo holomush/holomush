@@ -20,6 +20,13 @@ var (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("Server error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.Info("HoloMUSH starting",
 		"version", version,
 		"commit", commit,
@@ -52,9 +59,9 @@ func main() {
 
 	// Run
 	if err := srv.Run(ctx); err != nil {
-		slog.Error("Server error", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	slog.Info("Server stopped")
+	return nil
 }

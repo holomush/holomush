@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/rand"
+	"fmt"
 	"sync"
 	"time"
 
@@ -22,5 +23,9 @@ func NewULID() ulid.ULID {
 
 // ParseULID parses a ULID string.
 func ParseULID(s string) (ulid.ULID, error) {
-	return ulid.Parse(s)
+	id, err := ulid.Parse(s)
+	if err != nil {
+		return ulid.ULID{}, fmt.Errorf("invalid ULID %q: %w", s, err)
+	}
+	return id, nil
 }

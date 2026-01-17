@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -89,8 +90,8 @@ func (s *PostgresEventStore) Replay(ctx context.Context, stream string, afterID 
 		var e core.Event
 		var idStr string
 		var typeStr string
-		if err := rows.Scan(&idStr, &e.Stream, &typeStr, &e.Actor.Kind, &e.Actor.ID, &e.Payload, &e.Timestamp); err != nil {
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+		if scanErr := rows.Scan(&idStr, &e.Stream, &typeStr, &e.Actor.Kind, &e.Actor.ID, &e.Payload, &e.Timestamp); scanErr != nil {
+			return nil, fmt.Errorf("failed to scan event row: %w", scanErr)
 		}
 		e.ID, err = ulid.Parse(idStr)
 		if err != nil {
@@ -111,7 +112,7 @@ func (s *PostgresEventStore) LastEventID(ctx context.Context, stream string) (ul
 	err := s.pool.QueryRow(ctx,
 		`SELECT id FROM events WHERE stream = $1 ORDER BY id DESC LIMIT 1`,
 		stream).Scan(&idStr)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ulid.ULID{}, core.ErrStreamEmpty
 	}
 	if err != nil {

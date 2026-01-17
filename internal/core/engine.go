@@ -49,7 +49,10 @@ func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, me
 		Payload:   payload,
 	}
 
-	return e.store.Append(ctx, event)
+	if err := e.store.Append(ctx, event); err != nil {
+		return fmt.Errorf("failed to append say event: %w", err)
+	}
+	return nil
 }
 
 // HandlePose processes a pose command.
@@ -68,7 +71,10 @@ func (e *Engine) HandlePose(ctx context.Context, charID, locationID ulid.ULID, a
 		Payload:   payload,
 	}
 
-	return e.store.Append(ctx, event)
+	if err := e.store.Append(ctx, event); err != nil {
+		return fmt.Errorf("failed to append pose event: %w", err)
+	}
+	return nil
 }
 
 // ReplayEvents returns missed events for a character.
@@ -78,5 +84,9 @@ func (e *Engine) ReplayEvents(ctx context.Context, charID ulid.ULID, stream stri
 	if session != nil {
 		afterID = session.EventCursors[stream]
 	}
-	return e.store.Replay(ctx, stream, afterID, limit)
+	events, err := e.store.Replay(ctx, stream, afterID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to replay events: %w", err)
+	}
+	return events, nil
 }

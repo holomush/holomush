@@ -32,7 +32,7 @@ func TestMemoryEventStore_Replay(t *testing.T) {
 	ctx := context.Background()
 
 	// Append 5 events
-	var ids []ulid.ULID
+	ids := make([]ulid.ULID, 0, 5)
 	for range 5 {
 		event := Event{
 			ID:        NewULID(),
@@ -87,7 +87,10 @@ func TestMemoryEventStore_LastEventID(t *testing.T) {
 		Actor:     Actor{Kind: ActorSystem, ID: "system"},
 		Payload:   []byte(`{}`),
 	}
-	store.Append(ctx, event)
+	err = store.Append(ctx, event)
+	if err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
 
 	lastID, err := store.LastEventID(ctx, "location:test")
 	if err != nil {

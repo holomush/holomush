@@ -17,7 +17,10 @@ func TestServer_AcceptsConnections(t *testing.T) {
 	engine := core.NewEngine(store, sessions)
 
 	srv := NewServer(":0", engine, sessions)
-	go srv.Run(ctx)
+	go func() {
+		//nolint:errcheck // Server shutdown error is expected when context cancels
+		srv.Run(ctx)
+	}()
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -32,7 +35,10 @@ func TestServer_AcceptsConnections(t *testing.T) {
 	}
 	defer conn.Close()
 
-	conn.SetReadDeadline(time.Now().Add(time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Fatalf("Failed to set read deadline: %v", err)
+	}
 	reader := bufio.NewReader(conn)
 	line, err := reader.ReadString('\n')
 	if err != nil {

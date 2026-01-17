@@ -37,14 +37,14 @@ func NewMemoryEventStore() *MemoryEventStore {
 	}
 }
 
-func (s *MemoryEventStore) Append(ctx context.Context, event Event) error {
+func (s *MemoryEventStore) Append(_ context.Context, event Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.streams[event.Stream] = append(s.streams[event.Stream], event)
 	return nil
 }
 
-func (s *MemoryEventStore) Replay(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error) {
+func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -72,7 +72,7 @@ func (s *MemoryEventStore) Replay(ctx context.Context, stream string, afterID ul
 	return result, nil
 }
 
-func (s *MemoryEventStore) LastEventID(ctx context.Context, stream string) (ulid.ULID, error) {
+func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.ULID, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

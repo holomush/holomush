@@ -2,6 +2,7 @@ package wasm
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -73,13 +74,13 @@ func TestPluginHost_ClosedState(t *testing.T) {
 
 	// LoadPlugin should fail on closed host
 	err = host.LoadPlugin(ctx, "math2", addWASM)
-	if err != ErrHostClosed {
+	if !errors.Is(err, ErrHostClosed) {
 		t.Errorf("Expected ErrHostClosed, got: %v", err)
 	}
 
 	// CallFunction should fail on closed host
 	_, err = host.CallFunction(ctx, "math", "add", 1, 2)
-	if err != ErrHostClosed {
+	if !errors.Is(err, ErrHostClosed) {
 		t.Errorf("Expected ErrHostClosed, got: %v", err)
 	}
 

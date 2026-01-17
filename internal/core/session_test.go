@@ -106,13 +106,20 @@ func TestSessionManager_GetConnections_DefensiveCopy(t *testing.T) {
 
 	sm.Connect(charID, connID)
 
-	// Get connections and modify
+	// Get connections and modify the returned slice
 	conns := sm.GetConnections(charID)
-	conns = append(conns, NewULID())
+	if len(conns) != 1 {
+		t.Fatalf("Expected 1 connection initially, got %d", len(conns))
+	}
+	conns = append(conns, NewULID()) // Modify the returned slice
 
-	// Internal state should be unchanged
+	// Internal state should be unchanged despite modification
 	conns2 := sm.GetConnections(charID)
 	if len(conns2) != 1 {
-		t.Errorf("Expected 1 connection, got %d", len(conns2))
+		t.Errorf("Expected 1 connection (internal unchanged), got %d", len(conns2))
+	}
+	// Verify we actually modified the first slice
+	if len(conns) != 2 {
+		t.Errorf("Expected modified slice to have 2 connections, got %d", len(conns))
 	}
 }
