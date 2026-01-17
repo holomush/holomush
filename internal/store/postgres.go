@@ -20,6 +20,9 @@ var migration001SQL string
 //go:embed migrations/002_system_info.sql
 var migration002SQL string
 
+// ErrSystemInfoNotFound is returned when a system info key doesn't exist.
+var ErrSystemInfoNotFound = errors.New("system info key not found")
+
 // PostgresEventStore implements EventStore using PostgreSQL.
 type PostgresEventStore struct {
 	pool *pgxpool.Pool
@@ -137,7 +140,7 @@ func (s *PostgresEventStore) GetSystemInfo(ctx context.Context, key string) (str
 		`SELECT value FROM holomush_system_info WHERE key = $1`,
 		key).Scan(&value)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", fmt.Errorf("system info key %q not found", key)
+		return "", fmt.Errorf("%w: %s", ErrSystemInfoNotFound, key)
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to get system info %q: %w", key, err)
@@ -162,6 +165,10 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 	gameID, err := s.GetSystemInfo(ctx, "game_id")
 	if err == nil {
 		return gameID, nil
+	}
+	// Only generate new ID if key genuinely doesn't exist
+	if !errors.Is(err, ErrSystemInfoNotFound) {
+		return "", fmt.Errorf("failed to check for existing game_id: %w", err)
 	}
 
 	// Generate new game_id
