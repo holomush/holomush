@@ -3,9 +3,6 @@
 
 default: true
 
-# Hard tabs - allowed in code blocks (Go uses tabs)
-MD010: false
-
 # Line length - disabled for prose
 MD013: false
 
