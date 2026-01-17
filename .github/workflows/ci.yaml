@@ -31,14 +31,15 @@ jobs:
 
       - name: Install tools
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           go install github.com/rhysd/actionlint/cmd/actionlint@latest
           npm install -g markdownlint-cli2
           curl -fsSL https://dprint.dev/install.sh | sh
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
 
       - name: Lint Go
-        run: task lint:go
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1.6
 
       - name: Lint Markdown
         run: task lint:markdown
