@@ -30,41 +30,11 @@ WebAssembly plugins, and dual protocol support (telnet + web).`,
 
 // NewGatewayCmd creates the gateway subcommand.
 func NewGatewayCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "gateway",
-		Short: "Start the gateway process (telnet/web servers)",
-		Long: `Start the gateway process which handles incoming connections
-from telnet and web clients, forwarding commands to the core process.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cmd.Println("gateway: not implemented yet")
-			return nil
-		},
-	}
+	return newGatewayCmd()
 }
 
-// NewCoreCmd creates the core subcommand.
-func NewCoreCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "core",
-		Short: "Start the core process (engine, plugins)",
-		Long: `Start the core process which runs the game engine,
-manages plugins, and handles game state.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cmd.Println("core: not implemented yet")
-			return nil
-		},
-	}
-}
 
 // NewStatusCmd creates the status subcommand.
 func NewStatusCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Show status of running HoloMUSH processes",
-		Long:  `Show the health and status of running gateway and core processes.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cmd.Println("status: not implemented yet")
-			return nil
-		},
-	}
+	return newStatusCmd()
 }

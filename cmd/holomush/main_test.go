@@ -110,103 +110,8 @@ func TestRootCommand_NoArgs(t *testing.T) {
 	}
 }
 
-func TestGatewayCommand_Help(t *testing.T) {
-	cmd := NewRootCmd()
-	cmd.SetArgs([]string{"gateway", "--help"})
-
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "--config") {
-		t.Error("Gateway missing --config flag")
-	}
-}
-
-func TestGatewayCommand_Execute(t *testing.T) {
-	cmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"gateway"})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "not implemented") {
-		t.Errorf("Expected 'not implemented' message, got: %s", output)
-	}
-}
-
-func TestGatewayCommand_Properties(t *testing.T) {
-	cmd := NewGatewayCmd()
-
-	if cmd.Use != "gateway" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "gateway")
-	}
-
-	if !strings.Contains(cmd.Short, "gateway") {
-		t.Error("Short description should mention gateway")
-	}
-
-	if !strings.Contains(cmd.Long, "telnet") {
-		t.Error("Long description should mention telnet")
-	}
-}
-
-func TestCoreCommand_Help(t *testing.T) {
-	cmd := NewRootCmd()
-	cmd.SetArgs([]string{"core", "--help"})
-
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "--config") {
-		t.Error("Core missing --config flag")
-	}
-}
-
-func TestCoreCommand_Execute(t *testing.T) {
-	cmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"core"})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "not implemented") {
-		t.Errorf("Expected 'not implemented' message, got: %s", output)
-	}
-}
-
-func TestCoreCommand_Properties(t *testing.T) {
-	cmd := NewCoreCmd()
-
-	if cmd.Use != "core" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "core")
-	}
-
-	if !strings.Contains(cmd.Short, "core") {
-		t.Error("Short description should mention core")
-	}
-
-	if !strings.Contains(cmd.Long, "game engine") {
-		t.Error("Long description should mention game engine")
-	}
-}
+// Gateway command tests are now in gateway_test.go
+// Core command tests are now in core_test.go
 
 func TestMigrateCommand_Help(t *testing.T) {
 	cmd := NewRootCmd()
@@ -283,54 +188,7 @@ func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
 	}
 }
 
-func TestStatusCommand_Help(t *testing.T) {
-	cmd := NewRootCmd()
-	cmd.SetArgs([]string{"status", "--help"})
-
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "--config") {
-		t.Error("Status missing --config flag")
-	}
-}
-
-func TestStatusCommand_Execute(t *testing.T) {
-	cmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"status"})
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "not implemented") {
-		t.Errorf("Expected 'not implemented' message, got: %s", output)
-	}
-}
-
-func TestStatusCommand_Properties(t *testing.T) {
-	cmd := NewStatusCmd()
-
-	if cmd.Use != "status" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "status")
-	}
-
-	if !strings.Contains(cmd.Short, "status") {
-		t.Error("Short description should mention status")
-	}
-
-	if !strings.Contains(cmd.Long, "health") {
-		t.Error("Long description should mention health")
-	}
-}
+// Status command tests are now in status_test.go
 
 func TestUnknownCommand(t *testing.T) {
 	cmd := NewRootCmd()
