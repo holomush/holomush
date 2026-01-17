@@ -2,12 +2,21 @@
 package tls
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestGenerateCA(t *testing.T) {
@@ -495,4 +504,507 @@ func TestLoadClientTLS_MissingFiles(t *testing.T) {
 	if err == nil {
 		t.Error("LoadClientTLS() should return error for missing files")
 	}
+}
+
+// =============================================================================
+// Certificate Expiration Tests (e55.34)
+// =============================================================================
+
+func TestCertificateNearExpiration(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate a certificate that expires in 7 days (near expiration)
+	cert, err := generateCertWithExpiry(ca, gameID, "near-expiry", 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("generateCertWithExpiry() error = %v", err)
+	}
+
+	// Check expiration status
+	status := CheckCertificateExpiration(cert.Certificate, 30*24*time.Hour) // 30-day warning threshold
+	if status.IsExpired {
+		t.Error("Certificate should not be expired yet")
+	}
+	if !status.NearExpiration {
+		t.Error("Certificate should be marked as near expiration")
+	}
+	if status.DaysUntilExpiration > 8 {
+		t.Errorf("DaysUntilExpiration = %d, want <= 7", status.DaysUntilExpiration)
+	}
+	if status.Warning == "" {
+		t.Error("Expected warning message for near-expiration certificate")
+	}
+}
+
+func TestCertificateExpired(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate a certificate that is already expired (negative duration)
+	cert, err := generateExpiredCert(ca, gameID, "expired")
+	if err != nil {
+		t.Fatalf("generateExpiredCert() error = %v", err)
+	}
+
+	// Check expiration status
+	status := CheckCertificateExpiration(cert.Certificate, 30*24*time.Hour)
+	if !status.IsExpired {
+		t.Error("Certificate should be marked as expired")
+	}
+	if status.Error == nil {
+		t.Error("Expected error for expired certificate")
+	}
+	if status.DaysUntilExpiration >= 0 {
+		t.Errorf("DaysUntilExpiration = %d, want < 0 for expired cert", status.DaysUntilExpiration)
+	}
+}
+
+func TestCertificateValid(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate a certificate with plenty of time (1 year)
+	serverCert, err := GenerateServerCert(ca, gameID, "valid-server")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Check expiration status
+	status := CheckCertificateExpiration(serverCert.Certificate, 30*24*time.Hour)
+	if status.IsExpired {
+		t.Error("Certificate should not be expired")
+	}
+	if status.NearExpiration {
+		t.Error("Certificate should not be near expiration")
+	}
+	if status.Warning != "" {
+		t.Errorf("Expected no warning, got: %s", status.Warning)
+	}
+	if status.DaysUntilExpiration < 360 {
+		t.Errorf("DaysUntilExpiration = %d, want >= 360 for 1-year cert", status.DaysUntilExpiration)
+	}
+}
+
+func TestCertificateRotation(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	// Generate original CA and server cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	oldServerCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Save original certs
+	if err := SaveCertificates(tmpDir, ca, oldServerCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Record original serial number
+	oldSerial := oldServerCert.Certificate.SerialNumber
+
+	// Generate new server cert (rotation)
+	newServerCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() rotation error = %v", err)
+	}
+
+	// Verify new cert has different serial
+	if oldSerial.Cmp(newServerCert.Certificate.SerialNumber) == 0 {
+		t.Error("Rotated certificate should have different serial number")
+	}
+
+	// Save rotated cert (overwrites old one)
+	if err := SaveCertificates(tmpDir, ca, newServerCert); err != nil {
+		t.Fatalf("SaveCertificates() rotation error = %v", err)
+	}
+
+	// Verify we can load the rotated cert
+	config, err := LoadServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("LoadServerTLS() after rotation error = %v", err)
+	}
+
+	// Verify loaded cert is the new one
+	loadedCert, err := x509.ParseCertificate(config.Certificates[0].Certificate[0])
+	if err != nil {
+		t.Fatalf("Failed to parse loaded cert: %v", err)
+	}
+
+	if loadedCert.SerialNumber.Cmp(newServerCert.Certificate.SerialNumber) != 0 {
+		t.Error("Loaded certificate should be the rotated one")
+	}
+}
+
+// =============================================================================
+// Invalid Certificate Tests (e55.35)
+// =============================================================================
+
+func TestSelfSignedCertWithoutCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	// Generate CA and proper server cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Save certs
+	if err := SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("SaveCertificates() error = %v", err)
+	}
+
+	// Generate a separate CA (simulating self-signed cert from wrong CA)
+	differentCA, err := GenerateCA("different-game-id")
+	if err != nil {
+		t.Fatalf("GenerateCA() for different CA error = %v", err)
+	}
+
+	// Try to validate server cert against the wrong CA
+	err = ValidateCertificateChain(serverCert.Certificate, differentCA.Certificate)
+	if err == nil {
+		t.Error("ValidateCertificateChain() should fail for cert signed by different CA")
+	}
+
+	// Error message should be clear
+	if err != nil && !containsAny(err.Error(), []string{"signature", "verify", "CA", "certificate"}) {
+		t.Errorf("Error message should mention signature/verification issue, got: %v", err)
+	}
+}
+
+func TestWrongHostnameInCertificate(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Test hostname validation
+	tests := []struct {
+		name          string
+		hostname      string
+		expectValid   bool
+		expectErrPart string
+	}{
+		{
+			name:        "valid localhost",
+			hostname:    "localhost",
+			expectValid: true,
+		},
+		{
+			name:        "valid game hostname",
+			hostname:    "holomush-" + gameID,
+			expectValid: true,
+		},
+		{
+			name:          "wrong hostname",
+			hostname:      "wrong.example.com",
+			expectValid:   false,
+			expectErrPart: "hostname",
+		},
+		{
+			name:          "different game id",
+			hostname:      "holomush-different-game",
+			expectValid:   false,
+			expectErrPart: "hostname",
+		},
+		{
+			name:          "empty hostname",
+			hostname:      "",
+			expectValid:   false,
+			expectErrPart: "hostname",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHostname(serverCert.Certificate, tt.hostname)
+			if tt.expectValid {
+				if err != nil {
+					t.Errorf("ValidateHostname(%q) unexpected error: %v", tt.hostname, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("ValidateHostname(%q) expected error, got nil", tt.hostname)
+				}
+				if err != nil && tt.expectErrPart != "" && !containsAny(err.Error(), []string{tt.expectErrPart}) {
+					t.Errorf("Error message should mention %q, got: %v", tt.expectErrPart, err)
+				}
+			}
+		})
+	}
+}
+
+func TestMismatchedKeyAndCertPair(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	// Generate CA and two server certs
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert1, err := GenerateServerCert(ca, gameID, "server1")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() for server1 error = %v", err)
+	}
+
+	serverCert2, err := GenerateServerCert(ca, gameID, "server2")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() for server2 error = %v", err)
+	}
+
+	// Save server1's cert
+	if err := saveCert(filepath.Join(tmpDir, "mismatched.crt"), serverCert1.Certificate); err != nil {
+		t.Fatalf("saveCert() error = %v", err)
+	}
+
+	// Save server2's key (mismatched!)
+	if err := saveKey(filepath.Join(tmpDir, "mismatched.key"), serverCert2.PrivateKey); err != nil {
+		t.Fatalf("saveKey() error = %v", err)
+	}
+
+	// Try to load the mismatched pair
+	_, err = tls.LoadX509KeyPair(
+		filepath.Join(tmpDir, "mismatched.crt"),
+		filepath.Join(tmpDir, "mismatched.key"),
+	)
+	if err == nil {
+		t.Error("Loading mismatched cert/key pair should fail")
+	}
+
+	// Error message should indicate the mismatch
+	if err != nil && !containsAny(err.Error(), []string{"private key", "match", "correspond", "not valid"}) {
+		t.Errorf("Error message should indicate key mismatch, got: %v", err)
+	}
+}
+
+func TestValidateCertificateChain_ValidChain(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Validate chain - should succeed
+	if err := ValidateCertificateChain(serverCert.Certificate, ca.Certificate); err != nil {
+		t.Errorf("ValidateCertificateChain() unexpected error: %v", err)
+	}
+}
+
+func TestLoadCertificate_InvalidPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write invalid PEM data
+	invalidCertPath := filepath.Join(tmpDir, "invalid.crt")
+	if err := os.WriteFile(invalidCertPath, []byte("not valid PEM data"), 0o600); err != nil {
+		t.Fatalf("Failed to write invalid cert: %v", err)
+	}
+
+	// Try to read and parse
+	certPEM, err := os.ReadFile(filepath.Clean(invalidCertPath))
+	if err != nil {
+		t.Fatalf("Failed to read cert file: %v", err)
+	}
+
+	block, _ := pem.Decode(certPEM)
+	if block != nil {
+		t.Error("pem.Decode() should return nil for invalid PEM")
+	}
+}
+
+func TestClientCertForServerAuth(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate a client cert
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	// Verify it does NOT have ServerAuth ExtKeyUsage
+	hasServerAuth := false
+	for _, usage := range clientCert.Certificate.ExtKeyUsage {
+		if usage == x509.ExtKeyUsageServerAuth {
+			hasServerAuth = true
+			break
+		}
+	}
+	if hasServerAuth {
+		t.Error("Client certificate should NOT have ServerAuth ExtKeyUsage")
+	}
+
+	// Validate that using client cert for server auth would be inappropriate
+	err = ValidateExtKeyUsage(clientCert.Certificate, x509.ExtKeyUsageServerAuth)
+	if err == nil {
+		t.Error("Client cert should fail ServerAuth validation")
+	}
+	if err != nil && !containsAny(err.Error(), []string{"ExtKeyUsage", "server", "usage"}) {
+		t.Errorf("Error message should mention ExtKeyUsage issue, got: %v", err)
+	}
+}
+
+func TestServerCertForClientAuth(t *testing.T) {
+	gameID := "01HX7MZABC123DEF456GHJ"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate a server cert
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Verify it does NOT have ClientAuth ExtKeyUsage
+	hasClientAuth := false
+	for _, usage := range serverCert.Certificate.ExtKeyUsage {
+		if usage == x509.ExtKeyUsageClientAuth {
+			hasClientAuth = true
+			break
+		}
+	}
+	if hasClientAuth {
+		t.Error("Server certificate should NOT have ClientAuth ExtKeyUsage")
+	}
+
+	// Validate that using server cert for client auth would be inappropriate
+	err = ValidateExtKeyUsage(serverCert.Certificate, x509.ExtKeyUsageClientAuth)
+	if err == nil {
+		t.Error("Server cert should fail ClientAuth validation")
+	}
+}
+
+// =============================================================================
+// Helper Functions for Tests
+// =============================================================================
+
+// generateCertWithExpiry creates a server certificate with a specific expiry duration.
+func generateCertWithExpiry(ca *CA, gameID, name string, validFor time.Duration) (*ServerCert, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial: %w", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{"HoloMUSH"},
+			CommonName:   "holomush-" + name,
+		},
+		NotBefore:   time.Now().Add(-time.Hour), // Started 1 hour ago
+		NotAfter:    time.Now().Add(validFor),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:    []string{"localhost", "holomush-" + gameID},
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &key.PublicKey, ca.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	return &ServerCert{Certificate: cert, PrivateKey: key, Name: name}, nil
+}
+
+// generateExpiredCert creates a server certificate that is already expired.
+func generateExpiredCert(ca *CA, gameID, name string) (*ServerCert, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial: %w", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{"HoloMUSH"},
+			CommonName:   "holomush-" + name,
+		},
+		NotBefore:   time.Now().Add(-48 * time.Hour), // Started 48 hours ago
+		NotAfter:    time.Now().Add(-24 * time.Hour), // Expired 24 hours ago
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:    []string{"localhost", "holomush-" + gameID},
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &key.PublicKey, ca.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	return &ServerCert{Certificate: cert, PrivateKey: key, Name: name}, nil
+}
+
+// containsAny checks if s contains any of the substrings (case-insensitive).
+func containsAny(s string, substrings []string) bool {
+	sLower := strings.ToLower(s)
+	for _, sub := range substrings {
+		if strings.Contains(sLower, strings.ToLower(sub)) {
+			return true
+		}
+	}
+	return false
 }

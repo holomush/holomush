@@ -357,3 +357,122 @@ func LoadClientTLS(certsDir string, clientName string, expectedGameID string) (*
 		MinVersion:   cryptotls.VersionTLS13,
 	}, nil
 }
+
+// ExpirationStatus holds information about certificate expiration.
+type ExpirationStatus struct {
+	IsExpired           bool
+	NearExpiration      bool
+	DaysUntilExpiration int
+	Warning             string
+	Error               error
+}
+
+// CheckCertificateExpiration checks if a certificate is expired or near expiration.
+// The warningThreshold specifies how far in advance to warn about expiration.
+func CheckCertificateExpiration(cert *x509.Certificate, warningThreshold time.Duration) ExpirationStatus {
+	now := time.Now()
+	status := ExpirationStatus{}
+
+	// Calculate days until expiration
+	daysUntil := int(cert.NotAfter.Sub(now).Hours() / 24)
+	status.DaysUntilExpiration = daysUntil
+
+	// Check if expired
+	if now.After(cert.NotAfter) {
+		status.IsExpired = true
+		status.Error = fmt.Errorf("certificate expired on %s (%.0f hours ago)",
+			cert.NotAfter.Format(time.RFC3339),
+			now.Sub(cert.NotAfter).Hours())
+		return status
+	}
+
+	// Check if not yet valid
+	if now.Before(cert.NotBefore) {
+		status.Error = fmt.Errorf("certificate not yet valid, becomes valid on %s",
+			cert.NotBefore.Format(time.RFC3339))
+		return status
+	}
+
+	// Check if near expiration
+	if cert.NotAfter.Sub(now) <= warningThreshold {
+		status.NearExpiration = true
+		status.Warning = fmt.Sprintf("certificate expires in %d days on %s",
+			daysUntil, cert.NotAfter.Format(time.RFC3339))
+	}
+
+	return status
+}
+
+// ValidateCertificateChain validates that a certificate was signed by the given CA.
+func ValidateCertificateChain(cert *x509.Certificate, ca *x509.Certificate) error {
+	if cert == nil {
+		return fmt.Errorf("certificate is nil")
+	}
+	if ca == nil {
+		return fmt.Errorf("CA certificate is nil")
+	}
+
+	// Check if the cert was signed by the CA
+	if err := cert.CheckSignatureFrom(ca); err != nil {
+		return fmt.Errorf("certificate signature verification failed: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateHostname validates that the certificate is valid for the given hostname.
+func ValidateHostname(cert *x509.Certificate, hostname string) error {
+	if cert == nil {
+		return fmt.Errorf("certificate is nil")
+	}
+	if hostname == "" {
+		return fmt.Errorf("hostname is empty")
+	}
+
+	// Check DNSNames
+	for _, name := range cert.DNSNames {
+		if name == hostname {
+			return nil
+		}
+	}
+
+	// Check IP addresses if hostname looks like an IP
+	if ip := net.ParseIP(hostname); ip != nil {
+		for _, certIP := range cert.IPAddresses {
+			if certIP.Equal(ip) {
+				return nil
+			}
+		}
+	}
+
+	// Check Common Name as fallback (deprecated but still used)
+	if cert.Subject.CommonName == hostname {
+		return nil
+	}
+
+	return fmt.Errorf("hostname %q does not match certificate: DNSNames=%v, CN=%s",
+		hostname, cert.DNSNames, cert.Subject.CommonName)
+}
+
+// ValidateExtKeyUsage validates that the certificate has the required extended key usage.
+func ValidateExtKeyUsage(cert *x509.Certificate, requiredUsage x509.ExtKeyUsage) error {
+	if cert == nil {
+		return fmt.Errorf("certificate is nil")
+	}
+
+	for _, usage := range cert.ExtKeyUsage {
+		if usage == requiredUsage {
+			return nil
+		}
+	}
+
+	usageName := "unknown"
+	switch requiredUsage {
+	case x509.ExtKeyUsageServerAuth:
+		usageName = "ServerAuth"
+	case x509.ExtKeyUsageClientAuth:
+		usageName = "ClientAuth"
+	}
+
+	return fmt.Errorf("certificate does not have required ExtKeyUsage %s", usageName)
+}
