@@ -28,6 +28,23 @@ type gatewayConfig struct {
 	logFormat   string
 }
 
+// Validate checks that the configuration is valid.
+func (cfg *gatewayConfig) Validate() error {
+	if cfg.telnetAddr == "" {
+		return fmt.Errorf("telnet-addr is required")
+	}
+	if cfg.coreAddr == "" {
+		return fmt.Errorf("core-addr is required")
+	}
+	if cfg.controlAddr == "" {
+		return fmt.Errorf("control-addr is required")
+	}
+	if cfg.logFormat != "json" && cfg.logFormat != "text" {
+		return fmt.Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
+	}
+	return nil
+}
+
 // Default values for gateway command flags.
 const (
 	defaultTelnetAddr         = ":4201"
@@ -47,11 +64,10 @@ func newGatewayCmd() *cobra.Command {
 		Long: `Start the gateway process which handles incoming connections
 from telnet and web clients, forwarding commands to the core process.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGateway(cmd.Context(), cfg, cmd)
+			return runGatewayWithDeps(cmd.Context(), cfg, cmd, nil)
 		},
 	}
 
-	// Register flags
 	cmd.Flags().StringVar(&cfg.telnetAddr, "telnet-addr", defaultTelnetAddr, "telnet listen address")
 	cmd.Flags().StringVar(&cfg.coreAddr, "core-addr", defaultCoreAddr, "core gRPC server address")
 	cmd.Flags().StringVar(&cfg.controlAddr, "control-addr", defaultGatewayControlAddr, "control gRPC listen address with mTLS")
@@ -61,9 +77,55 @@ from telnet and web clients, forwarding commands to the core process.`,
 	return cmd
 }
 
-// runGateway starts the gateway process.
-func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) error {
-	// Set up logging
+// runGatewayWithDeps starts the gateway process with injectable dependencies.
+// If deps is nil, default implementations are used.
+func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command, deps *GatewayDeps) error {
+	if deps == nil {
+		deps = &GatewayDeps{}
+	}
+
+	// Set up default factories
+	if deps.CertsDirGetter == nil {
+		deps.CertsDirGetter = xdg.CertsDir
+	}
+	if deps.GameIDExtractor == nil {
+		deps.GameIDExtractor = control.ExtractGameIDFromCA
+	}
+	if deps.ClientTLSLoader == nil {
+		deps.ClientTLSLoader = tls.LoadClientTLS
+	}
+	if deps.GRPCClientFactory == nil {
+		deps.GRPCClientFactory = func(ctx context.Context, cfg holoGRPC.ClientConfig) (GRPCClient, error) {
+			return holoGRPC.NewClient(ctx, cfg)
+		}
+	}
+	if deps.ControlTLSLoader == nil {
+		deps.ControlTLSLoader = control.LoadControlServerTLS
+	}
+	if deps.ControlServerFactory == nil {
+		deps.ControlServerFactory = func(component string, shutdownFunc control.ShutdownFunc) (ControlServer, error) {
+			return control.NewGRPCServer(component, shutdownFunc)
+		}
+	}
+	if deps.ObservabilityServerFactory == nil {
+		deps.ObservabilityServerFactory = func(addr string, readinessChecker observability.ReadinessChecker) ObservabilityServer {
+			return observability.NewServer(addr, readinessChecker)
+		}
+	}
+	if deps.ListenerFactory == nil {
+		deps.ListenerFactory = func(network, address string) (Listener, error) {
+			l, err := net.Listen(network, address)
+			if err != nil {
+				return nil, fmt.Errorf("net.Listen failed: %w", err)
+			}
+			return &netListenerAdapter{l}, nil
+		}
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	if err := setupLogging(cfg.logFormat); err != nil {
 		return fmt.Errorf("failed to set up logging: %w", err)
 	}
@@ -74,20 +136,19 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 		"log_format", cfg.logFormat,
 	)
 
-	// Get certs directory
-	certsDir, err := xdg.CertsDir()
+	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
 		return fmt.Errorf("failed to get certs directory: %w", err)
 	}
 
 	// Extract game_id from CA certificate for proper ServerName verification
-	gameID, err := control.ExtractGameIDFromCA(certsDir)
+	gameID, err := deps.GameIDExtractor(certsDir)
 	if err != nil {
 		return fmt.Errorf("failed to extract game_id from CA: %w", err)
 	}
 
 	// Load TLS client certificates for mTLS connection to core
-	tlsConfig, err := tls.LoadClientTLS(certsDir, "gateway", gameID)
+	tlsConfig, err := deps.ClientTLSLoader(certsDir, "gateway", gameID)
 	if err != nil {
 		return fmt.Errorf("failed to load TLS certificates: %w", err)
 	}
@@ -95,7 +156,7 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	slog.Info("TLS certificates loaded", "certs_dir", certsDir)
 
 	// Create gRPC client with mTLS
-	grpcClient, err := holoGRPC.NewClient(ctx, holoGRPC.ClientConfig{
+	grpcClient, err := deps.GRPCClientFactory(ctx, holoGRPC.ClientConfig{
 		Address:   cfg.coreAddr,
 		TLSConfig: tlsConfig,
 	})
@@ -110,36 +171,33 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 
 	slog.Info("gRPC client created", "core_addr", cfg.coreAddr)
 
-	// Set up graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Start control gRPC server (always enabled)
-	controlTLSConfig, tlsErr := control.LoadControlServerTLS(certsDir, "gateway")
+	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "gateway")
 	if tlsErr != nil {
 		return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
 	}
 
-	controlGRPCServer := control.NewGRPCServer("gateway", func() { cancel() })
+	controlGRPCServer, err := deps.ControlServerFactory("gateway", func() { cancel() })
+	if err != nil {
+		return fmt.Errorf("failed to create control gRPC server: %w", err)
+	}
 	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
 	if err != nil {
 		return fmt.Errorf("failed to start control gRPC server: %w", err)
 	}
-	// Monitor control server errors in background
-	go func() {
-		if controlErr := <-controlErrChan; controlErr != nil {
-			slog.Error("control gRPC server error", "error", controlErr)
-		}
-	}()
+	// Monitor control server errors in background - triggers shutdown on error
+	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
 
 	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
 
-	// Start telnet listener
-	// Note: The current telnet server requires direct core components, which aren't
-	// available in the gateway process. For now, we start a basic listener that
-	// demonstrates the gateway is running. A future task will implement the gRPC-based
-	// telnet handler that uses the grpcClient to communicate with core.
-	telnetListener, err := net.Listen("tcp", cfg.telnetAddr)
+	// TODO(grpc-telnet): Replace placeholder telnet handler with gRPC-based implementation.
+	// The current telnet server requires direct core components, which aren't available
+	// in the gateway process. For now, we start a basic listener that demonstrates the
+	// gateway is running.
+	telnetListener, err := deps.ListenerFactory("tcp", cfg.telnetAddr)
 	if err != nil {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -152,11 +210,11 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	slog.Info("telnet server listening", "addr", telnetListener.Addr())
 
 	// Start observability server if configured
-	var obsServer *observability.Server
+	var obsServer ObservabilityServer
 	if cfg.metricsAddr != "" {
 		// For gateway, we're ready once telnet listener is up
-		obsServer = observability.NewServer(cfg.metricsAddr, func() bool { return true })
-		_, err = obsServer.Start()
+		obsServer = deps.ObservabilityServerFactory(cfg.metricsAddr, func() bool { return true })
+		obsErrChan, err := obsServer.Start()
 		if err != nil {
 			if closeErr := telnetListener.Close(); closeErr != nil {
 				slog.Warn("failed to close telnet listener during cleanup", "error", closeErr)
@@ -168,10 +226,11 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 			}
 			return fmt.Errorf("failed to start observability server: %w", err)
 		}
+		// Monitor observability server errors in background - triggers shutdown on error
+		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
 		slog.Info("observability server started", "addr", obsServer.Addr())
 	}
 
-	// Handle signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -190,7 +249,7 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 			}
 			// For now, just close the connection with a message.
 			// A future task will implement proper gRPC-based handling.
-			go handleTelnetConnectionPlaceholder(conn, grpcClient)
+			go handleTelnetConnectionPlaceholderWithConn(conn)
 		}
 	}()
 
@@ -235,9 +294,34 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	return nil
 }
 
+// netListenerAdapter wraps net.Listener to implement our Listener interface.
+type netListenerAdapter struct {
+	net.Listener
+}
+
+// Accept wraps net.Listener.Accept to return our Conn interface.
+func (a *netListenerAdapter) Accept() (Conn, error) {
+	conn, err := a.Listener.Accept()
+	if err != nil {
+		return nil, fmt.Errorf("accept failed: %w", err)
+	}
+	return conn, nil
+}
+
+// Addr wraps net.Listener.Addr to return our Addr interface.
+func (a *netListenerAdapter) Addr() Addr {
+	return a.Listener.Addr()
+}
+
 // handleTelnetConnectionPlaceholder handles a telnet connection.
 // This is a placeholder until the gRPC-based telnet handler is implemented.
 func handleTelnetConnectionPlaceholder(conn net.Conn, _ *holoGRPC.Client) {
+	handleTelnetConnectionPlaceholderWithConn(conn)
+}
+
+// handleTelnetConnectionPlaceholderWithConn handles a telnet connection using the Conn interface.
+// This is a placeholder until the gRPC-based telnet handler is implemented.
+func handleTelnetConnectionPlaceholderWithConn(conn Conn) {
 	defer func() {
 		if err := conn.Close(); err != nil {
 			slog.Debug("error closing telnet connection", "error", err)
@@ -245,17 +329,31 @@ func handleTelnetConnectionPlaceholder(conn net.Conn, _ *holoGRPC.Client) {
 	}()
 
 	// Send a welcome message indicating the gateway is running but not fully implemented
-	_, err := fmt.Fprintln(conn, "Welcome to HoloMUSH Gateway!")
+	_, err := fmt.Fprintln(writerAdapter{conn}, "Welcome to HoloMUSH Gateway!")
 	if err != nil {
 		slog.Debug("failed to send welcome message", "error", err)
 		return
 	}
-	_, err = fmt.Fprintln(conn, "Gateway is connected to core but telnet handler is pending implementation.")
+	_, err = fmt.Fprintln(writerAdapter{conn}, "Gateway is connected to core but telnet handler is pending implementation.")
 	if err != nil {
 		slog.Debug("failed to send status message", "error", err)
 		return
 	}
 	// Error intentionally ignored: connection closes immediately after, so logging
 	// a write failure here would be noise (client may have already disconnected).
-	_, _ = fmt.Fprintln(conn, "Disconnecting...")
+	_, _ = fmt.Fprintln(writerAdapter{conn}, "Disconnecting...")
+}
+
+// writerAdapter wraps a Conn to implement io.Writer for fmt.Fprintln.
+type writerAdapter struct {
+	Conn
+}
+
+// Write implements io.Writer.
+func (w writerAdapter) Write(p []byte) (n int, err error) {
+	n, err = w.Conn.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write failed: %w", err)
+	}
+	return n, nil
 }

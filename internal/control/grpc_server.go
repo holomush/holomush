@@ -1,4 +1,4 @@
-// Package control provides HTTP and gRPC control interfaces for process management.
+// Package control provides gRPC control interfaces for process management.
 package control
 
 import (
@@ -37,20 +37,30 @@ type GRPCServer struct {
 
 // NewGRPCServer creates a new gRPC control server.
 // component is the name of the process (e.g., "core" or "gateway").
-func NewGRPCServer(component string, shutdownFunc ShutdownFunc) *GRPCServer {
+// Returns an error if component is empty.
+func NewGRPCServer(component string, shutdownFunc ShutdownFunc) (*GRPCServer, error) {
+	if component == "" {
+		return nil, fmt.Errorf("component name cannot be empty")
+	}
 	s := &GRPCServer{
 		component:    component,
 		startTime:    time.Now(),
 		shutdownFunc: shutdownFunc,
 	}
 	s.running.Store(true)
-	return s
+	return s, nil
 }
 
 // Start begins listening on the specified address with mTLS.
 // It returns an error channel that will receive the server's exit error (or nil on graceful stop).
 // The channel will receive exactly one value when the server stops.
+// Returns an error if the server is already running (double-start prevention).
 func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan error, error) {
+	// Prevent double-start which would leak the first listener
+	if s.listener != nil {
+		return nil, fmt.Errorf("server is already running")
+	}
+
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
@@ -77,12 +87,14 @@ func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan err
 }
 
 // Stop gracefully shuts down the control gRPC server.
+// The running state is set to false only after GracefulStop completes.
 func (s *GRPCServer) Stop(_ context.Context) error {
-	s.running.Store(false)
-
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
 	}
+
+	// Set running to false only after GracefulStop completes to avoid race condition
+	s.running.Store(false)
 
 	return nil
 }

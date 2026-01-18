@@ -292,7 +292,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 
 	// Subscribe to requested streams
-	var channels []chan core.Event
+	channels := make([]chan core.Event, 0, len(req.Streams))
 	for _, streamName := range req.Streams {
 		ch := s.broadcaster.Subscribe(streamName)
 		channels = append(channels, ch)

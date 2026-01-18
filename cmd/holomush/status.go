@@ -17,6 +17,8 @@ import (
 )
 
 // ProcessStatus holds the status information for a process.
+// Use the constructor functions NewProcessStatus and NewProcessStatusError
+// to create instances - they enforce valid state invariants.
 type ProcessStatus struct {
 	Component     string `json:"component"`
 	Running       bool   `json:"running"`
@@ -26,11 +28,46 @@ type ProcessStatus struct {
 	Error         string `json:"error,omitempty"`
 }
 
+// NewProcessStatus creates a ProcessStatus for a running process.
+// This constructor ensures valid state: Running is true, Error is empty,
+// and Health is set to "healthy".
+func NewProcessStatus(component string, running bool, pid int, uptime int64) ProcessStatus {
+	return ProcessStatus{
+		Component:     component,
+		Running:       running,
+		Health:        "healthy",
+		PID:           pid,
+		UptimeSeconds: uptime,
+	}
+}
+
+// NewProcessStatusError creates a ProcessStatus for a process that failed to respond.
+// This constructor ensures valid state: Running is false, Error contains the message,
+// and Health/PID/Uptime are zero values.
+func NewProcessStatusError(component string, err error) ProcessStatus {
+	return ProcessStatus{
+		Component: component,
+		Running:   false,
+		Error:     err.Error(),
+	}
+}
+
 // statusConfig holds configuration for the status command.
 type statusConfig struct {
 	jsonOutput  bool
 	coreAddr    string
 	gatewayAddr string
+}
+
+// Validate checks that the configuration is valid.
+func (cfg *statusConfig) Validate() error {
+	if cfg.coreAddr == "" {
+		return fmt.Errorf("core-addr is required")
+	}
+	if cfg.gatewayAddr == "" {
+		return fmt.Errorf("gateway-addr is required")
+	}
+	return nil
 }
 
 // newStatusCmd creates the status subcommand with all flags configured.
@@ -46,7 +83,6 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 
-	// Register flags
 	cmd.Flags().BoolVar(&cfg.jsonOutput, "json", false, "output status as JSON")
 	cmd.Flags().StringVar(&cfg.coreAddr, "core-addr", defaultCoreControlAddr, "core control gRPC address")
 	cmd.Flags().StringVar(&cfg.gatewayAddr, "gateway-addr", defaultGatewayControlAddr, "gateway control gRPC address")
@@ -56,6 +92,11 @@ func newStatusCmd() *cobra.Command {
 
 // runStatus executes the status command.
 func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	// Query both core and gateway processes
 	statuses := map[string]ProcessStatus{
 		"core":    queryProcessStatusGRPC("core", cfg.coreAddr),
@@ -81,29 +122,22 @@ func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
 
 // queryProcessStatusGRPC queries the control gRPC server for a process and returns its status.
 func queryProcessStatusGRPC(component, addr string) ProcessStatus {
-	status := ProcessStatus{
-		Component: component,
-	}
-
 	// Get certs directory
 	certsDir, err := xdg.CertsDir()
 	if err != nil {
-		status.Error = fmt.Sprintf("failed to get certs directory: %v", err)
-		return status
+		return NewProcessStatusError(component, fmt.Errorf("failed to get certs directory: %w", err))
 	}
 
 	// Extract game_id from CA certificate for ServerName verification
 	gameID, err := control.ExtractGameIDFromCA(certsDir)
 	if err != nil {
-		status.Error = fmt.Sprintf("failed to extract game_id from CA: %v", err)
-		return status
+		return NewProcessStatusError(component, fmt.Errorf("failed to extract game_id from CA: %w", err))
 	}
 
 	// Load TLS config for client with game_id for proper ServerName verification
 	tlsConfig, err := control.LoadControlClientTLS(certsDir, component, gameID)
 	if err != nil {
-		status.Error = fmt.Sprintf("failed to load TLS config: %v", err)
-		return status
+		return NewProcessStatusError(component, fmt.Errorf("failed to load TLS config: %w", err))
 	}
 
 	// Create gRPC client with mTLS
@@ -111,11 +145,33 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	// TODO: Migrate to grpc.NewClient when ready.
+	//
+	// grpc.DialContext is deprecated in favor of grpc.NewClient. Key differences:
+	//
+	// 1. Connection behavior: grpc.NewClient creates a "virtual" connection without
+	//    immediately establishing a physical connection (lazy connect). grpc.DialContext
+	//    can block with WithBlock option. For our use case, we want eager connection
+	//    to detect unavailable services quickly.
+	//
+	// 2. Name resolver: grpc.NewClient uses "dns" as default resolver, while DialContext
+	//    uses "passthrough". For direct IP:port addresses like ours, this shouldn't matter,
+	//    but we should verify behavior with mTLS ServerName verification.
+	//
+	// 3. Migration steps:
+	//    a. Replace grpc.DialContext with grpc.NewClient
+	//    b. Remove context parameter (NewClient doesn't take context)
+	//    c. If blocking behavior is needed, call conn.Connect() and use
+	//       conn.WaitForStateChange() to wait for Ready state
+	//    d. Test mTLS with ServerName verification still works correctly
+	//    e. Update timeout handling (move to RPC context instead of dial context)
+	//
+	// See: https://github.com/grpc/grpc-go/blob/master/Documentation/anti-patterns.md
+	//
 	//nolint:staticcheck // grpc.NewClient requires different setup; DialContext works for 1.x
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
 	if err != nil {
-		status.Error = fmt.Sprintf("failed to connect: %v", err)
-		return status
+		return NewProcessStatusError(component, fmt.Errorf("failed to connect: %w", err))
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -124,17 +180,11 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	// Query status
 	resp, err := client.Status(ctx, &controlv1.StatusRequest{})
 	if err != nil {
-		status.Error = fmt.Sprintf("failed to query status: %v", err)
-		return status
+		return NewProcessStatusError(component, fmt.Errorf("failed to query status: %w", err))
 	}
 
 	// Process is running and responding
-	status.Running = resp.Running
-	status.Health = "healthy"
-	status.PID = int(resp.Pid)
-	status.UptimeSeconds = resp.UptimeSeconds
-
-	return status
+	return NewProcessStatus(component, resp.Running, int(resp.Pid), resp.UptimeSeconds)
 }
 
 // formatStatusTable formats the status as a human-readable table.

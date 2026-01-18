@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"net"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCoreCommand_Flags(t *testing.T) {
@@ -649,6 +652,91 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+// TestCoreConfig_Validate tests validation of coreConfig.
+func TestCoreConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       coreConfig
+		wantError bool
+		errorMsg  string
+	}{
+		{
+			name: "valid config",
+			cfg: coreConfig{
+				grpcAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9001",
+				logFormat:   "json",
+			},
+			wantError: false,
+		},
+		{
+			name: "valid config with text format",
+			cfg: coreConfig{
+				grpcAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9001",
+				logFormat:   "text",
+			},
+			wantError: false,
+		},
+		{
+			name: "empty grpc-addr",
+			cfg: coreConfig{
+				grpcAddr:    "",
+				controlAddr: "127.0.0.1:9001",
+				logFormat:   "json",
+			},
+			wantError: true,
+			errorMsg:  "grpc-addr is required",
+		},
+		{
+			name: "empty control-addr",
+			cfg: coreConfig{
+				grpcAddr:    "localhost:9000",
+				controlAddr: "",
+				logFormat:   "json",
+			},
+			wantError: true,
+			errorMsg:  "control-addr is required",
+		},
+		{
+			name: "invalid log-format",
+			cfg: coreConfig{
+				grpcAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9001",
+				logFormat:   "invalid",
+			},
+			wantError: true,
+			errorMsg:  "log-format must be 'json' or 'text'",
+		},
+		{
+			name: "empty log-format",
+			cfg: coreConfig{
+				grpcAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9001",
+				logFormat:   "",
+			},
+			wantError: true,
+			errorMsg:  "log-format must be 'json' or 'text'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("Validate() expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errorMsg)
+				}
+			} else if err != nil {
+				t.Fatalf("Validate() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 // TestCoreCommand_InvalidLogFormat verifies that invalid log format is rejected.
 func TestCoreCommand_InvalidLogFormat(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/test")
@@ -667,5 +755,131 @@ func TestCoreCommand_InvalidLogFormat(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "log") && !strings.Contains(err.Error(), "format") {
 		t.Errorf("Error should mention log/format issue, got: %v", err)
+	}
+}
+
+// TestMonitorServerErrors verifies that monitorServerErrors cancels context on error.
+func TestMonitorServerErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create error channel and send error
+	errCh := make(chan error, 1)
+	testErr := fmt.Errorf("test server error")
+	errCh <- testErr
+
+	// Start monitoring
+	done := make(chan struct{})
+	go func() {
+		monitorServerErrors(ctx, cancel, errCh, "test-server")
+		close(done)
+	}()
+
+	// Wait for context to be cancelled
+	select {
+	case <-ctx.Done():
+		// Success - context was cancelled
+	case <-time.After(time.Second):
+		t.Fatal("context was not cancelled after server error")
+	}
+
+	// Wait for goroutine to complete
+	select {
+	case <-done:
+		// Success
+	case <-time.After(time.Second):
+		t.Fatal("monitorServerErrors goroutine did not complete")
+	}
+}
+
+// TestMonitorServerErrors_NilError verifies that nil errors don't cancel context.
+func TestMonitorServerErrors_NilError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create error channel and send nil (graceful shutdown)
+	errCh := make(chan error, 1)
+	errCh <- nil
+
+	// Start monitoring
+	done := make(chan struct{})
+	go func() {
+		monitorServerErrors(ctx, cancel, errCh, "test-server")
+		close(done)
+	}()
+
+	// Wait for goroutine to complete
+	select {
+	case <-done:
+		// Success - goroutine completed
+	case <-time.After(time.Second):
+		t.Fatal("monitorServerErrors goroutine did not complete")
+	}
+
+	// Context should NOT be cancelled for nil error
+	select {
+	case <-ctx.Done():
+		t.Fatal("context should not be cancelled for nil error")
+	default:
+		// Success - context still active
+	}
+}
+
+// TestMonitorServerErrors_ChannelClose verifies handling when channel is closed.
+func TestMonitorServerErrors_ChannelClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create and immediately close channel
+	errCh := make(chan error, 1)
+	close(errCh)
+
+	// Start monitoring
+	done := make(chan struct{})
+	go func() {
+		monitorServerErrors(ctx, cancel, errCh, "test-server")
+		close(done)
+	}()
+
+	// Wait for goroutine to complete (should exit on closed channel)
+	select {
+	case <-done:
+		// Success - goroutine completed
+	case <-time.After(time.Second):
+		t.Fatal("monitorServerErrors goroutine did not complete")
+	}
+
+	// Context should NOT be cancelled for closed channel (graceful)
+	select {
+	case <-ctx.Done():
+		t.Fatal("context should not be cancelled when channel closes gracefully")
+	default:
+		// Success - context still active
+	}
+}
+
+// TestMonitorServerErrors_ContextCancelled verifies behavior when context is cancelled first.
+func TestMonitorServerErrors_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create error channel but don't send anything
+	errCh := make(chan error, 1)
+
+	// Start monitoring
+	done := make(chan struct{})
+	go func() {
+		monitorServerErrors(ctx, cancel, errCh, "test-server")
+		close(done)
+	}()
+
+	// Cancel context before any error arrives
+	cancel()
+
+	// Wait for goroutine to complete
+	select {
+	case <-done:
+		// Success - goroutine completed
+	case <-time.After(time.Second):
+		t.Fatal("monitorServerErrors goroutine did not complete after context cancel")
 	}
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -247,8 +249,9 @@ func TestGatewayCommand_InvalidLogFormat(t *testing.T) {
 		t.Fatal("Expected error with invalid log format")
 	}
 
-	// Error should mention logging
-	if !strings.Contains(err.Error(), "logging") && !strings.Contains(err.Error(), "log format") {
+	// Error should mention log format (validation moved from setupLogging to Validate)
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "logging") && !strings.Contains(errMsg, "log format") && !strings.Contains(errMsg, "log-format") {
 		t.Errorf("Error should mention logging issue, got: %v", err)
 	}
 }
@@ -394,6 +397,49 @@ func TestHandleTelnetConnectionPlaceholder_WriteError(t *testing.T) {
 	<-done
 }
 
+// mockConn is a mock net.Conn that fails after N writes.
+type mockConn struct {
+	net.Conn
+	writesUntilFail int
+	writeCount      int
+	closed          bool
+}
+
+func (m *mockConn) Write(p []byte) (int, error) {
+	m.writeCount++
+	if m.writeCount >= m.writesUntilFail {
+		return 0, fmt.Errorf("mock write error on write %d", m.writeCount)
+	}
+	return len(p), nil
+}
+
+func (m *mockConn) Close() error {
+	m.closed = true
+	return nil
+}
+
+func (m *mockConn) Read(_ []byte) (int, error) {
+	return 0, fmt.Errorf("mock read error")
+}
+
+// TestHandleTelnetConnectionPlaceholder_SecondWriteFails tests when second write fails.
+func TestHandleTelnetConnectionPlaceholder_SecondWriteFails(t *testing.T) {
+	// Mock that fails on second write (status message)
+	mock := &mockConn{writesUntilFail: 2}
+
+	done := make(chan struct{})
+	go func() {
+		handleTelnetConnectionPlaceholder(mock, nil)
+		close(done)
+	}()
+
+	<-done
+
+	if !mock.closed {
+		t.Error("connection should be closed after handler completes")
+	}
+}
+
 func TestGatewayCommand_InvalidCACN(t *testing.T) {
 	// Create a certs directory with a CA that has wrong CN prefix
 	tmpDir := t.TempDir()
@@ -438,6 +484,108 @@ Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
 	}
 }
 
+// TestGatewayConfig_Validate tests validation of gatewayConfig.
+func TestGatewayConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       gatewayConfig
+		wantError bool
+		errorMsg  string
+	}{
+		{
+			name: "valid config",
+			cfg: gatewayConfig{
+				telnetAddr:  ":4201",
+				coreAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9002",
+				logFormat:   "json",
+			},
+			wantError: false,
+		},
+		{
+			name: "valid config with text format",
+			cfg: gatewayConfig{
+				telnetAddr:  ":4201",
+				coreAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9002",
+				logFormat:   "text",
+			},
+			wantError: false,
+		},
+		{
+			name: "empty telnet-addr",
+			cfg: gatewayConfig{
+				telnetAddr:  "",
+				coreAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9002",
+				logFormat:   "json",
+			},
+			wantError: true,
+			errorMsg:  "telnet-addr is required",
+		},
+		{
+			name: "empty core-addr",
+			cfg: gatewayConfig{
+				telnetAddr:  ":4201",
+				coreAddr:    "",
+				controlAddr: "127.0.0.1:9002",
+				logFormat:   "json",
+			},
+			wantError: true,
+			errorMsg:  "core-addr is required",
+		},
+		{
+			name: "empty control-addr",
+			cfg: gatewayConfig{
+				telnetAddr:  ":4201",
+				coreAddr:    "localhost:9000",
+				controlAddr: "",
+				logFormat:   "json",
+			},
+			wantError: true,
+			errorMsg:  "control-addr is required",
+		},
+		{
+			name: "invalid log-format",
+			cfg: gatewayConfig{
+				telnetAddr:  ":4201",
+				coreAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9002",
+				logFormat:   "invalid",
+			},
+			wantError: true,
+			errorMsg:  "log-format must be 'json' or 'text'",
+		},
+		{
+			name: "empty log-format",
+			cfg: gatewayConfig{
+				telnetAddr:  ":4201",
+				coreAddr:    "localhost:9000",
+				controlAddr: "127.0.0.1:9002",
+				logFormat:   "",
+			},
+			wantError: true,
+			errorMsg:  "log-format must be 'json' or 'text'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("Validate() expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errorMsg)
+				}
+			} else if err != nil {
+				t.Fatalf("Validate() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestGatewayConfig_Defaults(t *testing.T) {
 	// Verify the default constants are set correctly
 	if defaultTelnetAddr != ":4201" {
@@ -451,5 +599,71 @@ func TestGatewayConfig_Defaults(t *testing.T) {
 	}
 	if defaultGatewayMetricsAddr != "127.0.0.1:9101" {
 		t.Errorf("defaultGatewayMetricsAddr = %q, want %q", defaultGatewayMetricsAddr, "127.0.0.1:9101")
+	}
+}
+
+// TestControlServerError_TriggersShutdown verifies that when the control gRPC server
+// encounters an error, the gateway process shuts down.
+func TestControlServerError_TriggersShutdown(t *testing.T) {
+	// This test verifies bug fix: control server errors should trigger shutdown
+	// The bug was that errors were logged but cancel() was not called
+
+	// Create a mock error channel that simulates control server failure
+	errCh := make(chan error, 1)
+	shutdownCalled := make(chan struct{})
+
+	// Simulate the current buggy behavior: receive error but don't trigger shutdown
+	// After fix, the goroutine should call cancel() which triggers shutdown
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
+	cancel := func() {
+		close(shutdownCalled)
+	}
+
+	// Start goroutine that monitors control server errors
+	go monitorServerErrors(ctx, cancel, errCh, "control-grpc")
+
+	// Send an error to simulate control server failure
+	errCh <- fmt.Errorf("simulated control server error")
+
+	// Wait for shutdown to be triggered
+	select {
+	case <-shutdownCalled:
+		// Success - shutdown was triggered
+	case <-time.After(1 * time.Second):
+		t.Fatal("control server error did not trigger shutdown within timeout")
+	}
+}
+
+// TestObservabilityServerError_TriggersShutdown verifies that when the observability
+// server encounters an error, the gateway process shuts down.
+func TestObservabilityServerError_TriggersShutdown(t *testing.T) {
+	// This test verifies bug fix: observability server errors should trigger shutdown
+	// The bug was that the error channel was discarded with _
+
+	// Create a mock error channel that simulates observability server failure
+	errCh := make(chan error, 1)
+	shutdownCalled := make(chan struct{})
+
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
+	cancel := func() {
+		close(shutdownCalled)
+	}
+
+	// Start goroutine that monitors observability server errors
+	go monitorServerErrors(ctx, cancel, errCh, "observability")
+
+	// Send an error to simulate observability server failure
+	errCh <- fmt.Errorf("simulated observability server error")
+
+	// Wait for shutdown to be triggered
+	select {
+	case <-shutdownCalled:
+		// Success - shutdown was triggered
+	case <-time.After(1 * time.Second):
+		t.Fatal("observability server error did not trigger shutdown within timeout")
 	}
 }

@@ -20,7 +20,10 @@ import (
 )
 
 func TestGRPCServer_NewGRPCServer(t *testing.T) {
-	s := NewGRPCServer("core", nil)
+	s, err := NewGRPCServer("core", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	if !s.running.Load() {
 		t.Error("server should be running after creation")
@@ -31,8 +34,20 @@ func TestGRPCServer_NewGRPCServer(t *testing.T) {
 	}
 }
 
+// TestGRPCServer_NewGRPCServer_EmptyComponent tests that NewGRPCServer returns
+// an error when component is empty.
+func TestGRPCServer_NewGRPCServer_EmptyComponent(t *testing.T) {
+	_, err := NewGRPCServer("", nil)
+	if err == nil {
+		t.Error("NewGRPCServer() should fail with empty component")
+	}
+}
+
 func TestGRPCServer_Status_ReturnsCorrectInfo(t *testing.T) {
-	s := NewGRPCServer("test-component", nil)
+	s, err := NewGRPCServer("test-component", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 	// Wait a bit to ensure uptime > 0
 	time.Sleep(10 * time.Millisecond)
 
@@ -63,9 +78,12 @@ func TestGRPCServer_Status_ReturnsCorrectInfo(t *testing.T) {
 func TestGRPCServer_Shutdown_TriggersCallback(t *testing.T) {
 	var shutdownCalled atomic.Bool
 
-	s := NewGRPCServer("core", func() {
+	s, err := NewGRPCServer("core", func() {
 		shutdownCalled.Store(true)
 	})
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	resp, err := s.Shutdown(context.Background(), &controlv1.ShutdownRequest{Graceful: true})
 	if err != nil {
@@ -85,7 +103,10 @@ func TestGRPCServer_Shutdown_TriggersCallback(t *testing.T) {
 }
 
 func TestGRPCServer_Shutdown_NilCallback(t *testing.T) {
-	s := NewGRPCServer("core", nil)
+	s, err := NewGRPCServer("core", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	// Should not panic with nil callback
 	resp, err := s.Shutdown(context.Background(), &controlv1.ShutdownRequest{Graceful: true})
@@ -99,7 +120,10 @@ func TestGRPCServer_Shutdown_NilCallback(t *testing.T) {
 }
 
 func TestGRPCServer_Stop_SetsRunningFalse(t *testing.T) {
-	s := NewGRPCServer("test", nil)
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	if !s.running.Load() {
 		t.Error("server should be running after creation")
@@ -126,9 +150,12 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	_ = listener.Close()
 
 	var shutdownCalled atomic.Bool
-	s := NewGRPCServer("integration-test", func() {
+	s, err := NewGRPCServer("integration-test", func() {
 		shutdownCalled.Store(true)
 	})
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	// Start server without TLS for testing
 	serverListener, err := net.Listen("tcp", addr)
@@ -205,10 +232,13 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 }
 
 func TestGRPCServer_Stop_HandlesNilServer(t *testing.T) {
-	s := NewGRPCServer("test", nil)
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 	// grpcServer and listener are nil
 
-	err := s.Stop(context.Background())
+	err = s.Stop(context.Background())
 	if err != nil {
 		t.Errorf("Stop should succeed with nil server components, got: %v", err)
 	}
@@ -223,7 +253,10 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	s := NewGRPCServer("concurrent-test", nil)
+	s, err := NewGRPCServer("concurrent-test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	// Start server without TLS for testing
 	serverListener, err := net.Listen("tcp", addr)
@@ -623,7 +656,10 @@ func TestGRPCServer_Start_FailsOnInvalidAddress(t *testing.T) {
 		t.Fatalf("failed to load TLS config: %v", err)
 	}
 
-	s := NewGRPCServer("test", nil)
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	// Try to start on an invalid address
 	errCh, err := s.Start("invalid-address:99999999", tlsConfig)
@@ -673,7 +709,10 @@ func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	s := NewGRPCServer("test", nil)
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	// Start should return an error channel
 	errCh, err := s.Start(addr, tlsConfig)
@@ -736,7 +775,10 @@ func TestGRPCServer_Start_PropagatesServerError(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	s := NewGRPCServer("test", nil)
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	errCh, err := s.Start(addr, tlsConfig)
 	if err != nil {
@@ -813,9 +855,12 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 
 	// Start server with mTLS
 	var shutdownCalled atomic.Bool
-	s := NewGRPCServer("core", func() {
+	s, err := NewGRPCServer("core", func() {
 		shutdownCalled.Store(true)
 	})
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	errCh, err := s.Start(addr, serverTLSConfig)
 	if err != nil {
@@ -924,7 +969,10 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 	_ = listener.Close()
 
 	// Start server with mTLS
-	s := NewGRPCServer("core", nil)
+	s, err := NewGRPCServer("core", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	errCh, err := s.Start(addr, serverTLSConfig)
 	if err != nil {
@@ -1016,7 +1064,10 @@ func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	s := NewGRPCServer("test", nil)
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
 
 	errCh, err := s.Start(addr, tlsConfig)
 	if err != nil {
@@ -1042,5 +1093,153 @@ func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("expected to receive from error channel after Stop()")
+	}
+}
+
+// TestGRPCServer_Start_DoubleStartReturnsError tests that calling Start() twice
+// returns an error instead of leaking the first listener (e55.57).
+func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-double-start"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Find two available ports
+	listener1, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr1 := listener1.Addr().String()
+	_ = listener1.Close()
+
+	listener2, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr2 := listener2.Addr().String()
+	_ = listener2.Close()
+
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
+
+	// First start should succeed
+	errCh, err := s.Start(addr1, tlsConfig)
+	if err != nil {
+		t.Fatalf("First Start() error = %v", err)
+	}
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Stop(ctx)
+		<-errCh
+	}()
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Second start should fail
+	errCh2, err := s.Start(addr2, tlsConfig)
+	if err == nil {
+		t.Error("Second Start() should fail when server is already running")
+		if errCh2 != nil {
+			// Clean up if it somehow succeeded
+			_ = s.Stop(context.Background())
+		}
+	}
+	if errCh2 != nil {
+		t.Error("Second Start() should return nil error channel on failure")
+	}
+}
+
+// TestGRPCServer_Stop_RunningStateAfterGracefulStop tests that running state is
+// false only after GracefulStop completes, not before (e55.59).
+func TestGRPCServer_Stop_RunningStateAfterGracefulStop(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-stop-timing"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
+
+	errCh, err := s.Start(addr, tlsConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify server is running
+	if !s.running.Load() {
+		t.Fatal("server should be running before Stop()")
+	}
+
+	// Stop the server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	// After Stop returns, running should be false
+	if s.running.Load() {
+		t.Error("server should not be running after Stop() returns")
+	}
+
+	// Drain error channel
+	select {
+	case <-errCh:
+	case <-time.After(2 * time.Second):
+		t.Error("error channel should have received value after Stop()")
 	}
 }

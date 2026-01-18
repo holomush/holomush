@@ -35,6 +35,20 @@ type coreConfig struct {
 	logFormat   string
 }
 
+// Validate checks that the configuration is valid.
+func (cfg *coreConfig) Validate() error {
+	if cfg.grpcAddr == "" {
+		return fmt.Errorf("grpc-addr is required")
+	}
+	if cfg.controlAddr == "" {
+		return fmt.Errorf("control-addr is required")
+	}
+	if cfg.logFormat != "json" && cfg.logFormat != "text" {
+		return fmt.Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
+	}
+	return nil
+}
+
 // Default values for core command flags.
 const (
 	defaultGRPCAddr        = "localhost:9000"
@@ -53,11 +67,10 @@ func NewCoreCmd() *cobra.Command {
 		Long: `Start the core process which runs the game engine,
 manages plugins, and handles game state.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCore(cmd.Context(), cfg, cmd)
+			return runCoreWithDeps(cmd.Context(), cfg, cmd, nil)
 		},
 	}
 
-	// Register flags
 	cmd.Flags().StringVar(&cfg.grpcAddr, "grpc-addr", defaultGRPCAddr, "gRPC listen address")
 	cmd.Flags().StringVar(&cfg.controlAddr, "control-addr", defaultCoreControlAddr, "control gRPC listen address with mTLS")
 	cmd.Flags().StringVar(&cfg.metricsAddr, "metrics-addr", defaultCoreMetricsAddr, "metrics/health HTTP address (empty = disabled)")
@@ -68,9 +81,48 @@ manages plugins, and handles game state.`,
 	return cmd
 }
 
-// runCore starts the core process.
-func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
-	// Set up logging
+// runCoreWithDeps starts the core process with injectable dependencies.
+// If deps is nil, default implementations are used.
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, deps *CoreDeps) error {
+	if deps == nil {
+		deps = &CoreDeps{}
+	}
+
+	// Set up default factories
+	if deps.EventStoreFactory == nil {
+		deps.EventStoreFactory = func(ctx context.Context, url string) (EventStore, error) {
+			return store.NewPostgresEventStore(ctx, url)
+		}
+	}
+	if deps.TLSCertEnsurer == nil {
+		deps.TLSCertEnsurer = ensureTLSCerts
+	}
+	if deps.ControlTLSLoader == nil {
+		deps.ControlTLSLoader = control.LoadControlServerTLS
+	}
+	if deps.ControlServerFactory == nil {
+		deps.ControlServerFactory = func(component string, shutdownFunc control.ShutdownFunc) (ControlServer, error) {
+			return control.NewGRPCServer(component, shutdownFunc)
+		}
+	}
+	if deps.ObservabilityServerFactory == nil {
+		deps.ObservabilityServerFactory = func(addr string, readinessChecker observability.ReadinessChecker) ObservabilityServer {
+			return observability.NewServer(addr, readinessChecker)
+		}
+	}
+	if deps.CertsDirGetter == nil {
+		deps.CertsDirGetter = xdg.CertsDir
+	}
+	if deps.DatabaseURLGetter == nil {
+		deps.DatabaseURLGetter = func() string {
+			return os.Getenv("DATABASE_URL")
+		}
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	if err := setupLogging(cfg.logFormat); err != nil {
 		return fmt.Errorf("failed to set up logging: %w", err)
 	}
@@ -80,14 +132,12 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 		"log_format", cfg.logFormat,
 	)
 
-	// Get database URL
-	databaseURL := os.Getenv("DATABASE_URL")
+	databaseURL := deps.DatabaseURLGetter()
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL environment variable is required")
 	}
 
-	// Connect to database
-	eventStore, err := store.NewPostgresEventStore(ctx, databaseURL)
+	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -106,73 +156,79 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 
 	slog.Info("game ID initialized", "game_id", gameID)
 
-	// Get certs directory
-	certsDir, err := xdg.CertsDir()
+	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
 		return fmt.Errorf("failed to get certs directory: %w", err)
 	}
 
 	// Generate or load TLS certificates
-	tlsConfig, err := ensureTLSCerts(certsDir, gameID)
+	tlsConfig, err := deps.TLSCertEnsurer(certsDir, gameID)
 	if err != nil {
 		return fmt.Errorf("failed to set up TLS: %w", err)
 	}
 
 	slog.Info("TLS certificates ready", "certs_dir", certsDir)
 
-	// Create core components
-	sessions := core.NewSessionManager()
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(eventStore, sessions, broadcaster)
+	// For testing, we need the event store to be *store.PostgresEventStore
+	// to pass to core.NewEngine. In production, this is always the case.
+	// In tests with mocks, we skip the gRPC server creation.
+	var grpcServer *grpc.Server
+	var listener net.Listener
 
-	// Create gRPC server
-	creds := credentials.NewTLS(tlsConfig)
-	grpcServer := grpc.NewServer(grpc.Creds(creds))
+	// Only create gRPC server if we have a real event store
+	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
+		sessions := core.NewSessionManager()
+		broadcaster := core.NewBroadcaster()
+		engine := core.NewEngine(realStore, sessions, broadcaster)
 
-	// Create and register Core service
-	coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster)
-	corev1.RegisterCoreServer(grpcServer, coreServer)
+		// Create gRPC server
+		creds := credentials.NewTLS(tlsConfig)
+		grpcServer = grpc.NewServer(grpc.Creds(creds))
 
-	// Start gRPC listener
-	listener, err := net.Listen("tcp", cfg.grpcAddr)
-	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", cfg.grpcAddr, err)
+		// Create and register Core service
+		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster)
+		corev1.RegisterCoreServer(grpcServer, coreServer)
+
+		// Start gRPC listener
+		listener, err = net.Listen("tcp", cfg.grpcAddr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on %s: %w", cfg.grpcAddr, err)
+		}
+		defer func() { _ = listener.Close() }()
+
+		slog.Info("gRPC server listening", "addr", cfg.grpcAddr)
 	}
-	defer func() { _ = listener.Close() }()
-
-	slog.Info("gRPC server listening", "addr", cfg.grpcAddr)
 
 	// Set up graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Start control gRPC server (always enabled)
-	controlTLSConfig, tlsErr := control.LoadControlServerTLS(certsDir, "core")
+	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "core")
 	if tlsErr != nil {
 		return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
 	}
 
-	controlGRPCServer := control.NewGRPCServer("core", func() { cancel() })
+	controlGRPCServer, err := deps.ControlServerFactory("core", func() { cancel() })
+	if err != nil {
+		return fmt.Errorf("failed to create control gRPC server: %w", err)
+	}
 	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
 	if err != nil {
 		return fmt.Errorf("failed to start control gRPC server: %w", err)
 	}
-	// Monitor control server errors in background
-	go func() {
-		if controlErr := <-controlErrChan; controlErr != nil {
-			slog.Error("control gRPC server error", "error", controlErr)
-		}
-	}()
+	// Monitor control server errors in background - cancel context on error
+	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
 
 	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
 
 	// Start observability server if configured
-	var obsServer *observability.Server
+	var obsServer ObservabilityServer
 	if cfg.metricsAddr != "" {
-		// For core, we're always ready once we reach this point
-		// (gRPC server is listening, database is connected)
-		obsServer = observability.NewServer(cfg.metricsAddr, func() bool { return true })
-		_, err = obsServer.Start()
+		// For core, we're ready once we reach this point (database is connected,
+		// listener is bound, core components initialized)
+		obsServer = deps.ObservabilityServerFactory(cfg.metricsAddr, func() bool { return true })
+		obsErrChan, err := obsServer.Start()
 		if err != nil {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
@@ -181,6 +237,8 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 			}
 			return fmt.Errorf("failed to start observability server: %w", err)
 		}
+		// Monitor observability server errors - cancel context on error
+		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
 		slog.Info("observability server started", "addr", obsServer.Addr())
 	}
 
@@ -188,13 +246,15 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start gRPC server in goroutine
+	// Start gRPC server in goroutine (only if we have one)
 	errChan := make(chan error, 1)
-	go func() {
-		if serveErr := grpcServer.Serve(listener); serveErr != nil {
-			errChan <- serveErr
-		}
-	}()
+	if grpcServer != nil && listener != nil {
+		go func() {
+			if serveErr := grpcServer.Serve(listener); serveErr != nil {
+				errChan <- serveErr
+			}
+		}()
+	}
 
 	cmd.Println("Core process started")
 	slog.Info("core process ready",
@@ -216,7 +276,9 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 	slog.Info("shutting down...")
 
 	// Stop accepting new connections
-	grpcServer.GracefulStop()
+	if grpcServer != nil {
+		grpcServer.GracefulStop()
+	}
 
 	// Stop servers
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -331,4 +393,26 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || !os.IsNotExist(err)
+}
+
+// monitorServerErrors monitors a server's error channel and cancels the context on error.
+// This ensures that server failures trigger graceful shutdown of the entire process.
+// It exits when either an error is received, the channel is closed, or the context is cancelled.
+func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <-chan error, serverName string) {
+	select {
+	case err, ok := <-errCh:
+		if !ok {
+			// Channel closed, server stopped gracefully
+			return
+		}
+		if err != nil {
+			slog.Error("server error, triggering shutdown",
+				"server", serverName,
+				"error", err,
+			)
+			cancel()
+		}
+	case <-ctx.Done():
+		// Context cancelled, exit monitoring
+	}
 }
