@@ -183,6 +183,34 @@ func TestEventType_String(t *testing.T) {
 - Create mock implementations for tests
 - Consider using testify/mock for complex mocks
 
+### WASM Tests (`internal/wasm`)
+
+The WASM package has special testing requirements due to Extism plugin compilation overhead.
+
+| Requirement                              | Description                                              |
+| ---------------------------------------- | -------------------------------------------------------- |
+| **MUST** use shared host where possible  | Use `getSharedEchoHost()` for tests that read-only       |
+| **MUST** use isolated host for mutations | Use `newIsolatedHost()` for tests that close/modify host |
+| **MUST NOT** run parallel with shared    | Extism plugins are NOT thread-safe for concurrent calls  |
+| **SHOULD** avoid loading plugins in loop | Each `LoadPlugin` takes ~1.5s for 10MB WASM compilation  |
+
+**Test helpers** (in `test_helpers_test.go`):
+
+```go
+// Shared host - plugin compiled once, reused across sequential tests
+host := getSharedEchoHost(t)
+// DO NOT close this host
+
+// Isolated host - for tests needing their own state
+host := newIsolatedHost(t)
+defer host.Close(context.Background())
+```
+
+**When to use each:**
+
+- `getSharedEchoHost()`: Pattern matching, event delivery, subscriber tests
+- `newIsolatedHost()`: Close tests, error handling, loading different plugins
+
 ## Commands
 
 ### Task Commands (Required)
