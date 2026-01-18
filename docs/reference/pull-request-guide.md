@@ -178,20 +178,21 @@ Co-Authored-By: Claude <model>@anthropic.com
 
 Before merging, ensure:
 
-| Requirement                   | Description                       |
-| ----------------------------- | --------------------------------- |
-| **MUST** have CI passing      | All automated checks green        |
-| **MUST** have review approval | At least one approving review     |
-| **MUST** be up to date        | Rebased on latest main            |
-| **SHOULD** squash if messy    | Clean up WIP commits before merge |
+| Requirement                   | Description                          |
+| ----------------------------- | ------------------------------------ |
+| **MUST** have CI passing      | All automated checks green           |
+| **MUST** have review approval | At least one approving review        |
+| **MUST** be up to date        | Rebased on latest main               |
+| **MUST** use squash merge     | All merges to main are squash merges |
 
-### Merge Strategy
+### Why Squash Merge?
 
-| Strategy     | When to Use                                 |
-| ------------ | ------------------------------------------- |
-| Squash merge | Multiple small commits that form one change |
-| Merge commit | Well-organized commits worth preserving     |
-| Rebase merge | Linear history preferred, clean commits     |
+All merges to main use squash merge to maintain a clean, linear history:
+
+- Each PR becomes one atomic commit on main
+- Easier to bisect, revert, and understand history
+- WIP commits and fixups don't clutter the main branch
+- Commit message can be refined at merge time
 
 ## Common Issues
 
