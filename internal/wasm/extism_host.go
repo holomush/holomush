@@ -36,7 +36,8 @@ func NewExtismHost(tracer trace.Tracer) *ExtismHost {
 
 // LoadPlugin loads a WASM plugin with the given name and binary.
 func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []byte) error {
-	_, span := h.tracer.Start(ctx, "ExtismHost.LoadPlugin")
+	_, span := h.tracer.Start(ctx, "ExtismHost.LoadPlugin",
+		trace.WithAttributes(attribute.String("plugin.name", name)))
 	defer span.End()
 
 	h.mu.Lock()

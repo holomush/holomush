@@ -118,6 +118,9 @@ func (s *ExtismSubscriber) deliverWithTimeout(parentCtx context.Context, pluginN
 	if err != nil {
 		slog.Error("plugin event delivery failed",
 			"plugin", pluginName,
+			"event_id", event.ID.String(),
+			"event_stream", event.Stream,
+			"event_timestamp", event.Timestamp,
 			"event_type", event.Type,
 			"error", err)
 		return

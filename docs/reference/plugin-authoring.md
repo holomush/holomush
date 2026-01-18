@@ -103,7 +103,7 @@ Plugins receive events as JSON with the following structure:
 | `stream`     | string | Event stream (e.g., "location:room1")       |
 | `type`       | string | Event type (e.g., "say", "pose", "emit")    |
 | `timestamp`  | int64  | Unix milliseconds timestamp                 |
-| `actor_kind` | int    | Actor type: 0=character, 1=system, 2=plugin |
+| `actor_kind` | uint8  | Actor type: 0=character, 1=system, 2=plugin |
 | `actor_id`   | string | Actor identifier                            |
 | `payload`    | string | JSON-encoded event payload                  |
 

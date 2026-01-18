@@ -96,7 +96,6 @@ const (
     EventTypePose    EventType = "pose"
     EventTypeArrive  EventType = "arrive"
     EventTypeLeave   EventType = "leave"
-    EventTypePage    EventType = "page"
     EventTypeSystem  EventType = "system"
     // Extensible via plugins
 )

@@ -10,6 +10,9 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/wasm"
 	"github.com/oklog/ulid/v2"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -56,6 +59,53 @@ func TestExtismHost_LoadPlugin(t *testing.T) {
 
 	if !host.HasPlugin("test-plugin") {
 		t.Error("HasPlugin returned false for loaded plugin")
+	}
+}
+
+func TestExtismHost_LoadPlugin_SpanAttribute(t *testing.T) {
+	// Create in-memory span exporter to capture spans
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	tracer := tp.Tracer("test")
+
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	const pluginName = "my-test-plugin"
+	err := host.LoadPlugin(context.Background(), pluginName, allocWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	// Verify span was created with plugin.name attribute
+	spans := exporter.GetSpans()
+	if len(spans) == 0 {
+		t.Fatal("expected at least one span, got none")
+	}
+
+	var foundSpan *tracetest.SpanStub
+	for i := range spans {
+		if spans[i].Name == "ExtismHost.LoadPlugin" {
+			foundSpan = &spans[i]
+			break
+		}
+	}
+
+	if foundSpan == nil {
+		t.Fatal("ExtismHost.LoadPlugin span not found")
+	}
+
+	// Check for plugin.name attribute
+	var foundAttr bool
+	for _, attr := range foundSpan.Attributes {
+		if attr.Key == attribute.Key("plugin.name") && attr.Value.AsString() == pluginName {
+			foundAttr = true
+			break
+		}
+	}
+
+	if !foundAttr {
+		t.Errorf("plugin.name attribute not found or has wrong value; attributes: %v", foundSpan.Attributes)
 	}
 }
 
@@ -271,8 +321,8 @@ func TestExtismHost_DeliverEvent_ConcurrentClose(t *testing.T) {
 		defer close(done)
 		for i := 0; i < 100; i++ {
 			_, err := host.DeliverEvent(context.Background(), "echo", event)
-			// After Close(), we expect ErrPluginNotFound
-			if err != nil && !errors.Is(err, wasm.ErrPluginNotFound) {
+			// After Close(), we expect ErrHostClosed
+			if err != nil && !errors.Is(err, wasm.ErrHostClosed) {
 				// Plugin call errors are acceptable during shutdown
 				continue
 			}

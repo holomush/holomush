@@ -1,10 +1,25 @@
 package wasm_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/holomush/holomush/internal/core"
 )
+
+// TestActorKindType validates that ActorKind is the documented type (uint8).
+// The plugin authoring guide documents the type as uint8 in the Event structure table.
+// If this test fails, update docs/reference/plugin-authoring.md to reflect the actual type.
+func TestActorKindType(t *testing.T) {
+	var ak core.ActorKind
+	actualType := reflect.TypeOf(ak).Kind()
+	const documentedType = reflect.Uint8
+
+	if actualType != documentedType {
+		t.Errorf("ActorKind underlying type = %s, but documented as %s in plugin-authoring.md",
+			actualType, documentedType)
+	}
+}
 
 // TestActorKindConstants validates that ActorKind constants have expected values.
 // This test ensures documentation in docs/reference/plugin-authoring.md stays in sync

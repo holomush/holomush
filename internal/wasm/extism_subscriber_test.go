@@ -505,12 +505,14 @@ func TestExtismSubscriber_ErrorLogging(t *testing.T) {
 		setupPlugin     bool                // whether to load a plugin
 		setupEmitter    func() wasm.Emitter // emitter factory
 		expectedMessage string              // expected log message substring
+		expectEventInfo bool                // whether to verify event_id, event_stream, event_timestamp
 	}{
 		{
-			name:            "plugin not found logs error",
+			name:            "plugin not found logs error with event info",
 			setupPlugin:     false, // deliberately don't load plugin
 			setupEmitter:    func() wasm.Emitter { return &mockEmitter{} },
 			expectedMessage: "plugin event delivery failed",
+			expectEventInfo: true, // delivery failure should include event info
 		},
 		{
 			name:        "emitter failure logs error",
@@ -519,6 +521,7 @@ func TestExtismSubscriber_ErrorLogging(t *testing.T) {
 				return &failingEmitter{}
 			},
 			expectedMessage: "failed to emit plugin event",
+			expectEventInfo: false, // emit failure doesn't include event info
 		},
 	}
 
@@ -546,11 +549,15 @@ func TestExtismSubscriber_ErrorLogging(t *testing.T) {
 			defer sub.Stop()
 			sub.Subscribe("echo", "location:*")
 
+			eventID := ulid.Make()
+			eventStream := "location:room1"
+			eventTimestamp := time.Now().Truncate(time.Second) // Truncate for comparison
+
 			event := core.Event{
-				ID:        ulid.Make(),
-				Stream:    "location:room1",
+				ID:        eventID,
+				Stream:    eventStream,
 				Type:      core.EventTypeSay,
-				Timestamp: time.Now(),
+				Timestamp: eventTimestamp,
 				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "test"},
 				Payload:   []byte(`{"message":"test"}`),
 			}
@@ -560,20 +567,49 @@ func TestExtismSubscriber_ErrorLogging(t *testing.T) {
 
 			// Verify error was logged
 			records := capture.Records()
-			found := false
-			for _, r := range records {
+			var matchedRecord *slog.Record
+			for i := range records {
+				r := &records[i]
 				if r.Level == slog.LevelError && r.Message == tt.expectedMessage {
-					found = true
+					matchedRecord = r
 					break
 				}
 			}
 
-			if !found {
+			if matchedRecord == nil {
 				msgs := make([]string, 0, len(records))
 				for _, r := range records {
 					msgs = append(msgs, r.Message)
 				}
-				t.Errorf("expected error log %q, got logs: %v", tt.expectedMessage, msgs)
+				t.Fatalf("expected error log %q, got logs: %v", tt.expectedMessage, msgs)
+			}
+
+			// Verify event info attributes if expected
+			if tt.expectEventInfo {
+				attrs := make(map[string]any)
+				matchedRecord.Attrs(func(a slog.Attr) bool {
+					attrs[a.Key] = a.Value.Any()
+					return true
+				})
+
+				// Check event_id
+				if gotID, ok := attrs["event_id"]; !ok {
+					t.Error("expected event_id attribute in log, but not found")
+				} else if gotID != eventID.String() {
+					t.Errorf("event_id = %v, want %v", gotID, eventID.String())
+				}
+
+				// Check event_stream
+				if gotStream, ok := attrs["event_stream"]; !ok {
+					t.Error("expected event_stream attribute in log, but not found")
+				} else if gotStream != eventStream {
+					t.Errorf("event_stream = %v, want %v", gotStream, eventStream)
+				}
+
+				// Check event_timestamp
+				if _, ok := attrs["event_timestamp"]; !ok {
+					t.Error("expected event_timestamp attribute in log, but not found")
+				}
 			}
 		})
 	}
