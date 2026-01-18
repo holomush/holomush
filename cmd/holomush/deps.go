@@ -5,10 +5,6 @@ import (
 	cryptotls "crypto/tls"
 	"net"
 
-	// Blank import to retain Extism SDK dependency until it's used in code.
-	// This will be replaced with actual imports when ExtismHost is implemented.
-	_ "github.com/extism/go-sdk"
-
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"

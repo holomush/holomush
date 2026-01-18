@@ -97,15 +97,15 @@ extism-py plugin.py -o my-plugin.wasm
 
 Plugins receive events as JSON with the following structure:
 
-| Field        | Type   | Description                              |
-| ------------ | ------ | ---------------------------------------- |
-| `id`         | string | Unique event ID (ULID)                   |
-| `stream`     | string | Event stream (e.g., "location:room1")    |
-| `type`       | string | Event type (e.g., "say", "pose", "emit") |
-| `timestamp`  | int64  | Unix milliseconds timestamp              |
-| `actor_kind` | int    | Actor type: 1=character, 2=plugin        |
-| `actor_id`   | string | Actor identifier                         |
-| `payload`    | string | JSON-encoded event payload               |
+| Field        | Type   | Description                                 |
+| ------------ | ------ | ------------------------------------------- |
+| `id`         | string | Unique event ID (ULID)                      |
+| `stream`     | string | Event stream (e.g., "location:room1")       |
+| `type`       | string | Event type (e.g., "say", "pose", "emit")    |
+| `timestamp`  | int64  | Unix milliseconds timestamp                 |
+| `actor_kind` | int    | Actor type: 0=character, 1=system, 2=plugin |
+| `actor_id`   | string | Actor identifier                            |
+| `payload`    | string | JSON-encoded event payload                  |
 
 Example input:
 
@@ -115,7 +115,7 @@ Example input:
   "stream": "location:room1",
   "type": "say",
   "timestamp": 1737195000000,
-  "actor_kind": 1,
+  "actor_kind": 0,
   "actor_id": "player123",
   "payload": "{\"message\": \"Hello, world!\"}"
 }
@@ -141,15 +141,13 @@ Return an empty events array or empty output if no response is needed.
 
 ## Event Types
 
-| Type    | Description                  | Payload                   |
-| ------- | ---------------------------- | ------------------------- |
-| `say`   | Character speech             | `{"message": "text"}`     |
-| `pose`  | Character action/emote       | `{"message": "text"}`     |
-| `emit`  | Environment description      | `{"message": "text"}`     |
-| `look`  | Character looks at something | `{"target": "object_id"}` |
-| `move`  | Character movement           | `{"direction": "north"}`  |
-| `join`  | Character joins location     | `{"character_id": "..."}` |
-| `leave` | Character leaves location    | `{"character_id": "..."}` |
+| Type     | Description               | Payload                   |
+| -------- | ------------------------- | ------------------------- |
+| `say`    | Character speech          | `{"message": "text"}`     |
+| `pose`   | Character action/emote    | `{"message": "text"}`     |
+| `arrive` | Character arrives at room | `{"character_id": "..."}` |
+| `leave`  | Character leaves room     | `{"character_id": "..."}` |
+| `system` | System-generated message  | `{"message": "text"}`     |
 
 ## Stream Patterns
 
@@ -169,7 +167,7 @@ Plugins subscribe to events using stream patterns:
 Always check `actor_kind` to avoid responding to your own events:
 
 ```python
-if event.get("actor_kind") == 2:  # ActorKindPlugin
+if event.get("actor_kind") == 2:  # ActorPlugin
     return  # Ignore events from plugins
 ```
 

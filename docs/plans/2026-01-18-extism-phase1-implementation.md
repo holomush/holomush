@@ -756,7 +756,7 @@ func TestExtismSubscriber_HandleEvent(t *testing.T) {
     }
 
     emitter := &mockEmitter{}
-    sub := wasm.NewExtismSubscriber(host, emitter)
+    sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
 
     sub.Subscribe("echo", "location:*")
 
@@ -819,14 +819,22 @@ type ExtismSubscriber struct {
     emitter       Emitter
     mu            sync.RWMutex
     subscriptions map[string][]string // plugin -> stream patterns
+    wg            sync.WaitGroup
+    ctx           context.Context
+    cancel        context.CancelFunc
 }
 
 // NewExtismSubscriber creates a subscriber for routing events to plugins.
-func NewExtismSubscriber(host *ExtismHost, emitter Emitter) *ExtismSubscriber {
+// The provided context controls the subscriber's lifecycle; when cancelled,
+// no new goroutines will be spawned for event handling.
+func NewExtismSubscriber(ctx context.Context, host *ExtismHost, emitter Emitter) *ExtismSubscriber {
+    ctx, cancel := context.WithCancel(ctx)
     return &ExtismSubscriber{
         host:          host,
         emitter:       emitter,
         subscriptions: make(map[string][]string),
+        ctx:           ctx,
+        cancel:        cancel,
     }
 }
 
@@ -1038,7 +1046,7 @@ func TestExtism_Integration(t *testing.T) {
 
     // Create subscriber with mock emitter
     emitter := &mockEmitter{}
-    sub := wasm.NewExtismSubscriber(host, emitter)
+    sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
     sub.Subscribe("echo", "location:*")
 
     // Send a say event

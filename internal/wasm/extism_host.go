@@ -111,6 +111,10 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	if h.closed {
+		return nil, ErrHostClosed
+	}
+
 	p, ok := h.plugins[pluginName]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrPluginNotFound, pluginName)

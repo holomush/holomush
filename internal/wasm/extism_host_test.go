@@ -212,6 +212,40 @@ func TestExtismHost_DeliverEvent_EchoPlugin(t *testing.T) {
 	}
 }
 
+func TestExtismHost_DeliverEvent_AfterClose(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+
+	// Load a plugin
+	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	// Close the host
+	if err := host.Close(context.Background()); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// DeliverEvent after close should return ErrHostClosed
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:test",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{"message":"hello"}`),
+	}
+
+	_, err = host.DeliverEvent(context.Background(), "echo", event)
+	if err == nil {
+		t.Error("DeliverEvent should fail after Close")
+	}
+	if !errors.Is(err, wasm.ErrHostClosed) {
+		t.Errorf("expected ErrHostClosed, got: %v", err)
+	}
+}
+
 func TestExtismHost_DeliverEvent_ConcurrentClose(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
 	host := wasm.NewExtismHost(tracer)

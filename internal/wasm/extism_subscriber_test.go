@@ -2,6 +2,7 @@ package wasm_test
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -469,5 +470,111 @@ func TestExtismSubscriber_Stop_RejectsNewEvents(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if len(emitter.Events()) != 0 {
 		t.Errorf("expected 0 events after Stop, got %d", len(emitter.Events()))
+	}
+}
+
+// logCapture is a slog.Handler that captures log records for testing.
+type logCapture struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (l *logCapture) Enabled(_ context.Context, _ slog.Level) bool { return true }
+
+func (l *logCapture) Handle(_ context.Context, r slog.Record) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.records = append(l.records, r)
+	return nil
+}
+
+func (l *logCapture) WithAttrs(_ []slog.Attr) slog.Handler { return l }
+func (l *logCapture) WithGroup(_ string) slog.Handler      { return l }
+
+func (l *logCapture) Records() []slog.Record {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]slog.Record{}, l.records...)
+}
+
+// TestExtismSubscriber_ErrorLogging verifies that errors are logged via slog.Error.
+// This tests the error handling strategy documented in deliverWithTimeout.
+func TestExtismSubscriber_ErrorLogging(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupPlugin     bool                // whether to load a plugin
+		setupEmitter    func() wasm.Emitter // emitter factory
+		expectedMessage string              // expected log message substring
+	}{
+		{
+			name:            "plugin not found logs error",
+			setupPlugin:     false, // deliberately don't load plugin
+			setupEmitter:    func() wasm.Emitter { return &mockEmitter{} },
+			expectedMessage: "plugin event delivery failed",
+		},
+		{
+			name:        "emitter failure logs error",
+			setupPlugin: true,
+			setupEmitter: func() wasm.Emitter {
+				return &failingEmitter{}
+			},
+			expectedMessage: "failed to emit plugin event",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture logs
+			capture := &logCapture{}
+			oldLogger := slog.Default()
+			slog.SetDefault(slog.New(capture))
+			defer slog.SetDefault(oldLogger)
+
+			tracer := noop.NewTracerProvider().Tracer("test")
+			host := wasm.NewExtismHost(tracer)
+			defer func() { _ = host.Close(context.Background()) }()
+
+			if tt.setupPlugin {
+				err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+				if err != nil {
+					t.Fatalf("LoadPlugin failed: %v", err)
+				}
+			}
+
+			emitter := tt.setupEmitter()
+			sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+			defer sub.Stop()
+			sub.Subscribe("echo", "location:*")
+
+			event := core.Event{
+				ID:        ulid.Make(),
+				Stream:    "location:room1",
+				Type:      core.EventTypeSay,
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "test"},
+				Payload:   []byte(`{"message":"test"}`),
+			}
+
+			sub.HandleEvent(context.Background(), event)
+			time.Sleep(2 * time.Second) // Wait for async processing
+
+			// Verify error was logged
+			records := capture.Records()
+			found := false
+			for _, r := range records {
+				if r.Level == slog.LevelError && r.Message == tt.expectedMessage {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				msgs := make([]string, 0, len(records))
+				for _, r := range records {
+					msgs = append(msgs, r.Message)
+				}
+				t.Errorf("expected error log %q, got logs: %v", tt.expectedMessage, msgs)
+			}
+		})
 	}
 }

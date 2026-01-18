@@ -4,9 +4,7 @@ package wasm_test
 
 import (
 	"context"
-	_ "embed"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,31 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-//go:embed testdata/echo.wasm
-var echoWASMIntegration []byte
-
-// collectingEmitter collects emitted events for verification.
-type collectingEmitter struct {
-	mu     sync.Mutex
-	events []core.Event
-}
-
-func (e *collectingEmitter) Emit(_ context.Context, stream string, eventType core.EventType, payload []byte) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.events = append(e.events, core.Event{
-		Stream:  stream,
-		Type:    eventType,
-		Payload: payload,
-	})
-	return nil
-}
-
-func (e *collectingEmitter) Events() []core.Event {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return append([]core.Event{}, e.events...)
-}
+// echoWASM is defined in extism_host_test.go and shared across the wasm_test package
 
 // TestExtism_Integration verifies the complete Extism plugin flow:
 // load plugin → subscribe → deliver event → verify emitted response.
@@ -57,7 +31,7 @@ func TestExtism_Integration(t *testing.T) {
 	}()
 
 	// Step 2: Load the echo plugin
-	err := host.LoadPlugin(ctx, "echo", echoWASMIntegration)
+	err := host.LoadPlugin(ctx, "echo", echoWASM)
 	if err != nil {
 		t.Fatalf("LoadPlugin failed: %v", err)
 	}
@@ -68,7 +42,7 @@ func TestExtism_Integration(t *testing.T) {
 	}
 
 	// Step 3: Create subscriber and register subscription
-	emitter := &collectingEmitter{}
+	emitter := &mockEmitter{}
 	subscriber := wasm.NewExtismSubscriber(ctx, host, emitter)
 	defer subscriber.Stop()
 	subscriber.Subscribe("echo", "location:*")

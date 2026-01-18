@@ -101,6 +101,13 @@ func (s *ExtismSubscriber) matchPattern(stream, pattern string) bool {
 	return stream == pattern
 }
 
+// deliverWithTimeout delivers an event to a plugin with a 5-second timeout.
+//
+// Error handling strategy: This method runs in a goroutine spawned by HandleEvent,
+// so there is no caller to return errors to. All errors are logged via slog.Error
+// with appropriate context (plugin name, event type, error) and the method either
+// returns early (for delivery failures) or continues processing (for emit failures).
+// This is the standard Go pattern for error handling in fire-and-forget workers.
 func (s *ExtismSubscriber) deliverWithTimeout(parentCtx context.Context, pluginName string, event core.Event) {
 	// Use timeout context for plugin call only; emissions use parent context
 	// to avoid starvation if plugin takes most of the 5 seconds
