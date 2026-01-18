@@ -50,11 +50,6 @@ func (s *ExtismSubscriber) Subscribe(pluginName, streamPattern string) {
 // HandleEvent delivers an event to all subscribed plugins.
 // If the subscriber has been stopped, no goroutines are spawned.
 func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
-	// Check if subscriber is stopped before acquiring lock
-	if s.ctx.Err() != nil {
-		return
-	}
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -63,7 +58,7 @@ func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
 			continue
 		}
 
-		// Double-check context after pattern match
+		// Check if subscriber is stopped before spawning goroutine
 		if s.ctx.Err() != nil {
 			return
 		}
@@ -134,6 +129,8 @@ func (s *ExtismSubscriber) deliverWithTimeout(parentCtx context.Context, pluginN
 		if err := s.emitter.Emit(parentCtx, emit.Stream, eventType, []byte(emit.Payload)); err != nil {
 			slog.Error("failed to emit plugin event",
 				"plugin", pluginName,
+				"emitted_stream", emit.Stream,
+				"emitted_type", emit.Type,
 				"error", err)
 		}
 	}

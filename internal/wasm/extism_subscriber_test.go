@@ -282,54 +282,6 @@ func TestExtismSubscriber_EmitterFailure(t *testing.T) {
 	}
 }
 
-// TestExtismSubscriber_MultiplePatterns tests plugins with multiple subscription patterns.
-// This test uses separate host instances to avoid wasm runtime state issues with the echo plugin.
-func TestExtismSubscriber_MultiplePatterns(t *testing.T) {
-	// Test that multiple patterns can be registered for a single plugin
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load the alloc plugin (more stable than echo for subscription tests)
-	err := host.LoadPlugin(context.Background(), "test-plugin", allocWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
-
-	emitter := &mockEmitter{}
-	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
-	defer sub.Stop()
-	sub.Subscribe("test-plugin", "location:*")
-	sub.Subscribe("test-plugin", "global:*")
-
-	// Test location pattern
-	event1 := core.Event{
-		ID:        ulid.Make(),
-		Stream:    "location:room1",
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "player1"},
-		Payload:   []byte(`{}`),
-	}
-	sub.HandleEvent(context.Background(), event1)
-
-	// Test global pattern
-	event2 := core.Event{
-		ID:        ulid.Make(),
-		Stream:    "global:chat",
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "player2"},
-		Payload:   []byte(`{}`),
-	}
-	sub.HandleEvent(context.Background(), event2)
-
-	time.Sleep(200 * time.Millisecond)
-
-	// alloc plugin doesn't emit events, but verifying no panic and patterns matched
-	// The pattern matching logic is already tested in TestExtismSubscriber_PatternMatching
-}
-
 // slowEmitter blocks on Emit for a configurable duration.
 type slowEmitter struct {
 	mu       sync.Mutex

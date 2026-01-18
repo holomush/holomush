@@ -44,6 +44,7 @@ func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []by
 	defer h.mu.Unlock()
 
 	if h.closed {
+		span.RecordError(ErrHostClosed)
 		return ErrHostClosed
 	}
 
@@ -59,7 +60,9 @@ func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []by
 
 	plugin, err := extism.NewPlugin(ctx, manifest, config, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create plugin %s: %w", name, err)
+		err = fmt.Errorf("failed to create plugin %s: %w", name, err)
+		span.RecordError(err)
+		return err
 	}
 
 	h.plugins[name] = plugin
@@ -113,12 +116,15 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 	defer h.mu.RUnlock()
 
 	if h.closed {
+		span.RecordError(ErrHostClosed)
 		return nil, ErrHostClosed
 	}
 
 	p, ok := h.plugins[pluginName]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrPluginNotFound, pluginName)
+		err := fmt.Errorf("%w: %s", ErrPluginNotFound, pluginName)
+		span.RecordError(err)
+		return nil, err
 	}
 
 	// Check if plugin exports handle_event
@@ -140,14 +146,18 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 
 	eventJSON, err := json.Marshal(pluginEvent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal event: %w", err)
+		err = fmt.Errorf("failed to marshal event: %w", err)
+		span.RecordError(err)
+		return nil, err
 	}
 
 	// Call plugin's handle_event function
 	// Extism handles memory allocation internally
 	_, output, err := p.Call("handle_event", eventJSON)
 	if err != nil {
-		return nil, fmt.Errorf("plugin call failed: %w", err)
+		err = fmt.Errorf("plugin call failed: %w", err)
+		span.RecordError(err)
+		return nil, err
 	}
 
 	// Empty output means no events to emit
@@ -158,7 +168,9 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 	// Parse response
 	var response plugin.Response
 	if err := json.Unmarshal(output, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		err = fmt.Errorf("failed to unmarshal response: %w", err)
+		span.RecordError(err)
+		return nil, err
 	}
 
 	return response.Events, nil

@@ -51,28 +51,6 @@ func TestActorKindConstants(t *testing.T) {
 	}
 }
 
-// TestActorKindDocumentedValues validates specific values that are documented.
-// The plugin authoring guide documents these values for plugin authors.
-func TestActorKindDocumentedValues(t *testing.T) {
-	// These are the values documented in docs/reference/plugin-authoring.md
-	// If you change the enum, update the documentation!
-	const (
-		DocumentedCharacter = 0
-		DocumentedSystem    = 1
-		DocumentedPlugin    = 2
-	)
-
-	if int(core.ActorCharacter) != DocumentedCharacter {
-		t.Errorf("ActorCharacter = %d, but documented as %d", core.ActorCharacter, DocumentedCharacter)
-	}
-	if int(core.ActorSystem) != DocumentedSystem {
-		t.Errorf("ActorSystem = %d, but documented as %d", core.ActorSystem, DocumentedSystem)
-	}
-	if int(core.ActorPlugin) != DocumentedPlugin {
-		t.Errorf("ActorPlugin = %d, but documented as %d", core.ActorPlugin, DocumentedPlugin)
-	}
-}
-
 // TestEventTypeConstants validates that EventType constants match documented values.
 // This test ensures documentation in docs/reference/plugin-authoring.md stays in sync
 // with the actual code values.
