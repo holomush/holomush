@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/holomush/holomush/internal/tls"
 )
@@ -336,8 +337,12 @@ func TestHandleTelnetConnectionPlaceholder(t *testing.T) {
 	}()
 
 	// Read all output from the client side until EOF
+	// Set a read deadline to prevent hanging if handler doesn't close connection
 	var output strings.Builder
-	buf := make([]byte, 256)
+	buf := make([]byte, 1024)
+	if err := client.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("failed to set read deadline: %v", err)
+	}
 	for {
 		n, err := client.Read(buf)
 		if n > 0 {
@@ -361,8 +366,13 @@ func TestHandleTelnetConnectionPlaceholder(t *testing.T) {
 		t.Errorf("output missing disconnect message, got: %q", result)
 	}
 
-	// Wait for handler to finish
-	<-done
+	// Wait for handler to finish with timeout
+	select {
+	case <-done:
+		// Handler finished
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler did not finish within timeout")
+	}
 }
 
 // TestHandleTelnetConnectionPlaceholder_WriteError tests handling when writes fail.
