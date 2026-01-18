@@ -253,6 +253,27 @@ if event.get("type") != "say":
     return  # Nothing to do
 ```
 
+### Concurrency and Thread Safety
+
+**Important:** WebAssembly plugins are NOT thread-safe for concurrent calls. This is
+a fundamental WASM limitation that applies to all plugins regardless of source
+language (Python, Rust, Go, etc.).
+
+**Why:** WASM linear memory is shared between the host application and plugin. When
+multiple callers access the same plugin instance simultaneously, memory corruption
+occurs.
+
+**What this means for plugin authors:**
+
+- Your plugin will only receive one event at a time (HoloMUSH serializes delivery)
+- You don't need to add locks or synchronization in your plugin code
+- Each `handle_event` call completes before the next one starts
+- Global state in your plugin is safe to use without thread protection
+
+**What HoloMUSH does:** The event subscriber delivers events to each plugin
+sequentially—while your plugin processes one event, it won't receive another.
+This happens transparently; you just write normal single-threaded code.
+
 ## Testing Locally
 
 ### Unit Testing

@@ -191,8 +191,12 @@ overhead and concurrency constraints.
 #### Plugin Concurrency Model
 
 **Critical constraint:** Extism plugins are NOT thread-safe for concurrent calls.
-The WASM memory gets corrupted when the same plugin instance handles multiple
-concurrent `DeliverEvent` calls.
+This is a fundamental WebAssembly limitation, not language-specific—it applies to
+plugins written in Python, Rust, Go, or any other language.
+
+**Why:** WASM linear memory is shared between host and guest. When multiple callers
+access the same plugin instance simultaneously, memory corruption occurs. Only one
+call can safely execute at a time per plugin instance.
 
 | Component          | Concurrency Model                                           |
 | ------------------ | ----------------------------------------------------------- |
