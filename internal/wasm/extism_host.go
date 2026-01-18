@@ -67,6 +67,7 @@ func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []by
 	}
 
 	h.plugins[name] = plugin
+	slog.Info("plugin loaded", "name", name, "wasm_size", len(wasmBytes))
 	return nil
 }
 

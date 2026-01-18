@@ -137,7 +137,27 @@ Plugins return a JSON object with emitted events:
 }
 ```
 
-Return an empty events array or empty output if no response is needed.
+### Empty Output
+
+All of these are valid ways to indicate "no action taken":
+
+1. **Return without calling `extism.output_str()`** - The function simply returns
+   without producing output
+2. **Output an empty JSON object** - `extism.output_str("{}")`
+3. **Output an empty events array** - `extism.output_str('{"events": []}')`
+
+Example of returning early without output:
+
+```python
+@extism.plugin_fn
+def handle_event():
+    event = json.loads(extism.input_str())
+
+    if event.get("type") != "say":
+        return  # No output call - valid, means "no action"
+
+    # ... handle say events
+```
 
 ## Event Types
 
