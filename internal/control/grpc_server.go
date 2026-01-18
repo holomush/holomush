@@ -5,6 +5,7 @@ import (
 	"context"
 	cryptotls "crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net"
@@ -18,6 +19,9 @@ import (
 
 	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
 )
+
+// ShutdownFunc is called when a shutdown is requested via the control interface.
+type ShutdownFunc func()
 
 // GRPCServer runs a gRPC control server with mTLS.
 type GRPCServer struct {
@@ -138,4 +142,67 @@ func LoadControlServerTLS(certsDir string, serverName string) (*cryptotls.Config
 		ClientAuth:   cryptotls.RequireAndVerifyClientCert,
 		MinVersion:   cryptotls.VersionTLS13,
 	}, nil
+}
+
+// LoadControlClientTLS loads TLS config for the control gRPC client with mTLS.
+// clientName identifies the client certificate to use (e.g., "core" or "gateway").
+// gameID is used for ServerName verification against the server's SAN (holomush-<gameID>).
+func LoadControlClientTLS(certsDir string, clientName string, gameID string) (*cryptotls.Config, error) {
+	certPath := filepath.Clean(filepath.Join(certsDir, clientName+".crt"))
+	keyPath := filepath.Clean(filepath.Join(certsDir, clientName+".key"))
+	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
+
+	// Load client certificate
+	cert, err := cryptotls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+
+	// Load CA for server verification
+	caCert, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to add CA certificate to pool")
+	}
+
+	return &cryptotls.Config{
+		Certificates: []cryptotls.Certificate{cert},
+		RootCAs:      caPool,
+		MinVersion:   cryptotls.VersionTLS13,
+		ServerName:   "holomush-" + gameID,
+	}, nil
+}
+
+// ExtractGameIDFromCA extracts the game_id from a CA certificate's Common Name.
+// The CA's CN format is "HoloMUSH CA {game_id}".
+func ExtractGameIDFromCA(certsDir string) (string, error) {
+	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
+
+	caCertPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+
+	block, _ := pem.Decode(caCertPEM)
+	if block == nil {
+		return "", fmt.Errorf("failed to decode CA certificate PEM")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse CA certificate: %w", err)
+	}
+
+	// Extract game_id from CN "HoloMUSH CA {game_id}"
+	const prefix = "HoloMUSH CA "
+	cn := cert.Subject.CommonName
+	if len(cn) <= len(prefix) || cn[:len(prefix)] != prefix {
+		return "", fmt.Errorf("CA CN %q does not have expected prefix %q", cn, prefix)
+	}
+
+	return cn[len(prefix):], nil
 }

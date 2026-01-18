@@ -23,8 +23,8 @@ HoloMUSH uses a two-process model: **Gateway** and **Core**. This separation ena
 │                         holomush gateway                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │   Telnet    │  │    Web      │  │   Control Socket        │  │
-│  │   Server    │  │   Server    │  │   (/health, /shutdown)  │  │
+│  │   Telnet    │  │    Web      │  │   Control gRPC          │  │
+│  │   Server    │  │   Server    │  │   (mTLS, :9002)         │  │
 │  └──────┬──────┘  └──────┬──────┘  └─────────────────────────┘  │
 │         │                │                                       │
 │         └───────┬────────┘                                       │
@@ -46,8 +46,8 @@ HoloMUSH uses a two-process model: **Gateway** and **Core**. This separation ena
 │  │              │              │                                 │
 │  ▼              ▼              ▼                                 │
 │ ┌────────┐ ┌──────────┐ ┌─────────────┐ ┌─────────────────────┐ │
-│ │ Engine │ │Broadcaster│ │ Plugin Host │ │   Control Socket    │ │
-│ └────────┘ └──────────┘ └─────────────┘ │  (/health, /ready)  │ │
+│ │ Engine │ │Broadcaster│ │ Plugin Host │ │   Control gRPC      │ │
+│ └────────┘ └──────────┘ └─────────────┘ │   (mTLS, :9001)     │ │
 │      │                                   └─────────────────────┘ │
 │      ▼                                                           │
 │ ┌──────────────────────────────────────────────────────────────┐ │
@@ -110,7 +110,6 @@ HoloMUSH follows the [XDG Base Directory Specification](https://specifications.f
 | `XDG_CONFIG_HOME` | `~/.config`      | Configuration, TLS certs |
 | `XDG_DATA_HOME`   | `~/.local/share` | Persistent data          |
 | `XDG_STATE_HOME`  | `~/.local/state` | Logs, PID files          |
-| `XDG_RUNTIME_DIR` | `/run/user/$UID` | Control sockets          |
 
 ### Directory Structure
 
@@ -131,23 +130,25 @@ $XDG_STATE_HOME/holomush/
 └── logs/
     ├── core.log
     └── gateway.log
-
-$XDG_RUNTIME_DIR/holomush/
-├── core.sock            # Core control socket
-└── gateway.sock         # Gateway control socket
 ```
 
-## Control Socket Protocol
+## Control gRPC Interface
 
-Each process exposes a Unix socket for lifecycle management and health checks.
+Each process exposes a gRPC control server with mTLS for lifecycle management.
 
-| Endpoint    | Method | Description                  |
-| ----------- | ------ | ---------------------------- |
-| `/health`   | GET    | Health check (200 OK or 503) |
-| `/ready`    | GET    | Readiness check              |
-| `/shutdown` | POST   | Graceful shutdown            |
+| RPC        | Description                        |
+| ---------- | ---------------------------------- |
+| `Status`   | Returns running state, PID, uptime |
+| `Shutdown` | Initiates graceful shutdown        |
 
-CLI commands (`holomush core stop`, `holomush gateway status`) communicate via these sockets.
+Default control addresses:
+
+| Process | Default Address  |
+| ------- | ---------------- |
+| Core    | `127.0.0.1:9001` |
+| Gateway | `127.0.0.1:9002` |
+
+CLI commands (`holomush status`) connect via mTLS using the same certificates as the main gRPC communication.
 
 ## System Architecture (Detailed)
 
@@ -162,7 +163,7 @@ graph TB
         TA[Telnet Server]
         WA[Web Server]
         GC[gRPC Client]
-        GCS[Control Socket]
+        GCS[Control gRPC<br/>:9002]
     end
 
     subgraph Core["Core Process"]
@@ -171,7 +172,7 @@ graph TB
         WE[World Engine]
         PH[Plugin Host<br/>wazero]
         BC[Broadcaster]
-        CCS[Control Socket]
+        CCS[Control gRPC<br/>:9001]
     end
 
     subgraph Storage

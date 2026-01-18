@@ -89,44 +89,42 @@ For development with human-readable logs:
 
 ### Core Commands
 
-| Command                | Description                          |
-| ---------------------- | ------------------------------------ |
-| `holomush core`        | Start the core process               |
-| `holomush core stop`   | Stop running core via control socket |
-| `holomush core status` | Show core health                     |
+| Command         | Description            |
+| --------------- | ---------------------- |
+| `holomush core` | Start the core process |
 
 **Core Flags:**
 
-| Flag             | Description                  | Default          |
-| ---------------- | ---------------------------- | ---------------- |
-| `--grpc-addr`    | gRPC listen address          | `localhost:9000` |
-| `--database-url` | PostgreSQL connection string | (required)       |
-| `--log-format`   | Log format: `json` or `text` | `json`           |
-| `--config-dir`   | Override config directory    | XDG default      |
+| Flag             | Description                  | Default            |
+| ---------------- | ---------------------------- | ------------------ |
+| `--grpc-addr`    | gRPC listen address          | `localhost:9000`   |
+| `--control-addr` | Control gRPC listen address  | `127.0.0.1:9001`   |
+| `--metrics-addr` | Metrics HTTP listen address  | `127.0.0.1:9100`   |
+| `--database-url` | PostgreSQL connection string | (required via env) |
+| `--log-format`   | Log format: `json` or `text` | `json`             |
 
 ### Gateway Commands
 
-| Command                   | Description                             |
-| ------------------------- | --------------------------------------- |
-| `holomush gateway`        | Start the gateway process               |
-| `holomush gateway stop`   | Stop running gateway via control socket |
-| `holomush gateway status` | Show gateway health                     |
+| Command            | Description               |
+| ------------------ | ------------------------- |
+| `holomush gateway` | Start the gateway process |
 
 **Gateway Flags:**
 
-| Flag            | Description                          | Default          |
-| --------------- | ------------------------------------ | ---------------- |
-| `--telnet-addr` | Telnet listen address                | `:4201`          |
-| `--core-addr`   | Core gRPC address                    | `localhost:9000` |
-| `--game-id`     | Expected game_id for cert validation | (from config)    |
-| `--log-format`  | Log format: `json` or `text`         | `json`           |
+| Flag             | Description                  | Default          |
+| ---------------- | ---------------------------- | ---------------- |
+| `--telnet-addr`  | Telnet listen address        | `:4201`          |
+| `--core-addr`    | Core gRPC address            | `localhost:9000` |
+| `--control-addr` | Control gRPC listen address  | `127.0.0.1:9002` |
+| `--metrics-addr` | Metrics HTTP listen address  | `127.0.0.1:9101` |
+| `--log-format`   | Log format: `json` or `text` | `json`           |
 
 ### Global Commands
 
-| Command           | Description                   |
-| ----------------- | ----------------------------- |
-| `holomush status` | Show health of all components |
-| `holomush --help` | Show all available commands   |
+| Command           | Description                              |
+| ----------------- | ---------------------------------------- |
+| `holomush status` | Show health of core and gateway via gRPC |
+| `holomush --help` | Show all available commands              |
 
 ## Configuration
 
@@ -143,11 +141,10 @@ On first startup, Core automatically:
 
 HoloMUSH follows the XDG Base Directory Specification:
 
-| Directory                    | Contents                 |
-| ---------------------------- | ------------------------ |
-| `~/.config/holomush/`        | Configuration, TLS certs |
-| `~/.local/state/holomush/`   | Logs, PID files          |
-| `$XDG_RUNTIME_DIR/holomush/` | Control sockets          |
+| Directory                  | Contents                 |
+| -------------------------- | ------------------------ |
+| `~/.config/holomush/`      | Configuration, TLS certs |
+| `~/.local/state/holomush/` | Logs, PID files          |
 
 ### Environment Variables
 
@@ -155,7 +152,6 @@ HoloMUSH follows the XDG Base Directory Specification:
 | ----------------- | ---------------------------------------------------- |
 | `XDG_CONFIG_HOME` | Override config directory (default: `~/.config`)     |
 | `XDG_STATE_HOME`  | Override state directory (default: `~/.local/state`) |
-| `XDG_RUNTIME_DIR` | Override runtime directory                           |
 
 ## Connecting to the Server
 

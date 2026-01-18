@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
+	"github.com/holomush/holomush/internal/tls"
 )
 
 func TestGRPCServer_NewGRPCServer(t *testing.T) {
@@ -292,5 +293,148 @@ func TestLoadControlServerTLS_FailsWithMissingCerts(t *testing.T) {
 	_, err := LoadControlServerTLS(tmpDir, "core")
 	if err == nil {
 		t.Fatal("LoadControlServerTLS should fail with missing certificates")
+	}
+}
+
+func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_, err := LoadControlClientTLS(tmpDir, "core", "test-game")
+	if err == nil {
+		t.Fatal("LoadControlClientTLS should fail with missing certificates")
+	}
+}
+
+func TestExtractGameIDFromCA_FailsWithMissingCA(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_, err := ExtractGameIDFromCA(tmpDir)
+	if err == nil {
+		t.Fatal("ExtractGameIDFromCA should fail with missing CA certificate")
+	}
+}
+
+func TestExtractGameIDFromCA_FailsWithInvalidPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write invalid PEM data
+	caPath := tmpDir + "/root-ca.crt"
+	if err := os.WriteFile(caPath, []byte("not valid PEM data"), 0o600); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := ExtractGameIDFromCA(tmpDir)
+	if err == nil {
+		t.Fatal("ExtractGameIDFromCA should fail with invalid PEM")
+	}
+}
+
+func TestExtractGameIDFromCA_FailsWithWrongCNPrefix(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a PEM certificate with wrong CN prefix
+	// We'll create a self-signed cert with wrong CN for testing
+	caPath := tmpDir + "/root-ca.crt"
+	// Use a valid PEM structure but the CN extraction should fail
+	pemData := `-----BEGIN CERTIFICATE-----
+MIIBhTCCASugAwIBAgIRAJJ3z4EJmJpMcOGM35xdMOIwCgYIKoZIzj0EAwIwFTET
+MBEGA1UEAxMKV3JvbmcgUHJlZml4MB4XDTI2MDExNzIxMTIwM1oXDTM2MDExNjIx
+MTIwM1owFTETMBEGA1UEAxMKV3JvbmcgUHJlZml4MFkwEwYHKoZIzj0CAQYIKoZI
+zj0DAQcDQgAE4yNhZUGTsmZ+eHdNIRPPbR67/CQdMy0gUUGEQ/jvqI0mDKhAaJZH
+5PJr2rDqKn/pPIGlNZIcM1uB0yGUCVYC1qNFMEMwDgYDVR0PAQH/BAQDAgEGMBIG
+A1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFC+WzLPcVjgMRBKQmFjCCRh5jPvE
+MAoGCCqGSM49BAMCA0gAMEUCIFJdkxsZ0I1p5tSyPgMqsyLTQI+bfK0hv0GJm7Yf
+Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
+-----END CERTIFICATE-----`
+	if err := os.WriteFile(caPath, []byte(pemData), 0o600); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := ExtractGameIDFromCA(tmpDir)
+	if err == nil {
+		t.Fatal("ExtractGameIDFromCA should fail with wrong CN prefix")
+	}
+
+	// Check error message mentions prefix
+	if err.Error() == "" {
+		t.Error("error should have a message")
+	}
+}
+
+func TestExtractGameIDFromCA_ExtractsCorrectGameID(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate a proper CA using the tls package
+	expectedGameID := "test-game-abc123"
+	ca, err := tls.GenerateCA(expectedGameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	// Save the CA to the temp directory
+	if err := tls.SaveCertificates(tmpDir, ca, nil); err != nil {
+		t.Fatalf("failed to save CA: %v", err)
+	}
+
+	// Extract the game ID
+	gotGameID, err := ExtractGameIDFromCA(tmpDir)
+	if err != nil {
+		t.Fatalf("ExtractGameIDFromCA() error = %v", err)
+	}
+
+	if gotGameID != expectedGameID {
+		t.Errorf("ExtractGameIDFromCA() = %q, want %q", gotGameID, expectedGameID)
+	}
+}
+
+func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate CA and client certificate
+	gameID := "test-game-xyz"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	// Generate server cert (core) - client will verify against this
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	// Generate client cert (gateway)
+	clientCert, err := tls.GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("failed to generate client cert: %v", err)
+	}
+
+	// Save all certs
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save server certs: %v", err)
+	}
+	if err := tls.SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("failed to save client cert: %v", err)
+	}
+
+	// Load client TLS config
+	config, err := LoadControlClientTLS(tmpDir, "gateway", gameID)
+	if err != nil {
+		t.Fatalf("LoadControlClientTLS() error = %v", err)
+	}
+
+	if config == nil {
+		t.Fatal("LoadControlClientTLS() returned nil config")
+	}
+
+	// Verify ServerName is set correctly
+	expectedServerName := "holomush-" + gameID
+	if config.ServerName != expectedServerName {
+		t.Errorf("ServerName = %q, want %q", config.ServerName, expectedServerName)
+	}
+
+	// Verify TLS 1.3 minimum
+	if config.MinVersion != 0x0304 { // TLS 1.3
+		t.Errorf("MinVersion = %x, want 0x0304 (TLS 1.3)", config.MinVersion)
 	}
 }

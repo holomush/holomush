@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
-	"os"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/holomush/holomush/internal/control"
+	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
+	"github.com/holomush/holomush/internal/xdg"
 )
 
 // ProcessStatus holds the status information for a process.
@@ -27,7 +28,9 @@ type ProcessStatus struct {
 
 // statusConfig holds configuration for the status command.
 type statusConfig struct {
-	jsonOutput bool
+	jsonOutput  bool
+	coreAddr    string
+	gatewayAddr string
 }
 
 // newStatusCmd creates the status subcommand with all flags configured.
@@ -45,6 +48,8 @@ func newStatusCmd() *cobra.Command {
 
 	// Register flags
 	cmd.Flags().BoolVar(&cfg.jsonOutput, "json", false, "output status as JSON")
+	cmd.Flags().StringVar(&cfg.coreAddr, "core-addr", defaultCoreControlAddr, "core control gRPC address")
+	cmd.Flags().StringVar(&cfg.gatewayAddr, "gateway-addr", defaultGatewayControlAddr, "gateway control gRPC address")
 
 	return cmd
 }
@@ -53,8 +58,8 @@ func newStatusCmd() *cobra.Command {
 func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
 	// Query both core and gateway processes
 	statuses := map[string]ProcessStatus{
-		"core":    queryProcessStatus("core"),
-		"gateway": queryProcessStatus("gateway"),
+		"core":    queryProcessStatusGRPC("core", cfg.coreAddr),
+		"gateway": queryProcessStatusGRPC("gateway", cfg.gatewayAddr),
 	}
 
 	// Format and output the results
@@ -74,79 +79,62 @@ func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
 	return nil
 }
 
-// queryProcessStatus queries the control socket for a process and returns its status.
-func queryProcessStatus(component string) ProcessStatus {
+// queryProcessStatusGRPC queries the control gRPC server for a process and returns its status.
+func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	status := ProcessStatus{
 		Component: component,
 	}
 
-	// Get socket path
-	socketPath, err := control.SocketPath(component)
+	// Get certs directory
+	certsDir, err := xdg.CertsDir()
 	if err != nil {
-		status.Error = fmt.Sprintf("failed to get socket path: %v", err)
+		status.Error = fmt.Sprintf("failed to get certs directory: %v", err)
 		return status
 	}
 
-	// Check if socket file exists
-	if _, err := os.Stat(socketPath); os.IsNotExist(err) {
-		status.Error = "socket not found"
+	// Extract game_id from CA certificate for ServerName verification
+	gameID, err := control.ExtractGameIDFromCA(certsDir)
+	if err != nil {
+		status.Error = fmt.Sprintf("failed to extract game_id from CA: %v", err)
 		return status
 	}
 
-	// Create HTTP client for Unix socket
-	client := createUnixHTTPClient(socketPath)
+	// Load TLS config for client with game_id for proper ServerName verification
+	tlsConfig, err := control.LoadControlClientTLS(certsDir, component, gameID)
+	if err != nil {
+		status.Error = fmt.Sprintf("failed to load TLS config: %v", err)
+		return status
+	}
 
-	// Query health endpoint
-	healthResp, err := client.Get("http://localhost/health")
+	// Create gRPC client with mTLS
+	creds := credentials.NewTLS(tlsConfig)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	//nolint:staticcheck // grpc.NewClient requires different setup; DialContext works for 1.x
+	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		status.Error = fmt.Sprintf("failed to connect: %v", err)
 		return status
 	}
-	defer func() { _ = healthResp.Body.Close() }()
+	defer func() { _ = conn.Close() }()
 
-	var health control.HealthResponse
-	if err := json.NewDecoder(healthResp.Body).Decode(&health); err != nil {
-		status.Error = fmt.Sprintf("failed to decode health response: %v", err)
-		return status
-	}
+	client := controlv1.NewControlClient(conn)
 
-	// Query status endpoint for more details
-	statusResp, err := client.Get("http://localhost/status")
+	// Query status
+	resp, err := client.Status(ctx, &controlv1.StatusRequest{})
 	if err != nil {
-		// Health succeeded but status failed - still consider running
-		status.Running = true
-		status.Health = health.Status
-		return status
-	}
-	defer func() { _ = statusResp.Body.Close() }()
-
-	var controlStatus control.StatusResponse
-	if err := json.NewDecoder(statusResp.Body).Decode(&controlStatus); err != nil {
-		// Health succeeded but status decode failed - still consider running
-		status.Running = true
-		status.Health = health.Status
+		status.Error = fmt.Sprintf("failed to query status: %v", err)
 		return status
 	}
 
 	// Process is running and responding
-	status.Running = controlStatus.Running
-	status.Health = health.Status
-	status.PID = controlStatus.PID
-	status.UptimeSeconds = controlStatus.UptimeSeconds
+	status.Running = resp.Running
+	status.Health = "healthy"
+	status.PID = int(resp.Pid)
+	status.UptimeSeconds = resp.UptimeSeconds
 
 	return status
-}
-
-// createUnixHTTPClient creates an HTTP client that connects via Unix socket.
-func createUnixHTTPClient(socketPath string) *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return net.Dial("unix", socketPath)
-			},
-		},
-		Timeout: 2 * time.Second,
-	}
 }
 
 // formatStatusTable formats the status as a human-readable table.

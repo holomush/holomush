@@ -21,18 +21,19 @@ import (
 
 // gatewayConfig holds configuration for the gateway command.
 type gatewayConfig struct {
-	telnetAddr      string
-	httpAddr        string
-	coreAddr        string
-	controlSocket   string
-	controlGRPCAddr string
-	logFormat       string
+	telnetAddr  string
+	coreAddr    string
+	controlAddr string
+	metricsAddr string
+	logFormat   string
 }
 
 // Default values for gateway command flags.
 const (
-	defaultTelnetAddr = ":4201"
-	defaultCoreAddr   = "localhost:9000"
+	defaultTelnetAddr         = ":4201"
+	defaultCoreAddr           = "localhost:9000"
+	defaultGatewayControlAddr = "127.0.0.1:9002"
+	defaultGatewayMetricsAddr = "127.0.0.1:9101"
 )
 
 // newGatewayCmd creates the gateway subcommand with all flags configured.
@@ -52,10 +53,9 @@ from telnet and web clients, forwarding commands to the core process.`,
 
 	// Register flags
 	cmd.Flags().StringVar(&cfg.telnetAddr, "telnet-addr", defaultTelnetAddr, "telnet listen address")
-	cmd.Flags().StringVar(&cfg.httpAddr, "http-addr", "", "HTTP observability address (metrics/health probes, empty = disabled)")
 	cmd.Flags().StringVar(&cfg.coreAddr, "core-addr", defaultCoreAddr, "core gRPC server address")
-	cmd.Flags().StringVar(&cfg.controlSocket, "control-socket", "", "control socket path (default: XDG_RUNTIME_DIR/holomush/holomush-gateway.sock)")
-	cmd.Flags().StringVar(&cfg.controlGRPCAddr, "control-grpc-addr", "", "control gRPC listen address with mTLS (empty = disabled)")
+	cmd.Flags().StringVar(&cfg.controlAddr, "control-addr", defaultGatewayControlAddr, "control gRPC listen address with mTLS")
+	cmd.Flags().StringVar(&cfg.metricsAddr, "metrics-addr", defaultGatewayMetricsAddr, "metrics/health HTTP address (empty = disabled)")
 	cmd.Flags().StringVar(&cfg.logFormat, "log-format", defaultLogFormat, "log format (json or text)")
 
 	return cmd
@@ -111,35 +111,18 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Create control socket server
-	controlServer := control.NewServer("gateway", func() { cancel() })
-	if err := controlServer.Start(); err != nil {
-		return fmt.Errorf("failed to start control socket: %w", err)
+	// Start control gRPC server (always enabled)
+	controlTLSConfig, tlsErr := control.LoadControlServerTLS(certsDir, "gateway")
+	if tlsErr != nil {
+		return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
 	}
 
-	slog.Info("control socket started")
-
-	// Start control gRPC server if configured
-	var controlGRPCServer *control.GRPCServer
-	if cfg.controlGRPCAddr != "" {
-		controlTLSConfig, tlsErr := control.LoadControlServerTLS(certsDir, "gateway")
-		if tlsErr != nil {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			_ = controlServer.Stop(shutdownCtx)
-			return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
-		}
-
-		controlGRPCServer = control.NewGRPCServer("gateway", func() { cancel() })
-		if err := controlGRPCServer.Start(cfg.controlGRPCAddr, controlTLSConfig); err != nil {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			_ = controlServer.Stop(shutdownCtx)
-			return fmt.Errorf("failed to start control gRPC server: %w", err)
-		}
-
-		slog.Info("control gRPC server started", "addr", cfg.controlGRPCAddr)
+	controlGRPCServer := control.NewGRPCServer("gateway", func() { cancel() })
+	if err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig); err != nil {
+		return fmt.Errorf("failed to start control gRPC server: %w", err)
 	}
+
+	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
 
 	// Start telnet listener
 	// Note: The current telnet server requires direct core components, which aren't
@@ -148,13 +131,9 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	// telnet handler that uses the grpcClient to communicate with core.
 	telnetListener, err := net.Listen("tcp", cfg.telnetAddr)
 	if err != nil {
-		// Stop control servers before returning
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
-		if controlGRPCServer != nil {
-			_ = controlGRPCServer.Stop(shutdownCtx)
-		}
-		_ = controlServer.Stop(shutdownCtx)
+		_ = controlGRPCServer.Stop(shutdownCtx)
 		return fmt.Errorf("failed to listen on %s: %w", cfg.telnetAddr, err)
 	}
 
@@ -162,17 +141,14 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 
 	// Start observability server if configured
 	var obsServer *observability.Server
-	if cfg.httpAddr != "" {
+	if cfg.metricsAddr != "" {
 		// For gateway, we're ready once telnet listener is up
-		obsServer = observability.NewServer(cfg.httpAddr, func() bool { return true })
+		obsServer = observability.NewServer(cfg.metricsAddr, func() bool { return true })
 		if err := obsServer.Start(); err != nil {
 			_ = telnetListener.Close()
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
-			if controlGRPCServer != nil {
-				_ = controlGRPCServer.Stop(shutdownCtx)
-			}
-			_ = controlServer.Stop(shutdownCtx)
+			_ = controlGRPCServer.Stop(shutdownCtx)
 			return fmt.Errorf("failed to start observability server: %w", err)
 		}
 		slog.Info("observability server started", "addr", obsServer.Addr())
@@ -237,15 +213,8 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	}
 
 	// Stop control gRPC server
-	if controlGRPCServer != nil {
-		if err := controlGRPCServer.Stop(shutdownCtx); err != nil {
-			slog.Warn("error stopping control gRPC server", "error", err)
-		}
-	}
-
-	// Stop control socket
-	if err := controlServer.Stop(shutdownCtx); err != nil {
-		slog.Warn("error stopping control socket", "error", err)
+	if err := controlGRPCServer.Stop(shutdownCtx); err != nil {
+		slog.Warn("error stopping control gRPC server", "error", err)
 	}
 
 	slog.Info("shutdown complete")

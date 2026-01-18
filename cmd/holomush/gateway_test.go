@@ -22,7 +22,8 @@ func TestGatewayCommand_Flags(t *testing.T) {
 	expectedFlags := []string{
 		"--telnet-addr",
 		"--core-addr",
-		"--control-socket",
+		"--control-addr",
+		"--metrics-addr",
 		"--log-format",
 	}
 
@@ -54,6 +55,24 @@ func TestGatewayCommand_DefaultValues(t *testing.T) {
 		t.Errorf("core-addr default = %q, want %q", coreAddr, "localhost:9000")
 	}
 
+	// Check default control-addr
+	controlAddr, err := cmd.Flags().GetString("control-addr")
+	if err != nil {
+		t.Fatalf("Failed to get control-addr flag: %v", err)
+	}
+	if controlAddr != "127.0.0.1:9002" {
+		t.Errorf("control-addr default = %q, want %q", controlAddr, "127.0.0.1:9002")
+	}
+
+	// Check default metrics-addr
+	metricsAddr, err := cmd.Flags().GetString("metrics-addr")
+	if err != nil {
+		t.Fatalf("Failed to get metrics-addr flag: %v", err)
+	}
+	if metricsAddr != "127.0.0.1:9101" {
+		t.Errorf("metrics-addr default = %q, want %q", metricsAddr, "127.0.0.1:9101")
+	}
+
 	// Check default log-format
 	logFormat, err := cmd.Flags().GetString("log-format")
 	if err != nil {
@@ -61,15 +80,6 @@ func TestGatewayCommand_DefaultValues(t *testing.T) {
 	}
 	if logFormat != "json" {
 		t.Errorf("log-format default = %q, want %q", logFormat, "json")
-	}
-
-	// Check control-socket has empty default
-	controlSocket, err := cmd.Flags().GetString("control-socket")
-	if err != nil {
-		t.Fatalf("Failed to get control-socket flag: %v", err)
-	}
-	if controlSocket != "" {
-		t.Errorf("control-socket default = %q, want empty string", controlSocket)
 	}
 }
 
@@ -182,6 +192,8 @@ func TestGatewayCommand_Help(t *testing.T) {
 		"telnet",
 		"--telnet-addr",
 		"--core-addr",
+		"--control-addr",
+		"--metrics-addr",
 	}
 
 	for _, phrase := range expectedPhrases {

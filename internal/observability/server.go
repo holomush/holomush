@@ -61,6 +61,7 @@ type Server struct {
 }
 
 // NewServer creates a new observability server.
+// addr: listen address in "host:port" format (e.g., "127.0.0.1:9100", ":9100" for all interfaces).
 func NewServer(addr string, readinessChecker ReadinessChecker) *Server {
 	// Create a new registry to avoid polluting the global one
 	registry := prometheus.NewRegistry()
