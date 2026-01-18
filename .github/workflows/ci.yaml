@@ -88,6 +88,11 @@ jobs:
           curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Build test fixtures
+        run: |
+          task plugin:build
+          task test:fixtures:build
+
       - name: Run tests
         run: task test:coverage
         env:

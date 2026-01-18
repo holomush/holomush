@@ -28,9 +28,13 @@ Before creating a PR, verify:
 - [ ] Tests pass locally (`task test`)
 - [ ] Linting passes (`task lint`)
 - [ ] Code is formatted (`task fmt`)
-- [ ] New code has appropriate test coverage
+- [ ] New code has appropriate test coverage ( > 80% )
 - [ ] Documentation updated if behavior changed
+- [ ] Design patterns and best practices followed
+- [ ] No obvious performance regressions
+- [ ] No security vulnerabilities introduced
 - [ ] No debug code or commented-out code left behind
+- [ ] Aggressively hunt for needlessly complex code, be as simple as possible
 
 ## Creating a PR
 
@@ -207,7 +211,6 @@ If your PR isn't getting reviewed:
 1. Ensure CI is passing
 2. Check PR description is complete
 3. Keep PR size reasonable (< 500 lines ideal)
-4. Ping reviewers if waiting > 24 hours
 
 ## Quick Reference
 
