@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,14 +23,8 @@ var allocWASM []byte
 //go:embed testdata/echo.wasm
 var echoWASM []byte
 
-func TestExtismHost_New(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-
-	if host == nil {
-		t.Fatal("NewExtismHost returned nil")
-	}
-}
+//go:embed testdata/malformed.wasm
+var malformedWASM []byte
 
 func TestExtismHost_Close(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
@@ -296,6 +291,61 @@ func TestExtismHost_DeliverEvent_AfterClose(t *testing.T) {
 	}
 }
 
+func TestExtismHost_DeliverEvent_MalformedJSON(t *testing.T) {
+	// Create tracer with exporter to verify span error recording
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	tracer := tp.Tracer("test")
+
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	// Load the malformed JSON plugin
+	err := host.LoadPlugin(context.Background(), "malformed", malformedWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:test",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{"message":"hello"}`),
+	}
+
+	// DeliverEvent should return error for malformed JSON response
+	_, err = host.DeliverEvent(context.Background(), "malformed", event)
+	if err == nil {
+		t.Fatal("DeliverEvent should fail for malformed JSON response")
+	}
+
+	// Verify error message indicates JSON unmarshal failure
+	if !strings.Contains(err.Error(), "failed to unmarshal response") {
+		t.Errorf("expected error containing 'failed to unmarshal response', got: %v", err)
+	}
+
+	// Verify span recorded the error
+	spans := exporter.GetSpans()
+	var deliverSpan *tracetest.SpanStub
+	for i := range spans {
+		if spans[i].Name == "ExtismHost.DeliverEvent" {
+			deliverSpan = &spans[i]
+			break
+		}
+	}
+
+	if deliverSpan == nil {
+		t.Fatal("ExtismHost.DeliverEvent span not found")
+	}
+
+	// Verify error was recorded on span
+	if len(deliverSpan.Events) == 0 {
+		t.Error("expected span to have error events recorded")
+	}
+}
+
 func TestExtismHost_DeliverEvent_ConcurrentClose(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
 	host := wasm.NewExtismHost(tracer)
@@ -317,8 +367,10 @@ func TestExtismHost_DeliverEvent_ConcurrentClose(t *testing.T) {
 
 	// Start goroutine calling DeliverEvent in a loop
 	done := make(chan struct{})
+	started := make(chan struct{})
 	go func() {
 		defer close(done)
+		close(started) // Signal that goroutine has started
 		for i := 0; i < 100; i++ {
 			_, err := host.DeliverEvent(context.Background(), "echo", event)
 			// After Close(), we expect ErrHostClosed
@@ -329,8 +381,8 @@ func TestExtismHost_DeliverEvent_ConcurrentClose(t *testing.T) {
 		}
 	}()
 
-	// Give goroutine time to start
-	time.Sleep(10 * time.Millisecond)
+	// Wait for goroutine to start
+	<-started
 
 	// Close from main goroutine
 	_ = host.Close(context.Background())

@@ -76,4 +76,3 @@ func TestEventTypeConstants(t *testing.T) {
 		})
 	}
 }
-

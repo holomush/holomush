@@ -40,9 +40,12 @@ The plugin exports a single function:
 
 ```json
 {
-  "stream": "room:123",
+  "id": "01ABC123...",
+  "stream": "location:room1",
   "type": "say",
-  "actor_kind": 1,
+  "timestamp": "2026-01-18T12:00:00Z",
+  "actor_kind": 0,
+  "actor_id": "char1",
   "payload": "{\"message\": \"Hello world\"}"
 }
 ```
@@ -53,7 +56,7 @@ The plugin exports a single function:
 {
   "events": [
     {
-      "stream": "room:123",
+      "stream": "location:room1",
       "type": "say",
       "payload": "{\"message\": \"Echo: Hello world\"}"
     }

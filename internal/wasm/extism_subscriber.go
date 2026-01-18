@@ -3,6 +3,7 @@ package wasm
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -54,7 +55,9 @@ func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
 	defer s.mu.RUnlock()
 
 	for pluginName, patterns := range s.subscriptions {
-		if !s.matchesAny(event.Stream, patterns) {
+		if !slices.ContainsFunc(patterns, func(p string) bool {
+			return s.matchPattern(event.Stream, p)
+		}) {
 			continue
 		}
 
@@ -81,15 +84,6 @@ func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
 func (s *ExtismSubscriber) Stop() {
 	s.cancel()
 	s.wg.Wait()
-}
-
-func (s *ExtismSubscriber) matchesAny(stream string, patterns []string) bool {
-	for _, pattern := range patterns {
-		if s.matchPattern(stream, pattern) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *ExtismSubscriber) matchPattern(stream, pattern string) bool {
@@ -127,13 +121,15 @@ func (s *ExtismSubscriber) deliverWithTimeout(parentCtx context.Context, pluginN
 	}
 
 	// Emit any events the plugin generated using parent context
-	for _, emit := range emitted {
+	for i, emit := range emitted {
 		// Convert plugin.EventType to core.EventType (both are string types)
 		eventType := core.EventType(emit.Type)
 
 		if err := s.emitter.Emit(parentCtx, emit.Stream, eventType, []byte(emit.Payload)); err != nil {
 			slog.Error("failed to emit plugin event",
 				"plugin", pluginName,
+				"emit_index", i,
+				"emit_count", len(emitted),
 				"emitted_stream", emit.Stream,
 				"emitted_type", emit.Type,
 				"error", err)

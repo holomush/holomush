@@ -158,22 +158,10 @@ func TestExtismSubscriber_ErrorsDoNotPropagate(t *testing.T) {
 }
 
 // failingEmitter always returns an error on Emit.
-type failingEmitter struct {
-	mu    sync.Mutex
-	calls int
-}
+type failingEmitter struct{}
 
 func (f *failingEmitter) Emit(_ context.Context, _ string, _ core.EventType, _ []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls++
 	return context.DeadlineExceeded // Simulate failure
-}
-
-func (f *failingEmitter) CallCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.calls
 }
 
 // TestExtismSubscriber_EmitterFailure verifies emitter errors don't stop processing.
@@ -204,27 +192,21 @@ func TestExtismSubscriber_EmitterFailure(t *testing.T) {
 	// Should not panic even when emitter fails
 	sub.HandleEvent(context.Background(), event)
 	time.Sleep(2 * time.Second)
-
-	// Emitter was called (plugin generated an event) but failed
-	if emitter.CallCount() != 1 {
-		t.Errorf("expected emitter to be called once, got %d", emitter.CallCount())
-	}
+	// Test passes if no panic occurred - emitter failure is logged, not fatal
 }
 
 // slowEmitter blocks on Emit for a configurable duration.
 type slowEmitter struct {
-	mu       sync.Mutex
-	delay    time.Duration
-	emitted  []core.Event
-	started  chan struct{}
-	finished chan struct{}
+	mu      sync.Mutex
+	delay   time.Duration
+	emitted []core.Event
+	started chan struct{}
 }
 
 func newSlowEmitter(delay time.Duration) *slowEmitter {
 	return &slowEmitter{
-		delay:    delay,
-		started:  make(chan struct{}, 10),
-		finished: make(chan struct{}, 10),
+		delay:   delay,
+		started: make(chan struct{}, 10),
 	}
 }
 
@@ -238,7 +220,6 @@ func (s *slowEmitter) Emit(_ context.Context, stream string, eventType core.Even
 		Type:    eventType,
 		Payload: payload,
 	})
-	s.finished <- struct{}{}
 	return nil
 }
 
@@ -493,5 +474,213 @@ func TestExtismSubscriber_ErrorLogging(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestExtismSubscriber_PatternMatching verifies exact and glob pattern matching behavior.
+// This tests matchPattern indirectly through HandleEvent since matchPattern is private.
+func TestExtismSubscriber_PatternMatching(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		pattern     string
+		eventStream string
+		expectMatch bool
+		description string
+	}{
+		// Exact match cases
+		{
+			name:        "exact match succeeds",
+			pattern:     "location:room1",
+			eventStream: "location:room1",
+			expectMatch: true,
+			description: "identical strings should match",
+		},
+		{
+			name:        "exact mismatch by suffix",
+			pattern:     "location:room1",
+			eventStream: "location:room123",
+			expectMatch: false,
+			description: "stream with extra characters should not match exact pattern",
+		},
+		{
+			name:        "exact mismatch by prefix",
+			pattern:     "location:room1",
+			eventStream: "location:room",
+			expectMatch: false,
+			description: "stream missing characters should not match exact pattern",
+		},
+		{
+			name:        "exact mismatch completely different",
+			pattern:     "location:room1",
+			eventStream: "global:chat",
+			expectMatch: false,
+			description: "completely different streams should not match",
+		},
+		// Glob pattern cases
+		{
+			name:        "glob matches any suffix",
+			pattern:     "location:*",
+			eventStream: "location:room1",
+			expectMatch: true,
+			description: "glob pattern should match any suffix after prefix",
+		},
+		{
+			name:        "glob matches empty suffix",
+			pattern:     "location:*",
+			eventStream: "location:",
+			expectMatch: true,
+			description: "glob pattern should match empty suffix",
+		},
+		{
+			name:        "glob does not match different prefix",
+			pattern:     "location:*",
+			eventStream: "global:chat",
+			expectMatch: false,
+			description: "glob pattern should not match different prefix",
+		},
+		// Edge cases
+		{
+			name:        "single star matches everything",
+			pattern:     "*",
+			eventStream: "anything:goes:here",
+			expectMatch: true,
+			description: "single * should match any stream",
+		},
+		{
+			name:        "empty pattern matches empty stream",
+			pattern:     "",
+			eventStream: "",
+			expectMatch: true,
+			description: "empty pattern should match empty stream exactly",
+		},
+		{
+			name:        "empty pattern does not match non-empty stream",
+			pattern:     "",
+			eventStream: "location:room1",
+			expectMatch: false,
+			description: "empty pattern should not match non-empty stream",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tracer := noop.NewTracerProvider().Tracer("test")
+			host := wasm.NewExtismHost(tracer)
+			defer func() { _ = host.Close(context.Background()) }()
+
+			// Load the echo plugin which emits events when it receives them
+			err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+			if err != nil {
+				t.Fatalf("LoadPlugin failed: %v", err)
+			}
+
+			emitter := &mockEmitter{}
+			sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+			defer sub.Stop()
+			sub.Subscribe("echo", tt.pattern)
+
+			event := core.Event{
+				ID:        ulid.Make(),
+				Stream:    tt.eventStream,
+				Type:      core.EventTypeSay,
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "player1"},
+				Payload:   []byte(`{"message":"test"}`),
+			}
+
+			sub.HandleEvent(context.Background(), event)
+
+			// Wait for async processing
+			time.Sleep(2 * time.Second)
+
+			events := emitter.Events()
+			gotMatch := len(events) > 0
+
+			if gotMatch != tt.expectMatch {
+				t.Errorf("%s: pattern=%q stream=%q: got match=%v, want match=%v",
+					tt.description, tt.pattern, tt.eventStream, gotMatch, tt.expectMatch)
+			}
+		})
+	}
+}
+
+// TestExtismSubscriber_EmitFailureIndexLogging verifies that emit failures include
+// the emit_index and emit_count for debugging multi-event scenarios.
+func TestExtismSubscriber_EmitFailureIndexLogging(t *testing.T) {
+	// Capture logs
+	capture := &logCapture{}
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(capture))
+	defer slog.SetDefault(oldLogger)
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	// Load echo plugin which emits one event
+	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	emitter := &failingEmitter{}
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
+	sub.Subscribe("echo", "location:*")
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:room1",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "test"},
+		Payload:   []byte(`{"message":"test"}`),
+	}
+
+	sub.HandleEvent(context.Background(), event)
+	time.Sleep(2 * time.Second) // Wait for async processing
+
+	// Verify error was logged with emit_index and emit_count
+	records := capture.Records()
+	var matchedRecord *slog.Record
+	for i := range records {
+		r := &records[i]
+		if r.Level == slog.LevelError && r.Message == "failed to emit plugin event" {
+			matchedRecord = r
+			break
+		}
+	}
+
+	if matchedRecord == nil {
+		msgs := make([]string, 0, len(records))
+		for _, r := range records {
+			msgs = append(msgs, r.Message)
+		}
+		t.Fatalf("expected error log %q, got logs: %v", "failed to emit plugin event", msgs)
+	}
+
+	// Extract attributes from log record
+	attrs := make(map[string]any)
+	matchedRecord.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
+	})
+
+	// Verify emit_index is present and equals 0 (first/only event)
+	if gotIndex, ok := attrs["emit_index"]; !ok {
+		t.Error("expected emit_index attribute in log, but not found")
+	} else if gotIndex != int64(0) {
+		t.Errorf("emit_index = %v (%T), want 0", gotIndex, gotIndex)
+	}
+
+	// Verify emit_count is present and equals 1 (echo plugin emits one event)
+	if gotCount, ok := attrs["emit_count"]; !ok {
+		t.Error("expected emit_count attribute in log, but not found")
+	} else if gotCount != int64(1) {
+		t.Errorf("emit_count = %v (%T), want 1", gotCount, gotCount)
 	}
 }

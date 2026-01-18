@@ -151,6 +151,7 @@ tasks:
     desc: Build all WASM plugins
     cmds:
       - task: plugin:build:echo-python
+      - task: plugin:build:malformed-json
 
   plugin:build:echo-python:
     desc: Build Python echo plugin to WASM
@@ -163,6 +164,18 @@ tasks:
     generates:
       - echo.wasm
       - ../../internal/wasm/testdata/echo.wasm
+
+  plugin:build:malformed-json:
+    desc: Build malformed JSON test plugin to WASM
+    dir: plugins/malformed-json
+    cmds:
+      - extism-py plugin.py -o malformed.wasm
+      - cp malformed.wasm ../../internal/wasm/testdata/malformed.wasm
+    sources:
+      - plugin.py
+    generates:
+      - malformed.wasm
+      - ../../internal/wasm/testdata/malformed.wasm
 
   # Documentation
   spec:
@@ -227,7 +240,9 @@ tasks:
     desc: Clean plugin build artifacts
     cmds:
       - rm -f plugins/echo-python/echo.wasm
+      - rm -f plugins/malformed-json/malformed.wasm
       - rm -f internal/wasm/testdata/echo.wasm
+      - rm -f internal/wasm/testdata/malformed.wasm
 
   # Install tools (prefer brew, use uvx for Python)
   tools:

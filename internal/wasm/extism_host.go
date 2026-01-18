@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"log/slog"
+	"sync"
 
 	extism "github.com/extism/go-sdk"
 	"github.com/holomush/holomush/internal/core"
@@ -136,8 +136,8 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 		return nil, nil
 	}
 
-	// Convert core.Event to plugin.Event
-	pluginEvent := plugin.Event{
+	// Convert core.Event to plugin.Event and marshal to JSON
+	eventJSON, err := json.Marshal(plugin.Event{
 		ID:        event.ID.String(),
 		Stream:    event.Stream,
 		Type:      plugin.EventType(event.Type),
@@ -145,9 +145,7 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 		ActorKind: plugin.ActorKind(event.Actor.Kind),
 		ActorID:   event.Actor.ID,
 		Payload:   string(event.Payload),
-	}
-
-	eventJSON, err := json.Marshal(pluginEvent)
+	})
 	if err != nil {
 		err = fmt.Errorf("failed to marshal event: %w", err)
 		span.RecordError(err)

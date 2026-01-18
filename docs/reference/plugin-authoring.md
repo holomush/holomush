@@ -101,7 +101,7 @@ Plugins receive events as JSON with the following structure:
 | ------------ | ------ | ------------------------------------------- |
 | `id`         | string | Unique event ID (ULID)                      |
 | `stream`     | string | Event stream (e.g., "location:room1")       |
-| `type`       | string | Event type (e.g., "say", "pose", "emit")    |
+| `type`       | string | Event type (e.g., "say", "pose", "arrive")  |
 | `timestamp`  | int64  | Unix milliseconds timestamp                 |
 | `actor_kind` | uint8  | Actor type: 0=character, 1=system, 2=plugin |
 | `actor_id`   | string | Actor identifier                            |
