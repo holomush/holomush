@@ -16,6 +16,9 @@ import (
 //go:embed testdata/alloc.wasm
 var allocWASM []byte
 
+//go:embed testdata/echo.wasm
+var echoWASM []byte
+
 func TestExtismHost_New(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
 	host := wasm.NewExtismHost(tracer)
@@ -136,5 +139,49 @@ func TestExtismHost_DeliverEvent_PluginNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, wasm.ErrPluginNotFound) {
 		t.Errorf("expected ErrPluginNotFound, got: %v", err)
+	}
+}
+
+func TestExtismHost_DeliverEvent_EchoPlugin(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	// Load the Python echo plugin
+	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:test",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{"message":"hello world"}`),
+	}
+
+	emitted, err := host.DeliverEvent(context.Background(), "echo", event)
+	if err != nil {
+		t.Fatalf("DeliverEvent failed: %v", err)
+	}
+
+	// Echo plugin should emit one event with "Echo: hello world"
+	if len(emitted) != 1 {
+		t.Fatalf("expected 1 emitted event, got %d", len(emitted))
+	}
+
+	if emitted[0].Stream != "location:test" {
+		t.Errorf("expected stream 'location:test', got %q", emitted[0].Stream)
+	}
+
+	if string(emitted[0].Type) != "say" {
+		t.Errorf("expected type 'say', got %q", emitted[0].Type)
+	}
+
+	// Check payload contains the echoed message
+	if emitted[0].Payload == "" {
+		t.Error("expected non-empty payload")
 	}
 }
