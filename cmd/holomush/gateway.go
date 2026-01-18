@@ -162,7 +162,6 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start accepting telnet connections in goroutine
-	errChan := make(chan error, 1)
 	go func() {
 		for {
 			conn, acceptErr := telnetListener.Accept()
@@ -187,12 +186,10 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 		"core_addr", cfg.coreAddr,
 	)
 
-	// Wait for shutdown signal or error
+	// Wait for shutdown signal
 	select {
 	case sig := <-sigChan:
 		slog.Info("received shutdown signal", "signal", sig)
-	case err := <-errChan:
-		return fmt.Errorf("gateway error: %w", err)
 	case <-ctx.Done():
 		slog.Info("context cancelled, shutting down")
 	}
