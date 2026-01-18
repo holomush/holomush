@@ -48,10 +48,12 @@ func NewGRPCServer(component string, shutdownFunc ShutdownFunc) *GRPCServer {
 }
 
 // Start begins listening on the specified address with mTLS.
-func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) error {
+// It returns an error channel that will receive the server's exit error (or nil on graceful stop).
+// The channel will receive exactly one value when the server stops.
+func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan error, error) {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", addr, err)
+		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
 	s.listener = listener
 
@@ -59,16 +61,19 @@ func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) error {
 	s.grpcServer = grpc.NewServer(grpc.Creds(creds))
 	controlv1.RegisterControlServer(s.grpcServer, s)
 
+	errCh := make(chan error, 1)
 	go func() {
-		if err := s.grpcServer.Serve(listener); err != nil {
+		err := s.grpcServer.Serve(listener)
+		if err != nil {
 			slog.Error("control gRPC server error",
 				"component", s.component,
 				"error", err,
 			)
 		}
+		errCh <- err
 	}()
 
-	return nil
+	return errCh, nil
 }
 
 // Stop gracefully shuts down the control gRPC server.

@@ -89,15 +89,18 @@ func (s *Server) Metrics() *Metrics {
 }
 
 // Start begins serving observability endpoints.
-func (s *Server) Start() error {
+// It returns an error channel that will receive any errors from the HTTP server
+// after it starts. The channel is closed when the server stops gracefully.
+// Callers should monitor this channel to detect server failures.
+func (s *Server) Start() (<-chan error, error) {
 	if !s.running.CompareAndSwap(false, true) {
-		return fmt.Errorf("observability server already running")
+		return nil, fmt.Errorf("observability server already running")
 	}
 
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		s.running.Store(false)
-		return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
 	}
 	s.listener = listener
 
@@ -117,14 +120,19 @@ func (s *Server) Start() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Create buffered error channel so the goroutine doesn't block
+	errCh := make(chan error, 1)
+
 	go func() {
+		defer close(errCh)
 		if serveErr := s.httpServer.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
 			slog.Error("observability server error", "error", serveErr)
+			errCh <- serveErr
 		}
 	}()
 
 	slog.Info("observability server started", "addr", listener.Addr().String())
-	return nil
+	return errCh, nil
 }
 
 // Stop gracefully shuts down the observability server.

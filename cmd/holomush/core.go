@@ -138,6 +138,7 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", cfg.grpcAddr, err)
 	}
+	defer func() { _ = listener.Close() }()
 
 	slog.Info("gRPC server listening", "addr", cfg.grpcAddr)
 
@@ -152,9 +153,16 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 	}
 
 	controlGRPCServer := control.NewGRPCServer("core", func() { cancel() })
-	if err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig); err != nil {
+	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
+	if err != nil {
 		return fmt.Errorf("failed to start control gRPC server: %w", err)
 	}
+	// Monitor control server errors in background
+	go func() {
+		if controlErr := <-controlErrChan; controlErr != nil {
+			slog.Error("control gRPC server error", "error", controlErr)
+		}
+	}()
 
 	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
 
@@ -164,7 +172,8 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 		// For core, we're always ready once we reach this point
 		// (gRPC server is listening, database is connected)
 		obsServer = observability.NewServer(cfg.metricsAddr, func() bool { return true })
-		if err := obsServer.Start(); err != nil {
+		_, err = obsServer.Start()
+		if err != nil {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
 			_ = controlGRPCServer.Stop(shutdownCtx)

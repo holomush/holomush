@@ -13,7 +13,7 @@ func TestServer_Metrics(t *testing.T) {
 	// Create server with always-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
@@ -92,7 +92,7 @@ func TestServer_Metrics(t *testing.T) {
 func TestServer_LivenessReturns200(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
@@ -125,7 +125,7 @@ func TestServer_ReadinessWhenReady(t *testing.T) {
 	// Create server with always-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
@@ -158,7 +158,7 @@ func TestServer_ReadinessWhenNotReady(t *testing.T) {
 	// Create server with never-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return false })
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
@@ -191,7 +191,7 @@ func TestServer_ReadinessWithNilChecker(t *testing.T) {
 	// Create server with nil readiness checker (should default to ready)
 	server := NewServer("127.0.0.1:0", nil)
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
@@ -214,7 +214,7 @@ func TestServer_ReadinessWithNilChecker(t *testing.T) {
 func TestServer_DoubleStartFails(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
@@ -224,7 +224,7 @@ func TestServer_DoubleStartFails(t *testing.T) {
 	}()
 
 	// Second start should fail
-	if err := server.Start(); err == nil {
+	if _, err := server.Start(); err == nil {
 		t.Error("expected error on double start, got nil")
 	}
 }
@@ -240,10 +240,78 @@ func TestServer_StopIdempotent(t *testing.T) {
 	}
 }
 
+func TestServer_ErrorChannelReportsServeErrors(t *testing.T) {
+	// This test proves the bug fix: when the server encounters an error after Start() returns,
+	// the caller can now detect it via the error channel.
+
+	server := NewServer("127.0.0.1:0", nil)
+
+	errCh, err := server.Start()
+	if err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+
+	// Get the listener address before we close it
+	addr := server.Addr()
+	if addr == "" {
+		t.Fatal("server address is empty")
+	}
+
+	// Force close the underlying listener to trigger an error in Serve()
+	// This simulates a real-world scenario where the listener fails unexpectedly
+	if server.listener != nil {
+		_ = server.listener.Close()
+	}
+
+	// The error channel should receive the error from Serve()
+	select {
+	case serveErr := <-errCh:
+		// We expect an error because we closed the listener
+		if serveErr == nil {
+			t.Error("expected an error from the error channel after closing listener")
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("timeout waiting for error on error channel - bug: server errors are not propagated")
+	}
+
+	// Clean up
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = server.Stop(ctx)
+}
+
+func TestServer_ErrorChannelClosesOnNormalShutdown(t *testing.T) {
+	// Verify the error channel closes gracefully on normal shutdown (no error sent)
+	server := NewServer("127.0.0.1:0", nil)
+
+	errCh, err := server.Start()
+	if err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+
+	// Normal shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Stop(ctx); err != nil {
+		t.Fatalf("failed to stop server: %v", err)
+	}
+
+	// The error channel should be closed (receive nil or closed)
+	select {
+	case err, ok := <-errCh:
+		if ok && err != nil {
+			t.Errorf("unexpected error on normal shutdown: %v", err)
+		}
+		// ok=false (closed) or ok=true with err=nil are both acceptable
+	case <-time.After(2 * time.Second):
+		t.Error("timeout waiting for error channel to close")
+	}
+}
+
 func TestServer_MetricsIncrement(t *testing.T) {
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
-	if err := server.Start(); err != nil {
+	if _, err := server.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {

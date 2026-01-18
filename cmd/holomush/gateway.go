@@ -121,9 +121,16 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	}
 
 	controlGRPCServer := control.NewGRPCServer("gateway", func() { cancel() })
-	if err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig); err != nil {
+	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
+	if err != nil {
 		return fmt.Errorf("failed to start control gRPC server: %w", err)
 	}
+	// Monitor control server errors in background
+	go func() {
+		if controlErr := <-controlErrChan; controlErr != nil {
+			slog.Error("control gRPC server error", "error", controlErr)
+		}
+	}()
 
 	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
 
@@ -147,7 +154,8 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 	if cfg.metricsAddr != "" {
 		// For gateway, we're ready once telnet listener is up
 		obsServer = observability.NewServer(cfg.metricsAddr, func() bool { return true })
-		if err := obsServer.Start(); err != nil {
+		_, err = obsServer.Start()
+		if err != nil {
 			_ = telnetListener.Close()
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()

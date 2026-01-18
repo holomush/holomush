@@ -438,3 +438,189 @@ func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
 		t.Errorf("MinVersion = %x, want 0x0304 (TLS 1.3)", config.MinVersion)
 	}
 }
+
+// TestGRPCServer_Start_ReturnsErrorChannel tests that Start() returns an error channel
+// that can be used to detect server failures.
+func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-errch"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	s := NewGRPCServer("test", nil)
+
+	// Start should return an error channel
+	errCh, err := s.Start(addr, tlsConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if errCh == nil {
+		t.Fatal("Start() should return a non-nil error channel")
+	}
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Stop(ctx)
+	}()
+
+	// Server should be running, errCh should be open but not have an error yet
+	select {
+	case err := <-errCh:
+		// This means server stopped immediately - could be an error
+		if err != nil {
+			t.Fatalf("unexpected immediate error: %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		// Good - server is running
+	}
+}
+
+// TestGRPCServer_Start_PropagatesServerError tests that when the gRPC server
+// encounters an error, it is sent to the error channel.
+func TestGRPCServer_Start_PropagatesServerError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-prop-err"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	s := NewGRPCServer("test", nil)
+
+	errCh, err := s.Start(addr, tlsConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Force close the listener to trigger a server error
+	if s.listener != nil {
+		_ = s.listener.Close()
+	}
+
+	// Now the error channel should receive an error (or nil if graceful stop)
+	select {
+	case err := <-errCh:
+		// Got the notification - server stopped
+		// Note: The error might be nil if GracefulStop was called, or non-nil if listener closed
+		t.Logf("received from error channel: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Error("expected to receive from error channel after listener closed")
+	}
+}
+
+// TestGRPCServer_Start_ErrorChannelOnGracefulStop tests that the error channel
+// receives nil when the server is gracefully stopped.
+func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-stop-ch"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	s := NewGRPCServer("test", nil)
+
+	errCh, err := s.Start(addr, tlsConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Gracefully stop the server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	// Error channel should receive nil on graceful stop
+	select {
+	case err := <-errCh:
+		// GracefulStop causes Serve to return nil
+		if err != nil {
+			t.Errorf("expected nil error on graceful stop, got: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("expected to receive from error channel after Stop()")
+	}
+}
