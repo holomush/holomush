@@ -115,17 +115,19 @@ func (s *Server) Start() (<-chan error, error) {
 	mux.HandleFunc("/healthz/liveness", s.handleLiveness)
 	mux.HandleFunc("/healthz/readiness", s.handleReadiness)
 
-	s.httpServer = &http.Server{
+	httpSrv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	s.httpServer = httpSrv
 
 	// Create buffered error channel so the goroutine doesn't block
 	errCh := make(chan error, 1)
 
 	go func() {
 		defer close(errCh)
-		if serveErr := s.httpServer.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
+		// Use local httpSrv to avoid race with subsequent Start() calls
+		if serveErr := httpSrv.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
 			slog.Error("observability server error", "error", serveErr)
 			errCh <- serveErr
 		}
