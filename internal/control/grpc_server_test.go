@@ -300,6 +300,160 @@ func TestLoadControlServerTLS_FailsWithMissingCerts(t *testing.T) {
 	}
 }
 
+func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create files with valid paths but invalid certificate content
+	certPath := filepath.Join(tmpDir, "core.crt")
+	keyPath := filepath.Join(tmpDir, "core.key")
+	caPath := filepath.Join(tmpDir, "root-ca.crt")
+
+	// Write corrupted/invalid certificate data
+	if err := os.WriteFile(certPath, []byte("not a valid certificate"), 0o600); err != nil {
+		t.Fatalf("failed to write cert file: %v", err)
+	}
+	if err := os.WriteFile(keyPath, []byte("not a valid key"), 0o600); err != nil {
+		t.Fatalf("failed to write key file: %v", err)
+	}
+	if err := os.WriteFile(caPath, []byte("not a valid CA"), 0o600); err != nil {
+		t.Fatalf("failed to write CA file: %v", err)
+	}
+
+	_, err := LoadControlServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Fatal("LoadControlServerTLS should fail with invalid certificate content")
+	}
+
+	// Error should mention certificate loading failure
+	if !stringContains(err.Error(), "failed to load server certificate") {
+		t.Errorf("error = %q, expected to contain 'failed to load server certificate'", err.Error())
+	}
+}
+
+func TestLoadControlServerTLS_FailsWithMalformedCAPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid server certificate first
+	gameID := "test-malformed-ca"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	// Save valid server certificates
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	// Overwrite CA with malformed PEM data that looks like PEM but isn't valid
+	caPath := filepath.Join(tmpDir, "root-ca.crt")
+	malformedPEM := `-----BEGIN CERTIFICATE-----
+not-valid-base64-data-here!!!
+-----END CERTIFICATE-----`
+	if err := os.WriteFile(caPath, []byte(malformedPEM), 0o600); err != nil {
+		t.Fatalf("failed to write malformed CA: %v", err)
+	}
+
+	_, err = LoadControlServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Fatal("LoadControlServerTLS should fail with malformed CA PEM")
+	}
+
+	// Error should mention CA pool failure
+	if !stringContains(err.Error(), "failed to add CA certificate to pool") {
+		t.Errorf("error = %q, expected to contain 'failed to add CA certificate to pool'", err.Error())
+	}
+}
+
+func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid server certificate first
+	gameID := "test-empty-ca"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	// Save valid server certificates
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	// Overwrite CA with empty content (causes AppendCertsFromPEM to return false)
+	caPath := filepath.Join(tmpDir, "root-ca.crt")
+	if err := os.WriteFile(caPath, []byte(""), 0o600); err != nil {
+		t.Fatalf("failed to write empty CA: %v", err)
+	}
+
+	_, err = LoadControlServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Fatal("LoadControlServerTLS should fail with empty CA file")
+	}
+
+	// Error should mention CA pool failure
+	if !stringContains(err.Error(), "failed to add CA certificate to pool") {
+		t.Errorf("error = %q, expected to contain 'failed to add CA certificate to pool'", err.Error())
+	}
+}
+
+func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid server certificate
+	gameID := "test-missing-ca"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	// Save server certificates using the tls package, then remove the CA
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	// Remove the CA file
+	caPath := filepath.Join(tmpDir, "root-ca.crt")
+	if err := os.Remove(caPath); err != nil {
+		t.Fatalf("failed to remove CA file: %v", err)
+	}
+
+	_, err = LoadControlServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Fatal("LoadControlServerTLS should fail with missing CA file")
+	}
+
+	// Error should mention CA read failure
+	if !stringContains(err.Error(), "failed to read CA certificate") {
+		t.Errorf("error = %q, expected to contain 'failed to read CA certificate'", err.Error())
+	}
+}
+
+// stringContains checks if s contains substr.
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {
 	tmpDir := t.TempDir()
 
