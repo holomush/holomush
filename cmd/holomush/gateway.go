@@ -249,5 +249,7 @@ func handleTelnetConnectionPlaceholder(conn net.Conn, _ *holoGRPC.Client) {
 		slog.Debug("failed to send status message", "error", err)
 		return
 	}
+	// Error intentionally ignored: connection closes immediately after, so logging
+	// a write failure here would be noise (client may have already disconnected).
 	_, _ = fmt.Fprintln(conn, "Disconnecting...")
 }
