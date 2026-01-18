@@ -22,10 +22,12 @@ FROM alpine:3.23
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata wget
 
-# Create non-root user
-RUN adduser -D -g '' holomush
+# Create non-root user with config directory
+RUN adduser -D -g '' holomush && \
+    mkdir -p /home/holomush/.config/holomush/certs && \
+    chown -R holomush:holomush /home/holomush
 USER holomush
 
 # Copy binary from builder

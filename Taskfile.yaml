@@ -226,3 +226,14 @@ tasks:
     cmds:
       - bd hooks uninstall
       - lefthook uninstall
+
+  # Release
+  release:check:
+    desc: Validate goreleaser config
+    cmds:
+      - goreleaser check
+
+  release:snapshot:
+    desc: Build snapshot locally (no publish, local arch only)
+    cmds:
+      - goreleaser build --snapshot --clean --single-target

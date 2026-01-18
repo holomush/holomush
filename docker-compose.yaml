@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: holomush
+      POSTGRES_USER: holomush
+      POSTGRES_PASSWORD: holomush
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holomush"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  core:
+    build: .
+    command: ["core", "--grpc-addr=0.0.0.0:9000", "--metrics-addr=0.0.0.0:9100"]
+    environment:
+      DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
+      HOME: /home/holomush
+    volumes:
+      - holomush_config:/home/holomush/.config/holomush
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [
+        "CMD",
+        "wget",
+        "-q",
+        "--spider",
+        "http://localhost:9100/healthz/readiness",
+      ]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build: .
+    command: ["gateway", "--core-addr=core:9000", "--metrics-addr=0.0.0.0:9101"]
+    environment:
+      HOME: /home/holomush
+    volumes:
+      - holomush_config:/home/holomush/.config/holomush
+    ports:
+      - "4201:4201"
+      - "8080:8080"
+    depends_on:
+      core:
+        condition: service_healthy
+    healthcheck:
+      test: [
+        "CMD",
+        "wget",
+        "-q",
+        "--spider",
+        "http://localhost:9101/healthz/readiness",
+      ]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  holomush_config:
