@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"log/slog"
 
 	extism "github.com/extism/go-sdk"
 	"github.com/holomush/holomush/internal/core"
@@ -91,9 +92,10 @@ func (h *ExtismHost) Close(ctx context.Context) error {
 	}
 
 	var errs []error
-	for _, p := range h.plugins {
+	for name, p := range h.plugins {
 		if err := p.Close(ctx); err != nil {
 			errs = append(errs, err)
+			slog.Warn("failed to close plugin", "plugin", name, "error", err)
 		}
 	}
 	h.plugins = nil

@@ -183,7 +183,19 @@ if not message:
 
 ### Keep Plugins Fast
 
-Plugins have a 5-second timeout. Keep processing fast and avoid blocking operations.
+Plugins have a 5-second timeout for each event delivery. When a plugin exceeds
+this timeout:
+
+- The plugin call returns an error to the event bus
+- The event is **not** retried - it is permanently skipped for that plugin
+- The plugin remains loaded and will receive future events normally
+
+Keep processing fast and avoid blocking operations. If you need to perform
+slow operations (network calls, heavy computation), consider:
+
+- Caching results where possible
+- Breaking work into smaller chunks
+- Offloading work to external systems via the API
 
 ### Return Early
 

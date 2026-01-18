@@ -60,6 +60,11 @@ func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
 
 		// Check if subscriber is stopped before spawning goroutine
 		if s.ctx.Err() != nil {
+			slog.Debug("dropping event due to shutdown",
+				"event_id", event.ID.String(),
+				"event_stream", event.Stream,
+				"event_type", event.Type,
+			)
 			return
 		}
 
