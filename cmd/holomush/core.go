@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/observability"
 	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/tls"
@@ -26,11 +27,13 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	grpcAddr      string
-	controlSocket string
-	dataDir       string
-	gameID        string
-	logFormat     string
+	grpcAddr        string
+	httpAddr        string
+	controlSocket   string
+	controlGRPCAddr string
+	dataDir         string
+	gameID          string
+	logFormat       string
 }
 
 // Default values for core command flags.
@@ -55,7 +58,9 @@ manages plugins, and handles game state.`,
 
 	// Register flags
 	cmd.Flags().StringVar(&cfg.grpcAddr, "grpc-addr", defaultGRPCAddr, "gRPC listen address")
+	cmd.Flags().StringVar(&cfg.httpAddr, "http-addr", "", "HTTP observability address (metrics/health probes, empty = disabled)")
 	cmd.Flags().StringVar(&cfg.controlSocket, "control-socket", "", "control socket path (default: XDG_RUNTIME_DIR/holomush/holomush-core.sock)")
+	cmd.Flags().StringVar(&cfg.controlGRPCAddr, "control-grpc-addr", "", "control gRPC listen address with mTLS (empty = disabled)")
 	cmd.Flags().StringVar(&cfg.dataDir, "data-dir", "", "data directory (default: XDG_DATA_HOME/holomush)")
 	cmd.Flags().StringVar(&cfg.gameID, "game-id", "", "game ID (default: auto-generated from database)")
 	cmd.Flags().StringVar(&cfg.logFormat, "log-format", defaultLogFormat, "log format (json or text)")
@@ -148,6 +153,46 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 
 	slog.Info("control socket started")
 
+	// Start control gRPC server if configured
+	var controlGRPCServer *control.GRPCServer
+	if cfg.controlGRPCAddr != "" {
+		controlTLSConfig, tlsErr := control.LoadControlServerTLS(certsDir, "core")
+		if tlsErr != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			_ = controlServer.Stop(shutdownCtx)
+			return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
+		}
+
+		controlGRPCServer = control.NewGRPCServer("core", func() { cancel() })
+		if err := controlGRPCServer.Start(cfg.controlGRPCAddr, controlTLSConfig); err != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			_ = controlServer.Stop(shutdownCtx)
+			return fmt.Errorf("failed to start control gRPC server: %w", err)
+		}
+
+		slog.Info("control gRPC server started", "addr", cfg.controlGRPCAddr)
+	}
+
+	// Start observability server if configured
+	var obsServer *observability.Server
+	if cfg.httpAddr != "" {
+		// For core, we're always ready once we reach this point
+		// (gRPC server is listening, database is connected)
+		obsServer = observability.NewServer(cfg.httpAddr, func() bool { return true })
+		if err := obsServer.Start(); err != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if controlGRPCServer != nil {
+				_ = controlGRPCServer.Stop(shutdownCtx)
+			}
+			_ = controlServer.Stop(shutdownCtx)
+			return fmt.Errorf("failed to start observability server: %w", err)
+		}
+		slog.Info("observability server started", "addr", obsServer.Addr())
+	}
+
 	// Handle signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -182,9 +227,24 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 	// Stop accepting new connections
 	grpcServer.GracefulStop()
 
-	// Stop control socket
+	// Stop servers
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
+
+	if obsServer != nil {
+		if err := obsServer.Stop(shutdownCtx); err != nil {
+			slog.Warn("error stopping observability server", "error", err)
+		}
+	}
+
+	// Stop control gRPC server
+	if controlGRPCServer != nil {
+		if err := controlGRPCServer.Stop(shutdownCtx); err != nil {
+			slog.Warn("error stopping control gRPC server", "error", err)
+		}
+	}
+
+	// Stop control socket
 	if err := controlServer.Stop(shutdownCtx); err != nil {
 		slog.Warn("error stopping control socket", "error", err)
 	}

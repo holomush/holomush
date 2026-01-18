@@ -1,0 +1,42 @@
+// api/proto/holomush/control/v1/control.proto
+syntax = "proto3";
+
+package holomush.control.v1;
+
+option go_package = "github.com/holomush/holomush/internal/proto/holomush/control/v1;controlv1";
+
+// Control provides administrative operations for HoloMUSH processes.
+service Control {
+  // Shutdown initiates process shutdown.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // Status returns current process status.
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+// ShutdownRequest contains shutdown parameters.
+message ShutdownRequest {
+  // If true, perform graceful shutdown allowing in-flight requests to complete.
+  bool graceful = 1;
+}
+
+// ShutdownResponse confirms shutdown initiation.
+message ShutdownResponse {
+  // Human-readable status message.
+  string message = 1;
+}
+
+// StatusRequest requests current process status.
+message StatusRequest {}
+
+// StatusResponse contains current process status.
+message StatusResponse {
+  // Whether the process is running.
+  bool running = 1;
+  // Process ID.
+  int32 pid = 2;
+  // Seconds since process started.
+  int64 uptime_seconds = 3;
+  // Component name (e.g., "core" or "gateway").
+  string component = 4;
+}
