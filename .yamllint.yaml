@@ -3,6 +3,9 @@
 
 extends: default
 
+ignore:
+  - .beads/
+
 rules:
   # Line length - allow longer lines for URLs and such
   line-length:
