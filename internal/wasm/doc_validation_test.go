@@ -77,31 +77,3 @@ func TestEventTypeConstants(t *testing.T) {
 	}
 }
 
-// TestAllEventTypesDocumented validates that all defined EventType constants
-// are included in the documented set. This catches new event types that were
-// added to the code but not yet documented.
-func TestAllEventTypesDocumented(t *testing.T) {
-	// All event types that must be documented
-	allTypes := []core.EventType{
-		core.EventTypeSay,
-		core.EventTypePose,
-		core.EventTypeArrive,
-		core.EventTypeLeave,
-		core.EventTypeSystem,
-	}
-
-	// This test will fail at compile time if a new EventType constant is added
-	// to core but not listed here. Update both this list and the documentation.
-	for _, et := range allTypes {
-		if et == "" {
-			t.Error("Empty EventType found - update the test and documentation")
-		}
-	}
-
-	// Verify we have the expected count
-	const expectedCount = 5
-	if len(allTypes) != expectedCount {
-		t.Errorf("Expected %d event types, got %d - update documentation if count changed",
-			expectedCount, len(allTypes))
-	}
-}
