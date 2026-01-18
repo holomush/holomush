@@ -185,7 +185,26 @@ func TestEventType_String(t *testing.T) {
 
 ### WASM Tests (`internal/wasm`)
 
-The WASM package has special testing requirements due to Extism plugin compilation overhead.
+The WASM package has special testing requirements due to Extism plugin compilation
+overhead and concurrency constraints.
+
+#### Plugin Concurrency Model
+
+**Critical constraint:** Extism plugins are NOT thread-safe for concurrent calls.
+The WASM memory gets corrupted when the same plugin instance handles multiple
+concurrent `DeliverEvent` calls.
+
+| Component          | Concurrency Model                                           |
+| ------------------ | ----------------------------------------------------------- |
+| `ExtismHost`       | Thread-safe for `LoadPlugin`/`UnloadPlugin` via RWMutex     |
+| `ExtismSubscriber` | Serializes delivery per-plugin (async goroutines, but safe) |
+| Plugin instance    | NOT thread-safe - single call at a time per plugin          |
+
+**Production safety:** `ExtismSubscriber.HandleEvent` delivers events asynchronously
+via goroutines but each plugin receives events sequentially (one at a time). The
+5-second timeout ensures slow plugins don't block the event bus.
+
+#### Test Requirements
 
 | Requirement                              | Description                                              |
 | ---------------------------------------- | -------------------------------------------------------- |
@@ -208,8 +227,24 @@ defer host.Close(context.Background())
 
 **When to use each:**
 
-- `getSharedEchoHost()`: Pattern matching, event delivery, subscriber tests
-- `newIsolatedHost()`: Close tests, error handling, loading different plugins
+| Helper              | Use Case                                               |
+| ------------------- | ------------------------------------------------------ |
+| `getSharedEchoHost` | Pattern matching, event delivery, subscriber tests     |
+| `newIsolatedHost`   | Close tests, error handling, loading different plugins |
+
+**Parallel test pattern:** When subtests need `t.Parallel()`, each MUST create its
+own isolated host:
+
+```go
+for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) {
+        t.Parallel()
+        host := newIsolatedHost(t)  // Each parallel subtest needs own host
+        defer host.Close(ctx)
+        // ...
+    })
+}
+```
 
 ## Commands
 
