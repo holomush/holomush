@@ -1,6 +1,9 @@
 # Lefthook configuration
 # https://github.com/evilmartians/lefthook
 
+# set because we chain through beads (bd) in spots
+no_auto_install: true
+
 pre-commit:
   parallel: true
   exclude:
