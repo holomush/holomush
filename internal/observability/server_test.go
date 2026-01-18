@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -365,6 +366,162 @@ func TestServer_ConcurrentStopCalls(t *testing.T) {
 	if server.Addr() == "" {
 		t.Error("server should be running after Start")
 	}
+}
+
+func TestServer_StopContextTimeout(t *testing.T) {
+	// This test verifies that when Stop() times out due to active connections,
+	// the server returns an error and restores the running state so it can be retried.
+	server := NewServer("127.0.0.1:0", nil)
+
+	errCh, err := server.Start()
+	if err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+
+	// Drain error channel in background
+	go func() {
+		for range errCh { //nolint:revive // intentional empty block to drain channel
+		}
+	}()
+
+	addr := server.Addr()
+	if addr == "" {
+		t.Fatal("server should be running")
+	}
+
+	// Create a connection that will hold open during shutdown.
+	// We use a slow handler response to keep the connection active.
+	// Open a connection and make it hang by not completing the request.
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Send a partial HTTP request (connection stays open waiting for more data)
+	_, err = conn.Write([]byte("GET /healthz/liveness HTTP/1.1\r\n"))
+	if err != nil {
+		t.Fatalf("failed to write: %v", err)
+	}
+
+	// Use a very short timeout that will expire before the connection drains
+	shortCtx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	// Small delay to ensure the timeout context expires
+	time.Sleep(5 * time.Millisecond)
+
+	// Stop with expired context should fail because connection is still active
+	err = server.Stop(shortCtx)
+	if err == nil {
+		t.Error("expected error when stopping with expired context and active connection")
+	}
+
+	// The running state should be restored (server still running)
+	// Close the hanging connection first
+	_ = conn.Close()
+
+	// Now Stop with valid context should succeed
+	validCtx, validCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer validCancel()
+
+	if err := server.Stop(validCtx); err != nil {
+		t.Fatalf("Stop with valid context should succeed: %v", err)
+	}
+
+	// Server should now be stopped - Start should work
+	errCh2, err := server.Start()
+	if err != nil {
+		t.Fatalf("Start after successful Stop should work: %v", err)
+	}
+
+	// Clean up
+	go func() {
+		for range errCh2 { //nolint:revive // intentional empty block to drain channel
+		}
+	}()
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cleanupCancel()
+	_ = server.Stop(cleanupCtx)
+}
+
+func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
+	// This test specifically verifies that when Stop() fails due to context timeout,
+	// the running state is restored to true, allowing Stop() to be retried.
+	// This tests the state restoration logic at line 149-150 in server.go.
+	server := NewServer("127.0.0.1:0", nil)
+
+	errCh, err := server.Start()
+	if err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+
+	// Drain error channel in background
+	go func() {
+		for range errCh { //nolint:revive // intentional empty block to drain channel
+		}
+	}()
+
+	addr := server.Addr()
+	if addr == "" {
+		t.Fatal("server should be running")
+	}
+
+	// Create a connection that will block in a handler during shutdown.
+	// We make a partial request that keeps the connection in read state.
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+
+	// Send partial HTTP request to keep connection active
+	_, err = conn.Write([]byte("GET /healthz/liveness HTTP/1.1\r\n"))
+	if err != nil {
+		_ = conn.Close()
+		t.Fatalf("failed to write: %v", err)
+	}
+
+	// Use a very short timeout - this should fail
+	shortCtx, shortCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	time.Sleep(5 * time.Millisecond) // Ensure context expires
+	shortCancel()
+
+	// First Stop should fail due to timeout
+	err = server.Stop(shortCtx)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("expected error when stopping with expired context and active connection")
+	}
+
+	// Key assertion: after failed Stop(), we should be able to call Stop() again.
+	// If running state wasn't restored, this second Stop() would return nil immediately
+	// without actually shutting down.
+
+	// Close the connection so shutdown can succeed
+	_ = conn.Close()
+
+	// Second Stop() with valid context should succeed and actually shut down
+	validCtx, validCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer validCancel()
+
+	if err := server.Stop(validCtx); err != nil {
+		t.Fatalf("second Stop with valid context should succeed: %v", err)
+	}
+
+	// Verify shutdown actually happened by confirming Start() works
+	errCh2, err := server.Start()
+	if err != nil {
+		t.Fatalf("Start after successful Stop should work: %v", err)
+	}
+
+	// Clean up
+	go func() {
+		for range errCh2 { //nolint:revive // intentional empty block to drain channel
+		}
+	}()
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cleanupCancel()
+	_ = server.Stop(cleanupCtx)
 }
 
 func TestServer_MetricsIncrement(t *testing.T) {

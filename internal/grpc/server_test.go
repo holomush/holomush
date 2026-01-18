@@ -2,11 +2,8 @@ package grpc
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1127,170 +1124,6 @@ func TestMergeChannels_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestLoadServerTLS(t *testing.T) {
-	tmpDir := t.TempDir()
-	gameID := "test-game-tls"
-
-	// Generate certificates
-	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
-
-	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("GenerateServerCert() error = %v", err)
-	}
-
-	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("SaveCertificates() error = %v", err)
-	}
-
-	// Load TLS config
-	tlsConfig, err := LoadServerTLS(tmpDir)
-	if err != nil {
-		t.Fatalf("LoadServerTLS() error = %v", err)
-	}
-
-	if tlsConfig == nil {
-		t.Fatal("LoadServerTLS() returned nil config")
-	}
-	if len(tlsConfig.Certificates) == 0 {
-		t.Error("TLS config has no certificates")
-	}
-	if tlsConfig.ClientCAs == nil {
-		t.Error("TLS config has no ClientCAs")
-	}
-	if tlsConfig.MinVersion != tls.VersionTLS13 {
-		t.Errorf("MinVersion = %d, want TLS1.3 (%d)", tlsConfig.MinVersion, tls.VersionTLS13)
-	}
-}
-
-func TestLoadServerTLS_MissingCert(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	_, err := LoadServerTLS(tmpDir)
-	if err == nil {
-		t.Error("LoadServerTLS() should fail when certificate files are missing")
-	}
-}
-
-func TestLoadServerTLS_MissingCA(t *testing.T) {
-	tmpDir := t.TempDir()
-	gameID := "test-game-tls"
-
-	// Generate and save only server cert (no CA)
-	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
-
-	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("GenerateServerCert() error = %v", err)
-	}
-
-	// Save only cert, not CA
-	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("SaveCertificates() error = %v", err)
-	}
-
-	// Remove the CA file
-	if err := os.Remove(filepath.Join(tmpDir, "root-ca.crt")); err != nil {
-		t.Fatalf("Failed to remove CA file: %v", err)
-	}
-
-	_, err = LoadServerTLS(tmpDir)
-	if err == nil {
-		t.Error("LoadServerTLS() should fail when CA file is missing")
-	}
-}
-
-func TestLoadClientTLS(t *testing.T) {
-	tmpDir := t.TempDir()
-	gameID := "test-game-client-tls"
-
-	// Generate certificates
-	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
-
-	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("GenerateServerCert() error = %v", err)
-	}
-
-	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		t.Fatalf("GenerateClientCert() error = %v", err)
-	}
-
-	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("SaveCertificates() error = %v", err)
-	}
-	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
-		t.Fatalf("SaveClientCert() error = %v", err)
-	}
-
-	// Load TLS config
-	tlsConfig, err := LoadClientTLS(tmpDir, gameID)
-	if err != nil {
-		t.Fatalf("LoadClientTLS() error = %v", err)
-	}
-
-	if tlsConfig == nil {
-		t.Fatal("LoadClientTLS() returned nil config")
-	}
-	if len(tlsConfig.Certificates) == 0 {
-		t.Error("TLS config has no certificates")
-	}
-	if tlsConfig.RootCAs == nil {
-		t.Error("TLS config has no RootCAs")
-	}
-	if tlsConfig.ServerName != "holomush-"+gameID {
-		t.Errorf("ServerName = %q, want %q", tlsConfig.ServerName, "holomush-"+gameID)
-	}
-	if tlsConfig.MinVersion != tls.VersionTLS13 {
-		t.Errorf("MinVersion = %d, want TLS1.3 (%d)", tlsConfig.MinVersion, tls.VersionTLS13)
-	}
-}
-
-func TestLoadClientTLS_MissingCert(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	_, err := LoadClientTLS(tmpDir, "test-game")
-	if err == nil {
-		t.Error("LoadClientTLS() should fail when certificate files are missing")
-	}
-}
-
-func TestLoadClientTLS_MissingCA(t *testing.T) {
-	tmpDir := t.TempDir()
-	gameID := "test-game-client-tls"
-
-	// Generate certificates
-	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
-
-	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		t.Fatalf("GenerateClientCert() error = %v", err)
-	}
-
-	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
-		t.Fatalf("SaveClientCert() error = %v", err)
-	}
-
-	// No CA saved
-	_, err = LoadClientTLS(tmpDir, gameID)
-	if err == nil {
-		t.Error("LoadClientTLS() should fail when CA file is missing")
-	}
-}
-
 func TestNewGRPCServer(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game-grpc"
@@ -1311,7 +1144,7 @@ func TestNewGRPCServer(t *testing.T) {
 	}
 
 	// Load TLS config
-	tlsConfig, err := LoadServerTLS(tmpDir)
+	tlsConfig, err := holomushtls.LoadServerTLS(tmpDir, "core")
 	if err != nil {
 		t.Fatalf("LoadServerTLS() error = %v", err)
 	}
@@ -1322,66 +1155,6 @@ func TestNewGRPCServer(t *testing.T) {
 		t.Fatal("NewGRPCServer() returned nil")
 	}
 	server.Stop()
-}
-
-func TestLoadServerTLS_InvalidCA(t *testing.T) {
-	tmpDir := t.TempDir()
-	gameID := "test-game-invalid-ca"
-
-	// Generate valid certificates
-	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
-
-	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("GenerateServerCert() error = %v", err)
-	}
-
-	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("SaveCertificates() error = %v", err)
-	}
-
-	// Overwrite CA file with invalid content
-	if err := os.WriteFile(filepath.Join(tmpDir, "root-ca.crt"), []byte("invalid certificate"), 0o600); err != nil {
-		t.Fatalf("Failed to write invalid CA: %v", err)
-	}
-
-	_, err = LoadServerTLS(tmpDir)
-	if err == nil {
-		t.Error("LoadServerTLS() should fail with invalid CA")
-	}
-}
-
-func TestLoadClientTLS_InvalidCA(t *testing.T) {
-	tmpDir := t.TempDir()
-	gameID := "test-game-invalid-ca"
-
-	// Generate valid certificates
-	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
-
-	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		t.Fatalf("GenerateClientCert() error = %v", err)
-	}
-
-	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
-		t.Fatalf("SaveClientCert() error = %v", err)
-	}
-
-	// Write invalid CA
-	if err := os.WriteFile(filepath.Join(tmpDir, "root-ca.crt"), []byte("invalid certificate"), 0o600); err != nil {
-		t.Fatalf("Failed to write invalid CA: %v", err)
-	}
-
-	_, err = LoadClientTLS(tmpDir, gameID)
-	if err == nil {
-		t.Error("LoadClientTLS() should fail with invalid CA")
-	}
 }
 
 // =============================================================================

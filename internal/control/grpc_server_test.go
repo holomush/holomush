@@ -1241,6 +1241,89 @@ func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
 	}
 }
 
+// TestGRPCServer_Stop_DuringStart tests that calling Stop() during Start()
+// initialization does not cause a race condition (e55.95).
+func TestGRPCServer_Stop_DuringStart(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-stop-during-start"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Run multiple iterations to increase chance of hitting race windows
+	const iterations = 100
+	for i := 0; i < iterations; i++ {
+		// Find available port for each iteration
+		listener, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			t.Fatalf("iteration %d: failed to find available port: %v", i, err)
+		}
+		addr := listener.Addr().String()
+		_ = listener.Close()
+
+		s, err := NewGRPCServer("test", nil)
+		if err != nil {
+			t.Fatalf("iteration %d: NewGRPCServer() error = %v", i, err)
+		}
+
+		// Start server and immediately try to stop it
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		var errCh <-chan error
+		var startErr error
+
+		go func() {
+			defer wg.Done()
+			errCh, startErr = s.Start(addr, tlsConfig)
+		}()
+
+		go func() {
+			defer wg.Done()
+			// Small random delay to vary timing
+			time.Sleep(time.Duration(i%10) * time.Microsecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = s.Stop(ctx)
+		}()
+
+		wg.Wait()
+
+		// Either start succeeded and we stopped it, or start failed - both are OK
+		// The key is that we don't panic or have a data race
+		if startErr == nil && errCh != nil {
+			// Drain error channel if start succeeded
+			select {
+			case <-errCh:
+			case <-time.After(2 * time.Second):
+				// Server might already be stopped
+			}
+		}
+
+		// After both operations complete, server should not be running
+		if s.running.Load() {
+			t.Errorf("iteration %d: server should not be running after Stop()", i)
+		}
+	}
+}
+
 // TestGRPCServer_Stop_RunningStateAfterGracefulStop tests that running state is
 // false only after GracefulStop completes, not before (e55.59).
 func TestGRPCServer_Stop_RunningStateAfterGracefulStop(t *testing.T) {

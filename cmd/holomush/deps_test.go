@@ -191,27 +191,29 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 
 	controlErrChan := make(chan error, 1)
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
+			ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
+				return &mockObservabilityServer{}
+			},
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
-		},
-		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
-			return &mockObservabilityServer{}
-		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
 		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
@@ -356,14 +358,16 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 	}
 
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "", fmt.Errorf("failed to get certs directory")
+			},
+		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
-		},
-		CertsDirGetter: func() (string, error) {
-			return "", fmt.Errorf("failed to get certs directory")
 		},
 	}
 
@@ -388,14 +392,16 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 	}
 
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
-		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
 		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return nil, fmt.Errorf("failed to load TLS certificates")
@@ -423,20 +429,22 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 	}
 
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return nil, fmt.Errorf("failed to load control TLS")
+			},
+		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
-		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return nil, fmt.Errorf("failed to load control TLS")
 		},
 	}
 
@@ -461,23 +469,25 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 	}
 
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return nil, fmt.Errorf("failed to create control server")
+			},
+		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
-		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return nil, fmt.Errorf("failed to create control server")
 		},
 	}
 
@@ -502,27 +512,29 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 	}
 
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return nil, fmt.Errorf("address already in use")
+					},
+				}, nil
+			},
+		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
-		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return nil, fmt.Errorf("address already in use")
-				},
-			}, nil
 		},
 	}
 
@@ -549,34 +561,36 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 
 	controlErrChan := make(chan error, 1)
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
+			ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
+				return &mockObservabilityServer{
+					startFunc: func() (<-chan error, error) {
+						return nil, fmt.Errorf("address already in use")
+					},
+				}
+			},
+		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
-		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
-		},
-		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
-			return &mockObservabilityServer{
-				startFunc: func() (<-chan error, error) {
-					return nil, fmt.Errorf("address already in use")
-				},
-			}
 		},
 	}
 
@@ -606,8 +620,23 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 	ml := &mockListener{}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
+			ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
+				return &mockObservabilityServer{}
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -617,19 +646,6 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 		},
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
-		},
-		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
-			return &mockObservabilityServer{}
 		},
 		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return ml, nil
@@ -689,8 +705,10 @@ func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "", fmt.Errorf("failed to get certs directory")
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "", fmt.Errorf("failed to get certs directory")
+			},
 		},
 	}
 
@@ -715,8 +733,10 @@ func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "", fmt.Errorf("failed to extract game_id")
@@ -744,8 +764,10 @@ func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -776,8 +798,10 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -811,8 +835,13 @@ func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return nil, fmt.Errorf("failed to load control TLS")
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -822,9 +851,6 @@ func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 		},
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return nil, fmt.Errorf("failed to load control TLS")
 		},
 	}
 
@@ -849,8 +875,16 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return nil, fmt.Errorf("failed to create control server")
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -860,12 +894,6 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 		},
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return nil, fmt.Errorf("failed to create control server")
 		},
 	}
 
@@ -890,8 +918,20 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 	}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return nil, fmt.Errorf("address already in use")
+					},
+				}, nil
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -901,16 +941,6 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 		},
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return nil, fmt.Errorf("address already in use")
-				},
-			}, nil
 		},
 	}
 
@@ -936,8 +966,20 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 
 	controlErrChan := make(chan error, 1)
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -947,16 +989,6 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 		},
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
 		},
 		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return nil, fmt.Errorf("address already in use")
@@ -988,8 +1020,27 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	ml := &mockListener{}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
+			ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
+				return &mockObservabilityServer{
+					startFunc: func() (<-chan error, error) {
+						return nil, fmt.Errorf("address already in use")
+					},
+				}
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -1000,25 +1051,8 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
 		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
-		},
 		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return ml, nil
-		},
-		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
-			return &mockObservabilityServer{
-				startFunc: func() (<-chan error, error) {
-					return nil, fmt.Errorf("address already in use")
-				},
-			}
 		},
 	}
 
@@ -1048,31 +1082,33 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 	obsErrChan := make(chan error, 1)
 
 	deps := &CoreDeps{
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
+			ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
+				return &mockObservabilityServer{
+					startFunc: func() (<-chan error, error) {
+						return obsErrChan, nil
+					},
+				}
+			},
+		},
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
-		},
-		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
-			return &mockObservabilityServer{
-				startFunc: func() (<-chan error, error) {
-					return obsErrChan, nil
-				},
-			}
-		},
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
 		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
@@ -1116,8 +1152,27 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 	ml := &mockListener{}
 
 	deps := &GatewayDeps{
-		CertsDirGetter: func() (string, error) {
-			return "/tmp/certs", nil
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/tmp/certs", nil
+			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
+			ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
+				return &mockControlServer{
+					startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
+						return controlErrChan, nil
+					},
+				}, nil
+			},
+			ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
+				return &mockObservabilityServer{
+					startFunc: func() (<-chan error, error) {
+						return obsErrChan, nil
+					},
+				}
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
@@ -1127,23 +1182,6 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 		},
 		GRPCClientFactory: func(_ context.Context, _ holoGRPC.ClientConfig) (GRPCClient, error) {
 			return &mockGRPCClient{}, nil
-		},
-		ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
-			return testTLSConfig(), nil
-		},
-		ControlServerFactory: func(_ string, _ control.ShutdownFunc) (ControlServer, error) {
-			return &mockControlServer{
-				startFunc: func(_ string, _ *cryptotls.Config) (<-chan error, error) {
-					return controlErrChan, nil
-				},
-			}, nil
-		},
-		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
-			return &mockObservabilityServer{
-				startFunc: func() (<-chan error, error) {
-					return obsErrChan, nil
-				},
-			}
 		},
 		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return ml, nil

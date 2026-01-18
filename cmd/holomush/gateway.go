@@ -227,34 +227,10 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
-	// Start accepting telnet connections in goroutine
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("panic in telnet accept loop, triggering shutdown",
-					"panic", r,
-				)
-				cancel()
-			}
-		}()
-
-		for {
-			conn, acceptErr := telnetListener.Accept()
-			if acceptErr != nil {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					slog.Error("telnet accept failed", "error", acceptErr)
-					continue
-				}
-			}
-			// For now, just close the connection with a message.
-			// A future task will implement proper gRPC-based handling.
-			go handleTelnetConnection(conn)
-		}
-	}()
+	// Start accepting telnet connections in goroutine with backoff on errors
+	go runTelnetAcceptLoop(ctx, telnetListener, cancel)
 
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
@@ -320,4 +296,85 @@ func handleTelnetConnection(conn net.Conn) {
 	// Error intentionally ignored: connection closes immediately after, so logging
 	// a write failure here would be noise (client may have already disconnected).
 	_, _ = fmt.Fprintln(conn, "Disconnecting...")
+}
+
+// acceptBackoff manages exponential backoff for the accept loop.
+// It starts at 100ms and doubles on each failure, capped at 30 seconds.
+// Resets to initial value on successful accept.
+type acceptBackoff struct {
+	current time.Duration
+	initial time.Duration
+	max     time.Duration
+}
+
+// newAcceptBackoff creates a new backoff with 100ms initial and 30s max.
+func newAcceptBackoff() *acceptBackoff {
+	return &acceptBackoff{
+		current: 0, // No delay until first failure
+		initial: 100 * time.Millisecond,
+		max:     30 * time.Second,
+	}
+}
+
+// failure records a failure and increases the backoff.
+func (b *acceptBackoff) failure() {
+	if b.current == 0 {
+		b.current = b.initial
+	} else {
+		b.current *= 2
+		if b.current > b.max {
+			b.current = b.max
+		}
+	}
+}
+
+// success resets the backoff to initial state.
+func (b *acceptBackoff) success() {
+	b.current = 0
+}
+
+// wait returns the current backoff duration to wait.
+func (b *acceptBackoff) wait() time.Duration {
+	return b.current
+}
+
+// runTelnetAcceptLoop accepts telnet connections with exponential backoff on errors.
+// The cancel function is called on panic to trigger graceful shutdown.
+func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, cancel func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("panic in telnet accept loop, triggering shutdown",
+				"panic", r,
+			)
+			cancel()
+		}
+	}()
+
+	backoff := newAcceptBackoff()
+
+	for {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				backoff.failure()
+				waitDuration := backoff.wait()
+				slog.Error("telnet accept failed, backing off",
+					"error", acceptErr,
+					"backoff", waitDuration,
+				)
+				// Wait with context so we can exit promptly on shutdown
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(waitDuration):
+				}
+				continue
+			}
+		}
+		backoff.success()
+		go handleTelnetConnection(conn)
+	}
 }

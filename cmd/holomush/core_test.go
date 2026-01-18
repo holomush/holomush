@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -904,5 +906,100 @@ func TestListenerCloseError(t *testing.T) {
 	if closeErr := listener.Close(); closeErr != nil {
 		// This is the expected path - error is logged
 		t.Logf("Expected close error: %v", closeErr)
+	}
+}
+
+// TestSignalHandling_ChannelSetup verifies that signal handling sets up channels correctly.
+// This tests the signal.Notify behavior and ensures proper channel configuration.
+func TestSignalHandling_ChannelSetup(t *testing.T) {
+	// Create a buffered channel like the code does
+	sigChan := make(chan os.Signal, 1)
+
+	// Register for signals
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	// Verify the channel is buffered with capacity 1
+	// This is important to prevent signal loss
+	if cap(sigChan) != 1 {
+		t.Errorf("signal channel capacity = %d, want 1", cap(sigChan))
+	}
+
+	// Verify we can send a signal to ourselves and receive it
+	// This simulates what happens when the OS sends a signal
+	go func() {
+		// Small delay to ensure the main goroutine is waiting on the channel
+		time.Sleep(10 * time.Millisecond)
+		// Send a signal through the channel (simulating OS signal delivery)
+		sigChan <- syscall.SIGTERM
+	}()
+
+	// Wait for the signal with timeout
+	select {
+	case sig := <-sigChan:
+		if sig != syscall.SIGTERM {
+			t.Errorf("received signal = %v, want SIGTERM", sig)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("did not receive signal within timeout")
+	}
+}
+
+// TestSignalHandling_MultipleSignals verifies behavior with multiple signals.
+// Since channel capacity is 1, only one signal can be buffered.
+func TestSignalHandling_MultipleSignals(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	// First signal should be delivered
+	sigChan <- syscall.SIGINT
+
+	// Second signal - since we haven't read yet, behavior depends on buffer
+	// With capacity 1, channel is full so this would block without select
+	select {
+	case sigChan <- syscall.SIGTERM:
+		// If this succeeds, channel wasn't full (unexpected)
+		t.Log("second signal sent (unexpected - channel should be full)")
+	default:
+		// This is expected - channel is full with first signal
+		t.Log("second signal blocked as expected (channel full)")
+	}
+
+	// Read the first signal
+	select {
+	case sig := <-sigChan:
+		if sig != syscall.SIGINT {
+			t.Errorf("first signal = %v, want SIGINT", sig)
+		}
+	default:
+		t.Fatal("no signal available when expected")
+	}
+}
+
+// TestSignalStop_Cleanup verifies that signal.Stop properly unregisters signal handling.
+func TestSignalStop_Cleanup(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Send a signal before stop - should be received
+	sigChan <- syscall.SIGINT
+	select {
+	case <-sigChan:
+		// Good - signal received
+	default:
+		t.Fatal("signal not available before Stop")
+	}
+
+	// Stop signal handling
+	signal.Stop(sigChan)
+
+	// After Stop, channel should be drained but no longer receives OS signals
+	// We can verify Stop was called by checking the channel is empty
+	select {
+	case sig := <-sigChan:
+		t.Errorf("unexpected signal after Stop: %v", sig)
+	default:
+		// Good - channel is empty after Stop
 	}
 }

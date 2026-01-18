@@ -4,11 +4,8 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -426,68 +423,6 @@ func mergeChannels(ctx context.Context, channels []chan core.Event) <-chan core.
 	}()
 
 	return merged
-}
-
-// LoadServerTLS loads TLS config for the Core gRPC server with mTLS.
-func LoadServerTLS(certsDir string) (*tls.Config, error) {
-	certPath := filepath.Clean(filepath.Join(certsDir, "core.crt"))
-	keyPath := filepath.Clean(filepath.Join(certsDir, "core.key"))
-	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
-
-	// Load server certificate
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load server certificate: %w", err)
-	}
-
-	// Load CA for client verification
-	caCert, err := os.ReadFile(caPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
-	}
-
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to add CA certificate to pool")
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientCAs:    caPool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		MinVersion:   tls.VersionTLS13,
-	}, nil
-}
-
-// LoadClientTLS loads TLS config for gRPC clients (Gateway) with mTLS.
-func LoadClientTLS(certsDir string, expectedGameID string) (*tls.Config, error) {
-	certPath := filepath.Clean(filepath.Join(certsDir, "gateway.crt"))
-	keyPath := filepath.Clean(filepath.Join(certsDir, "gateway.key"))
-	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
-
-	// Load client certificate
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load client certificate: %w", err)
-	}
-
-	// Load CA for server verification
-	caCert, err := os.ReadFile(caPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
-	}
-
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to add CA certificate to pool")
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caPool,
-		ServerName:   "holomush-" + expectedGameID,
-		MinVersion:   tls.VersionTLS13,
-	}, nil
 }
 
 // NewGRPCServer creates a new gRPC server with mTLS credentials.

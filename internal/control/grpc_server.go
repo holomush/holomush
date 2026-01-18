@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,10 +30,13 @@ type GRPCServer struct {
 
 	component    string
 	startTime    time.Time
-	listener     net.Listener
-	grpcServer   *grpc.Server
 	shutdownFunc ShutdownFunc
 	running      atomic.Bool
+
+	// mu protects listener and grpcServer during concurrent Start/Stop
+	mu         sync.Mutex
+	listener   net.Listener
+	grpcServer *grpc.Server
 }
 
 // NewGRPCServer creates a new gRPC control server.
@@ -56,6 +60,9 @@ func NewGRPCServer(component string, shutdownFunc ShutdownFunc) (*GRPCServer, er
 // The channel will receive exactly one value when the server stops.
 // Returns an error if the server is already running (double-start prevention).
 func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan error, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Prevent double-start which would leak the first listener
 	if s.listener != nil {
 		return nil, fmt.Errorf("server is already running")
@@ -96,8 +103,12 @@ func (s *GRPCServer) Stop(_ context.Context) error {
 		return nil
 	}
 
-	if s.grpcServer != nil {
-		s.grpcServer.GracefulStop()
+	s.mu.Lock()
+	server := s.grpcServer
+	s.mu.Unlock()
+
+	if server != nil {
+		server.GracefulStop()
 	}
 
 	return nil

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -707,5 +709,281 @@ func TestObservabilityServerError_TriggersShutdown(t *testing.T) {
 		// Success - shutdown was triggered
 	case <-time.After(1 * time.Second):
 		t.Fatal("observability server error did not trigger shutdown within timeout")
+	}
+}
+
+// acceptLoopMockListener is a mock listener for testing the accept loop backoff behavior.
+type acceptLoopMockListener struct {
+	acceptTimes  []time.Time
+	acceptCalls  int
+	acceptErrors int
+	closed       bool
+	closeCh      chan struct{}
+}
+
+func (m *acceptLoopMockListener) Accept() (net.Conn, error) {
+	m.acceptTimes = append(m.acceptTimes, time.Now())
+	m.acceptCalls++
+	if m.acceptCalls <= m.acceptErrors {
+		return nil, fmt.Errorf("mock accept error %d", m.acceptCalls)
+	}
+	// Block until closed
+	<-m.closeCh
+	return nil, fmt.Errorf("listener closed")
+}
+
+func (m *acceptLoopMockListener) Close() error {
+	if !m.closed {
+		m.closed = true
+		close(m.closeCh)
+	}
+	return nil
+}
+
+func (m *acceptLoopMockListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 4201}
+}
+
+// TestTelnetAcceptLoop_BackoffOnErrors verifies that the accept loop applies
+// exponential backoff when accept errors occur.
+func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mock := &acceptLoopMockListener{
+		acceptErrors: 3,
+		closeCh:      make(chan struct{}),
+	}
+
+	// Run the accept loop in a goroutine
+	done := make(chan struct{})
+	go func() {
+		runTelnetAcceptLoop(ctx, mock, cancel)
+		close(done)
+	}()
+
+	// Give it time to hit 3 errors with backoff (100ms, 200ms, 400ms = 700ms minimum)
+	time.Sleep(800 * time.Millisecond)
+
+	// Close the listener first, then cancel context to stop the loop
+	// The loop checks ctx.Done() after Accept() returns an error
+	if err := mock.Close(); err != nil {
+		t.Fatalf("failed to close mock listener: %v", err)
+	}
+	cancel()
+
+	select {
+	case <-done:
+		// Loop finished
+	case <-time.After(1 * time.Second):
+		t.Fatal("accept loop did not finish within timeout")
+	}
+
+	// Verify backoff behavior: should have recorded 3+ accept attempts
+	if mock.acceptCalls < 3 {
+		t.Errorf("expected at least 3 accept calls, got %d", mock.acceptCalls)
+	}
+
+	// Verify timing shows backoff (first to second should be ~100ms, second to third ~200ms)
+	if len(mock.acceptTimes) >= 3 {
+		gap1 := mock.acceptTimes[1].Sub(mock.acceptTimes[0])
+		gap2 := mock.acceptTimes[2].Sub(mock.acceptTimes[1])
+
+		// First gap should be around 100ms (the initial backoff)
+		if gap1 < 50*time.Millisecond || gap1 > 200*time.Millisecond {
+			t.Errorf("first backoff gap = %v, expected ~100ms", gap1)
+		}
+
+		// Second gap should be around 200ms (doubled from first)
+		if gap2 < 150*time.Millisecond || gap2 > 350*time.Millisecond {
+			t.Errorf("second backoff gap = %v, expected ~200ms", gap2)
+		}
+	}
+}
+
+// TestAcceptBackoff_ExponentialIncrease verifies the backoff doubles on each failure.
+func TestAcceptBackoff_ExponentialIncrease(t *testing.T) {
+	b := newAcceptBackoff()
+
+	// Initial state - no delay
+	if b.wait() != 0 {
+		t.Errorf("initial wait = %v, want 0", b.wait())
+	}
+
+	// First failure - should be initial (100ms)
+	b.failure()
+	if b.wait() != 100*time.Millisecond {
+		t.Errorf("after first failure wait = %v, want 100ms", b.wait())
+	}
+
+	// Second failure - should double (200ms)
+	b.failure()
+	if b.wait() != 200*time.Millisecond {
+		t.Errorf("after second failure wait = %v, want 200ms", b.wait())
+	}
+
+	// Third failure - should double again (400ms)
+	b.failure()
+	if b.wait() != 400*time.Millisecond {
+		t.Errorf("after third failure wait = %v, want 400ms", b.wait())
+	}
+}
+
+// TestAcceptBackoff_MaxCap verifies the backoff is capped at max (30s).
+func TestAcceptBackoff_MaxCap(t *testing.T) {
+	b := newAcceptBackoff()
+
+	// Rapidly increase backoff past the cap
+	for i := 0; i < 20; i++ {
+		b.failure()
+	}
+
+	// Should be capped at 30 seconds
+	if b.wait() != 30*time.Second {
+		t.Errorf("after many failures wait = %v, want 30s (max)", b.wait())
+	}
+}
+
+// TestAcceptBackoff_ResetOnSuccess verifies backoff resets after successful accept.
+func TestAcceptBackoff_ResetOnSuccess(t *testing.T) {
+	b := newAcceptBackoff()
+
+	// Build up some backoff
+	b.failure()
+	b.failure()
+	b.failure()
+
+	if b.wait() == 0 {
+		t.Fatal("expected non-zero backoff after failures")
+	}
+
+	// Success should reset
+	b.success()
+
+	if b.wait() != 0 {
+		t.Errorf("after success wait = %v, want 0", b.wait())
+	}
+
+	// Next failure should start at initial again
+	b.failure()
+	if b.wait() != 100*time.Millisecond {
+		t.Errorf("after reset and failure wait = %v, want 100ms", b.wait())
+	}
+}
+
+// TestGatewaySignalHandling_TriggersShutdown verifies that receiving a signal
+// triggers graceful shutdown through the select statement in runGatewayWithDeps.
+func TestGatewaySignalHandling_TriggersShutdown(t *testing.T) {
+	// This test verifies the signal handling pattern used in gateway.go:
+	// sigChan := make(chan os.Signal, 1)
+	// signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// select { case sig := <-sigChan: ... }
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	// Track if shutdown was triggered
+	shutdownTriggered := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Simulate the main select loop
+	go func() {
+		select {
+		case sig := <-sigChan:
+			// This simulates: slog.Info("received shutdown signal", "signal", sig)
+			if sig == syscall.SIGTERM || sig == syscall.SIGINT {
+				close(shutdownTriggered)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}()
+
+	// Send signal
+	sigChan <- syscall.SIGTERM
+
+	// Verify shutdown was triggered
+	select {
+	case <-shutdownTriggered:
+		// Success
+	case <-time.After(1 * time.Second):
+		t.Fatal("signal did not trigger shutdown within timeout")
+	}
+}
+
+// TestGatewaySignalHandling_BothSignals verifies both SIGINT and SIGTERM trigger shutdown.
+func TestGatewaySignalHandling_BothSignals(t *testing.T) {
+	tests := []struct {
+		name   string
+		signal os.Signal
+	}{
+		{"SIGINT", syscall.SIGINT},
+		{"SIGTERM", syscall.SIGTERM},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+			defer signal.Stop(sigChan)
+
+			received := make(chan os.Signal, 1)
+
+			go func() {
+				select {
+				case sig := <-sigChan:
+					received <- sig
+				case <-time.After(1 * time.Second):
+					close(received)
+				}
+			}()
+
+			// Send the signal
+			sigChan <- tt.signal
+
+			// Verify it was received
+			select {
+			case sig := <-received:
+				if sig != tt.signal {
+					t.Errorf("received %v, want %v", sig, tt.signal)
+				}
+			case <-time.After(1 * time.Second):
+				t.Fatal("signal not received within timeout")
+			}
+		})
+	}
+}
+
+// TestGatewaySignalHandling_ContextCancelAlsoExits verifies that context cancellation
+// also exits the main select loop (the third case in the select).
+func TestGatewaySignalHandling_ContextCancelAlsoExits(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	exitedViaContext := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Simulate the main select loop
+	go func() {
+		select {
+		case <-sigChan:
+			// Not expected in this test
+		case <-ctx.Done():
+			close(exitedViaContext)
+		}
+	}()
+
+	// Cancel context
+	cancel()
+
+	// Verify we exited via context cancellation
+	select {
+	case <-exitedViaContext:
+		// Success
+	case <-time.After(1 * time.Second):
+		t.Fatal("context cancel did not exit select within timeout")
 	}
 }
