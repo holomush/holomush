@@ -219,8 +219,10 @@ tasks:
     desc: Install git hooks
     cmds:
       - lefthook install
+      - bd hooks install --chain
 
   hooks:uninstall:
     desc: Uninstall git hooks
     cmds:
+      - bd hooks uninstall
       - lefthook uninstall
