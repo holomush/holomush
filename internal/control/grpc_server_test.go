@@ -479,7 +479,6 @@ func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
 	}
 }
 
-
 func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {
 	tmpDir := t.TempDir()
 

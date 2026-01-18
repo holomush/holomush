@@ -54,7 +54,7 @@ Spec/Design (RFC2119) → Tests (failing) → Implementation → Tests (passing)
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Go Core (Event-Oriented)                     │
 ├─────────────────────────────────────────────────────────────────┤
-│  Session Manager   │  World Engine   │  Plugin Host (wazero)   │
+│  Session Manager   │  World Engine   │  Plugin Host (Extism)   │
 │  - Per-char buffer │  - Locations    │  - WASM sandbox         │
 │  - Reconnect/sync  │  - Objects      │  - Capability grants    │
 │  - Protocol adapt  │  - Commands     │  - Multi-language       │
@@ -209,9 +209,9 @@ type Connection struct {
 
 ### Runtime
 
-- Host: wazero (pure Go, no CGO)
-- Plugins: Any language that compiles to WASM (Rust, Go, Python via Pyodide, etc.)
-- Interface: WASI for basic I/O + custom host functions for game API
+- Host: Extism SDK (wraps wazero, pure Go, no CGO)
+- Plugins: Any language with Extism PDK (Rust, Go, Python, JavaScript, etc.)
+- Interface: Extism plugin calling convention + custom host functions for game API
 
 ### Plugin Manifest
 

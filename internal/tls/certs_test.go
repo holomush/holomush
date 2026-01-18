@@ -1403,7 +1403,7 @@ func generateNotYetValidCert(ca *CA, gameID, name string) (*ServerCert, error) {
 			Organization: []string{"HoloMUSH"},
 			CommonName:   "holomush-" + name,
 		},
-		NotBefore:   time.Now().Add(24 * time.Hour),  // Starts tomorrow
+		NotBefore:   time.Now().Add(24 * time.Hour), // Starts tomorrow
 		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
 		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
