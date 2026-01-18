@@ -33,7 +33,6 @@ func NewGatewayCmd() *cobra.Command {
 	return newGatewayCmd()
 }
 
-
 // NewStatusCmd creates the status subcommand.
 func NewStatusCmd() *cobra.Command {
 	return newStatusCmd()

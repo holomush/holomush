@@ -1837,10 +1837,10 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 
 func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 	tests := []struct {
-		name        string
-		timeout     time.Duration
-		storeDelay  time.Duration
-		expectError bool
+		name          string
+		timeout       time.Duration
+		storeDelay    time.Duration
+		expectError   bool
 		errorContains string
 	}{
 		{
@@ -1850,10 +1850,10 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "slow command times out",
-			timeout:     30 * time.Millisecond,
-			storeDelay:  200 * time.Millisecond,
-			expectError: true,
+			name:          "slow command times out",
+			timeout:       30 * time.Millisecond,
+			storeDelay:    200 * time.Millisecond,
+			expectError:   true,
 			errorContains: "context",
 		},
 	}
@@ -2085,7 +2085,6 @@ func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
 	// This tests the server's behavior with an empty AuthRequest
 	req := &corev1.AuthRequest{}
 	resp, err := server.Authenticate(ctx, req)
-
 	// Should return an error response, not panic
 	if err != nil {
 		// gRPC error is acceptable
