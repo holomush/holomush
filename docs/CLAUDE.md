@@ -55,10 +55,28 @@ func example() error {
 
 ### Tables
 
-| Requirement                      | Description                             |
-| -------------------------------- | --------------------------------------- |
-| **MUST** align pipes             | Use consistent spacing in table columns |
-| **SHOULD** use header separators | Include `                               |
+| Requirement                     | Description                                      |
+| ------------------------------- | ------------------------------------------------ |
+| **MUST** align columns          | All pipes in a column must vertically align      |
+| **MUST** have header separators | Include separator row with dashes after headers  |
+| **MUST** have consistent style  | Use "aligned" style with spaces around cell text |
+| **SHOULD** run `task fmt`       | dprint auto-formats tables to correct alignment  |
+
+Example of properly aligned table:
+
+```markdown
+| Column A | Column B | Column C |
+| -------- | -------- | -------- |
+| value 1  | value 2  | value 3  |
+| longer   | short    | medium   |
+```
+
+Common table errors:
+
+- **MD060**: Table column style - pipes not aligned or missing spaces
+- **MD056**: Table column count - mismatched column counts between rows
+
+Fix table alignment issues by running `task fmt` which uses dprint to auto-format.
 
 ## Document Structure
 
@@ -116,12 +134,14 @@ Content here
 
 ## Common Lint Errors
 
-| Error                       | Fix                                     |
-| --------------------------- | --------------------------------------- |
-| MD010: Hard tabs            | Replace tabs with spaces                |
-| MD031: Blanks around fences | Add blank line before/after code blocks |
-| MD032: Blanks around lists  | Add blank line before/after lists       |
-| MD040: No language          | Add language to code fence              |
+| Error                       | Fix                                         |
+| --------------------------- | ------------------------------------------- |
+| MD010: Hard tabs            | Replace tabs with spaces                    |
+| MD031: Blanks around fences | Add blank line before/after code blocks     |
+| MD032: Blanks around lists  | Add blank line before/after lists           |
+| MD040: No language          | Add language to code fence                  |
+| MD056: Table column count   | Ensure all rows have same number of columns |
+| MD060: Table column style   | Run `task fmt` to fix pipe alignment        |
 
 ## Pre-commit Validation
 

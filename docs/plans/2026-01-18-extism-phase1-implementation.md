@@ -1094,10 +1094,13 @@ git commit -m "test(wasm): add Extism integration test"
 
 ## Task 11: Update Documentation
 
+**Important:** Follow `docs/CLAUDE.md` for all markdown standards (code fence languages, no hard tabs, blank lines around lists/fences).
+
 **Files:**
 
 - Modify: `docs/plans/2026-01-17-holomush-architecture-design.md`
 - Create: `docs/reference/plugin-authoring.md`
+- Reference: `docs/CLAUDE.md` (documentation guidelines)
 
 **Step 1: Update architecture documentation**
 
@@ -1107,6 +1110,8 @@ Update the architecture design doc to reflect Extism instead of raw wazero:
 - Update plugin protocol from "Custom alloc/handle_event" to "Extism PDK exports"
 - Update memory management from "Manual ptr/len" to "Automatic"
 - Update language support from "TinyGo only" to "Python, JS, Go, Rust"
+
+Review all other system documentation for consistency with this change.
 
 **Step 2: Create plugin authoring guide**
 
@@ -1125,12 +1130,15 @@ Create `docs/reference/plugin-authoring.md` covering:
 Run:
 
 ```bash
-# Verify Python example compiles
+# Verify markdown lint passes
+task lint:markdown
+
+# Verify Python example compiles (if extism-py available)
 cd /Volumes/Code/github.com/holomush/holomush/plugins/echo-python && \
   extism-py plugin.py -o /tmp/test.wasm 2>/dev/null || echo "extism-py not installed"
 ```
 
-Expected: Build succeeds or message about extism-py not being installed
+Expected: Lint passes, build succeeds or message about extism-py not installed
 
 **Step 4: Commit**
 
