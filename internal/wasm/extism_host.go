@@ -3,13 +3,20 @@ package wasm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 
 	extism "github.com/extism/go-sdk"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/pkg/plugin"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// ErrPluginNotFound is returned when the requested plugin is not loaded.
+var ErrPluginNotFound = errors.New("plugin not found")
 
 // ExtismHost manages Extism-based WASM plugins with OpenTelemetry tracing.
 type ExtismHost struct {
@@ -84,4 +91,65 @@ func (h *ExtismHost) Close(ctx context.Context) error {
 	h.plugins = nil
 	h.closed = true
 	return errors.Join(errs...)
+}
+
+// DeliverEvent sends an event to a plugin and returns any emitted events.
+func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event core.Event) ([]plugin.EmitEvent, error) {
+	_, span := h.tracer.Start(ctx, "ExtismHost.DeliverEvent",
+		trace.WithAttributes(
+			attribute.String("plugin.name", pluginName),
+			attribute.String("event.type", string(event.Type)),
+			attribute.String("event.stream", event.Stream),
+		))
+	defer span.End()
+
+	h.mu.RLock()
+	p, ok := h.plugins[pluginName]
+	h.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrPluginNotFound, pluginName)
+	}
+
+	// Check if plugin exports handle_event
+	if !p.FunctionExists("handle_event") {
+		// Plugin doesn't handle events - not an error
+		return nil, nil
+	}
+
+	// Convert core.Event to plugin.Event
+	pluginEvent := plugin.Event{
+		ID:        event.ID.String(),
+		Stream:    event.Stream,
+		Type:      plugin.EventType(event.Type),
+		Timestamp: event.Timestamp.UnixMilli(),
+		ActorKind: plugin.ActorKind(event.Actor.Kind),
+		ActorID:   event.Actor.ID,
+		Payload:   string(event.Payload),
+	}
+
+	eventJSON, err := json.Marshal(pluginEvent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	// Call plugin's handle_event function
+	// Extism handles memory allocation internally
+	_, output, err := p.Call("handle_event", eventJSON)
+	if err != nil {
+		return nil, fmt.Errorf("plugin call failed: %w", err)
+	}
+
+	// Empty output means no events to emit
+	if len(output) == 0 {
+		return nil, nil
+	}
+
+	// Parse response
+	var response plugin.Response
+	if err := json.Unmarshal(output, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return response.Events, nil
 }

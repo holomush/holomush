@@ -5,8 +5,11 @@ import (
 	_ "embed"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/wasm"
+	"github.com/oklog/ulid/v2"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -85,5 +88,53 @@ func TestExtismHost_HasPlugin_NotLoaded(t *testing.T) {
 
 	if host.HasPlugin("nonexistent") {
 		t.Error("HasPlugin returned true for non-existent plugin")
+	}
+}
+
+func TestExtismHost_DeliverEvent(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	// Load the alloc.wasm test fixture (already embedded)
+	err := host.LoadPlugin(context.Background(), "echo", allocWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:test",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{"message":"hello"}`),
+	}
+
+	// Note: allocWASM is a minimal test fixture that may not have handle_event
+	// The test verifies DeliverEvent handles this gracefully
+	_, err = host.DeliverEvent(context.Background(), "echo", event)
+	if err != nil {
+		t.Fatalf("DeliverEvent failed: %v", err)
+	}
+}
+
+func TestExtismHost_DeliverEvent_PluginNotFound(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	event := core.Event{
+		ID:     ulid.Make(),
+		Stream: "location:test",
+		Type:   core.EventTypeSay,
+	}
+
+	_, err := host.DeliverEvent(context.Background(), "nonexistent", event)
+	if err == nil {
+		t.Error("DeliverEvent should fail for nonexistent plugin")
+	}
+	if !errors.Is(err, wasm.ErrPluginNotFound) {
+		t.Errorf("expected ErrPluginNotFound, got: %v", err)
 	}
 }
