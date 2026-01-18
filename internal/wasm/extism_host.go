@@ -4,6 +4,7 @@ package wasm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	extism "github.com/extism/go-sdk"
@@ -24,6 +25,45 @@ func NewExtismHost(tracer trace.Tracer) *ExtismHost {
 		plugins: make(map[string]*extism.Plugin),
 		tracer:  tracer,
 	}
+}
+
+// LoadPlugin loads a WASM plugin with the given name and binary.
+func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []byte) error {
+	_, span := h.tracer.Start(ctx, "ExtismHost.LoadPlugin")
+	defer span.End()
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.closed {
+		return ErrHostClosed
+	}
+
+	manifest := extism.Manifest{
+		Wasm: []extism.Wasm{
+			extism.WasmData{Data: wasmBytes},
+		},
+	}
+
+	config := extism.PluginConfig{
+		EnableWasi: true,
+	}
+
+	plugin, err := extism.NewPlugin(ctx, manifest, config, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create plugin %s: %w", name, err)
+	}
+
+	h.plugins[name] = plugin
+	return nil
+}
+
+// HasPlugin returns true if a plugin with the given name is loaded.
+func (h *ExtismHost) HasPlugin(name string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.plugins[name]
+	return ok
 }
 
 // Close releases all loaded plugins.
