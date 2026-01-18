@@ -1102,13 +1102,13 @@ git commit -m "test(wasm): add Extism integration test"
 
 ## Task 11: Update Documentation
 
-**Important:** Follow `docs/CLAUDE.md` for all markdown standards (code fence languages, no hard tabs, blank lines around lists/fences).
+**Important:** Follow `docs/DOCUMENTATION-GUIDELINES.md` for all markdown standards (code fence languages, no hard tabs, blank lines around lists/fences).
 
 **Files:**
 
 - Modify: `docs/plans/2026-01-17-holomush-architecture-design.md`
 - Create: `docs/reference/plugin-authoring.md`
-- Reference: `docs/CLAUDE.md` (documentation guidelines)
+- Reference: `docs/DOCUMENTATION-GUIDELINES.md` (documentation guidelines)
 
 **Step 1: Update architecture documentation**
 
