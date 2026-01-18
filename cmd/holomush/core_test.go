@@ -447,3 +447,225 @@ func TestListenerCleanupOnFailure(t *testing.T) {
 	}
 	defer func() { _ = listener2.Close() }()
 }
+
+// TestEnsureTLSCerts_DirectoryCreationFailure verifies that ensureTLSCerts
+// returns an error when the certs directory cannot be created.
+func TestEnsureTLSCerts_DirectoryCreationFailure(t *testing.T) {
+	// Create a file where we want to create a directory
+	tmpFile, err := os.CreateTemp("", "holomush-test-certs-block-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
+
+	// Try to use the file path as a directory - this should fail
+	// because you can't create a subdirectory under a file
+	badDir := tmpFile.Name() + "/nested/certs"
+
+	_, err = ensureTLSCerts(badDir, "test-game-id")
+	if err == nil {
+		t.Fatal("ensureTLSCerts() should fail when directory cannot be created")
+	}
+
+	if !strings.Contains(err.Error(), "directory") && !strings.Contains(err.Error(), "not a directory") {
+		t.Errorf("Error should mention directory issue, got: %v", err)
+	}
+}
+
+// TestEnsureTLSCerts_SaveCertificatesFailure verifies that ensureTLSCerts
+// returns an error when certificates cannot be saved to a read-only directory.
+func TestEnsureTLSCerts_SaveCertificatesFailure(t *testing.T) {
+	// Skip on Windows where file permissions work differently
+	if os.Getenv("GOOS") == "windows" {
+		t.Skip("Skipping permission test on Windows")
+	}
+
+	// Create a temp directory and make it read-only
+	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-readonly-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		//nolint:gosec // G302: Need 0700 to clean up directory
+		_ = os.Chmod(tmpDir, 0o700)
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	// Make directory read-only so files can't be created
+	//nolint:gosec // G302: Intentionally setting restrictive permissions for test
+	if err := os.Chmod(tmpDir, 0o500); err != nil {
+		t.Fatalf("Failed to make dir read-only: %v", err)
+	}
+
+	_, err = ensureTLSCerts(tmpDir, "test-game-id")
+	if err == nil {
+		t.Fatal("ensureTLSCerts() should fail when certs cannot be saved")
+	}
+
+	// Error should indicate permission/save issue
+	if !strings.Contains(err.Error(), "permission") && !strings.Contains(err.Error(), "save") &&
+		!strings.Contains(err.Error(), "create") && !strings.Contains(err.Error(), "denied") {
+		t.Errorf("Error should mention save/permission issue, got: %v", err)
+	}
+}
+
+// TestEnsureTLSCerts_PartialCertState verifies behavior when only some
+// certificate files exist (e.g., CA exists but server cert doesn't).
+func TestEnsureTLSCerts_PartialCertState(t *testing.T) {
+	tests := []struct {
+		name          string
+		filesToCreate []string // files to create before test
+		expectError   bool
+	}{
+		{
+			name:          "only CA cert exists",
+			filesToCreate: []string{"root-ca.crt"},
+			expectError:   true, // can't load without key
+		},
+		{
+			name:          "only core cert exists",
+			filesToCreate: []string{"core.crt"},
+			expectError:   true, // can't load without key and CA
+		},
+		{
+			name:          "core cert and key but no CA",
+			filesToCreate: []string{"core.crt", "core.key"},
+			expectError:   true, // can't load without CA
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir, err := os.MkdirTemp("", "holomush-test-partial-*")
+			if err != nil {
+				t.Fatalf("Failed to create temp dir: %v", err)
+			}
+			t.Cleanup(func() {
+				_ = os.RemoveAll(tmpDir)
+			})
+
+			// Create the specified files with dummy content
+			for _, file := range tt.filesToCreate {
+				path := tmpDir + "/" + file
+				if err := os.WriteFile(path, []byte("dummy content"), 0o600); err != nil {
+					t.Fatalf("Failed to create %s: %v", file, err)
+				}
+			}
+
+			_, err = ensureTLSCerts(tmpDir, "test-game-id")
+			if tt.expectError && err == nil {
+				t.Error("Expected error for partial cert state, got nil")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestFileExists verifies the fileExists helper function edge cases.
+func TestFileExists(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "holomush-test-fileexists-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) string
+		expected bool
+	}{
+		{
+			name: "existing file",
+			setup: func(t *testing.T) string {
+				path := tmpDir + "/exists.txt"
+				if err := os.WriteFile(path, []byte("content"), 0o600); err != nil {
+					t.Fatalf("Failed to write test file: %v", err)
+				}
+				return path
+			},
+			expected: true,
+		},
+		{
+			name: "non-existent file",
+			setup: func(_ *testing.T) string {
+				return tmpDir + "/does-not-exist.txt"
+			},
+			expected: false,
+		},
+		{
+			name: "directory exists",
+			setup: func(t *testing.T) string {
+				path := tmpDir + "/subdir"
+				if err := os.Mkdir(path, 0o700); err != nil {
+					t.Fatalf("Failed to create test dir: %v", err)
+				}
+				return path
+			},
+			expected: true,
+		},
+		{
+			name: "symlink to existing file",
+			setup: func(t *testing.T) string {
+				target := tmpDir + "/target.txt"
+				if err := os.WriteFile(target, []byte("content"), 0o600); err != nil {
+					t.Fatalf("Failed to write target file: %v", err)
+				}
+				link := tmpDir + "/link.txt"
+				if err := os.Symlink(target, link); err != nil {
+					t.Fatalf("Failed to create symlink: %v", err)
+				}
+				return link
+			},
+			expected: true,
+		},
+		{
+			name: "broken symlink",
+			setup: func(t *testing.T) string {
+				link := tmpDir + "/broken-link.txt"
+				if err := os.Symlink("/nonexistent/path", link); err != nil {
+					t.Fatalf("Failed to create broken symlink: %v", err)
+				}
+				return link
+			},
+			// Broken symlink: lstat succeeds (link exists) but target doesn't
+			// The function uses os.Stat which follows symlinks, so this returns false
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.setup(t)
+			got := fileExists(path)
+			if got != tt.expected {
+				t.Errorf("fileExists(%q) = %v, want %v", path, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCoreCommand_InvalidLogFormat verifies that invalid log format is rejected.
+func TestCoreCommand_InvalidLogFormat(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/test")
+
+	cmd := NewRootCmd()
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(errBuf)
+	cmd.SetArgs([]string{"core", "--log-format=invalid"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Expected error with invalid log format")
+	}
+
+	if !strings.Contains(err.Error(), "log") && !strings.Contains(err.Error(), "format") {
+		t.Errorf("Error should mention log/format issue, got: %v", err)
+	}
+}
