@@ -66,9 +66,13 @@ func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []by
 }
 
 // HasPlugin returns true if a plugin with the given name is loaded.
+// Returns false if the host has been closed.
 func (h *ExtismHost) HasPlugin(name string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+	if h.closed {
+		return false
+	}
 	_, ok := h.plugins[name]
 	return ok
 }
@@ -103,10 +107,11 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 		))
 	defer span.End()
 
+	// Hold RLock for entire operation to prevent race with Close()
 	h.mu.RLock()
-	p, ok := h.plugins[pluginName]
-	h.mu.RUnlock()
+	defer h.mu.RUnlock()
 
+	p, ok := h.plugins[pluginName]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrPluginNotFound, pluginName)
 	}

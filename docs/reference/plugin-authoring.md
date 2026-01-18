@@ -102,7 +102,7 @@ Plugins receive events as JSON with the following structure:
 | `id`         | string | Unique event ID (ULID)                   |
 | `stream`     | string | Event stream (e.g., "location:room1")    |
 | `type`       | string | Event type (e.g., "say", "pose", "emit") |
-| `timestamp`  | string | ISO 8601 timestamp                       |
+| `timestamp`  | int64  | Unix milliseconds timestamp              |
 | `actor_kind` | int    | Actor type: 1=character, 2=plugin        |
 | `actor_id`   | string | Actor identifier                         |
 | `payload`    | string | JSON-encoded event payload               |
@@ -114,7 +114,7 @@ Example input:
   "id": "01JGXYZ123ABC456DEF789GHI",
   "stream": "location:room1",
   "type": "say",
-  "timestamp": "2026-01-18T10:30:00Z",
+  "timestamp": 1737195000000,
   "actor_kind": 1,
   "actor_id": "player123",
   "payload": "{\"message\": \"Hello, world!\"}"

@@ -94,6 +94,32 @@ func TestExtismHost_HasPlugin_NotLoaded(t *testing.T) {
 	}
 }
 
+func TestExtismHost_HasPlugin_AfterClose(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+
+	// Load a plugin
+	err := host.LoadPlugin(context.Background(), "echo", allocWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	// Verify plugin is loaded
+	if !host.HasPlugin("echo") {
+		t.Error("HasPlugin returned false for loaded plugin before close")
+	}
+
+	// Close the host
+	if err := host.Close(context.Background()); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// After close, HasPlugin should return false
+	if host.HasPlugin("echo") {
+		t.Error("HasPlugin returned true after host was closed")
+	}
+}
+
 func TestExtismHost_DeliverEvent(t *testing.T) {
 	tracer := noop.NewTracerProvider().Tracer("test")
 	host := wasm.NewExtismHost(tracer)
@@ -183,5 +209,53 @@ func TestExtismHost_DeliverEvent_EchoPlugin(t *testing.T) {
 	// Check payload contains the echoed message
 	if emitted[0].Payload == "" {
 		t.Error("expected non-empty payload")
+	}
+}
+
+func TestExtismHost_DeliverEvent_ConcurrentClose(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+
+	// Load the echo plugin
+	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:test",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{"message":"hello"}`),
+	}
+
+	// Start goroutine calling DeliverEvent in a loop
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			_, err := host.DeliverEvent(context.Background(), "echo", event)
+			// After Close(), we expect ErrPluginNotFound
+			if err != nil && !errors.Is(err, wasm.ErrPluginNotFound) {
+				// Plugin call errors are acceptable during shutdown
+				continue
+			}
+		}
+	}()
+
+	// Give goroutine time to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Close from main goroutine
+	_ = host.Close(context.Background())
+
+	// Wait for goroutine to finish
+	select {
+	case <-done:
+		// Success - no race detected
+	case <-time.After(5 * time.Second):
+		t.Fatal("test timed out waiting for goroutine")
 	}
 }

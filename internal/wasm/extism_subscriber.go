@@ -21,14 +21,22 @@ type ExtismSubscriber struct {
 	emitter       Emitter
 	mu            sync.RWMutex
 	subscriptions map[string][]string // plugin -> stream patterns
+	wg            sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 // NewExtismSubscriber creates a subscriber for routing events to plugins.
-func NewExtismSubscriber(host *ExtismHost, emitter Emitter) *ExtismSubscriber {
+// The provided context controls the subscriber's lifecycle; when cancelled,
+// no new goroutines will be spawned for event handling.
+func NewExtismSubscriber(ctx context.Context, host *ExtismHost, emitter Emitter) *ExtismSubscriber {
+	ctx, cancel := context.WithCancel(ctx)
 	return &ExtismSubscriber{
 		host:          host,
 		emitter:       emitter,
 		subscriptions: make(map[string][]string),
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 }
 
@@ -40,7 +48,13 @@ func (s *ExtismSubscriber) Subscribe(pluginName, streamPattern string) {
 }
 
 // HandleEvent delivers an event to all subscribed plugins.
+// If the subscriber has been stopped, no goroutines are spawned.
 func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
+	// Check if subscriber is stopped before acquiring lock
+	if s.ctx.Err() != nil {
+		return
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -49,8 +63,24 @@ func (s *ExtismSubscriber) HandleEvent(ctx context.Context, event core.Event) {
 			continue
 		}
 
-		go s.deliverWithTimeout(ctx, pluginName, event)
+		// Double-check context after pattern match
+		if s.ctx.Err() != nil {
+			return
+		}
+
+		s.wg.Add(1)
+		go func(plugin string) {
+			defer s.wg.Done()
+			s.deliverWithTimeout(ctx, plugin, event)
+		}(pluginName)
 	}
+}
+
+// Stop cancels the subscriber context and waits for all in-flight
+// event deliveries to complete.
+func (s *ExtismSubscriber) Stop() {
+	s.cancel()
+	s.wg.Wait()
 }
 
 func (s *ExtismSubscriber) matchesAny(stream string, patterns []string) bool {

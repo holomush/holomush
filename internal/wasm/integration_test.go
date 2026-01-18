@@ -69,7 +69,8 @@ func TestExtism_Integration(t *testing.T) {
 
 	// Step 3: Create subscriber and register subscription
 	emitter := &collectingEmitter{}
-	subscriber := wasm.NewExtismSubscriber(host, emitter)
+	subscriber := wasm.NewExtismSubscriber(ctx, host, emitter)
+	defer subscriber.Stop()
 	subscriber.Subscribe("echo", "location:*")
 
 	// Step 4: Deliver a say event

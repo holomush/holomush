@@ -42,7 +42,8 @@ func TestExtismSubscriber_Subscribe(t *testing.T) {
 	defer func() { _ = host.Close(context.Background()) }()
 
 	emitter := &mockEmitter{}
-	sub := wasm.NewExtismSubscriber(host, emitter)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
 
 	sub.Subscribe("echo", "location:*")
 	sub.Subscribe("echo", "global:*")
@@ -62,7 +63,8 @@ func TestExtismSubscriber_HandleEvent_NoMatch(t *testing.T) {
 	}
 
 	emitter := &mockEmitter{}
-	sub := wasm.NewExtismSubscriber(host, emitter)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
 	sub.Subscribe("echo", "location:*")
 
 	// Send event that doesn't match
@@ -96,7 +98,8 @@ func TestExtismSubscriber_HandleEvent_WithEchoPlugin(t *testing.T) {
 	}
 
 	emitter := &mockEmitter{}
-	sub := wasm.NewExtismSubscriber(host, emitter)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
 	sub.Subscribe("echo", "location:*")
 
 	event := core.Event{
@@ -169,7 +172,8 @@ func TestExtismSubscriber_PatternMatching(t *testing.T) {
 			}
 
 			emitter := &mockEmitter{}
-			sub := wasm.NewExtismSubscriber(host, emitter)
+			sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+			defer sub.Stop()
 			sub.Subscribe("test-plugin", tt.pattern)
 
 			event := core.Event{
@@ -200,7 +204,8 @@ func TestExtismSubscriber_ErrorsDoNotPropagate(t *testing.T) {
 	defer func() { _ = host.Close(context.Background()) }()
 
 	emitter := &mockEmitter{}
-	sub := wasm.NewExtismSubscriber(host, emitter)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
 	sub.Subscribe("nonexistent-plugin", "location:*")
 
 	event := core.Event{
@@ -253,7 +258,8 @@ func TestExtismSubscriber_EmitterFailure(t *testing.T) {
 	}
 
 	emitter := &failingEmitter{}
-	sub := wasm.NewExtismSubscriber(host, emitter)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
 	sub.Subscribe("echo", "location:*")
 
 	event := core.Event{
@@ -290,7 +296,8 @@ func TestExtismSubscriber_MultiplePatterns(t *testing.T) {
 	}
 
 	emitter := &mockEmitter{}
-	sub := wasm.NewExtismSubscriber(host, emitter)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	defer sub.Stop()
 	sub.Subscribe("test-plugin", "location:*")
 	sub.Subscribe("test-plugin", "global:*")
 
@@ -320,4 +327,147 @@ func TestExtismSubscriber_MultiplePatterns(t *testing.T) {
 
 	// alloc plugin doesn't emit events, but verifying no panic and patterns matched
 	// The pattern matching logic is already tested in TestExtismSubscriber_PatternMatching
+}
+
+// slowEmitter blocks on Emit for a configurable duration.
+type slowEmitter struct {
+	mu       sync.Mutex
+	delay    time.Duration
+	emitted  []core.Event
+	started  chan struct{}
+	finished chan struct{}
+}
+
+func newSlowEmitter(delay time.Duration) *slowEmitter {
+	return &slowEmitter{
+		delay:    delay,
+		started:  make(chan struct{}, 10),
+		finished: make(chan struct{}, 10),
+	}
+}
+
+func (s *slowEmitter) Emit(_ context.Context, stream string, eventType core.EventType, payload []byte) error {
+	s.started <- struct{}{}
+	time.Sleep(s.delay)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.emitted = append(s.emitted, core.Event{
+		Stream:  stream,
+		Type:    eventType,
+		Payload: payload,
+	})
+	s.finished <- struct{}{}
+	return nil
+}
+
+func (s *slowEmitter) Events() []core.Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]core.Event{}, s.emitted...)
+}
+
+// TestExtismSubscriber_Stop_WaitsForInFlight verifies that Stop blocks until
+// all in-flight event deliveries complete.
+func TestExtismSubscriber_Stop_WaitsForInFlight(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	// Load the echo plugin which emits events
+	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	// Create emitter that delays for 500ms
+	emitter := newSlowEmitter(500 * time.Millisecond)
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	sub.Subscribe("echo", "location:*")
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:room1",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "player1"},
+		Payload:   []byte(`{"message":"Hello, world!"}`),
+	}
+
+	// Start event handling
+	sub.HandleEvent(context.Background(), event)
+
+	// Wait for emitter to start (plugin has processed and called Emit)
+	select {
+	case <-emitter.started:
+		// Good, emitter started
+	case <-time.After(3 * time.Second):
+		t.Fatal("emitter did not start within timeout")
+	}
+
+	// Now call Stop - it should block until the slow emit completes
+	stopDone := make(chan struct{})
+	go func() {
+		sub.Stop()
+		close(stopDone)
+	}()
+
+	// Stop should not complete immediately (emitter is still sleeping)
+	select {
+	case <-stopDone:
+		t.Fatal("Stop returned before in-flight delivery completed")
+	case <-time.After(100 * time.Millisecond):
+		// Good, Stop is blocking
+	}
+
+	// Wait for Stop to complete (should happen after emitter delay)
+	select {
+	case <-stopDone:
+		// Good, Stop completed
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not complete within expected time")
+	}
+
+	// Verify the event was actually emitted
+	events := emitter.Events()
+	if len(events) != 1 {
+		t.Errorf("expected 1 emitted event, got %d", len(events))
+	}
+}
+
+// TestExtismSubscriber_Stop_RejectsNewEvents verifies that after Stop is called,
+// HandleEvent does not spawn new goroutines.
+func TestExtismSubscriber_Stop_RejectsNewEvents(t *testing.T) {
+	tracer := noop.NewTracerProvider().Tracer("test")
+	host := wasm.NewExtismHost(tracer)
+	defer func() { _ = host.Close(context.Background()) }()
+
+	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
+	if err != nil {
+		t.Fatalf("LoadPlugin failed: %v", err)
+	}
+
+	emitter := &mockEmitter{}
+	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
+	sub.Subscribe("echo", "location:*")
+
+	// Stop the subscriber before sending events
+	sub.Stop()
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    "location:room1",
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "player1"},
+		Payload:   []byte(`{"message":"Hello"}`),
+	}
+
+	// This should be a no-op since subscriber is stopped
+	sub.HandleEvent(context.Background(), event)
+
+	// Wait briefly and verify no events were emitted
+	time.Sleep(200 * time.Millisecond)
+	if len(emitter.Events()) != 0 {
+		t.Errorf("expected 0 events after Stop, got %d", len(emitter.Events()))
+	}
 }
