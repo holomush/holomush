@@ -176,7 +176,9 @@ func runCore(ctx context.Context, cfg *coreConfig, cmd *cobra.Command) error {
 		if err != nil {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
-			_ = controlGRPCServer.Stop(shutdownCtx)
+			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
+				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
+			}
 			return fmt.Errorf("failed to start observability server: %w", err)
 		}
 		slog.Info("observability server started", "addr", obsServer.Addr())
