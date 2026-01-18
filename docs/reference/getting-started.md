@@ -158,7 +158,7 @@ HoloMUSH follows the XDG Base Directory Specification:
 ### Using Telnet
 
 ```bash
-telnet localhost 4000
+telnet localhost 4201
 ```
 
 You should see:
@@ -287,10 +287,10 @@ Ensure the server is running:
 task dev
 ```
 
-Check if something else is using port 4000:
+Check if something else is using port 4201:
 
 ```bash
-lsof -i :4000
+lsof -i :4201
 ```
 
 ### Tests failing

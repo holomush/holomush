@@ -80,11 +80,14 @@ func runGateway(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Command) err
 		return fmt.Errorf("failed to get certs directory: %w", err)
 	}
 
+	// Extract game_id from CA certificate for proper ServerName verification
+	gameID, err := control.ExtractGameIDFromCA(certsDir)
+	if err != nil {
+		return fmt.Errorf("failed to extract game_id from CA: %w", err)
+	}
+
 	// Load TLS client certificates for mTLS connection to core
-	// Note: We use "localhost" as the expected game ID for now since LoadClientTLS
-	// needs a game ID for server name validation. In production, this would come
-	// from configuration or discovery.
-	tlsConfig, err := tls.LoadClientTLS(certsDir, "gateway", "localhost")
+	tlsConfig, err := tls.LoadClientTLS(certsDir, "gateway", gameID)
 	if err != nil {
 		return fmt.Errorf("failed to load TLS certificates: %w", err)
 	}
