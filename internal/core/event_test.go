@@ -33,6 +33,7 @@ func TestActorKind_String(t *testing.T) {
 		{"character", ActorCharacter, "character"},
 		{"system", ActorSystem, "system"},
 		{"plugin", ActorPlugin, "plugin"},
+		{"unknown", ActorKind(99), "unknown"},
 	}
 
 	for _, tt := range tests {

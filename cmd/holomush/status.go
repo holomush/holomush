@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"text/tabwriter"
 	"time"
 
@@ -173,7 +174,11 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	if err != nil {
 		return NewProcessStatusError(component, fmt.Errorf("failed to connect: %w", err))
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			slog.Debug("error closing gRPC connection", "component", component, "error", closeErr)
+		}
+	}()
 
 	client := controlv1.NewControlClient(conn)
 

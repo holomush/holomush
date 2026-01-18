@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -305,6 +306,64 @@ func TestServer_ErrorChannelClosesOnNormalShutdown(t *testing.T) {
 		// ok=false (closed) or ok=true with err=nil are both acceptable
 	case <-time.After(2 * time.Second):
 		t.Error("timeout waiting for error channel to close")
+	}
+}
+
+func TestServer_ConcurrentStopCalls(t *testing.T) {
+	// This test verifies that Stop() uses CompareAndSwap for atomic state transition.
+	// Multiple concurrent Stop() calls should be safe and idempotent.
+	// Only one Stop() should actually perform the shutdown; others should return nil.
+	server := NewServer("127.0.0.1:0", nil)
+
+	errCh, err := server.Start()
+	if err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+
+	// Drain error channel in background
+	go func() {
+		for range errCh { //nolint:revive // intentional empty block to drain channel
+		}
+	}()
+
+	// Launch multiple concurrent Stop calls
+	const numStoppers = 10
+	var wg sync.WaitGroup
+	wg.Add(numStoppers)
+
+	for i := 0; i < numStoppers; i++ {
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			// All Stop calls should complete without error
+			if err := server.Stop(ctx); err != nil {
+				t.Errorf("Stop should not error: %v", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// After all stops, server should not be running - Start() should succeed
+	errCh2, err := server.Start()
+	if err != nil {
+		t.Fatalf("Start after Stop should succeed: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Stop(ctx)
+	}()
+
+	// Drain error channel
+	go func() {
+		for range errCh2 { //nolint:revive // intentional empty block to drain channel
+		}
+	}()
+
+	if server.Addr() == "" {
+		t.Error("server should be running after Start")
 	}
 }
 

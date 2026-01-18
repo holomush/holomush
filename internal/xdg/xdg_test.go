@@ -170,3 +170,88 @@ func TestEnsureDir_Idempotent(t *testing.T) {
 		t.Fatalf("Second EnsureDir() error = %v", err)
 	}
 }
+
+func TestEnsureDir_Error(t *testing.T) {
+	// Try to create a directory inside a file (should fail)
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "afile")
+
+	// Create a file
+	if err := os.WriteFile(filePath, []byte("content"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Try to create a directory inside that file
+	invalidPath := filepath.Join(filePath, "subdir")
+	err := EnsureDir(invalidPath)
+	if err == nil {
+		t.Error("EnsureDir() expected error, got nil")
+	}
+}
+
+func TestHomeDir_Fallback(t *testing.T) {
+	// Unset HOME to force os.UserHomeDir() fallback
+	t.Setenv("HOME", "")
+
+	// Call homeDir - it should fall back to os.UserHomeDir()
+	// On some systems (macOS), os.UserHomeDir() also needs HOME,
+	// so it may return an error. We're testing both paths.
+	got, err := homeDir()
+	if err != nil {
+		// This is expected on systems where os.UserHomeDir() requires HOME
+		// Verify the error message is properly wrapped
+		if got != "" {
+			t.Errorf("homeDir() returned non-empty string %q with error", got)
+		}
+		return
+	}
+
+	// If no error, we should have a valid path
+	if got == "" {
+		t.Error("homeDir() returned empty string")
+	}
+}
+
+func TestConfigDir_HomeDirError(t *testing.T) {
+	// Clear both HOME and XDG_CONFIG_HOME, then break os.UserHomeDir
+	// by setting HOME to empty on systems that require it
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	// On most test systems, os.UserHomeDir will still work
+	// So we just verify the function doesn't panic
+	_, _ = ConfigDir()
+}
+
+func TestDataDir_HomeDirError(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+
+	// Verify the function doesn't panic
+	_, _ = DataDir()
+}
+
+func TestStateDir_HomeDirError(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+
+	// Verify the function doesn't panic
+	_, _ = StateDir()
+}
+
+func TestRuntimeDir_StateDirError(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "")
+
+	// Verify the function doesn't panic
+	_, _ = RuntimeDir()
+}
+
+func TestCertsDir_ConfigDirError(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+
+	// Verify the function doesn't panic
+	_, _ = CertsDir()
+}

@@ -32,9 +32,9 @@ release:check:
     - goreleaser check
 
 release:snapshot:
-  desc: Build snapshot locally (no publish)
+  desc: Build snapshot locally (no publish, local arch only)
   cmds:
-    - goreleaser release --snapshot --clean
+    - goreleaser build --snapshot --clean --single-target
 ```
 
 ### What's NOT Needed
@@ -66,10 +66,14 @@ release:snapshot:
 
 Core generates TLS certificates on first startup. Gateway needs these certs to establish mTLS connection to Core. Solution:
 
-1. Shared volume (`holomush_config`) mounted at `/config` in both containers
-2. `XDG_CONFIG_HOME=/config` environment variable
+1. Shared volume (`holomush_config`) mounted at `/home/holomush/.config/holomush` in both containers
+2. `HOME=/home/holomush` environment variable (XDG spec: config defaults to `$HOME/.config`)
 3. Core healthcheck verifies readiness before gateway starts
 4. Gateway `depends_on: core: condition: service_healthy`
+
+> **Note:** The implementation uses `HOME` instead of `XDG_CONFIG_HOME` because the XDG spec
+> derives config from `$HOME/.config` when `XDG_CONFIG_HOME` is unset. This is cleaner for
+> containers since it also handles other XDG directories (data, state) correctly.
 
 ### docker-compose.yaml
 
@@ -94,9 +98,9 @@ services:
     command: ["core", "--grpc-addr=0.0.0.0:9000", "--metrics-addr=0.0.0.0:9100"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
-      XDG_CONFIG_HOME: /config
+      HOME: /home/holomush
     volumes:
-      - holomush_config:/config
+      - holomush_config:/home/holomush/.config/holomush
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,9 +120,9 @@ services:
     image: ghcr.io/holomush/holomush:latest
     command: ["gateway", "--core-addr=core:9000", "--metrics-addr=0.0.0.0:9101"]
     environment:
-      XDG_CONFIG_HOME: /config
+      HOME: /home/holomush
     volumes:
-      - holomush_config:/config
+      - holomush_config:/home/holomush/.config/holomush
     ports:
       - "4201:4201"
       - "8080:8080"

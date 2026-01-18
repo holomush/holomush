@@ -87,14 +87,18 @@ func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan err
 }
 
 // Stop gracefully shuts down the control gRPC server.
+// Uses CompareAndSwap to ensure only one concurrent caller performs the stop.
 // The running state is set to false only after GracefulStop completes.
 func (s *GRPCServer) Stop(_ context.Context) error {
+	// Use CompareAndSwap to ensure only one caller performs the stop
+	if !s.running.CompareAndSwap(true, false) {
+		// Already stopped or stopping
+		return nil
+	}
+
 	if s.grpcServer != nil {
 		s.grpcServer.GracefulStop()
 	}
-
-	// Set running to false only after GracefulStop completes to avoid race condition
-	s.running.Store(false)
 
 	return nil
 }

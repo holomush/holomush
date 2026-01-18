@@ -6,6 +6,7 @@ import (
 	cryptotls "crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"testing"
@@ -99,16 +100,16 @@ func (m *mockGRPCClient) Close() error {
 	return nil
 }
 
-// mockListener implements Listener for testing.
+// mockListener implements net.Listener for testing.
 type mockListener struct {
-	acceptFunc func() (Conn, error)
+	acceptFunc func() (net.Conn, error)
 	closeFunc  func() error
-	addrFunc   func() Addr
+	addrFunc   func() net.Addr
 	mu         sync.Mutex
 	closed     bool
 }
 
-func (m *mockListener) Accept() (Conn, error) {
+func (m *mockListener) Accept() (net.Conn, error) {
 	m.mu.Lock()
 	closed := m.closed
 	m.mu.Unlock()
@@ -140,16 +141,20 @@ func (m *mockListener) Close() error {
 	return nil
 }
 
-func (m *mockListener) Addr() Addr {
+func (m *mockListener) Addr() net.Addr {
 	if m.addrFunc != nil {
 		return m.addrFunc()
 	}
 	return &mockAddr{addr: "127.0.0.1:4201"}
 }
 
-// mockAddr implements Addr for testing.
+// mockAddr implements net.Addr for testing.
 type mockAddr struct {
 	addr string
+}
+
+func (m *mockAddr) Network() string {
+	return "tcp"
 }
 
 func (m *mockAddr) String() string {
@@ -626,7 +631,7 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
 			return &mockObservabilityServer{}
 		},
-		ListenerFactory: func(_, _ string) (Listener, error) {
+		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return ml, nil
 		},
 	}
@@ -953,7 +958,7 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 				},
 			}, nil
 		},
-		ListenerFactory: func(_, _ string) (Listener, error) {
+		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return nil, fmt.Errorf("address already in use")
 		},
 	}
@@ -1005,7 +1010,7 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 				},
 			}, nil
 		},
-		ListenerFactory: func(_, _ string) (Listener, error) {
+		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return ml, nil
 		},
 		ObservabilityServerFactory: func(_ string, _ observability.ReadinessChecker) ObservabilityServer {
@@ -1140,7 +1145,7 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 				},
 			}
 		},
-		ListenerFactory: func(_, _ string) (Listener, error) {
+		ListenerFactory: func(_, _ string) (net.Listener, error) {
 			return ml, nil
 		},
 	}

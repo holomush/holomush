@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -358,7 +360,7 @@ func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
 	}
 
 	// Error should mention certificate loading failure
-	if !stringContains(err.Error(), "failed to load server certificate") {
+	if !strings.Contains(err.Error(), "failed to load server certificate") {
 		t.Errorf("error = %q, expected to contain 'failed to load server certificate'", err.Error())
 	}
 }
@@ -398,7 +400,7 @@ not-valid-base64-data-here!!!
 	}
 
 	// Error should mention CA pool failure
-	if !stringContains(err.Error(), "failed to add CA certificate to pool") {
+	if !strings.Contains(err.Error(), "failed to add CA certificate to pool") {
 		t.Errorf("error = %q, expected to contain 'failed to add CA certificate to pool'", err.Error())
 	}
 }
@@ -435,7 +437,7 @@ func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
 	}
 
 	// Error should mention CA pool failure
-	if !stringContains(err.Error(), "failed to add CA certificate to pool") {
+	if !strings.Contains(err.Error(), "failed to add CA certificate to pool") {
 		t.Errorf("error = %q, expected to contain 'failed to add CA certificate to pool'", err.Error())
 	}
 }
@@ -472,20 +474,11 @@ func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
 	}
 
 	// Error should mention CA read failure
-	if !stringContains(err.Error(), "failed to read CA certificate") {
+	if !strings.Contains(err.Error(), "failed to read CA certificate") {
 		t.Errorf("error = %q, expected to contain 'failed to read CA certificate'", err.Error())
 	}
 }
 
-// stringContains checks if s contains substr.
-func stringContains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -1169,6 +1162,82 @@ func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
 	}
 	if errCh2 != nil {
 		t.Error("Second Start() should return nil error channel on failure")
+	}
+}
+
+// TestGRPCServer_Stop_ConcurrentCalls tests that calling Stop() concurrently
+// does not cause a race condition (e55.68).
+func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-concurrent-stop"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	s, err := NewGRPCServer("test", nil)
+	if err != nil {
+		t.Fatalf("NewGRPCServer() error = %v", err)
+	}
+
+	errCh, err := s.Start(addr, tlsConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Call Stop concurrently from multiple goroutines
+	const numCallers = 10
+	var wg sync.WaitGroup
+	wg.Add(numCallers)
+
+	for i := 0; i < numCallers; i++ {
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = s.Stop(ctx)
+		}()
+	}
+
+	wg.Wait()
+
+	// After all Stop calls complete, running should be false
+	if s.running.Load() {
+		t.Error("server should not be running after concurrent Stop() calls")
+	}
+
+	// Drain error channel
+	select {
+	case <-errCh:
+	case <-time.After(2 * time.Second):
+		t.Error("error channel should have received value after Stop()")
 	}
 }
 

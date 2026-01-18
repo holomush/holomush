@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"net"
 
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -74,7 +75,7 @@ type GatewayDeps struct {
 
 	// ListenerFactory creates a network listener.
 	// Default: net.Listen
-	ListenerFactory func(network, address string) (Listener, error)
+	ListenerFactory func(network, address string) (net.Listener, error)
 }
 
 // EventStore interface wraps the methods used by core from store.PostgresEventStore.
@@ -99,23 +100,5 @@ type ObservabilityServer interface {
 // GRPCClient interface wraps the methods used from holoGRPC.Client.
 type GRPCClient interface {
 	Close() error
-}
-
-// Listener interface wraps net.Listener.
-type Listener interface {
-	Accept() (Conn, error)
-	Close() error
-	Addr() Addr
-}
-
-// Conn interface wraps net.Conn methods used by gateway.
-type Conn interface {
-	Close() error
-	Write(b []byte) (n int, err error)
-}
-
-// Addr interface wraps net.Addr.
-type Addr interface {
-	String() string
 }
 

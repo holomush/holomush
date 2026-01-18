@@ -123,3 +123,70 @@ func TestSessionManager_GetConnections_DefensiveCopy(t *testing.T) {
 		t.Errorf("Expected modified slice to have 2 connections, got %d", len(conns))
 	}
 }
+
+func TestSessionManager_Disconnect_NonExistentSession(_ *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+
+	// Disconnect from non-existent session should not panic
+	sm.Disconnect(charID, connID)
+	// No assertion - just verify no panic occurs
+}
+
+func TestSessionManager_Disconnect_NonExistentConnection(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+	otherConnID := NewULID()
+
+	// Create session with one connection
+	sm.Connect(charID, connID)
+
+	// Disconnect a different connection that doesn't exist
+	sm.Disconnect(charID, otherConnID)
+
+	// Original connection should still be there
+	session := sm.GetSession(charID)
+	if len(session.Connections) != 1 {
+		t.Errorf("Expected 1 connection, got %d", len(session.Connections))
+	}
+	if session.Connections[0] != connID {
+		t.Error("Original connection should still exist")
+	}
+}
+
+func TestSessionManager_UpdateCursor_NonExistentSession(_ *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	eventID := NewULID()
+
+	// UpdateCursor for non-existent session should not panic
+	sm.UpdateCursor(charID, "location:test", eventID)
+	// No assertion - just verify no panic occurs
+}
+
+func TestSessionManager_GetSession_NonExistent(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+
+	session := sm.GetSession(charID)
+	if session != nil {
+		t.Error("Expected nil for non-existent session")
+	}
+}
+
+func TestSessionManager_GetConnections_NonExistent(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+
+	conns := sm.GetConnections(charID)
+	if conns != nil {
+		t.Error("Expected nil for non-existent session")
+	}
+}

@@ -194,7 +194,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		if err != nil {
 			return fmt.Errorf("failed to listen on %s: %w", cfg.grpcAddr, err)
 		}
-		defer func() { _ = listener.Close() }()
+		defer func() {
+			if closeErr := listener.Close(); closeErr != nil {
+				slog.Debug("error closing gRPC listener", "error", closeErr)
+			}
+		}()
 
 		slog.Info("gRPC server listening", "addr", cfg.grpcAddr)
 	}

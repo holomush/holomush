@@ -64,10 +64,10 @@ docker run -d --name holomush-db \
   -e POSTGRES_USER=holomush \
   -e POSTGRES_PASSWORD=secret \
   -p 5432:5432 \
-  postgres:16
+  postgres:18-alpine
 
 # Terminal 2: Start Core
-./holomush core --database-url="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable"
+DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable" ./holomush core
 
 # Terminal 3: Start Gateway
 ./holomush gateway
@@ -79,7 +79,7 @@ For development with human-readable logs:
 
 ```bash
 # Start Core with text logging
-./holomush core --database-url="..." --log-format=text
+DATABASE_URL="..." ./holomush core --log-format=text
 
 # Start Gateway with text logging
 ./holomush gateway --log-format=text
@@ -95,13 +95,13 @@ For development with human-readable logs:
 
 **Core Flags:**
 
-| Flag             | Description                  | Default            |
-| ---------------- | ---------------------------- | ------------------ |
-| `--grpc-addr`    | gRPC listen address          | `localhost:9000`   |
-| `--control-addr` | Control gRPC listen address  | `127.0.0.1:9001`   |
-| `--metrics-addr` | Metrics HTTP listen address  | `127.0.0.1:9100`   |
-| `--database-url` | PostgreSQL connection string | (required via env) |
-| `--log-format`   | Log format: `json` or `text` | `json`             |
+| Flag             | Description                  | Default          |
+| ---------------- | ---------------------------- | ---------------- |
+| `--grpc-addr`    | gRPC listen address          | `localhost:9000` |
+| `--control-addr` | Control gRPC listen address  | `127.0.0.1:9001` |
+| `--metrics-addr` | Metrics HTTP listen address  | `127.0.0.1:9100` |
+| `--data-dir`     | Data directory               | XDG_DATA_HOME    |
+| `--log-format`   | Log format: `json` or `text` | `json`           |
 
 ### Gateway Commands
 
@@ -150,6 +150,7 @@ HoloMUSH follows the XDG Base Directory Specification:
 
 | Variable          | Description                                          |
 | ----------------- | ---------------------------------------------------- |
+| `DATABASE_URL`    | PostgreSQL connection string (required for core)     |
 | `XDG_CONFIG_HOME` | Override config directory (default: `~/.config`)     |
 | `XDG_STATE_HOME`  | Override state directory (default: `~/.local/state`) |
 

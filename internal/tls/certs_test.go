@@ -1008,3 +1008,417 @@ func containsAny(s string, substrings []string) bool {
 	}
 	return false
 }
+
+// =============================================================================
+// Additional Coverage Tests (e55.69)
+// =============================================================================
+
+func TestLoadCA_InvalidCertPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create valid key but invalid cert PEM
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	keyBytes, _ := x509.MarshalECPrivateKey(key)
+
+	certPath := filepath.Join(tmpDir, "root-ca.crt")
+	keyPath := filepath.Join(tmpDir, "root-ca.key")
+
+	// Write invalid cert (not valid PEM)
+	if err := os.WriteFile(certPath, []byte("not valid pem data"), 0o600); err != nil {
+		t.Fatalf("Failed to write invalid cert: %v", err)
+	}
+
+	// Write valid key
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write key: %v", err)
+	}
+
+	_, err := LoadCA(tmpDir)
+	if err == nil {
+		t.Error("LoadCA() should return error for invalid cert PEM")
+	}
+	if !strings.Contains(err.Error(), "decode CA certificate PEM") {
+		t.Errorf("Error should mention PEM decode failure, got: %v", err)
+	}
+}
+
+func TestLoadCA_InvalidKeyPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game"
+
+	// Generate valid CA first to get valid cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	certPath := filepath.Join(tmpDir, "root-ca.crt")
+	keyPath := filepath.Join(tmpDir, "root-ca.key")
+
+	// Write valid cert
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Certificate.Raw})
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write cert: %v", err)
+	}
+
+	// Write invalid key (not valid PEM)
+	if err := os.WriteFile(keyPath, []byte("not valid pem data"), 0o600); err != nil {
+		t.Fatalf("Failed to write key: %v", err)
+	}
+
+	_, err = LoadCA(tmpDir)
+	if err == nil {
+		t.Error("LoadCA() should return error for invalid key PEM")
+	}
+	if !strings.Contains(err.Error(), "decode CA key PEM") {
+		t.Errorf("Error should mention key PEM decode failure, got: %v", err)
+	}
+}
+
+func TestLoadCA_InvalidCertificateData(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	certPath := filepath.Join(tmpDir, "root-ca.crt")
+	keyPath := filepath.Join(tmpDir, "root-ca.key")
+
+	// Write valid PEM but invalid certificate data
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("invalid cert data")})
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write cert: %v", err)
+	}
+
+	// Write valid key PEM but invalid key data
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: []byte("invalid key data")})
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write key: %v", err)
+	}
+
+	_, err := LoadCA(tmpDir)
+	if err == nil {
+		t.Error("LoadCA() should return error for invalid certificate data")
+	}
+	if !strings.Contains(err.Error(), "parse CA certificate") {
+		t.Errorf("Error should mention certificate parse failure, got: %v", err)
+	}
+}
+
+func TestLoadCA_InvalidKeyData(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game"
+
+	// Generate valid CA first to get valid cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	certPath := filepath.Join(tmpDir, "root-ca.crt")
+	keyPath := filepath.Join(tmpDir, "root-ca.key")
+
+	// Write valid cert PEM
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Certificate.Raw})
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write cert: %v", err)
+	}
+
+	// Write valid PEM but invalid key data
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: []byte("invalid key data")})
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write key: %v", err)
+	}
+
+	_, err = LoadCA(tmpDir)
+	if err == nil {
+		t.Error("LoadCA() should return error for invalid key data")
+	}
+	if !strings.Contains(err.Error(), "parse CA key") {
+		t.Errorf("Error should mention key parse failure, got: %v", err)
+	}
+}
+
+func TestLoadServerTLS_InvalidCAPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game"
+
+	// Generate and save valid server cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Save server cert
+	if err := saveCert(filepath.Join(tmpDir, "core.crt"), serverCert.Certificate); err != nil {
+		t.Fatalf("saveCert() error = %v", err)
+	}
+	if err := saveKey(filepath.Join(tmpDir, "core.key"), serverCert.PrivateKey); err != nil {
+		t.Fatalf("saveKey() error = %v", err)
+	}
+
+	// Write invalid CA (valid PEM but not a certificate)
+	invalidCAPEM := pem.EncodeToMemory(&pem.Block{Type: "JUNK", Bytes: []byte("not a certificate")})
+	if err := os.WriteFile(filepath.Join(tmpDir, "root-ca.crt"), invalidCAPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write invalid CA: %v", err)
+	}
+
+	_, err = LoadServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Error("LoadServerTLS() should return error for invalid CA PEM")
+	}
+	if !strings.Contains(err.Error(), "failed to add CA certificate") {
+		t.Errorf("Error should mention CA certificate pool failure, got: %v", err)
+	}
+}
+
+func TestLoadClientTLS_InvalidCAPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game"
+
+	// Generate and save valid client cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	// Save client cert
+	if err := saveCert(filepath.Join(tmpDir, "gateway.crt"), clientCert.Certificate); err != nil {
+		t.Fatalf("saveCert() error = %v", err)
+	}
+	if err := saveKey(filepath.Join(tmpDir, "gateway.key"), clientCert.PrivateKey); err != nil {
+		t.Fatalf("saveKey() error = %v", err)
+	}
+
+	// Write invalid CA (valid PEM but not a certificate)
+	invalidCAPEM := pem.EncodeToMemory(&pem.Block{Type: "JUNK", Bytes: []byte("not a certificate")})
+	if err := os.WriteFile(filepath.Join(tmpDir, "root-ca.crt"), invalidCAPEM, 0o600); err != nil {
+		t.Fatalf("Failed to write invalid CA: %v", err)
+	}
+
+	_, err = LoadClientTLS(tmpDir, "gateway", gameID)
+	if err == nil {
+		t.Error("LoadClientTLS() should return error for invalid CA PEM")
+	}
+	if !strings.Contains(err.Error(), "failed to add CA certificate") {
+		t.Errorf("Error should mention CA certificate pool failure, got: %v", err)
+	}
+}
+
+func TestLoadServerTLS_MissingCAFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game"
+
+	// Generate and save valid server cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Save server cert but NOT CA
+	if err := saveCert(filepath.Join(tmpDir, "core.crt"), serverCert.Certificate); err != nil {
+		t.Fatalf("saveCert() error = %v", err)
+	}
+	if err := saveKey(filepath.Join(tmpDir, "core.key"), serverCert.PrivateKey); err != nil {
+		t.Fatalf("saveKey() error = %v", err)
+	}
+
+	_, err = LoadServerTLS(tmpDir, "core")
+	if err == nil {
+		t.Error("LoadServerTLS() should return error for missing CA file")
+	}
+	if !strings.Contains(err.Error(), "read CA certificate") {
+		t.Errorf("Error should mention reading CA certificate, got: %v", err)
+	}
+}
+
+func TestLoadClientTLS_MissingCAFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	gameID := "test-game"
+
+	// Generate and save valid client cert
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	clientCert, err := GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("GenerateClientCert() error = %v", err)
+	}
+
+	// Save client cert but NOT CA
+	if err := saveCert(filepath.Join(tmpDir, "gateway.crt"), clientCert.Certificate); err != nil {
+		t.Fatalf("saveCert() error = %v", err)
+	}
+	if err := saveKey(filepath.Join(tmpDir, "gateway.key"), clientCert.PrivateKey); err != nil {
+		t.Fatalf("saveKey() error = %v", err)
+	}
+
+	_, err = LoadClientTLS(tmpDir, "gateway", gameID)
+	if err == nil {
+		t.Error("LoadClientTLS() should return error for missing CA file")
+	}
+	if !strings.Contains(err.Error(), "read CA certificate") {
+		t.Errorf("Error should mention reading CA certificate, got: %v", err)
+	}
+}
+
+func TestValidateCertificateChain_NilCert(t *testing.T) {
+	gameID := "test-game"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	err = ValidateCertificateChain(nil, ca.Certificate)
+	if err == nil {
+		t.Error("ValidateCertificateChain() should return error for nil cert")
+	}
+	if !strings.Contains(err.Error(), "certificate is nil") {
+		t.Errorf("Error should mention nil certificate, got: %v", err)
+	}
+}
+
+func TestValidateCertificateChain_NilCA(t *testing.T) {
+	gameID := "test-game"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	err = ValidateCertificateChain(serverCert.Certificate, nil)
+	if err == nil {
+		t.Error("ValidateCertificateChain() should return error for nil CA")
+	}
+	if !strings.Contains(err.Error(), "CA certificate is nil") {
+		t.Errorf("Error should mention nil CA certificate, got: %v", err)
+	}
+}
+
+func TestValidateHostname_NilCert(t *testing.T) {
+	err := ValidateHostname(nil, "localhost")
+	if err == nil {
+		t.Error("ValidateHostname() should return error for nil cert")
+	}
+	if !strings.Contains(err.Error(), "certificate is nil") {
+		t.Errorf("Error should mention nil certificate, got: %v", err)
+	}
+}
+
+func TestValidateHostname_IPAddress(t *testing.T) {
+	gameID := "test-game"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	serverCert, err := GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("GenerateServerCert() error = %v", err)
+	}
+
+	// Test with valid IP (127.0.0.1 is in the cert's IPAddresses)
+	err = ValidateHostname(serverCert.Certificate, "127.0.0.1")
+	if err != nil {
+		t.Errorf("ValidateHostname() should accept 127.0.0.1, got: %v", err)
+	}
+
+	// Test with invalid IP
+	err = ValidateHostname(serverCert.Certificate, "192.168.1.1")
+	if err == nil {
+		t.Error("ValidateHostname() should reject 192.168.1.1")
+	}
+}
+
+func TestValidateExtKeyUsage_NilCert(t *testing.T) {
+	err := ValidateExtKeyUsage(nil, x509.ExtKeyUsageServerAuth)
+	if err == nil {
+		t.Error("ValidateExtKeyUsage() should return error for nil cert")
+	}
+	if !strings.Contains(err.Error(), "certificate is nil") {
+		t.Errorf("Error should mention nil certificate, got: %v", err)
+	}
+}
+
+func TestCheckCertificateExpiration_NotYetValid(t *testing.T) {
+	gameID := "test-game"
+
+	ca, err := GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("GenerateCA() error = %v", err)
+	}
+
+	// Generate a certificate that is not yet valid
+	cert, err := generateNotYetValidCert(ca, gameID, "future")
+	if err != nil {
+		t.Fatalf("generateNotYetValidCert() error = %v", err)
+	}
+
+	status := CheckCertificateExpiration(cert.Certificate, 30*24*time.Hour)
+	if status.Error == nil {
+		t.Error("Expected error for not-yet-valid certificate")
+	}
+	if !strings.Contains(status.Error.Error(), "not yet valid") {
+		t.Errorf("Error should mention 'not yet valid', got: %v", status.Error)
+	}
+}
+
+// generateNotYetValidCert creates a certificate that is not yet valid.
+func generateNotYetValidCert(ca *CA, gameID, name string) (*ServerCert, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial: %w", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{"HoloMUSH"},
+			CommonName:   "holomush-" + name,
+		},
+		NotBefore:   time.Now().Add(24 * time.Hour),  // Starts tomorrow
+		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:    []string{"localhost", "holomush-" + gameID},
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &key.PublicKey, ca.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	return &ServerCert{Certificate: cert, PrivateKey: key, Name: name}, nil
+}

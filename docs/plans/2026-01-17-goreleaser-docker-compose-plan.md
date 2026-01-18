@@ -34,9 +34,9 @@ Add after `release:check`:
 
 ```yaml
 release:snapshot:
-  desc: Build snapshot locally (no publish)
+  desc: Build snapshot locally (no publish, local arch only)
   cmds:
-    - goreleaser release --snapshot --clean
+    - goreleaser build --snapshot --clean --single-target
 ```
 
 **Step 3: Verify goreleaser check works**
@@ -96,9 +96,9 @@ services:
     command: ["core", "--grpc-addr=0.0.0.0:9000", "--metrics-addr=0.0.0.0:9100"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
-      XDG_CONFIG_HOME: /config
+      HOME: /home/holomush
     volumes:
-      - holomush_config:/config
+      - holomush_config:/home/holomush/.config/holomush
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,9 +118,9 @@ services:
     image: ghcr.io/holomush/holomush:latest
     command: ["gateway", "--core-addr=core:9000", "--metrics-addr=0.0.0.0:9101"]
     environment:
-      XDG_CONFIG_HOME: /config
+      HOME: /home/holomush
     volumes:
-      - holomush_config:/config
+      - holomush_config:/home/holomush/.config/holomush
     ports:
       - "4201:4201"
       - "8080:8080"

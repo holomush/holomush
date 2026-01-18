@@ -137,17 +137,21 @@ func (s *Server) Start() (<-chan error, error) {
 
 // Stop gracefully shuts down the observability server.
 func (s *Server) Stop(ctx context.Context) error {
-	if !s.running.Load() {
+	// Use CompareAndSwap to atomically transition from running to stopped.
+	// This prevents a race where a concurrent Start() could succeed between
+	// checking the running state and setting it to false.
+	if !s.running.CompareAndSwap(true, false) {
 		return nil
 	}
 
 	if s.httpServer != nil {
 		if err := s.httpServer.Shutdown(ctx); err != nil {
+			// Restore running state on failure so the server can be stopped again
+			s.running.Store(true)
 			return fmt.Errorf("failed to shutdown observability server: %w", err)
 		}
 	}
 
-	s.running.Store(false)
 	slog.Info("observability server stopped")
 	return nil
 }

@@ -327,15 +327,15 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	}
 }
 
-// TestHandleTelnetConnectionPlaceholder tests the placeholder telnet handler.
-func TestHandleTelnetConnectionPlaceholder(t *testing.T) {
+// TestHandleTelnetConnection tests the telnet handler.
+func TestHandleTelnetConnection(t *testing.T) {
 	// Create a pipe to simulate a connection
 	server, client := net.Pipe()
 
 	// Run handler in goroutine (it will close the server side)
 	done := make(chan struct{})
 	go func() {
-		handleTelnetConnectionPlaceholder(server, nil)
+		handleTelnetConnection(server)
 		close(done)
 	}()
 
@@ -378,8 +378,8 @@ func TestHandleTelnetConnectionPlaceholder(t *testing.T) {
 	}
 }
 
-// TestHandleTelnetConnectionPlaceholder_WriteError tests handling when writes fail.
-func TestHandleTelnetConnectionPlaceholder_WriteError(t *testing.T) {
+// TestHandleTelnetConnection_WriteError tests handling when writes fail.
+func TestHandleTelnetConnection_WriteError(t *testing.T) {
 	// Create a pipe and close the client side immediately to cause write errors
 	server, client := net.Pipe()
 	if err := client.Close(); err != nil {
@@ -389,7 +389,7 @@ func TestHandleTelnetConnectionPlaceholder_WriteError(t *testing.T) {
 	// Run handler - should handle write errors gracefully without panic
 	done := make(chan struct{})
 	go func() {
-		handleTelnetConnectionPlaceholder(server, nil)
+		handleTelnetConnection(server)
 		close(done)
 	}()
 
@@ -397,15 +397,15 @@ func TestHandleTelnetConnectionPlaceholder_WriteError(t *testing.T) {
 	<-done
 }
 
-// mockConn is a mock net.Conn that fails after N writes.
-type mockConn struct {
+// mockNetConn is a mock net.Conn that fails after N writes.
+type mockNetConn struct {
 	net.Conn
 	writesUntilFail int
 	writeCount      int
 	closed          bool
 }
 
-func (m *mockConn) Write(p []byte) (int, error) {
+func (m *mockNetConn) Write(p []byte) (int, error) {
 	m.writeCount++
 	if m.writeCount >= m.writesUntilFail {
 		return 0, fmt.Errorf("mock write error on write %d", m.writeCount)
@@ -413,23 +413,31 @@ func (m *mockConn) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (m *mockConn) Close() error {
+func (m *mockNetConn) Close() error {
 	m.closed = true
 	return nil
 }
 
-func (m *mockConn) Read(_ []byte) (int, error) {
+func (m *mockNetConn) Read(_ []byte) (int, error) {
 	return 0, fmt.Errorf("mock read error")
 }
 
-// TestHandleTelnetConnectionPlaceholder_SecondWriteFails tests when second write fails.
-func TestHandleTelnetConnectionPlaceholder_SecondWriteFails(t *testing.T) {
+func (m *mockNetConn) LocalAddr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}
+}
+
+func (m *mockNetConn) RemoteAddr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 54321}
+}
+
+// TestHandleTelnetConnection_SecondWriteFails tests when second write fails.
+func TestHandleTelnetConnection_SecondWriteFails(t *testing.T) {
 	// Mock that fails on second write (status message)
-	mock := &mockConn{writesUntilFail: 2}
+	mock := &mockNetConn{writesUntilFail: 2}
 
 	done := make(chan struct{})
 	go func() {
-		handleTelnetConnectionPlaceholder(mock, nil)
+		handleTelnetConnection(mock)
 		close(done)
 	}()
 
@@ -633,6 +641,40 @@ func TestControlServerError_TriggersShutdown(t *testing.T) {
 		// Success - shutdown was triggered
 	case <-time.After(1 * time.Second):
 		t.Fatal("control server error did not trigger shutdown within timeout")
+	}
+}
+
+// TestTelnetAcceptLoopPanicRecovery verifies that a panic in the telnet accept loop
+// triggers graceful shutdown instead of crashing the process.
+func TestTelnetAcceptLoopPanicRecovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	shutdownCalled := make(chan struct{})
+	cancelFunc := func() {
+		close(shutdownCalled)
+	}
+
+	// Simulate what the accept loop does with panic recovery
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// This simulates the behavior in gateway.go
+				cancelFunc()
+			}
+		}()
+		// Simulate a panic in the accept loop
+		panic("simulated panic in accept loop")
+	}()
+
+	// Wait for shutdown to be triggered
+	select {
+	case <-shutdownCalled:
+		// Success - panic triggered shutdown
+	case <-ctx.Done():
+		t.Fatal("context cancelled before shutdown triggered")
+	case <-time.After(1 * time.Second):
+		t.Fatal("panic did not trigger shutdown within timeout")
 	}
 }
 

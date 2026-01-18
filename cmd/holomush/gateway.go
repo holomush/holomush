@@ -113,13 +113,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		}
 	}
 	if deps.ListenerFactory == nil {
-		deps.ListenerFactory = func(network, address string) (Listener, error) {
-			l, err := net.Listen(network, address)
-			if err != nil {
-				return nil, fmt.Errorf("net.Listen failed: %w", err)
-			}
-			return &netListenerAdapter{l}, nil
-		}
+		deps.ListenerFactory = net.Listen
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -236,6 +230,15 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 
 	// Start accepting telnet connections in goroutine
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in telnet accept loop, triggering shutdown",
+					"panic", r,
+				)
+				cancel()
+			}
+		}()
+
 		for {
 			conn, acceptErr := telnetListener.Accept()
 			if acceptErr != nil {
@@ -249,7 +252,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 			}
 			// For now, just close the connection with a message.
 			// A future task will implement proper gRPC-based handling.
-			go handleTelnetConnectionPlaceholderWithConn(conn)
+			go handleTelnetConnection(conn)
 		}
 	}()
 
@@ -294,34 +297,9 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	return nil
 }
 
-// netListenerAdapter wraps net.Listener to implement our Listener interface.
-type netListenerAdapter struct {
-	net.Listener
-}
-
-// Accept wraps net.Listener.Accept to return our Conn interface.
-func (a *netListenerAdapter) Accept() (Conn, error) {
-	conn, err := a.Listener.Accept()
-	if err != nil {
-		return nil, fmt.Errorf("accept failed: %w", err)
-	}
-	return conn, nil
-}
-
-// Addr wraps net.Listener.Addr to return our Addr interface.
-func (a *netListenerAdapter) Addr() Addr {
-	return a.Listener.Addr()
-}
-
-// handleTelnetConnectionPlaceholder handles a telnet connection.
+// handleTelnetConnection handles a telnet connection.
 // This is a placeholder until the gRPC-based telnet handler is implemented.
-func handleTelnetConnectionPlaceholder(conn net.Conn, _ *holoGRPC.Client) {
-	handleTelnetConnectionPlaceholderWithConn(conn)
-}
-
-// handleTelnetConnectionPlaceholderWithConn handles a telnet connection using the Conn interface.
-// This is a placeholder until the gRPC-based telnet handler is implemented.
-func handleTelnetConnectionPlaceholderWithConn(conn Conn) {
+func handleTelnetConnection(conn net.Conn) {
 	defer func() {
 		if err := conn.Close(); err != nil {
 			slog.Debug("error closing telnet connection", "error", err)
@@ -329,31 +307,17 @@ func handleTelnetConnectionPlaceholderWithConn(conn Conn) {
 	}()
 
 	// Send a welcome message indicating the gateway is running but not fully implemented
-	_, err := fmt.Fprintln(writerAdapter{conn}, "Welcome to HoloMUSH Gateway!")
+	_, err := fmt.Fprintln(conn, "Welcome to HoloMUSH Gateway!")
 	if err != nil {
 		slog.Debug("failed to send welcome message", "error", err)
 		return
 	}
-	_, err = fmt.Fprintln(writerAdapter{conn}, "Gateway is connected to core but telnet handler is pending implementation.")
+	_, err = fmt.Fprintln(conn, "Gateway is connected to core but telnet handler is pending implementation.")
 	if err != nil {
 		slog.Debug("failed to send status message", "error", err)
 		return
 	}
 	// Error intentionally ignored: connection closes immediately after, so logging
 	// a write failure here would be noise (client may have already disconnected).
-	_, _ = fmt.Fprintln(writerAdapter{conn}, "Disconnecting...")
-}
-
-// writerAdapter wraps a Conn to implement io.Writer for fmt.Fprintln.
-type writerAdapter struct {
-	Conn
-}
-
-// Write implements io.Writer.
-func (w writerAdapter) Write(p []byte) (n int, err error) {
-	n, err = w.Conn.Write(p)
-	if err != nil {
-		return n, fmt.Errorf("write failed: %w", err)
-	}
-	return n, nil
+	_, _ = fmt.Fprintln(conn, "Disconnecting...")
 }
