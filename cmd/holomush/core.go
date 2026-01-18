@@ -258,13 +258,27 @@ func setupLogging(format string) error {
 
 // ensureTLSCerts generates or loads TLS certificates.
 func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
-	// Try to load existing certificates
-	existingConfig, err := tls.LoadServerTLS(certsDir, "core")
-	if err == nil {
+	// Check if certificate files exist
+	certPath := certsDir + "/core.crt"
+	keyPath := certsDir + "/core.key"
+	caPath := certsDir + "/root-ca.crt"
+
+	certExists := fileExists(certPath)
+	keyExists := fileExists(keyPath)
+	caExists := fileExists(caPath)
+
+	// If any certificate files exist, try to load them
+	// If loading fails (corruption, permission issues, etc.), return the error
+	// rather than silently regenerating certificates
+	if certExists || keyExists || caExists {
+		existingConfig, err := tls.LoadServerTLS(certsDir, "core")
+		if err != nil {
+			return nil, fmt.Errorf("failed to load existing TLS certificates: %w", err)
+		}
 		return existingConfig, nil
 	}
 
-	// Certificates don't exist, generate new ones
+	// No certificate files exist, generate new ones
 	slog.Info("generating TLS certificates", "certs_dir", certsDir)
 
 	// Ensure directory exists
@@ -307,4 +321,12 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 		return nil, fmt.Errorf("failed to load generated certificates: %w", err)
 	}
 	return config, nil
+}
+
+// fileExists returns true if the file exists, false otherwise.
+// Permission errors are treated as "file exists" to avoid silently
+// overwriting files we can't read.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil || !os.IsNotExist(err)
 }

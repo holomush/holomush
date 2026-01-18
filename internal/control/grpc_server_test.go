@@ -2,13 +2,17 @@ package control
 
 import (
 	"context"
+	cryptotls "crypto/tls"
+	"crypto/x509"
 	"net"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
@@ -439,6 +443,48 @@ func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
 	}
 }
 
+// TestGRPCServer_Start_FailsOnInvalidAddress tests that Start() returns an error
+// when the address is invalid or already in use.
+func TestGRPCServer_Start_FailsOnInvalidAddress(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate valid certificates
+	gameID := "test-listen-fail"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save certs: %v", err)
+	}
+
+	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load TLS config: %v", err)
+	}
+
+	s := NewGRPCServer("test", nil)
+
+	// Try to start on an invalid address
+	errCh, err := s.Start("invalid-address:99999999", tlsConfig)
+	if err == nil {
+		t.Error("Start() should fail with invalid address")
+		// Clean up if it somehow succeeded
+		if errCh != nil {
+			_ = s.Stop(context.Background())
+		}
+	}
+	if errCh != nil {
+		t.Error("Start() should return nil error channel on failure")
+	}
+}
+
 // TestGRPCServer_Start_ReturnsErrorChannel tests that Start() returns an error channel
 // that can be used to detect server failures.
 func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
@@ -559,6 +605,226 @@ func TestGRPCServer_Start_PropagatesServerError(t *testing.T) {
 		t.Logf("received from error channel: %v", err)
 	case <-time.After(2 * time.Second):
 		t.Error("expected to receive from error channel after listener closed")
+	}
+}
+
+// TestGRPCServer_Integration_mTLS tests full end-to-end mTLS handshake between
+// client and server using generated certificates.
+func TestGRPCServer_Integration_mTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate CA and certificates
+	gameID := "mtls-integration-test"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	clientCert, err := tls.GenerateClientCert(ca, "gateway")
+	if err != nil {
+		t.Fatalf("failed to generate client cert: %v", err)
+	}
+
+	// Save certificates
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save server certs: %v", err)
+	}
+	if err := tls.SaveClientCert(tmpDir, clientCert); err != nil {
+		t.Fatalf("failed to save client cert: %v", err)
+	}
+
+	// Load TLS configs
+	serverTLSConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load server TLS config: %v", err)
+	}
+
+	clientTLSConfig, err := LoadControlClientTLS(tmpDir, "gateway", gameID)
+	if err != nil {
+		t.Fatalf("failed to load client TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	// Start server with mTLS
+	var shutdownCalled atomic.Bool
+	s := NewGRPCServer("core", func() {
+		shutdownCalled.Store(true)
+	})
+
+	errCh, err := s.Start(addr, serverTLSConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Stop(ctx)
+		// Drain error channel
+		<-errCh
+	}()
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Connect client with mTLS
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(credentials.NewTLS(clientTLSConfig)))
+	if err != nil {
+		t.Fatalf("failed to create gRPC client: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	client := controlv1.NewControlClient(conn)
+
+	t.Run("Status_via_mTLS", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		resp, err := client.Status(ctx, &controlv1.StatusRequest{})
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
+
+		if !resp.Running {
+			t.Error("running should be true")
+		}
+
+		if resp.Component != "core" {
+			t.Errorf("component = %q, want %q", resp.Component, "core")
+		}
+
+		if resp.Pid <= 0 {
+			t.Errorf("pid = %d, should be positive", resp.Pid)
+		}
+	})
+
+	t.Run("Shutdown_via_mTLS", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		resp, err := client.Shutdown(ctx, &controlv1.ShutdownRequest{Graceful: true})
+		if err != nil {
+			t.Fatalf("Shutdown() error = %v", err)
+		}
+
+		if resp.Message != "shutdown initiated" {
+			t.Errorf("message = %q, want %q", resp.Message, "shutdown initiated")
+		}
+
+		// Wait for async shutdown callback
+		time.Sleep(50 * time.Millisecond)
+
+		if !shutdownCalled.Load() {
+			t.Error("shutdown callback was not called")
+		}
+	})
+}
+
+// TestGRPCServer_mTLS_RejectsUnauthenticatedClient tests that the server rejects
+// clients that don't present valid client certificates.
+func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Generate CA and server certificate
+	gameID := "mtls-reject-test"
+	ca, err := tls.GenerateCA(gameID)
+	if err != nil {
+		t.Fatalf("failed to generate CA: %v", err)
+	}
+
+	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	if err != nil {
+		t.Fatalf("failed to generate server cert: %v", err)
+	}
+
+	// Save certificates (no client cert saved)
+	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
+		t.Fatalf("failed to save server certs: %v", err)
+	}
+
+	// Load server TLS config
+	serverTLSConfig, err := LoadControlServerTLS(tmpDir, "core")
+	if err != nil {
+		t.Fatalf("failed to load server TLS config: %v", err)
+	}
+
+	// Find available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to find available port: %v", err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	// Start server with mTLS
+	s := NewGRPCServer("core", nil)
+
+	errCh, err := s.Start(addr, serverTLSConfig)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Stop(ctx)
+		// Drain error channel
+		<-errCh
+	}()
+
+	// Give server time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Try to connect without client certificate - should fail
+	// Create a TLS config that trusts the CA but has no client cert
+	//nolint:gosec // G304: tmpDir is from t.TempDir(), safe in tests
+	caCertPEM, err := os.ReadFile(filepath.Join(tmpDir, "root-ca.crt"))
+	if err != nil {
+		t.Fatalf("failed to read CA cert: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCertPEM) {
+		t.Fatal("failed to add CA to pool")
+	}
+
+	noClientCertTLS := &cryptotls.Config{
+		RootCAs:    caPool,
+		ServerName: "holomush-" + gameID,
+		MinVersion: cryptotls.VersionTLS13,
+		// Note: No client certificate
+	}
+
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(credentials.NewTLS(noClientCertTLS)))
+	if err != nil {
+		t.Fatalf("failed to create gRPC client: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	client := controlv1.NewControlClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// This should fail because no client certificate was provided
+	_, err = client.Status(ctx, &controlv1.StatusRequest{})
+	if err == nil {
+		t.Error("expected error when connecting without client certificate, got nil")
+	} else {
+		t.Logf("correctly rejected: %v", err)
 	}
 }
 

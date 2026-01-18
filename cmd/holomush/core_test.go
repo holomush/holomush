@@ -324,6 +324,92 @@ func TestCoreCommand_Help(t *testing.T) {
 	}
 }
 
+// TestEnsureTLSCerts_CorruptedCertFile verifies that ensureTLSCerts returns an error
+// when certificate files exist but are corrupted, rather than silently regenerating.
+// This is a regression test for the bug where any error from LoadServerTLS would
+// trigger regeneration, conflating "file not found" with "file corrupted".
+func TestEnsureTLSCerts_CorruptedCertFile(t *testing.T) {
+	// Create a temp directory for certs
+	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-corrupted-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	gameID := "test-game-id"
+
+	// First, generate valid certs
+	_, err = ensureTLSCerts(tmpDir, gameID)
+	if err != nil {
+		t.Fatalf("Initial ensureTLSCerts() error = %v", err)
+	}
+
+	// Corrupt the server certificate file by writing invalid data
+	corruptedCertPath := tmpDir + "/core.crt"
+	if err := os.WriteFile(corruptedCertPath, []byte("THIS IS NOT A VALID CERTIFICATE"), 0o600); err != nil {
+		t.Fatalf("Failed to corrupt cert file: %v", err)
+	}
+
+	// Now try to load certs again - should return an error, NOT silently regenerate
+	_, err = ensureTLSCerts(tmpDir, gameID)
+	if err == nil {
+		t.Fatal("ensureTLSCerts() should return error for corrupted cert file, not silently regenerate")
+	}
+
+	// The error should mention the certificate issue
+	if !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "load") {
+		t.Errorf("Error should mention certificate/load issue, got: %v", err)
+	}
+}
+
+// TestEnsureTLSCerts_PermissionDenied verifies that ensureTLSCerts returns an error
+// when certificate files exist but are not readable due to permissions.
+func TestEnsureTLSCerts_PermissionDenied(t *testing.T) {
+	// Skip on Windows where file permissions work differently
+	if os.Getenv("GOOS") == "windows" {
+		t.Skip("Skipping permission test on Windows")
+	}
+
+	// Create a temp directory for certs
+	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-perms-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		// Restore permissions before cleanup
+		_ = os.Chmod(tmpDir+"/core.crt", 0o600)
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	gameID := "test-game-id"
+
+	// First, generate valid certs
+	_, err = ensureTLSCerts(tmpDir, gameID)
+	if err != nil {
+		t.Fatalf("Initial ensureTLSCerts() error = %v", err)
+	}
+
+	// Remove read permissions from the cert file
+	certPath := tmpDir + "/core.crt"
+	if err := os.Chmod(certPath, 0o000); err != nil {
+		t.Fatalf("Failed to remove permissions: %v", err)
+	}
+
+	// Now try to load certs again - should return an error, NOT silently regenerate
+	_, err = ensureTLSCerts(tmpDir, gameID)
+	if err == nil {
+		t.Fatal("ensureTLSCerts() should return error for permission denied, not silently regenerate")
+	}
+
+	// The error should mention permission issue
+	if !strings.Contains(err.Error(), "permission") && !strings.Contains(err.Error(), "denied") &&
+		!strings.Contains(err.Error(), "certificate") {
+		t.Errorf("Error should mention permission/denied/certificate issue, got: %v", err)
+	}
+}
+
 // TestListenerCleanupOnFailure verifies that the gRPC listener is properly
 // closed when startup fails after the listener is created.
 // This is a regression test for the resource leak bug where the listener
