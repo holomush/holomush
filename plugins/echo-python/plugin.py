@@ -15,7 +15,7 @@ def handle_event():
     if event.get("type") != "say":
         return
 
-    if event.get("actor_kind") == 2:  # ActorKindPlugin
+    if event.get("actor_kind") == 2:  # 2 = plugin actor (core.ActorPlugin in Go)
         return
 
     # Extract message from payload

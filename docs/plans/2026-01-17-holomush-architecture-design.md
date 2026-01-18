@@ -260,6 +260,10 @@ plugins:
       - world.write.characters # But not char modification
 ```
 
+### Observability
+
+All plugin operations are instrumented with OpenTelemetry spans for tracing and debugging.
+
 ## Access Control (ABAC)
 
 Attribute-Based Access Control applies across the system - plugins, players, characters, objects.

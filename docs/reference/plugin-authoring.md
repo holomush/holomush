@@ -180,6 +180,33 @@ Plugins subscribe to events using stream patterns:
 | `global:*`       | All global events             |
 | `character:*`    | All character-specific events |
 
+### Pattern Matching Rules
+
+The `*` wildcard matches any sequence of characters (including empty strings):
+
+| Pattern          | Stream           | Matches? | Why                                  |
+| ---------------- | ---------------- | -------- | ------------------------------------ |
+| `*`              | `location:room1` | Yes      | Single `*` matches everything        |
+| `*`              | `global:chat`    | Yes      | Single `*` matches everything        |
+| `*`              | (empty)          | Yes      | Single `*` matches empty strings too |
+| `location:*`     | `location:room1` | Yes      | `*` matches `room1`                  |
+| `location:*`     | `location:`      | Yes      | `*` matches empty string after `:`   |
+| `location:room1` | `location:room1` | Yes      | Exact match                          |
+| `location:room1` | `location:room2` | No       | No wildcard, requires exact match    |
+| (empty)          | (empty)          | Yes      | Empty pattern matches empty stream   |
+| (empty)          | `location:room1` | No       | Empty pattern only matches empty     |
+
+### Edge Cases
+
+**Single `*` pattern**: Matches all streams, including empty streams. Use this when a
+plugin needs to receive every event in the system.
+
+**Empty pattern**: Only matches events with an empty stream name. This is rarely
+useful in practice since most events have stream names.
+
+**Patterns without `*`**: Require an exact match. The pattern `location:room1` only
+matches the stream `location:room1`, not `location:room123` or `location:room1:sub`.
+
 ## Best Practices
 
 ### Avoid Echo Loops

@@ -14,6 +14,7 @@ import (
 	"github.com/holomush/holomush/pkg/plugin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // ErrPluginNotFound is returned when the requested plugin is not loaded.
@@ -27,15 +28,19 @@ type ExtismHost struct {
 	closed  bool
 }
 
-// NewExtismHost creates a new ExtismHost with the provided tracer.
+// NewExtismHost creates a host with OpenTelemetry tracing support.
+// If tracer is nil, a noop tracer is used.
 func NewExtismHost(tracer trace.Tracer) *ExtismHost {
+	if tracer == nil {
+		tracer = noop.NewTracerProvider().Tracer("extism-host")
+	}
 	return &ExtismHost{
 		plugins: make(map[string]*extism.Plugin),
 		tracer:  tracer,
 	}
 }
 
-// LoadPlugin loads a WASM plugin with the given name and binary.
+// LoadPlugin compiles and registers a WASM binary for later invocation.
 func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []byte) error {
 	_, span := h.tracer.Start(ctx, "ExtismHost.LoadPlugin",
 		trace.WithAttributes(attribute.String("plugin.name", name)))
@@ -71,8 +76,7 @@ func (h *ExtismHost) LoadPlugin(ctx context.Context, name string, wasmBytes []by
 	return nil
 }
 
-// HasPlugin returns true if a plugin with the given name is loaded.
-// Returns false if the host has been closed.
+// HasPlugin returns false if the host has been closed.
 func (h *ExtismHost) HasPlugin(name string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -83,7 +87,7 @@ func (h *ExtismHost) HasPlugin(name string) bool {
 	return ok
 }
 
-// Close releases all loaded plugins.
+// Close releases all plugins. Safe to call multiple times.
 func (h *ExtismHost) Close(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -104,7 +108,7 @@ func (h *ExtismHost) Close(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// DeliverEvent sends an event to a plugin and returns any emitted events.
+// DeliverEvent invokes a plugin's handle_event function and returns any emitted events.
 func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event core.Event) ([]plugin.EmitEvent, error) {
 	_, span := h.tracer.Start(ctx, "ExtismHost.DeliverEvent",
 		trace.WithAttributes(
@@ -132,7 +136,7 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 
 	// Check if plugin exports handle_event
 	if !p.FunctionExists("handle_event") {
-		// Plugin doesn't handle events - not an error
+		slog.Debug("plugin lacks handle_event export", "plugin", pluginName)
 		return nil, nil
 	}
 
@@ -152,9 +156,9 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 		return nil, err
 	}
 
-	// Call plugin's handle_event function
-	// Extism handles memory allocation internally
-	_, output, err := p.Call("handle_event", eventJSON)
+	// Call plugin's handle_event function with context for cancellation support.
+	// Extism handles memory allocation internally.
+	_, output, err := p.CallWithContext(ctx, "handle_event", eventJSON)
 	if err != nil {
 		err = fmt.Errorf("plugin call failed: %w", err)
 		span.RecordError(err)
@@ -163,6 +167,7 @@ func (h *ExtismHost) DeliverEvent(ctx context.Context, pluginName string, event 
 
 	// Empty output means no events to emit
 	if len(output) == 0 {
+		slog.Debug("plugin returned empty output", "plugin", pluginName, "event_type", string(event.Type))
 		return nil, nil
 	}
 

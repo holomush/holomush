@@ -18,7 +18,11 @@ import (
 // ErrHostClosed is returned when operations are attempted on a closed PluginHost.
 var ErrHostClosed = fmt.Errorf("plugin host is closed")
 
-// PluginHost manages WASM plugins.
+// PluginHost manages WASM plugins using wazero directly.
+//
+// Deprecated: Use ExtismHost instead. PluginHost is the original wazero-based
+// implementation retained during migration to Extism. ExtismHost provides
+// OpenTelemetry tracing and uses the Extism SDK which handles memory management.
 type PluginHost struct {
 	mu      sync.RWMutex
 	closed  bool
@@ -232,6 +236,9 @@ type EventEmitter interface {
 }
 
 // PluginSubscriber subscribes plugins to event streams and dispatches events.
+//
+// Deprecated: Use ExtismSubscriber instead. This subscriber works with the
+// deprecated PluginHost; see PluginHost deprecation notice for details.
 type PluginSubscriber struct {
 	host        *PluginHost
 	broadcaster *core.Broadcaster
