@@ -285,21 +285,32 @@ bd dep add <a> <b>    # Add dependency
 ## Directory Structure
 
 ```text
+api/                 # Protocol definitions
+  proto/             # Protobuf service definitions
 cmd/holomush/        # Server entry point
-internal/            # Private implementation
-  core/              # Event system, sessions, world engine
-  telnet/            # Telnet protocol adapter
-  web/               # WebSocket adapter (future)
-  store/             # PostgreSQL implementations
-  wasm/              # Plugin host (wazero)
-pkg/                 # Public plugin API
-  plugin/            # Plugin SDK types
-  api/               # Game API for plugins
-plugins/             # Core plugins (WASM)
 docs/
-  specs/             # Specifications
   plans/             # Implementation plans
   reference/         # API documentation
+  specs/             # Specifications
+internal/            # Private implementation
+  control/           # Control plane (admin API)
+  core/              # Event system, sessions, world engine
+  grpc/              # gRPC server implementation
+  logging/           # Structured logging setup
+  observability/     # Metrics and health endpoints
+  proto/             # Generated protobuf code
+  store/             # PostgreSQL implementations
+  telnet/            # Telnet protocol adapter
+  tls/               # TLS certificate management
+  wasm/              # Plugin host (Extism)
+  web/               # WebSocket adapter (future)
+  xdg/               # XDG base directory support
+pkg/                 # Public plugin API
+  plugin/            # Plugin SDK types
+plugins/             # Core plugins (WASM)
+scripts/             # Build and utility scripts
+test/                # Integration tests
+  integration/       # End-to-end test suites
 ```
 
 ## Key Interfaces
