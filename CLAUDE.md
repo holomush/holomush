@@ -84,23 +84,22 @@ bd close <task-id>
 
 ### Code Review Requirement
 
-All tasks MUST be reviewed by a separate agent before completion:
+All tasks MUST be reviewed before completion. See
+[Pull Request Guide](docs/reference/pull-request-guide.md) for the complete workflow.
 
 | Requirement                                | Description                                          |
 | ------------------------------------------ | ---------------------------------------------------- |
 | **MUST** use `pr-review-toolkit:review-pr` | Launch comprehensive review using specialized agents |
 | **MUST** address all findings              | Fix issues or document why not applicable            |
 | **MUST NOT** skip review                   | Even for "simple" changes                            |
-| **SHOULD** review after each logical chunk | Don't batch too many changes                         |
 
-**Review process:**
+**Quick workflow:**
 
 1. Complete implementation and tests
-2. Invoke `pr-review-toolkit:review-pr` skill
-3. Review agent findings across all specialized reviewers
-4. Address each finding (fix or justify skipping)
-5. Re-run review if significant changes were made
-6. Only then mark task complete
+2. Run `task test` and `task lint`
+3. Invoke `/pr-review-toolkit:review-pr`
+4. Address all findings
+5. Create PR or mark task complete
 
 ## Code Conventions
 
