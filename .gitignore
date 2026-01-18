@@ -63,3 +63,4 @@ dist/
 
 # worktrees
 .worktrees/
+.task/

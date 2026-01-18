@@ -57,11 +57,15 @@ tasks:
   # Testing
   test:
     desc: Run all tests
+    deps:
+      - plugin:build
     cmds:
       - go test -race -v ./...
 
   test:coverage:
     desc: Run tests with coverage
+    deps:
+      - plugin:build
     cmds:
       - go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - go tool cover -html=coverage.out -o coverage.html
@@ -73,6 +77,8 @@ tasks:
 
   test:integration:
     desc: Run integration tests (requires Docker)
+    deps:
+      - plugin:build
     cmds:
       - go test -race -v -tags=integration ./...
 
@@ -143,9 +149,20 @@ tasks:
   # Plugins
   plugin:build:
     desc: Build all WASM plugins
-    dir: plugins
     cmds:
-      - echo "Plugin build not yet implemented"
+      - task: plugin:build:echo-python
+
+  plugin:build:echo-python:
+    desc: Build Python echo plugin to WASM
+    dir: plugins/echo-python
+    cmds:
+      - extism-py plugin.py -o echo.wasm
+      - cp echo.wasm ../../internal/wasm/testdata/echo.wasm
+    sources:
+      - plugin.py
+    generates:
+      - echo.wasm
+      - ../../internal/wasm/testdata/echo.wasm
 
   # Documentation
   spec:
@@ -204,13 +221,23 @@ tasks:
       - rm -rf dist/
       - rm -f {{.BINARY_NAME}}
       - rm -f coverage.out coverage.html
+      - task: plugin:clean
+
+  plugin:clean:
+    desc: Clean plugin build artifacts
+    cmds:
+      - rm -f plugins/echo-python/echo.wasm
+      - rm -f internal/wasm/testdata/echo.wasm
 
   # Install tools (prefer brew, use uvx for Python)
   tools:
     desc: Install development tools
     cmds:
-      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto markdownlint-cli
+      - brew install golangci-lint gofumpt lefthook actionlint goreleaser \
+        dprint cocogitto markdownlint-cli \
+        binaryen
       - brew install steveyegge/beads/bd
+      - curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
       - 'echo "Tools installed. Run lefthook install to set up git hooks."'
       - 'echo "Note: Use uvx yamllint to run yamllint (no install needed)"'
 
