@@ -3,6 +3,8 @@
 
 pre-commit:
   parallel: true
+  exclude:
+    - ".worktrees/**"
   commands:
     lint-go:
       glob: "*.go"
