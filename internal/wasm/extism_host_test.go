@@ -218,15 +218,7 @@ func TestExtismHost_DeliverEvent_PluginNotFound(t *testing.T) {
 }
 
 func TestExtismHost_DeliverEvent_EchoPlugin(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load the Python echo plugin
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	event := core.Event{
 		ID:        ulid.Make(),
@@ -573,15 +565,7 @@ func TestExtismHost_DeliverEvent_LogsWhenPluginReturnsEmptyOutput(t *testing.T) 
 // If a plugin were to infinite-loop, the deliveryTimeout would eventually
 // cause the context to expire, and subsequent operations would fail.
 func TestExtismHost_DeliverEvent_ContextCancellation(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load the echo plugin
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	event := core.Event{
 		ID:        ulid.Make(),
@@ -599,7 +583,7 @@ func TestExtismHost_DeliverEvent_ContextCancellation(t *testing.T) {
 
 		// Call DeliverEvent with already-cancelled context
 		start := time.Now()
-		_, err = host.DeliverEvent(ctx, "echo", event)
+		_, err := host.DeliverEvent(ctx, "echo", event)
 		elapsed := time.Since(start)
 
 		// Document observed behavior:

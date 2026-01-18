@@ -121,15 +121,7 @@ func TestExtismSubscriber_HandleEvent_NoMatch(t *testing.T) {
 }
 
 func TestExtismSubscriber_HandleEvent_WithEchoPlugin(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load the echo plugin
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -222,14 +214,7 @@ func (f *failingEmitter) WaitForEmit(t *testing.T, timeout time.Duration) {
 
 // TestExtismSubscriber_EmitterFailure verifies emitter errors don't stop processing.
 func TestExtismSubscriber_EmitterFailure(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newFailingEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -279,15 +264,7 @@ func (s *slowEmitter) Events() []core.Event {
 // TestExtismSubscriber_Stop_WaitsForInFlight verifies that Stop blocks until
 // all in-flight event deliveries complete.
 func TestExtismSubscriber_Stop_WaitsForInFlight(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load the echo plugin which emits events
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := &slowEmitter{delay: 500 * time.Millisecond, started: make(chan struct{}, 10)}
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -346,14 +323,7 @@ func TestExtismSubscriber_Stop_WaitsForInFlight(t *testing.T) {
 // TestExtismSubscriber_Stop_RejectsNewEvents verifies that after Stop is called,
 // HandleEvent does not spawn new goroutines.
 func TestExtismSubscriber_Stop_RejectsNewEvents(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -391,14 +361,7 @@ func TestExtismSubscriber_DroppedEventLogsAtWarn(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	defer slog.SetDefault(oldLogger)
 
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -555,6 +518,10 @@ func TestExtismSubscriber_DeliveryFailureLogging(t *testing.T) {
 
 // TestExtismSubscriber_PatternMatching verifies exact and glob pattern matching behavior.
 // This tests matchPattern indirectly through HandleEvent since matchPattern is private.
+//
+// Note: Each subtest needs its own host because Extism plugins are NOT thread-safe
+// for concurrent calls - the WASM memory gets corrupted. Parallel subtests therefore
+// cannot share a host.
 func TestExtismSubscriber_PatternMatching(t *testing.T) {
 	t.Parallel()
 
@@ -582,12 +549,10 @@ func TestExtismSubscriber_PatternMatching(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			tracer := noop.NewTracerProvider().Tracer("test")
-			host := wasm.NewExtismHost(tracer)
+			// Each parallel subtest needs its own host (Extism plugins are not thread-safe)
+			host := newIsolatedHost(t)
 			defer func() { _ = host.Close(context.Background()) }()
-
-			err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-			if err != nil {
+			if err := host.LoadPlugin(context.Background(), "echo", echoWASM); err != nil {
 				t.Fatalf("LoadPlugin failed: %v", err)
 			}
 
@@ -696,15 +661,7 @@ func TestExtismSubscriber_EmptyStreamRejected(t *testing.T) {
 
 // TestExtismSubscriber_ValidStreamAllowed verifies that valid stream names still work.
 func TestExtismSubscriber_ValidStreamAllowed(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load echo plugin which emits to a valid stream
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -739,14 +696,7 @@ func TestExtismSubscriber_ValidStreamAllowed(t *testing.T) {
 // TestExtismSubscriber_DeliveryTimeout_Configurable verifies that the delivery timeout
 // can be configured via WithDeliveryTimeout option.
 func TestExtismSubscriber_DeliveryTimeout_Configurable(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 
@@ -782,14 +732,7 @@ func TestExtismSubscriber_DeliveryTimeout_Configurable(t *testing.T) {
 // TestExtismSubscriber_DeliveryTimeout_Default verifies that the default timeout
 // is 5 seconds when no option is provided.
 func TestExtismSubscriber_DeliveryTimeout_Default(t *testing.T) {
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 	// No options - should use default 5s timeout
@@ -872,15 +815,7 @@ func TestExtismSubscriber_EmitFailureIndexLogging(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	defer slog.SetDefault(oldLogger)
 
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load echo plugin which emits one event
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newFailingEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -954,15 +889,7 @@ func TestExtismSubscriber_SkipsEmitsOnContextCancellation(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	defer slog.SetDefault(oldLogger)
 
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load echo plugin which emits one event
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	// Use a cancellable context for the subscriber
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1043,15 +970,7 @@ func TestExtismSubscriber_SkipsEmitsOnContextCancellationDuringDelivery(t *testi
 	slog.SetDefault(slog.New(capture))
 	defer slog.SetDefault(oldLogger)
 
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load echo plugin which emits one event
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	// Use a cancellable context for the subscriber
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1166,15 +1085,7 @@ func TestExtismSubscriber_EmitFailureAggregation(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	defer slog.SetDefault(oldLogger)
 
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load echo plugin which emits one event
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newFailingEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
@@ -1438,15 +1349,7 @@ func TestExtismSubscriber_Subscribe_ExistingPlugin(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	defer slog.SetDefault(oldLogger)
 
-	tracer := noop.NewTracerProvider().Tracer("test")
-	host := wasm.NewExtismHost(tracer)
-	defer func() { _ = host.Close(context.Background()) }()
-
-	// Load plugin first
-	err := host.LoadPlugin(context.Background(), "echo", echoWASM)
-	if err != nil {
-		t.Fatalf("LoadPlugin failed: %v", err)
-	}
+	host := getSharedEchoHost(t)
 
 	emitter := newMockEmitter()
 	sub := wasm.NewExtismSubscriber(context.Background(), host, emitter)
