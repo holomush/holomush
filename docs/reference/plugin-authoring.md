@@ -17,6 +17,21 @@ HoloMUSH uses [Extism](https://extism.org/) for its plugin system, which allows 
 
 Plugins compile to WebAssembly (WASM) and run in a sandboxed environment.
 
+## Plugin Registration
+
+Plugins are loaded and configured by the host application. Currently (Phase 1), this
+means:
+
+- **Loading:** The host loads your `.wasm` file at startup
+- **Subscriptions:** The host configures which event streams your plugin receives
+- **No manifest required:** Plugins don't need to declare their own metadata
+
+This approach keeps plugin authoring simple—you just write the event handler logic.
+The host administrator decides which plugins to load and what events they receive.
+
+> **Future enhancement:** Self-describing plugins with manifests for dynamic loading
+> and hot-reload are planned for a future phase.
+
 ## Quick Start (Python)
 
 ### Prerequisites
