@@ -78,6 +78,31 @@ func TestHostFunctions_Log_InvalidLevel(t *testing.T) {
 	}
 }
 
+func TestHostFunctions_Log_MissingArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{"no arguments", `holomush.log()`},
+		{"only level", `holomush.log("info")`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+
+			hf := hostfunc.New(nil, capability.NewEnforcer())
+			hf.Register(L, "test-plugin")
+
+			err := L.DoString(tt.code)
+			if err == nil {
+				t.Errorf("expected error for %s", tt.name)
+			}
+		})
+	}
+}
+
 func TestHostFunctions_Log_InvalidLevel_ErrorMessage(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -635,6 +660,64 @@ func TestHostFunctions_KVGet_Timeout(t *testing.T) {
 	}
 
 	// Error should indicate deadline/timeout
+	errMsg := errVal.String()
+	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
+		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
+	}
+}
+
+func TestHostFunctions_KVSet_Timeout(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &slowKVStore{delay: 10 * time.Second}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
+	if err != nil {
+		t.Fatalf("kv_set raised error instead of returning error tuple: %v", err)
+	}
+
+	errVal := L.GetGlobal("err")
+	if errVal.Type() != lua.LTString {
+		t.Errorf("expected error string for timeout, got %v", errVal.Type())
+	}
+
+	errMsg := errVal.String()
+	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
+		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
+	}
+}
+
+func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &slowKVStore{delay: 10 * time.Second}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`result, err = holomush.kv_delete("key")`)
+	if err != nil {
+		t.Fatalf("kv_delete raised error instead of returning error tuple: %v", err)
+	}
+
+	errVal := L.GetGlobal("err")
+	if errVal.Type() != lua.LTString {
+		t.Errorf("expected error string for timeout, got %v", errVal.Type())
+	}
+
 	errMsg := errVal.String()
 	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
 		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
