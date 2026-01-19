@@ -37,6 +37,8 @@ func GenerateSchema() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal schema: %w", err)
 	}
+	// Append trailing newline for POSIX compliance
+	data = append(data, '\n')
 	return data, nil
 }
 
