@@ -34,10 +34,12 @@ sudo apt install gh
 Each release includes:
 
 - Binary archives (`.tar.gz`) for multiple platforms
+- Source archive (`.tar.gz`) containing the repository snapshot
 - A checksums file (`checksums.txt`) with SHA256 hashes
 - A signature file (`checksums.txt.sig`) signing the checksums
 - A certificate file (`checksums.txt.sig.cert`) with the signing identity
-- SBOM files in CycloneDX and SPDX formats
+- Binary SBOM files in CycloneDX and SPDX formats (per platform)
+- Source SBOM files in CycloneDX and SPDX formats
 
 ### Download and Verify
 
@@ -72,8 +74,13 @@ cosign verify-blob \
 # Linux
 sha256sum --check --ignore-missing checksums.txt
 
-# macOS (use shasum instead)
-shasum -a 256 --check checksums.txt
+# macOS (BSD shasum doesn't support --ignore-missing)
+# Option 1: Verify specific file
+grep "holomush_${VERSION#v}_${ARCH}.tar.gz" checksums.txt | shasum -a 256 -c -
+
+# Option 2: Install GNU coreutils and use gsha256sum
+# brew install coreutils
+# gsha256sum --check --ignore-missing checksums.txt
 ```
 
 A successful verification shows:

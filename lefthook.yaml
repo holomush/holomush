@@ -14,7 +14,24 @@ pre-commit:
       exclude: "*.pb.go"
       run: |
         set -euo pipefail
-        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+
+        # Verify LICENSE_HEADER exists
+        if [[ ! -f LICENSE_HEADER ]]; then
+          echo "ERROR: LICENSE_HEADER file not found in repository root"
+          echo "Please ensure LICENSE_HEADER exists before committing"
+          exit 1
+        fi
+
+        # Install addlicense if needed
+        if ! command -v addlicense >/dev/null 2>&1; then
+          echo "Installing addlicense..."
+          if ! go install github.com/google/addlicense@latest; then
+            echo "ERROR: Failed to install addlicense"
+            echo "Please run: go install github.com/google/addlicense@latest"
+            exit 1
+          fi
+        fi
+
         addlicense -f LICENSE_HEADER {staged_files}
       stage_fixed: true
 

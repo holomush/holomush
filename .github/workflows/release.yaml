@@ -87,6 +87,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Verify signing artifacts were created (defense-in-depth)
+      - name: Verify signing artifacts exist
+        run: |
+          set -euo pipefail
+          echo "Verifying signing artifacts..."
+
+          # Check that checksums signature and certificate exist
+          if [[ ! -f dist/checksums.txt.sig ]]; then
+            echo "ERROR: checksums.txt.sig not found - signing may have failed"
+            ls -la dist/
+            exit 1
+          fi
+
+          if [[ ! -f dist/checksums.txt.sig.cert ]]; then
+            echo "ERROR: checksums.txt.sig.cert not found - signing may have failed"
+            ls -la dist/
+            exit 1
+          fi
+
+          echo "✓ Signing artifacts verified:"
+          ls -la dist/checksums.txt.sig*
+
       # Upload artifacts for provenance attestation
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -94,6 +116,7 @@ jobs:
           name: release-artifacts
           path: dist/*.tar.gz
           retention-days: 1
+          if-no-files-found: error
 
   # Provenance attestation runs after goreleaser completes.
   # This adds SLSA provenance to the already-signed artifacts.
@@ -184,6 +207,8 @@ jobs:
     name: Verify Release
     runs-on: ubuntu-latest
     needs: [goreleaser, attest-provenance, attest-containers]
+    permissions:
+      contents: read
     steps:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -197,10 +222,24 @@ jobs:
 
           echo "Verifying release ${VERSION}..."
 
+          # Wait for release to be available (handles propagation delay)
+          for i in {1..5}; do
+            if gh release view "${VERSION}" -R holomush/holomush > /dev/null 2>&1; then
+              break
+            fi
+            echo "Release not yet available, waiting... (attempt $i/5)"
+            sleep 10
+          done
+
           # Download checksums and signature
           mkdir -p dist
-          gh release download "${VERSION}" -R holomush/holomush -D dist \
-            -p 'checksums.txt' -p 'checksums.txt.sig' -p 'checksums.txt.sig.cert'
+          if ! gh release download "${VERSION}" -R holomush/holomush -D dist \
+            -p 'checksums.txt' -p 'checksums.txt.sig' -p 'checksums.txt.sig.cert'; then
+            echo "ERROR: Failed to download release artifacts"
+            echo "This may indicate the release was not published or signing failed"
+            gh release view "${VERSION}" -R holomush/holomush --json assets || true
+            exit 1
+          fi
 
           # Verify signature
           cosign verify-blob \

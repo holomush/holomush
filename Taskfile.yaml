@@ -101,22 +101,60 @@ tasks:
     cmds:
       - |
           set -euo pipefail
+
+          # Directories to check
+          DIRS="api cmd internal pkg plugins scripts"
+
+          # Verify directories exist
+          EXISTING_DIRS=""
+          for dir in $DIRS; do
+            if [[ -d "$dir" ]]; then
+              EXISTING_DIRS="$EXISTING_DIRS $dir"
+            else
+              echo "WARNING: Directory '$dir' does not exist, skipping"
+            fi
+          done
+
+          if [[ -z "$EXISTING_DIRS" ]]; then
+            echo "ERROR: No directories found to check"
+            exit 1
+          fi
+
           command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
           addlicense -check -f LICENSE_HEADER \
             -ignore '**/*.pb.go' \
             -ignore 'vendor/**' \
-            api/ cmd/ internal/ pkg/ plugins/ scripts/
+            $EXISTING_DIRS
 
   license:add:
     desc: Add missing SPDX license headers
     cmds:
       - |
           set -euo pipefail
+
+          # Directories to add headers to
+          DIRS="api cmd internal pkg plugins scripts"
+
+          # Verify directories exist
+          EXISTING_DIRS=""
+          for dir in $DIRS; do
+            if [[ -d "$dir" ]]; then
+              EXISTING_DIRS="$EXISTING_DIRS $dir"
+            else
+              echo "WARNING: Directory '$dir' does not exist, skipping"
+            fi
+          done
+
+          if [[ -z "$EXISTING_DIRS" ]]; then
+            echo "ERROR: No directories found to process"
+            exit 1
+          fi
+
           command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
           addlicense -f LICENSE_HEADER \
             -ignore '**/*.pb.go' \
             -ignore 'vendor/**' \
-            api/ cmd/ internal/ pkg/ plugins/ scripts/
+            $EXISTING_DIRS
 
   lint:
     desc: Run all linters

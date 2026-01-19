@@ -29,10 +29,11 @@ provenance attestations to HoloMUSH releases. The goals are:
 
 Each release produces:
 
-| Artifact Type               | Signing                      | SBOM                  | Provenance       |
-| --------------------------- | ---------------------------- | --------------------- | ---------------- |
-| Binary archives (`.tar.gz`) | Cosign `.sig` + `.cert`      | CycloneDX + SPDX JSON | SLSA attestation |
-| Container images (ghcr.io)  | Cosign signature in registry | CycloneDX attestation | SLSA attestation |
+| Artifact Type               | Signing                      | SBOM                       | Provenance       |
+| --------------------------- | ---------------------------- | -------------------------- | ---------------- |
+| Binary archives (`.tar.gz`) | Cosign `.sig` + `.cert`      | CycloneDX + SPDX JSON      | SLSA attestation |
+| Source archive (`.tar.gz`)  | Cosign `.sig` + `.cert`      | CycloneDX + SPDX JSON      | SLSA attestation |
+| Container images (ghcr.io)  | Cosign signature in registry | Scan directly with `grype` | SLSA attestation |
 
 ### Verification Flow
 
@@ -68,11 +69,12 @@ package foo
 
 **Files requiring headers:**
 
-- All `.go` files in `cmd/`, `internal/`, `pkg/`
+- All `.go` files in `api/`, `cmd/`, `internal/`, `pkg/`
+- `.lua` and `.py` files in `plugins/`
 - `.proto` files in `api/proto/`
 - Shell scripts in `scripts/`
 
-**Enforcement:** CI checks via `google/addlicense`.
+**Enforcement:** CI checks via `google/addlicense`. Lefthook pre-commit hook auto-adds headers.
 
 ### 2. GoReleaser SBOM and Signing Configuration
 
@@ -159,13 +161,11 @@ Add to `.github/workflows/ci.yaml`:
 
 ```yaml
 - name: Check license headers
-  run: |
-    go install github.com/google/addlicense@latest
-    addlicense -check -f LICENSE_HEADER \
-      -ignore '**/*.pb.go' \
-      -ignore 'vendor/**' \
-      cmd/ internal/ pkg/ scripts/
+  run: task license:check
 ```
+
+The `task license:check` command handles installation and runs `addlicense` with all configured
+directories (`api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`).
 
 ### 5. Taskfile Commands
 
@@ -175,12 +175,24 @@ Add to `Taskfile.yaml`:
 license:check:
   desc: Check SPDX license headers
   cmds:
-    - addlicense -check -f LICENSE_HEADER -ignore '**/*.pb.go' cmd/ internal/ pkg/ scripts/
+    - |
+        set -euo pipefail
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense -check -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' \
+          -ignore 'vendor/**' \
+          api/ cmd/ internal/ pkg/ plugins/ scripts/
 
 license:add:
   desc: Add missing SPDX license headers
   cmds:
-    - addlicense -f LICENSE_HEADER -ignore '**/*.pb.go' cmd/ internal/ pkg/ scripts/
+    - |
+        set -euo pipefail
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' \
+          -ignore 'vendor/**' \
+          api/ cmd/ internal/ pkg/ plugins/ scripts/
 ```
 
 ## User Verification
