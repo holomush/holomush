@@ -389,28 +389,19 @@ type PluginHost interface {
 
 ### StateFactory
 
-Lua states are created fresh per event delivery. The `StateFactory` interface allows
-future optimization (pooling) without changing calling code.
+Lua states are created fresh per event delivery. The `StateFactory` creates sandboxed
+states with only safe libraries loaded.
 
 ```go
-// StateFactory creates Lua states with host functions pre-registered.
-type StateFactory interface {
-    // NewState returns a fresh Lua state ready for plugin execution.
-    NewState(ctx context.Context, pluginName string) (*lua.LState, error)
-}
+// StateFactory creates sandboxed Lua states.
+type StateFactory struct{}
 
-// simpleFactory creates fresh states (initial implementation).
-type simpleFactory struct {
-    hostFuncs *HostFunctions
-    enforcer  *CapabilityEnforcer
-}
-
-func (f *simpleFactory) NewState(ctx context.Context, pluginName string) (*lua.LState, error) {
+func (f *StateFactory) NewState(ctx context.Context) (*lua.LState, error) {
     L := lua.NewState(lua.Options{
         SkipOpenLibs: true,  // Sandbox: don't load os, io, etc.
     })
 
-    // Load only safe libraries using gopher-lua's CallByParam for error handling
+    // Load only safe libraries
     for _, pair := range []struct {
         name string
         fn   lua.LGFunction
@@ -430,20 +421,21 @@ func (f *simpleFactory) NewState(ctx context.Context, pluginName string) (*lua.L
         }
     }
 
-    // Register host functions
-    f.hostFuncs.Register(L, pluginName)
-
     return L, nil
 }
 ```
 
 ### LuaHost
 
+`LuaHost` manages plugin lifecycle and optionally holds host functions for registration
+during event delivery. This separation keeps `StateFactory` simple and dependency-free.
+
 ```go
 type LuaHost struct {
-    factory  StateFactory
-    plugins  map[string]*luaPlugin
-    mu       sync.RWMutex
+    factory   *StateFactory
+    hostFuncs *hostfunc.Functions  // Optional; nil for basic host
+    plugins   map[string]*luaPlugin
+    mu        sync.RWMutex
 }
 
 type luaPlugin struct {
@@ -464,11 +456,12 @@ On `LuaHost.Load()`:
 
 On `LuaHost.DeliverEvent()`:
 
-1. Get fresh state from factory
-2. Load pre-compiled bytecode into state
-3. Call `on_event(event)` function
-4. Collect return value (emit events table or nil)
-5. Close state
+1. Get fresh sandboxed state from factory
+2. Register host functions (if available)
+3. Load plugin code into state
+4. Call `on_event(event)` function
+5. Collect return value (emit events table or nil)
+6. Close state
 
 ```mermaid
 sequenceDiagram
@@ -478,16 +471,20 @@ sequenceDiagram
     participant LS as LuaState
     participant HF as HostFunctions
 
-    Note over LH: Plugin loaded at startup<br/>(bytecode compiled once)
+    Note over LH: Plugin loaded at startup<br/>(code stored, not bytecode)
 
     EB->>LH: DeliverEvent(pluginName, event)
-    LH->>SF: NewState(ctx, pluginName)
+    LH->>SF: NewState(ctx)
     SF->>LS: Create fresh state
     SF->>LS: Load safe libraries
-    SF->>HF: Register host functions
-    SF-->>LH: state
+    SF-->>LH: sandboxed state
 
-    LH->>LS: Load pre-compiled bytecode
+    alt Host has hostFuncs
+        LH->>HF: Register(state, pluginName)
+        HF->>LS: Add holomush.* functions
+    end
+
+    LH->>LS: Load plugin code
     LH->>LS: Call on_event(event)
 
     alt Plugin calls host function

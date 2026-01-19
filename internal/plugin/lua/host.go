@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -23,17 +24,32 @@ type luaPlugin struct {
 
 // Host manages Lua plugins.
 type Host struct {
-	factory *StateFactory
-	plugins map[string]*luaPlugin
-	mu      sync.RWMutex
-	closed  bool
+	factory   *StateFactory
+	hostFuncs *hostfunc.Functions
+	plugins   map[string]*luaPlugin
+	mu        sync.RWMutex
+	closed    bool
 }
 
-// NewHost creates a new Lua plugin host.
+// NewHost creates a new Lua plugin host without host functions.
 func NewHost() *Host {
 	return &Host{
 		factory: NewStateFactory(),
 		plugins: make(map[string]*luaPlugin),
+	}
+}
+
+// NewHostWithFunctions creates a Lua plugin host with host functions.
+// The host functions enable plugins to call holomush.* APIs like log(), new_request_id(), and kv_*.
+// Panics if hf is nil (consistent with hostfunc.New).
+func NewHostWithFunctions(hf *hostfunc.Functions) *Host {
+	if hf == nil {
+		panic("lua.NewHostWithFunctions: hostFuncs cannot be nil")
+	}
+	return &Host{
+		factory:   NewStateFactory(),
+		hostFuncs: hf,
+		plugins:   make(map[string]*luaPlugin),
 	}
 }
 
@@ -100,6 +116,11 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 		return nil, fmt.Errorf("plugin %s: failed to create state: %w", name, err)
 	}
 	defer L.Close()
+
+	// Register host functions if available
+	if h.hostFuncs != nil {
+		h.hostFuncs.Register(L, name)
+	}
 
 	// Load plugin code
 	if err := L.DoString(code); err != nil {
