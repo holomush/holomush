@@ -414,6 +414,18 @@ func TestCapabilityEnforcer_IsRegistered_EmptyPluginName(t *testing.T) {
 	}
 }
 
+func TestCapabilityEnforcer_Check_EmptyPluginName(t *testing.T) {
+	e := capability.NewEnforcer()
+	if err := e.SetGrants("real-plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Empty plugin name should return false (deny by default)
+	if e.Check("", "world.read.location") {
+		t.Error("Check() should return false for empty plugin name")
+	}
+}
+
 func TestCapabilityEnforcer_RemoveGrants(t *testing.T) {
 	e := capability.NewEnforcer()
 

@@ -1,13 +1,16 @@
 // Package capability provides runtime capability enforcement for plugins.
 //
 // Pattern matching uses gobwas/glob with '.' as the segment separator:
-//   - '*' matches a single segment (does not cross '.')
-//   - '**' matches zero or more segments (crosses '.')
+//   - '*' matches exactly one segment (does not cross '.')
+//   - '**' matches one or more segments when trailing (e.g., "world.**")
+//   - '**' matches zero or more segments at root or in middle position
 //
 // Examples:
 //   - "world.read.*" matches "world.read.location" but NOT "world.read.character.name"
-//   - "world.read.**" matches both "world.read.location" AND "world.read.character.name"
-//   - "**" matches any capability
+//   - "world.read.**" matches "world.read.location" AND "world.read.character.name"
+//     but NOT "world.read" (requires at least one segment after the prefix)
+//   - "**" matches any capability including empty and single-segment
+//   - "a.**.b" matches "a.b", "a.x.b", and "a.x.y.b" (zero or more in middle)
 package capability
 
 import (
@@ -48,16 +51,17 @@ func NewEnforcer() *Enforcer {
 // all previous grants. If validation fails, no changes are made to the
 // enforcer's state (atomic all-or-nothing semantics).
 //
-// Pattern matching uses gobwas/glob with '.' as the segment separator:
-//   - '*' matches a single segment (does not cross '.')
-//   - '**' matches zero or more segments (crosses '.')
+// Pattern matching uses gobwas/glob (see package documentation for full details):
+//   - '*' matches exactly one segment (does not cross '.')
+//   - '**' matches one or more when trailing, zero or more at root/middle
 //
 // Examples:
 //   - "world.read.location" - exact match only
 //   - "world.read.*" - matches direct children: "world.read.location", "world.read.foo"
-//   - "world.read.**" - matches all descendants: "world.read.location", "world.read.char.name"
+//   - "world.read.**" - matches descendants: "world.read.location", "world.read.char.name"
+//     (but NOT "world.read" - trailing ** requires at least one segment)
 //   - "*" - matches any single-segment capability
-//   - "**" - matches any capability (root super-wildcard)
+//   - "**" - matches any capability (root super-wildcard, including empty)
 //
 // Invalid patterns (will return error):
 //   - Empty string
@@ -169,11 +173,14 @@ func (e *Enforcer) ListPlugins() []string {
 //   - Unknown plugin (not registered via SetGrants)
 //   - Plugin lacks the requested capability
 //
-// Pattern matching uses gobwas/glob with '.' as the segment separator:
-//   - '*' matches a single segment: "world.read.*" matches "world.read.location"
-//   - '**' matches multiple segments: "world.read.**" matches "world.read.char.name"
+// To distinguish "not registered" from "lacks capability", use [Enforcer.IsRegistered].
+//
+// Pattern matching uses gobwas/glob (see package documentation for full details):
+//   - '*' matches exactly one segment: "world.read.*" matches "world.read.location"
+//   - '**' matches one or more when trailing: "world.read.**" matches "world.read.char.name"
+//     (but NOT "world.read" - trailing ** requires at least one segment)
 func (e *Enforcer) Check(plugin, capability string) bool {
-	if capability == "" {
+	if plugin == "" || capability == "" {
 		return false
 	}
 
