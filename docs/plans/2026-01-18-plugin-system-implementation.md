@@ -2358,6 +2358,7 @@ import (
     "context"
     "fmt"
     "os/exec"
+    "path/filepath"
     "runtime"
     "strings"
     "sync"
@@ -2504,7 +2505,7 @@ func (h *Host) Close(_ context.Context) error {
 func expandBinaryPath(template, dir string) string {
     result := strings.ReplaceAll(template, "${os}", runtime.GOOS)
     result = strings.ReplaceAll(result, "${arch}", runtime.GOARCH)
-    return dir + "/" + result
+    return filepath.Join(dir, result)
 }
 
 // actorKindToString converts ActorKind to string for proto/SDK.
