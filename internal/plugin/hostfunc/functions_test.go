@@ -4,6 +4,7 @@ package hostfunc_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -145,6 +147,11 @@ func TestHostFunctions_NewRequestID(t *testing.T) {
 	id := L.GetGlobal("id").String()
 	if len(id) != 26 { // ULID length
 		t.Errorf("id length = %d, want 26", len(id))
+	}
+
+	// Verify it's a valid ULID (not just 26 random characters)
+	if _, err := ulid.Parse(id); err != nil {
+		t.Errorf("id %q is not a valid ULID: %v", id, err)
 	}
 }
 
@@ -844,7 +851,7 @@ func (s *slowKVStore) Get(ctx context.Context, _, _ string) ([]byte, error) {
 	case <-time.After(s.delay):
 		return []byte("value"), nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("slow kv get: %w", ctx.Err())
 	}
 }
 
@@ -853,7 +860,7 @@ func (s *slowKVStore) Set(ctx context.Context, _, _ string, _ []byte) error {
 	case <-time.After(s.delay):
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("slow kv set: %w", ctx.Err())
 	}
 }
 
@@ -862,6 +869,6 @@ func (s *slowKVStore) Delete(ctx context.Context, _, _ string) error {
 	case <-time.After(s.delay):
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("slow kv delete: %w", ctx.Err())
 	}
 }
