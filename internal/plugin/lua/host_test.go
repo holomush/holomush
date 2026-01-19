@@ -667,3 +667,19 @@ end
 		t.Errorf("expected capability denied error, got: %v", err)
 	}
 }
+
+func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Error("expected panic when hostFuncs is nil")
+		}
+		// Verify panic message is descriptive
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "hostFuncs cannot be nil") {
+			t.Errorf("panic message should mention 'hostFuncs cannot be nil', got: %v", r)
+		}
+	}()
+
+	_ = pluginlua.NewHostWithFunctions(nil)
+}
