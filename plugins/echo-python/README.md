@@ -4,16 +4,18 @@ A simple echo plugin implemented in Python using the Extism PDK. This plugin dem
 
 ## Building
 
-Install the Extism Python CLI tool:
+Install the Extism Python PDK:
 
 ```bash
-pip install extism-cli
+curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
 ```
 
 Build the plugin:
 
 ```bash
-make build
+task plugin:build:echo-python
+# Or manually:
+extism-py plugin.py -o echo.wasm
 ```
 
 This produces `echo.wasm` which can be loaded by the HoloMUSH plugin host.
@@ -43,12 +45,14 @@ The plugin exports a single function:
   "id": "01ABC123...",
   "stream": "location:room1",
   "type": "say",
-  "timestamp": "2026-01-18T12:00:00Z",
+  "timestamp": 1737208800000,
   "actor_kind": 0,
   "actor_id": "char1",
   "payload": "{\"message\": \"Hello world\"}"
 }
 ```
+
+Note: `timestamp` is Unix milliseconds (int64), not an ISO 8601 string.
 
 ### Output Format
 

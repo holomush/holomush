@@ -148,11 +148,9 @@ tasks:
 
   # Plugins
   plugin:build:
-    desc: Build all WASM plugins
+    desc: Build all WASM plugins (production only)
     cmds:
       - task: plugin:build:echo-python
-      - task: plugin:build:malformed-json
-      - task: plugin:build:empty-stream
 
   plugin:build:echo-python:
     desc: Build Python echo plugin to WASM
@@ -166,29 +164,36 @@ tasks:
       - echo.wasm
       - ../../internal/wasm/testdata/echo.wasm
 
-  plugin:build:malformed-json:
-    desc: Build malformed JSON test plugin to WASM
-    dir: plugins/malformed-json
+  # Test fixtures (not for production use)
+  test:fixtures:build:
+    desc: Build test fixture plugins (for testing error handling)
+    cmds:
+      - task: test:fixtures:build:malformed-json
+      - task: test:fixtures:build:empty-stream
+
+  test:fixtures:build:malformed-json:
+    desc: Build malformed JSON test fixture
+    dir: test/fixtures/plugins/malformed-json
     cmds:
       - extism-py plugin.py -o malformed.wasm
-      - cp malformed.wasm ../../internal/wasm/testdata/malformed.wasm
+      - cp malformed.wasm ../../../../internal/wasm/testdata/malformed.wasm
     sources:
       - plugin.py
     generates:
       - malformed.wasm
-      - ../../internal/wasm/testdata/malformed.wasm
+      - ../../../../internal/wasm/testdata/malformed.wasm
 
-  plugin:build:empty-stream:
-    desc: Build empty-stream test plugin to WASM
-    dir: plugins/empty-stream
+  test:fixtures:build:empty-stream:
+    desc: Build empty-stream test fixture
+    dir: test/fixtures/plugins/empty-stream
     cmds:
       - extism-py plugin.py -o empty-stream.wasm
-      - cp empty-stream.wasm ../../internal/wasm/testdata/empty-stream.wasm
+      - cp empty-stream.wasm ../../../../internal/wasm/testdata/empty-stream.wasm
     sources:
       - plugin.py
     generates:
       - empty-stream.wasm
-      - ../../internal/wasm/testdata/empty-stream.wasm
+      - ../../../../internal/wasm/testdata/empty-stream.wasm
 
   # Documentation
   spec:
@@ -253,9 +258,14 @@ tasks:
     desc: Clean plugin build artifacts
     cmds:
       - rm -f plugins/echo-python/echo.wasm
-      - rm -f plugins/malformed-json/malformed.wasm
-      - rm -f plugins/empty-stream/empty-stream.wasm
       - rm -f internal/wasm/testdata/echo.wasm
+      - task: test:fixtures:clean
+
+  test:fixtures:clean:
+    desc: Clean test fixture build artifacts
+    cmds:
+      - rm -f test/fixtures/plugins/malformed-json/malformed.wasm
+      - rm -f test/fixtures/plugins/empty-stream/empty-stream.wasm
       - rm -f internal/wasm/testdata/malformed.wasm
       - rm -f internal/wasm/testdata/empty-stream.wasm
 

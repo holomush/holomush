@@ -8,11 +8,29 @@ HoloMUSH is a modern MUSH platform with:
 
 - Go core with event-oriented architecture
 - Dual protocol support (telnet + web)
-- WASM plugin system via wazero
+- WASM plugin system via Extism
 - PostgreSQL for all data
 - SvelteKit PWA for web client
 
 **Architecture Reference**: [docs/plans/2026-01-17-holomush-architecture-design.md](docs/plans/2026-01-17-holomush-architecture-design.md)
+
+---
+
+## ⚠️ Protected Branch Policy
+
+**`main` is a protected branch.** Direct commits to main are not allowed.
+
+| Requirement                        | Description                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| **MUST** create feature branch     | All work happens on feature branches, not main      |
+| **MUST** submit PR for review      | All changes to main require a pull request          |
+| **MUST** pass CI checks            | Tests and linting must pass before merge            |
+| **MUST** use squash merge          | All PRs are squash merged to maintain clean history |
+| **MUST NOT** push directly to main | Branch protection enforces this                     |
+
+**See:** [Pull Request Guide](docs/reference/pull-request-guide.md) for the complete workflow.
+
+---
 
 ## Development Principles
 
@@ -84,23 +102,22 @@ bd close <task-id>
 
 ### Code Review Requirement
 
-All tasks MUST be reviewed by a separate agent before completion:
+All tasks MUST be reviewed before completion. See
+[Pull Request Guide](docs/reference/pull-request-guide.md) for the complete workflow.
 
 | Requirement                                | Description                                          |
 | ------------------------------------------ | ---------------------------------------------------- |
 | **MUST** use `pr-review-toolkit:review-pr` | Launch comprehensive review using specialized agents |
 | **MUST** address all findings              | Fix issues or document why not applicable            |
 | **MUST NOT** skip review                   | Even for "simple" changes                            |
-| **SHOULD** review after each logical chunk | Don't batch too many changes                         |
 
-**Review process:**
+**Quick workflow:**
 
 1. Complete implementation and tests
-2. Invoke `pr-review-toolkit:review-pr` skill
-3. Review agent findings across all specialized reviewers
-4. Address each finding (fix or justify skipping)
-5. Re-run review if significant changes were made
-6. Only then mark task complete
+2. Run `task test` and `task lint`
+3. Invoke `/pr-review-toolkit:review-pr`
+4. Address all findings
+5. Create PR or mark task complete
 
 ## Code Conventions
 
@@ -285,21 +302,32 @@ bd dep add <a> <b>    # Add dependency
 ## Directory Structure
 
 ```text
+api/                 # Protocol definitions
+  proto/             # Protobuf service definitions
 cmd/holomush/        # Server entry point
-internal/            # Private implementation
-  core/              # Event system, sessions, world engine
-  telnet/            # Telnet protocol adapter
-  web/               # WebSocket adapter (future)
-  store/             # PostgreSQL implementations
-  wasm/              # Plugin host (wazero)
-pkg/                 # Public plugin API
-  plugin/            # Plugin SDK types
-  api/               # Game API for plugins
-plugins/             # Core plugins (WASM)
 docs/
-  specs/             # Specifications
   plans/             # Implementation plans
   reference/         # API documentation
+  specs/             # Specifications
+internal/            # Private implementation
+  control/           # Control plane (admin API)
+  core/              # Event system, sessions, world engine
+  grpc/              # gRPC server implementation
+  logging/           # Structured logging setup
+  observability/     # Metrics and health endpoints
+  proto/             # Generated protobuf code
+  store/             # PostgreSQL implementations
+  telnet/            # Telnet protocol adapter
+  tls/               # TLS certificate management
+  wasm/              # Plugin host (Extism)
+  web/               # WebSocket adapter (future)
+  xdg/               # XDG base directory support
+pkg/                 # Public plugin API
+  plugin/            # Plugin SDK types
+plugins/             # Core plugins (WASM)
+scripts/             # Build and utility scripts
+test/                # Integration tests
+  integration/       # End-to-end test suites
 ```
 
 ## Key Interfaces

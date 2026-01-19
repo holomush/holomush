@@ -46,6 +46,7 @@ node_modules/
 
 # WASM plugins build output
 plugins/*/*.wasm
+test/fixtures/plugins/*/*.wasm
 
 # Local development
 *.local

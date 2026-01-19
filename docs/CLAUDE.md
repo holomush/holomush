@@ -14,6 +14,21 @@ Documentation uses RFC2119 keywords to indicate requirement levels:
 | **SHOULD NOT** | Not recommended                            |
 | **MAY**        | Optional                                   |
 
+## File Naming
+
+| Requirement                  | Description                                             |
+| ---------------------------- | ------------------------------------------------------- |
+| **MUST** use kebab-case      | All documentation file names use lowercase with hyphens |
+| **MUST NOT** use underscores | Use hyphens, not underscores (e.g., `my-doc.md`)        |
+| **MUST NOT** use spaces      | Use hyphens instead of spaces                           |
+
+Examples:
+
+- `plugin-authoring.md` ✓
+- `getting-started.md` ✓
+- `plugin_authoring.md` ✗
+- `Getting Started.md` ✗
+
 ## Markdown Standards
 
 All markdown files MUST pass `markdownlint-cli2` validation. The project uses `.markdownlint.yaml` for configuration.
