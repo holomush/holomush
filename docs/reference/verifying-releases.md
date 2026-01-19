@@ -17,6 +17,18 @@ go install github.com/sigstore/cosign/v2/cmd/cosign@latest
 # https://github.com/sigstore/cosign/releases
 ```
 
+Install [GitHub CLI](https://cli.github.com/) for downloading releases and attestation verification:
+
+```bash
+# macOS
+brew install gh
+
+# Linux (Debian/Ubuntu)
+sudo apt install gh
+
+# Or see https://github.com/cli/cli#installation
+```
+
 ## Verifying Binary Releases
 
 Each release includes:
@@ -57,7 +69,11 @@ cosign verify-blob \
   checksums.txt
 
 # Verify the archive checksum
+# Linux
 sha256sum --check --ignore-missing checksums.txt
+
+# macOS (use shasum instead)
+shasum -a 256 --check checksums.txt
 ```
 
 A successful verification shows:
@@ -136,6 +152,14 @@ grype ghcr.io/holomush/holomush:v1.0.0
 
 Ensure you're using the correct certificate identity and OIDC issuer. The identity must match
 the GitHub repository that produced the build.
+
+### Attestation Verification Fails
+
+If `gh attestation verify` fails, try fetching the attestation from the OCI registry:
+
+```bash
+gh attestation verify oci://ghcr.io/holomush/holomush:v1.0.0 --owner holomush --bundle-from-oci
+```
 
 ### Certificate Expired
 

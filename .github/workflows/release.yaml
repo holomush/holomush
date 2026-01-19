@@ -152,11 +152,20 @@ jobs:
           IMAGE="ghcr.io/holomush/holomush:${VERSION}"
 
           echo "Fetching digest for ${IMAGE}"
-          DIGEST=$(docker manifest inspect "${IMAGE}" --verbose 2>/dev/null \
-            | jq -r '.Descriptor.digest // .digest' | head -1)
+          MANIFEST_STDERR=$(mktemp)
+          if ! docker manifest inspect "${IMAGE}" --verbose > /tmp/manifest.json 2> "${MANIFEST_STDERR}"; then
+            echo "ERROR: Failed to inspect manifest for ${IMAGE}"
+            echo "Docker manifest inspect stderr:"
+            cat "${MANIFEST_STDERR}"
+            exit 1
+          fi
+
+          DIGEST=$(jq -r '.Descriptor.digest // .digest' /tmp/manifest.json | head -1)
 
           if [[ -z "${DIGEST}" || "${DIGEST}" == "null" ]]; then
-            echo "ERROR: Could not get digest for ${IMAGE}"
+            echo "ERROR: Could not extract digest from manifest"
+            echo "Manifest output:"
+            cat /tmp/manifest.json
             exit 1
           fi
 

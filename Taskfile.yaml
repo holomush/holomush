@@ -100,7 +100,8 @@ tasks:
     desc: Check SPDX license headers
     cmds:
       - |
-          go install github.com/google/addlicense@latest
+          set -euo pipefail
+          command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
           addlicense -check -f LICENSE_HEADER \
             -ignore '**/*.pb.go' \
             -ignore 'vendor/**' \
@@ -110,7 +111,8 @@ tasks:
     desc: Add missing SPDX license headers
     cmds:
       - |
-          go install github.com/google/addlicense@latest
+          set -euo pipefail
+          command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
           addlicense -f LICENSE_HEADER \
             -ignore '**/*.pb.go' \
             -ignore 'vendor/**' \

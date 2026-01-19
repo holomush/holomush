@@ -13,10 +13,8 @@ pre-commit:
       glob: "*.{go,lua,sh,py,proto}"
       exclude: "*.pb.go"
       run: |
-        command -v addlicense >/dev/null 2>&1 || {
-          echo "Installing addlicense..."
-          go install github.com/google/addlicense@latest
-        }
+        set -euo pipefail
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
         addlicense -f LICENSE_HEADER {staged_files}
       stage_fixed: true
 
@@ -43,6 +41,7 @@ pre-commit:
     schema-sync:
       glob: "internal/plugin/*.go"
       run: |
+        set -euo pipefail
         task generate:schema
         if ! git diff --exit-code schemas/plugin.schema.json; then
           echo "Schema out of sync. Run 'task generate:schema' and commit."
