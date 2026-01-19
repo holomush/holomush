@@ -14,15 +14,15 @@
 
 ## Phase Overview
 
-| Phase | Bead ID          | Deliverable                   | Files Created                                                     |
-| ----- | ---------------- | ----------------------------- | ----------------------------------------------------------------- |
-| 2.1   | `holomush-1hq.3` | Lua runtime integration       | `internal/plugin/lua/host.go`, `state.go`                         |
-| 2.2   | `holomush-1hq.4` | Plugin discovery & lifecycle  | `internal/plugin/manager.go`, `manifest.go`                       |
-| 2.3   | `holomush-1hq.5` | Event subscription & delivery | `internal/plugin/subscriber.go`                                   |
-| 2.4   | `holomush-1hq.6` | Host functions                | `internal/plugin/hostfunc/functions.go`                           |
-| 2.5   | `holomush-1hq.7` | Capability model              | `internal/plugin/capability/enforcer.go`                          |
-| 2.6   | `holomush-1hq.8` | go-plugin integration         | `internal/plugin/goplugin/host.go`, `api/proto/plugin/v1/*.proto` |
-| 2.7   | `holomush-1hq.9` | Echo bot in Lua               | `plugins/echo-bot/plugin.yaml`, `main.lua`                        |
+| Phase | Bead ID          | Deliverable                   | Files Created                                                              |
+| ----- | ---------------- | ----------------------------- | -------------------------------------------------------------------------- |
+| 2.1   | `holomush-1hq.3` | Lua runtime integration       | `internal/plugin/lua/host.go`, `state.go`                                  |
+| 2.2   | `holomush-1hq.4` | Plugin discovery & lifecycle  | `internal/plugin/manager.go`, `manifest.go`                                |
+| 2.3   | `holomush-1hq.5` | Event subscription & delivery | `internal/plugin/subscriber.go`                                            |
+| 2.4   | `holomush-1hq.6` | Host functions                | `internal/plugin/hostfunc/functions.go`                                    |
+| 2.5   | `holomush-1hq.7` | Capability model              | `internal/plugin/capability/enforcer.go`                                   |
+| 2.6   | `holomush-1hq.8` | go-plugin integration         | `internal/plugin/goplugin/host.go`, `api/proto/holomush/plugin/v1/*.proto` |
+| 2.7   | `holomush-1hq.9` | Echo bot in Lua               | `plugins/echo-bot/plugin.yaml`, `main.lua`                                 |
 
 ---
 
@@ -953,10 +953,23 @@ func (h *Host) buildEventTable(L *lua.LState, event pluginpkg.Event) *lua.LTable
     L.SetField(t, "stream", lua.LString(event.Stream))
     L.SetField(t, "type", lua.LString(string(event.Type)))
     L.SetField(t, "timestamp", lua.LNumber(event.Timestamp))
-    L.SetField(t, "actor_kind", lua.LNumber(event.ActorKind))
+    L.SetField(t, "actor_kind", lua.LString(actorKindToString(event.ActorKind)))
     L.SetField(t, "actor_id", lua.LString(event.ActorID))
     L.SetField(t, "payload", lua.LString(event.Payload))
     return t
+}
+
+func actorKindToString(kind pluginpkg.ActorKind) string {
+    switch kind {
+    case pluginpkg.ActorCharacter:
+        return "character"
+    case pluginpkg.ActorSystem:
+        return "system"
+    case pluginpkg.ActorPlugin:
+        return "plugin"
+    default:
+        return "unknown"
+    }
 }
 
 func (h *Host) parseEmitEvents(ret lua.LValue) ([]pluginpkg.EmitEvent, error) {
@@ -1961,7 +1974,7 @@ function on_event(event)
     end
 
     -- Don't echo plugin messages (prevents loops)
-    if event.actor_kind == 2 then -- ActorPlugin = 2
+    if event.actor_kind == "plugin" then
         return nil
     end
 
@@ -2095,18 +2108,18 @@ Part of Epic 2: Plugin System (holomush-1hq)"
 
 **Files:**
 
-- Create: `api/proto/plugin/v1/plugin.proto`
-- Create: `api/proto/plugin/v1/hostfunc.proto`
+- Create: `api/proto/holomush/plugin/v1/plugin.proto`
+- Create: `api/proto/holomush/plugin/v1/hostfunc.proto`
 
 ### Step 1: Create plugin service proto
 
 ```protobuf
-// api/proto/plugin/v1/plugin.proto
+// api/proto/holomush/plugin/v1/plugin.proto
 syntax = "proto3";
 
 package holomush.plugin.v1;
 
-option go_package = "github.com/holomush/holomush/internal/proto/plugin/v1;pluginv1";
+option go_package = "github.com/holomush/holomush/internal/proto/holomush/plugin/v1;pluginv1";
 
 service Plugin {
     rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
@@ -2140,12 +2153,12 @@ message HandleEventResponse {
 ### Step 2: Create host functions proto
 
 ```protobuf
-// api/proto/plugin/v1/hostfunc.proto
+// api/proto/holomush/plugin/v1/hostfunc.proto
 syntax = "proto3";
 
 package holomush.plugin.v1;
 
-option go_package = "github.com/holomush/holomush/internal/proto/plugin/v1;pluginv1";
+option go_package = "github.com/holomush/holomush/internal/proto/holomush/plugin/v1;pluginv1";
 
 service HostFunctions {
     rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
@@ -2236,7 +2249,7 @@ buf generate api/proto
 ### Step 4: Commit
 
 ```bash
-git add api/proto/plugin/v1/
+git add api/proto/holomush/plugin/v1/
 git commit -m "feat(plugin): add gRPC proto definitions for go-plugin
 
 Defines Plugin service for event handling and HostFunctions service
