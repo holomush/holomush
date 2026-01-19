@@ -175,6 +175,7 @@ func TestParseManifest_ValidNames(t *testing.T) {
 		{name: "with numbers", plugName: "echo123"},
 		{name: "mixed", plugName: "echo-bot-v2"},
 		{name: "single char", plugName: "a"},
+		{name: "exactly max length (64 chars)", plugName: "a234567890123456789012345678901234567890123456789012345678901234"},
 	}
 
 	for _, tt := range tests {

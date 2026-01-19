@@ -40,13 +40,14 @@ func NewStateFactory() *StateFactory {
 }
 
 // unsafeBaseFunctions lists base library functions that must be blocked for security.
-// These functions allow filesystem access which would break sandboxing.
+// dofile, loadfile: filesystem access breaks sandboxing.
+// loadstring, load: dynamic code execution from strings.
 var unsafeBaseFunctions = []string{"dofile", "loadfile", "loadstring", "load"}
 
 // NewState creates a fresh Lua state with only safe libraries loaded.
 // Safe libraries: base, table, string, math.
 // Blocked libraries: os, io, debug, package.
-// Blocked base functions: dofile, loadfile, loadstring, load (filesystem access).
+// Blocked base functions: dofile, loadfile (filesystem), loadstring, load (dynamic code).
 //
 // The ctx parameter is reserved for future cancellation/timeout support.
 func (f *StateFactory) NewState(_ context.Context) (*lua.LState, error) {
