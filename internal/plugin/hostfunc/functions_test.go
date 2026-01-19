@@ -487,6 +487,63 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	}
 }
 
+func TestHostFunctions_KVGet_EmptyKeyRejected(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`holomush.kv_get("")`)
+	if err == nil {
+		t.Error("expected error for empty key")
+	}
+}
+
+func TestHostFunctions_KVSet_EmptyKeyRejected(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`holomush.kv_set("", "value")`)
+	if err == nil {
+		t.Error("expected error for empty key")
+	}
+}
+
+func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`holomush.kv_delete("")`)
+	if err == nil {
+		t.Error("expected error for empty key")
+	}
+}
+
 func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 

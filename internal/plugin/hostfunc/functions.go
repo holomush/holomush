@@ -115,6 +115,10 @@ func (f *Functions) newRequestIDFn() lua.LGFunction {
 func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
+		if key == "" {
+			L.RaiseError("kv_get: key cannot be empty")
+			return 0
+		}
 
 		if f.kvStore == nil {
 			slog.Error("kv_get called but store unavailable",
@@ -155,6 +159,10 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
 		value := L.CheckString(2)
+		if key == "" {
+			L.RaiseError("kv_set: key cannot be empty")
+			return 0
+		}
 
 		if f.kvStore == nil {
 			slog.Error("kv_set called but store unavailable",
@@ -187,6 +195,10 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
+		if key == "" {
+			L.RaiseError("kv_delete: key cannot be empty")
+			return 0
+		}
 
 		if f.kvStore == nil {
 			slog.Error("kv_delete called but store unavailable",
