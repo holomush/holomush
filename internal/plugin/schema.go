@@ -4,14 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/invopop/jsonschema"
 	jschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
-// schemaCache holds the compiled schema to avoid recompilation.
-var schemaCache *jschema.Schema
+// schemaState holds the compiled schema and sync.Once for thread-safe initialization.
+type schemaState struct {
+	once   sync.Once
+	schema *jschema.Schema
+	err    error
+}
+
+// globalSchemaState is the package-level schema state.
+var globalSchemaState = &schemaState{}
 
 // GenerateSchema generates a JSON Schema from the Manifest struct.
 func GenerateSchema() ([]byte, error) {
@@ -62,11 +70,16 @@ func ValidateSchema(data []byte) error {
 }
 
 // getCompiledSchema returns the cached compiled schema or compiles it.
+// Thread-safe via sync.Once.
 func getCompiledSchema() (*jschema.Schema, error) {
-	if schemaCache != nil {
-		return schemaCache, nil
-	}
+	globalSchemaState.once.Do(func() {
+		globalSchemaState.schema, globalSchemaState.err = compileSchema()
+	})
+	return globalSchemaState.schema, globalSchemaState.err
+}
 
+// compileSchema does the actual schema compilation work.
+func compileSchema() (*jschema.Schema, error) {
 	schemaBytes, err := GenerateSchema()
 	if err != nil {
 		return nil, err
@@ -89,7 +102,6 @@ func getCompiledSchema() (*jschema.Schema, error) {
 		return nil, fmt.Errorf("failed to compile schema: %w", err)
 	}
 
-	schemaCache = sch
 	return sch, nil
 }
 
@@ -135,8 +147,9 @@ func convertToJSONTypes(v any) any {
 }
 
 // ResetSchemaCache clears the cached schema. Used for testing.
+// Creates a new schemaState so sync.Once can trigger again.
 func ResetSchemaCache() {
-	schemaCache = nil
+	globalSchemaState = &schemaState{}
 }
 
 // GetSchemaID returns the schema $id for use in plugin.yaml files.

@@ -2,6 +2,7 @@ package plugin_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/holomush/holomush/internal/plugin"
@@ -231,23 +232,10 @@ func TestGenerateSchema(t *testing.T) {
 		`"$schema"`,
 	}
 	for _, field := range expectedFields {
-		if !contains(schemaStr, field) {
+		if !strings.Contains(schemaStr, field) {
 			t.Errorf("GenerateSchema() missing expected field %s", field)
 		}
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestResetSchemaCache(t *testing.T) {
@@ -279,7 +267,7 @@ func TestGetSchemaID(t *testing.T) {
 	if id == "" {
 		t.Error("GetSchemaID() returned empty string")
 	}
-	if !contains(id, "holomush") {
+	if !strings.Contains(id, "holomush") {
 		t.Errorf("GetSchemaID() = %q, want to contain 'holomush'", id)
 	}
 }

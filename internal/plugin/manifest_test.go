@@ -1,6 +1,7 @@
 package plugin_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/holomush/holomush/internal/plugin"
@@ -161,6 +162,9 @@ lua-plugin:
 			if err == nil {
 				t.Error("expected error for invalid name")
 			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
+			}
 		})
 	}
 }
@@ -252,6 +256,9 @@ lua-plugin:
 			_, err := plugin.ParseManifest([]byte(tt.yaml))
 			if err == nil {
 				t.Errorf("expected error for %s", tt.name)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
 			}
 		})
 	}
