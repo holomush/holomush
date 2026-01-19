@@ -57,7 +57,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 		return nil, fmt.Errorf("failed to read plugins directory: %w", err)
 	}
 
-	var plugins []*DiscoveredPlugin
+	plugins := make([]*DiscoveredPlugin, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
