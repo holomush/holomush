@@ -38,12 +38,20 @@ type BinaryConfig struct {
 	Executable string `yaml:"executable"`
 }
 
+// maxNameLength is the maximum allowed length for plugin names.
+const maxNameLength = 64
+
 // namePattern validates plugin names: must start with lowercase letter,
 // followed by lowercase letters, digits, or hyphens.
-var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+// Cannot end with a hyphen. Single character names are allowed.
+var namePattern = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
 
 // ParseManifest parses and validates a plugin.yaml file.
 func ParseManifest(data []byte) (*Manifest, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("manifest data is empty")
+	}
+
 	var m Manifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("invalid YAML: %w", err)
@@ -59,7 +67,10 @@ func ParseManifest(data []byte) (*Manifest, error) {
 // Validate checks manifest constraints.
 func (m *Manifest) Validate() error {
 	if m.Name == "" || !namePattern.MatchString(m.Name) {
-		return fmt.Errorf("name %q must match pattern ^[a-z][a-z0-9-]*$", m.Name)
+		return fmt.Errorf("name %q must start with a-z, contain only a-z, 0-9, hyphens, and not end with a hyphen", m.Name)
+	}
+	if len(m.Name) > maxNameLength {
+		return fmt.Errorf("name must be %d characters or less, got %d", maxNameLength, len(m.Name))
 	}
 
 	if m.Version == "" {

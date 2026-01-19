@@ -158,3 +158,21 @@ func TestStateFactory_NewState_MultipleStates(t *testing.T) {
 		t.Error("states should be independent - L2 should not have L1's variable")
 	}
 }
+
+func TestStateFactory_NewState_BlocksFilesystemFunctions(t *testing.T) {
+	factory := pluginlua.NewStateFactory()
+	L, err := factory.NewState(context.Background())
+	if err != nil {
+		t.Fatalf("NewState() error = %v", err)
+	}
+	defer L.Close()
+
+	// These functions are in base library but should be blocked for sandboxing.
+	// They allow reading/executing arbitrary files from the filesystem.
+	unsafeFuncs := []string{"dofile", "loadfile", "loadstring", "load"}
+	for _, fn := range unsafeFuncs {
+		if L.GetGlobal(fn).Type().String() != "nil" {
+			t.Errorf("unsafe function %q should be blocked for sandboxing", fn)
+		}
+	}
+}

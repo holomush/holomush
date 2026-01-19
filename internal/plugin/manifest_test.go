@@ -131,6 +131,28 @@ lua-plugin:
 `,
 			wantErr: "name",
 		},
+		{
+			name: "trailing hyphen",
+			yaml: `
+name: echo-
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: "name",
+		},
+		{
+			name: "name too long",
+			yaml: `
+name: this-is-a-very-long-plugin-name-that-exceeds-the-maximum-allowed-length
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: "name",
+		},
 	}
 
 	for _, tt := range tests {
@@ -355,5 +377,25 @@ func TestManifest_Validate_EmptyExecutable(t *testing.T) {
 	}
 	if err := m.Validate(); err == nil {
 		t.Error("Validate() should fail for empty executable")
+	}
+}
+
+func TestParseManifest_EmptyInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{name: "nil input", input: nil},
+		{name: "empty slice", input: []byte{}},
+		{name: "whitespace only", input: []byte("   \n\t  ")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := plugin.ParseManifest(tt.input)
+			if err == nil {
+				t.Error("ParseManifest() should return error for empty input")
+			}
+		})
 	}
 }
