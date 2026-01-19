@@ -7,6 +7,13 @@ import (
 )
 
 // Enforcer checks plugin capabilities at runtime.
+//
+// Enforcer is safe for concurrent use. The zero value is ready to use
+// without calling NewEnforcer.
+//
+// Design note: Enforcer does not validate plugin names or capability strings.
+// Callers are responsible for ensuring inputs are well-formed. Empty strings
+// are accepted but will not match any capabilities.
 type Enforcer struct {
 	grants map[string][]string // plugin name -> granted capabilities
 	mu     sync.RWMutex
@@ -19,7 +26,9 @@ func NewEnforcer() *Enforcer {
 	}
 }
 
-// SetGrants configures capabilities for a plugin.
+// SetGrants configures capabilities for a plugin. The capabilities slice is
+// copied, so callers may safely modify it after the call returns.
+// Calling SetGrants again for the same plugin replaces all previous grants.
 func (e *Enforcer) SetGrants(plugin string, capabilities []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -36,6 +45,8 @@ func (e *Enforcer) SetGrants(plugin string, capabilities []string) {
 }
 
 // Check returns true if the plugin has the requested capability.
+// Supports wildcard grants: "world.read.*" matches "world.read.location".
+// The root wildcard ".*" matches any non-empty capability.
 func (e *Enforcer) Check(plugin, capability string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

@@ -46,6 +46,18 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 			capability: "world.read.location",
 			want:       true,
 		},
+		{
+			name:       "root wildcard matches single-segment capability",
+			grants:     []string{".*"},
+			capability: "world",
+			want:       true,
+		},
+		{
+			name:       "wildcard matches exact prefix boundary",
+			grants:     []string{"world.read.*"},
+			capability: "world.read.",
+			want:       true,
+		},
 
 		// Negative cases
 		{
@@ -83,6 +95,12 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 		{
 			name:       "empty capability returns false",
 			grants:     []string{"world.read.*"},
+			capability: "",
+			want:       false,
+		},
+		{
+			name:       "root wildcard does not match empty capability",
+			grants:     []string{".*"},
 			capability: "",
 			want:       false,
 		},
