@@ -94,6 +94,7 @@ event subscriptions, and required capabilities.
 
 ```yaml
 # yaml-language-server: $schema=https://holomush.dev/schemas/plugin.schema.json
+# NOTE: Schema URL is placeholder; actual path determined during implementation
 
 # Required fields
 name: echo-bot # Unique identifier, pattern: ^[a-z][a-z0-9-]*$
@@ -281,6 +282,10 @@ type PluginHost interface {
 
 ## Lua Runtime
 
+> **Note:** Code examples in this section are illustrative and show design intent.
+> Implementation details (error handling, edge cases, library initialization patterns)
+> will be refined during implementation.
+
 ### StateFactory
 
 Lua states are created fresh per event delivery. The `StateFactory` interface allows
@@ -364,6 +369,12 @@ On `LuaHost.DeliverEvent()`:
 4. Collect return value (emit events table or nil)
 5. Close state
 
+**Edge cases** (handled gracefully, logged, delivery continues):
+
+- `on_event` function not defined → no-op
+- Function returns non-table value → ignored
+- Function returns empty table → treated as no events to emit
+
 ### Sandbox Configuration
 
 | Library     | Loaded | Rationale                   |
@@ -446,17 +457,24 @@ func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
 
 ### API Reference
 
-| Function                                  | Capability             | Description                   |
-| ----------------------------------------- | ---------------------- | ----------------------------- |
-| `holomush.emit_event(stream, type, data)` | `events.emit.*`        | Emit event to stream          |
-| `holomush.query_location(id)`             | `world.read.location`  | Get location data             |
-| `holomush.query_character(id)`            | `world.read.character` | Get character data            |
-| `holomush.query_object(id)`               | `world.read.object`    | Get object data               |
-| `holomush.kv_get(key)`                    | `kv.read`              | Read from plugin KV store     |
-| `holomush.kv_set(key, value)`             | `kv.write`             | Write to plugin KV store      |
-| `holomush.kv_delete(key)`                 | `kv.write`             | Delete from plugin KV store   |
-| `holomush.new_request_id()`               | (none)                 | Generate ULID for correlation |
-| `holomush.log(level, message)`            | (none)                 | Structured logging            |
+| Function                                  | Capability               | Description                   |
+| ----------------------------------------- | ------------------------ | ----------------------------- |
+| `holomush.emit_event(stream, type, data)` | `events.emit.<type>`[^1] | Emit event to stream          |
+| `holomush.query_location(id)`             | `world.read.location`    | Get location data             |
+| `holomush.query_character(id)`            | `world.read.character`   | Get character data            |
+| `holomush.query_object(id)`               | `world.read.object`      | Get object data               |
+| `holomush.kv_get(key)`                    | `kv.read`                | Read from plugin KV store     |
+| `holomush.kv_set(key, value)`             | `kv.write`               | Write to plugin KV store[^2]  |
+| `holomush.kv_delete(key)`                 | `kv.write`               | Delete from plugin KV store   |
+| `holomush.new_request_id()`               | (none)                   | Generate ULID for correlation |
+| `holomush.log(level, message)`            | (none)                   | Structured logging            |
+
+[^1]: Capability determined dynamically from stream parameter. Stream format is
+    `<type>:<id>` (e.g., `location:123`). Emitting to `location:123` requires
+    `events.emit.location` capability.
+
+[^2]: Value can be string or table. Tables are automatically JSON-serialized;
+    `kv_get` returns deserialized Lua tables.
 
 ### Capability Wrapper
 
@@ -760,12 +778,11 @@ internal/plugin/testdata/
 
 ## Migration from WASM
 
-The existing `internal/wasm/` package (Extism spike) is already marked deprecated
-in the source code. It will be:
+The `internal/wasm/` package contains the Phase 1.6 Extism spike. Once the new plugin
+system is complete, this package will be **deleted entirely**.
 
-1. Retained as reference for OTel patterns (see `ExtismHost` tracing implementation)
-2. Not deleted (may be useful if WASM support is revisited)
-3. Not used by the new plugin system
+Before deletion, relevant patterns (OTel tracing from `ExtismHost`) should be referenced
+during implementation of the new system.
 
 New code lives in `internal/plugin/`. Do not add dependencies on `internal/wasm/`.
 
