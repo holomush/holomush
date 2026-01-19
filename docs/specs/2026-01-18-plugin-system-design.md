@@ -25,6 +25,13 @@ extension model that all game systems build upon.
 - Hot reload in v1 (planned for future)
 - Plugin marketplace or distribution system
 
+### Note on Code Examples
+
+Code examples in this document are **illustrative** and show design intent, not final
+implementation. Details such as error handling, edge cases, and library-specific patterns
+will be refined during implementation. Refer to the actual gopher-lua and go-plugin
+documentation for correct API usage.
+
 ## Architecture
 
 ```text
@@ -134,6 +141,17 @@ binary-plugin:
 | When `type: binary`, `binary-plugin` MUST be present          | Schema (oneOf) |
 | Requested capabilities MUST be subset of granted capabilities | Runtime        |
 
+### Binary Executable Variables
+
+The `executable` field supports variable expansion for cross-platform binaries:
+
+| Variable  | Source           | Example Values         |
+| --------- | ---------------- | ---------------------- |
+| `${os}`   | `runtime.GOOS`   | linux, darwin, windows |
+| `${arch}` | `runtime.GOARCH` | amd64, arm64, 386      |
+
+Example: `combat-${os}-${arch}` → `combat-linux-amd64` on Linux/AMD64.
+
 ### Directory Structure
 
 ```text
@@ -160,6 +178,7 @@ events
   events.emit.*             # Emit to any stream
   events.emit.location      # Emit to location streams only
   events.emit.session       # Emit to session streams only
+  events.emit.plugin        # Emit to plugin streams (cross-plugin calls)
 
 world
   world.read.*              # Read any world data
@@ -182,7 +201,13 @@ system
   system.disconnect         # Disconnect sessions (via emit_event with type="disconnect")
 ```
 
-> **Note:** `system.*` capabilities are enforced via event type checks in `emit_event`,
+> **Note:** `events.subscribe.*` is **manifest-driven only**—plugins declare subscriptions
+> in `plugin.yaml` and there is no runtime capability check. The server loads subscriptions
+> at plugin load time. In contrast, `events.emit.*` capabilities are checked at runtime
+> when `emit_event` is called. The stream prefix determines the required capability:
+> `location:123` requires `events.emit.location`, `session:456` requires `events.emit.session`.
+>
+> `system.*` capabilities are enforced via event type checks in `emit_event`,
 > not via separate host functions. Emitting a `prompt` event requires `system.prompt`;
 > emitting a `disconnect` event requires `system.disconnect`. This provides fine-grained
 > control over privileged actions while using the unified event mechanism.
@@ -236,9 +261,10 @@ func (e *CapabilityEnforcer) Check(plugin, capability string) bool {
     return false
 }
 
-// matchCapability handles wildcards at the final level using prefix matching.
-// "world.read.*" matches "world.read.location" and "world.read.location.nested".
-// For strict single-level matching, split on "." and compare segments (not implemented here).
+// matchCapability handles wildcards using prefix matching.
+// "world.read.*" matches any capability starting with "world.read." including nested paths.
+// Design choice: prefix matching is simpler and sufficient for v1; single-level wildcards
+// (e.g., "world.read.*" matching only immediate children) MAY be added if needed later.
 func matchCapability(grant, requested string) bool {
     if grant == requested {
         return true
@@ -375,6 +401,22 @@ On `LuaHost.DeliverEvent()`:
 4. Collect return value (emit events table or nil)
 5. Close state
 
+**Lua Event Table Structure:**
+
+The `event` parameter passed to `on_event` is a Lua table with these fields:
+
+```lua
+{
+    id = "01H...",              -- ULID string
+    stream = "location:123",    -- Stream identifier
+    type = "say",               -- Event type
+    timestamp = 1705591234000,  -- Unix milliseconds
+    actor_kind = "character",   -- "character", "system", "plugin"
+    actor_id = "char_123",      -- Actor identifier
+    payload = { ... }           -- Decoded JSON payload as Lua table
+}
+```
+
 **Edge cases** (handled gracefully, logged, delivery continues):
 
 - `on_event` function not defined → no-op
@@ -463,24 +505,25 @@ func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
 
 ### API Reference
 
-| Function                                  | Capability               | Description                   |
-| ----------------------------------------- | ------------------------ | ----------------------------- |
-| `holomush.emit_event(stream, type, data)` | `events.emit.<type>`[^1] | Emit event to stream          |
-| `holomush.query_location(id)`             | `world.read.location`    | Get location data             |
-| `holomush.query_character(id)`            | `world.read.character`   | Get character data            |
-| `holomush.query_object(id)`               | `world.read.object`      | Get object data               |
-| `holomush.kv_get(key)`                    | `kv.read`                | Read from plugin KV store     |
-| `holomush.kv_set(key, value)`             | `kv.write`               | Write to plugin KV store[^2]  |
-| `holomush.kv_delete(key)`                 | `kv.write`               | Delete from plugin KV store   |
-| `holomush.new_request_id()`               | (none)                   | Generate ULID for correlation |
-| `holomush.log(level, message)`            | (none)                   | Structured logging            |
+| Function                                  | Capability               | Returns                     |
+| ----------------------------------------- | ------------------------ | --------------------------- |
+| `holomush.emit_event(stream, type, data)` | `events.emit.<type>`[^1] | `nil, err` on failure       |
+| `holomush.query_location(id)`             | `world.read.location`    | `location, err`             |
+| `holomush.query_character(id)`            | `world.read.character`   | `character, err`            |
+| `holomush.query_object(id)`               | `world.read.object`      | `object, err`               |
+| `holomush.kv_get(key)`                    | `kv.read`                | `value, err`[^2]            |
+| `holomush.kv_set(key, value)`             | `kv.write`               | `nil, err`[^3]              |
+| `holomush.kv_delete(key)`                 | `kv.write`               | `nil, err`                  |
+| `holomush.new_request_id()`               | (none)                   | `ulid_string` (never fails) |
+| `holomush.log(level, message)`            | (none)                   | (no return)                 |
 
 [^1]: Capability determined dynamically from stream parameter. Stream format is
     `<type>:<id>` (e.g., `location:123`). Emitting to `location:123` requires
     `events.emit.location` capability.
 
-[^2]: Value can be string or table. Tables are automatically JSON-serialized;
-    `kv_get` returns deserialized Lua tables.
+[^2]: Returns deserialized Lua table if value was stored as table; string otherwise.
+
+[^3]: Value can be string or table. Tables are automatically JSON-serialized.
 
 ### Error Semantics
 
@@ -556,6 +599,18 @@ of MUSH games where users may not respond immediately.
 | `prompt_timeout`  | System → Plugin | User didn't respond   |
 | `plugin_request`  | Plugin → Plugin | Cross-plugin call     |
 | `plugin_response` | Plugin → Plugin | Cross-plugin response |
+
+**Cross-Plugin Communication:**
+
+Plugin-to-plugin events use `plugin:<plugin-name>` streams:
+
+- To call another plugin: emit to `plugin:target-plugin` with type `plugin_request`
+- Target plugin subscribes to `plugin_request` in its manifest
+- Requires `events.emit.plugin` capability (implied by `events.emit.*`)
+- Response returns via `plugin_response` to the caller's `plugin:<caller>` stream
+
+This pattern enables loose coupling—plugins communicate through events without direct
+dependencies. The requesting plugin includes a `request_id` for correlation.
 
 ### Example: User Prompt
 
