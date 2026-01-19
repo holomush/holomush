@@ -32,7 +32,7 @@ pre-commit:
     schema-sync:
       glob: "internal/plugin/*.go"
       run: |
-        go run cmd/gen-schema/main.go
+        task generate:schema
         if ! git diff --exit-code schemas/plugin.schema.json; then
           echo "Schema out of sync. Run 'task generate:schema' and commit."
           exit 1
