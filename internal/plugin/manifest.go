@@ -20,13 +20,15 @@ const (
 
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
-	Name         string        `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
-	Version      string        `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
-	Type         Type          `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary"`
-	Events       []string      `yaml:"events,omitempty" json:"events,omitempty"`
-	Capabilities []string      `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
-	LuaPlugin    *LuaConfig    `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
-	BinaryPlugin *BinaryConfig `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
+	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
+	Version      string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
+	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary"`
+	Engine       string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
+	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
+	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
+	Capabilities []string          `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	LuaPlugin    *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
+	BinaryPlugin *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
 }
 
 // LuaConfig holds Lua-specific configuration.
@@ -79,6 +81,20 @@ func (m *Manifest) Validate() error {
 	}
 	if _, err := semver.StrictNewVersion(m.Version); err != nil {
 		return fmt.Errorf("version %q must be valid semver (e.g., 1.0.0): %w", m.Version, err)
+	}
+
+	// Validate engine constraint if specified
+	if m.Engine != "" {
+		if _, err := semver.NewConstraint(m.Engine); err != nil {
+			return fmt.Errorf("engine %q must be a valid version constraint: %w", m.Engine, err)
+		}
+	}
+
+	// Validate dependency constraints
+	for name, constraint := range m.Dependencies {
+		if _, err := semver.NewConstraint(constraint); err != nil {
+			return fmt.Errorf("dependency %q constraint %q is invalid: %w", name, constraint, err)
+		}
 	}
 
 	switch m.Type {

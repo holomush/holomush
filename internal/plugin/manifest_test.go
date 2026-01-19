@@ -486,3 +486,158 @@ lua-plugin:
 		})
 	}
 }
+
+func TestParseManifest_EngineConstraint(t *testing.T) {
+	tests := []struct {
+		name       string
+		engine     string
+		wantErr    bool
+		wantEngine string
+	}{
+		{name: "exact version", engine: "2.0.0", wantErr: false, wantEngine: "2.0.0"},
+		{name: "greater than or equal", engine: ">= 1.0.0", wantErr: false, wantEngine: ">= 1.0.0"},
+		{name: "less than", engine: "< 3.0.0", wantErr: false, wantEngine: "< 3.0.0"},
+		{name: "range", engine: ">= 1.0.0, < 2.0.0", wantErr: false, wantEngine: ">= 1.0.0, < 2.0.0"},
+		{name: "caret", engine: "^1.2.0", wantErr: false, wantEngine: "^1.2.0"},
+		{name: "tilde", engine: "~1.2.0", wantErr: false, wantEngine: "~1.2.0"},
+		{name: "wildcard", engine: "1.x", wantErr: false, wantEngine: "1.x"},
+		{name: "invalid constraint", engine: "not-a-version", wantErr: true},
+		{name: "empty is valid (optional)", engine: "", wantErr: false, wantEngine: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`
+			if tt.engine != "" {
+				yaml = `
+name: test
+version: 1.0.0
+type: lua
+engine: "` + tt.engine + `"
+lua-plugin:
+  entry: main.lua
+`
+			}
+			m, err := plugin.ParseManifest([]byte(yaml))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for engine %q", tt.engine)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseManifest() error = %v for engine %q", err, tt.engine)
+			}
+			if m.Engine != tt.wantEngine {
+				t.Errorf("Engine = %q, want %q", m.Engine, tt.wantEngine)
+			}
+		})
+	}
+}
+
+func TestParseManifest_Dependencies(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+		wantDep map[string]string
+	}{
+		{
+			name: "single dependency with exact version",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+dependencies:
+  other-plugin: "1.0.0"
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+			wantDep: map[string]string{"other-plugin": "1.0.0"},
+		},
+		{
+			name: "dependency with constraint",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+dependencies:
+  other-plugin: ">= 1.0.0"
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+			wantDep: map[string]string{"other-plugin": ">= 1.0.0"},
+		},
+		{
+			name: "multiple dependencies",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+dependencies:
+  plugin-a: "^1.0.0"
+  plugin-b: "~2.0.0"
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+			wantDep: map[string]string{"plugin-a": "^1.0.0", "plugin-b": "~2.0.0"},
+		},
+		{
+			name: "invalid dependency constraint",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+dependencies:
+  bad-plugin: "not-valid"
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: true,
+		},
+		{
+			name: "no dependencies is valid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+			wantDep: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := plugin.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseManifest() error = %v", err)
+			}
+			if len(m.Dependencies) != len(tt.wantDep) {
+				t.Errorf("len(Dependencies) = %d, want %d", len(m.Dependencies), len(tt.wantDep))
+			}
+			for k, v := range tt.wantDep {
+				if m.Dependencies[k] != v {
+					t.Errorf("Dependencies[%q] = %q, want %q", k, m.Dependencies[k], v)
+				}
+			}
+		})
+	}
+}
