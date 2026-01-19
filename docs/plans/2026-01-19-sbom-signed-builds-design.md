@@ -15,13 +15,13 @@ provenance attestations to HoloMUSH releases. The goals are:
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Signing method | Sigstore/Cosign keyless | No key management; uses GitHub Actions OIDC |
-| SBOM formats | CycloneDX + SPDX | Maximum compatibility with downstream tools |
-| Artifacts signed | Binaries + containers | Full coverage of distribution methods |
-| Provenance | SLSA attestations | Proves exact commit, workflow, runner per build |
-| License headers | SPDX format | Enables accurate license detection in SBOMs |
+| Decision         | Choice                  | Rationale                                       |
+| ---------------- | ----------------------- | ----------------------------------------------- |
+| Signing method   | Sigstore/Cosign keyless | No key management; uses GitHub Actions OIDC     |
+| SBOM formats     | CycloneDX + SPDX        | Maximum compatibility with downstream tools     |
+| Artifacts signed | Binaries + containers   | Full coverage of distribution methods           |
+| Provenance       | SLSA attestations       | Proves exact commit, workflow, runner per build |
+| License headers  | SPDX format             | Enables accurate license detection in SBOMs     |
 
 ## Architecture
 
@@ -29,10 +29,10 @@ provenance attestations to HoloMUSH releases. The goals are:
 
 Each release produces:
 
-| Artifact Type | Signing | SBOM | Provenance |
-|---------------|---------|------|------------|
-| Binary archives (`.tar.gz`) | Cosign `.sig` + `.cert` | CycloneDX + SPDX JSON | SLSA attestation |
-| Container images (ghcr.io) | Cosign signature in registry | CycloneDX attestation | SLSA attestation |
+| Artifact Type               | Signing                      | SBOM                  | Provenance       |
+| --------------------------- | ---------------------------- | --------------------- | ---------------- |
+| Binary archives (`.tar.gz`) | Cosign `.sig` + `.cert`      | CycloneDX + SPDX JSON | SLSA attestation |
+| Container images (ghcr.io)  | Cosign signature in registry | CycloneDX attestation | SLSA attestation |
 
 ### Verification Flow
 
@@ -101,12 +101,12 @@ Updated `.github/workflows/release.yaml` structure:
 permissions:
   contents: write
   packages: write
-  id-token: write        # Required for Cosign keyless signing
-  attestations: write    # Required for provenance attestations
+  id-token: write # Required for Cosign keyless signing
+  attestations: write # Required for provenance attestations
 
 jobs:
   goreleaser:
-    # Build binaries, containers, generate SBOMs
+  # Build binaries, containers, generate SBOMs
 
   sign-binaries:
     needs: goreleaser
@@ -203,15 +203,15 @@ grype ghcr.io/holomush/holomush:v1.0.0
 
 ## Files to Create/Modify
 
-| File | Change |
-|------|--------|
-| `.goreleaser.yaml` | Add `sboms` section |
-| `.github/workflows/release.yaml` | Add signing, attestation, SBOM jobs |
-| `.github/workflows/ci.yaml` | Add license header check |
-| `Taskfile.yaml` | Add `license:check`, `license:add` tasks |
-| `LICENSE_HEADER` | New template file |
-| `docs/reference/verifying-releases.md` | New user documentation |
-| All `.go` files | Add SPDX headers |
+| File                                   | Change                                   |
+| -------------------------------------- | ---------------------------------------- |
+| `.goreleaser.yaml`                     | Add `sboms` section                      |
+| `.github/workflows/release.yaml`       | Add signing, attestation, SBOM jobs      |
+| `.github/workflows/ci.yaml`            | Add license header check                 |
+| `Taskfile.yaml`                        | Add `license:check`, `license:add` tasks |
+| `LICENSE_HEADER`                       | New template file                        |
+| `docs/reference/verifying-releases.md` | New user documentation                   |
+| All `.go` files                        | Add SPDX headers                         |
 
 ## Implementation Order
 

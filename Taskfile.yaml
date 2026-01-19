@@ -100,21 +100,21 @@ tasks:
     desc: Check SPDX license headers
     cmds:
       - |
-        go install github.com/google/addlicense@latest
-        addlicense -check -f LICENSE_HEADER \
-          -ignore '**/*.pb.go' \
-          -ignore 'vendor/**' \
-          cmd/ internal/ pkg/
+          go install github.com/google/addlicense@latest
+          addlicense -check -f LICENSE_HEADER \
+            -ignore '**/*.pb.go' \
+            -ignore 'vendor/**' \
+            cmd/ internal/ pkg/
 
   license:add:
     desc: Add missing SPDX license headers
     cmds:
       - |
-        go install github.com/google/addlicense@latest
-        addlicense -f LICENSE_HEADER \
-          -ignore '**/*.pb.go' \
-          -ignore 'vendor/**' \
-          cmd/ internal/ pkg/
+          go install github.com/google/addlicense@latest
+          addlicense -f LICENSE_HEADER \
+            -ignore '**/*.pb.go' \
+            -ignore 'vendor/**' \
+            cmd/ internal/ pkg/
 
   lint:
     desc: Run all linters

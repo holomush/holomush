@@ -20,6 +20,7 @@ go install github.com/sigstore/cosign/v2/cmd/cosign@latest
 ## Verifying Binary Releases
 
 Each binary release includes:
+
 - The archive (`.tar.gz`)
 - A signature file (`.tar.gz.sig`)
 - A certificate file (`.tar.gz.cert`)
@@ -45,7 +46,8 @@ cosign verify-blob \
 ```
 
 A successful verification shows:
-```
+
+```text
 Verified OK
 ```
 
@@ -64,11 +66,13 @@ cosign verify \
 ### View Build Provenance
 
 Using GitHub CLI:
+
 ```bash
 gh attestation verify oci://ghcr.io/holomush/holomush:v1.0.0 --owner holomush
 ```
 
 Using Cosign:
+
 ```bash
 cosign verify-attestation \
   --type slsaprovenance \
@@ -102,13 +106,13 @@ grype ghcr.io/holomush/holomush:v1.0.0
 
 ## What Gets Verified
 
-| Check | What It Proves |
-|-------|----------------|
-| Signature verification | Artifact was signed by the HoloMUSH CI pipeline |
-| Certificate identity | Signature came from the holomush/holomush repository |
-| OIDC issuer | Signature was created during a GitHub Actions workflow |
-| Transparency log | Signature is recorded in the public Rekor log |
-| Build provenance | Exact commit, workflow, and runner that produced the build |
+| Check                  | What It Proves                                             |
+| ---------------------- | ---------------------------------------------------------- |
+| Signature verification | Artifact was signed by the HoloMUSH CI pipeline            |
+| Certificate identity   | Signature came from the holomush/holomush repository       |
+| OIDC issuer            | Signature was created during a GitHub Actions workflow     |
+| Transparency log       | Signature is recorded in the public Rekor log              |
+| Build provenance       | Exact commit, workflow, and runner that produced the build |
 
 ## Troubleshooting
 
@@ -125,5 +129,6 @@ in the Rekor transparency log at signing time. Verification checks this log entr
 ### Network Issues
 
 Verification requires network access to:
+
 - `rekor.sigstore.dev` (transparency log)
 - `fulcio.sigstore.dev` (certificate authority)

@@ -10,8 +10,8 @@ permissions:
   contents: write
   packages: write
   pull-requests: write
-  id-token: write        # Required for Cosign keyless signing
-  attestations: write    # Required for provenance attestations
+  id-token: write # Required for Cosign keyless signing
+  attestations: write # Required for provenance attestations
 
 jobs:
   release-please:
