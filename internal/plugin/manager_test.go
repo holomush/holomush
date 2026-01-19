@@ -53,14 +53,14 @@ func (h *mockHost) Close(_ context.Context) error {
 // Helper functions for creating test fixtures with secure permissions.
 func mkdirAll(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(path, 0750); err != nil {
+	if err := os.MkdirAll(path, 0o750); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func writeFile(t *testing.T, path string, content []byte) {
 	t.Helper()
-	if err := os.WriteFile(path, content, 0600); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -124,7 +124,6 @@ lua-plugin:
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-
 	// Should succeed but only return valid plugin
 	if err != nil {
 		t.Fatalf("Discover() error = %v", err)
@@ -429,7 +428,6 @@ func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
-
 	// LoadAll should succeed but log a warning and skip the bad plugin
 	if err != nil {
 		t.Fatalf("LoadAll() error = %v (should skip plugins with load errors)", err)
