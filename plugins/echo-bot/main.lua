@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+
 -- Echo bot: repeats messages back to the room
 -- Demonstrates basic event handling and response
 --

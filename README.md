@@ -85,11 +85,41 @@ task fmt
 
 See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
 
+## Release Verification
+
+All releases are cryptographically signed and include SBOMs for vulnerability tracking.
+
+```bash
+# Download release assets (adjust VERSION and ARCH as needed)
+VERSION="v1.0.0"
+ARCH="linux_amd64"  # or: darwin_amd64, darwin_arm64, linux_arm64
+gh release download "${VERSION}" -R holomush/holomush \
+  -p "holomush_${VERSION#v}_${ARCH}.tar.gz" \
+  -p "checksums.txt*"
+
+# Verify checksums signature
+cosign verify-blob \
+  --certificate checksums.txt.sig.cert \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  checksums.txt
+
+# Verify container image
+cosign verify \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/holomush/holomush:v1.0.0
+```
+
+See [Verifying Releases](docs/reference/verifying-releases.md) for complete instructions.
+
 ## Documentation
 
 - [Getting Started](docs/reference/getting-started.md) - Setup and usage guide
 - [Architecture Overview](docs/reference/architecture-overview.md) - System design summary
 - [Full Architecture Design](docs/plans/2026-01-17-holomush-architecture-design.md) - Detailed specifications
+- [Verifying Releases](docs/reference/verifying-releases.md) - How to verify signed releases
 - [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License

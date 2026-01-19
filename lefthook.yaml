@@ -9,6 +9,32 @@ pre-commit:
   exclude:
     - ".worktrees/**"
   commands:
+    license-headers:
+      glob: "*.{go,lua,sh,py,proto}"
+      exclude: "*.pb.go"
+      run: |
+        set -euo pipefail
+
+        # Verify LICENSE_HEADER exists
+        if [[ ! -f LICENSE_HEADER ]]; then
+          echo "ERROR: LICENSE_HEADER file not found in repository root"
+          echo "Please ensure LICENSE_HEADER exists before committing"
+          exit 1
+        fi
+
+        # Install addlicense if needed
+        if ! command -v addlicense >/dev/null 2>&1; then
+          echo "Installing addlicense..."
+          if ! go install github.com/google/addlicense@latest; then
+            echo "ERROR: Failed to install addlicense"
+            echo "Please run: go install github.com/google/addlicense@latest"
+            exit 1
+          fi
+        fi
+
+        addlicense -f LICENSE_HEADER {staged_files}
+      stage_fixed: true
+
     lint-go:
       glob: "*.go"
       run: golangci-lint run --new-from-rev=HEAD~1
@@ -32,6 +58,7 @@ pre-commit:
     schema-sync:
       glob: "internal/plugin/*.go"
       run: |
+        set -euo pipefail
         task generate:schema
         if ! git diff --exit-code schemas/plugin.schema.json; then
           echo "Schema out of sync. Run 'task generate:schema' and commit."

@@ -1,0 +1,181 @@
+# Verifying HoloMUSH Releases
+
+This guide explains how to verify the authenticity and integrity of HoloMUSH releases.
+
+## Prerequisites
+
+Install [Cosign](https://docs.sigstore.dev/system_config/installation/) for signature verification:
+
+```bash
+# macOS
+brew install cosign
+
+# Linux (via Go)
+go install github.com/sigstore/cosign/v2/cmd/cosign@latest
+
+# Or download from GitHub releases
+# https://github.com/sigstore/cosign/releases
+```
+
+Install [GitHub CLI](https://cli.github.com/) for downloading releases and attestation verification:
+
+```bash
+# macOS
+brew install gh
+
+# Linux (Debian/Ubuntu)
+sudo apt install gh
+
+# Or see https://github.com/cli/cli#installation
+```
+
+## Verifying Binary Releases
+
+Each release includes:
+
+- Binary archives (`.tar.gz`) for multiple platforms
+- Source archive (`.tar.gz`) containing the repository snapshot
+- A checksums file (`checksums.txt`) with SHA256 hashes
+- A signature file (`checksums.txt.sig`) signing the checksums
+- A certificate file (`checksums.txt.sig.cert`) with the signing identity
+- Binary SBOM files in CycloneDX and SPDX formats (per platform)
+- Source SBOM files in CycloneDX and SPDX formats
+
+### Download and Verify
+
+```bash
+# Download the release assets
+VERSION="v1.0.0"
+ARCH="linux_amd64"  # or: darwin_amd64, darwin_arm64, linux_arm64
+
+# Using GitHub CLI (recommended)
+gh release download "${VERSION}" -R holomush/holomush \
+  -p "holomush_${VERSION#v}_${ARCH}.tar.gz" \
+  -p "checksums.txt" \
+  -p "checksums.txt.sig" \
+  -p "checksums.txt.sig.cert"
+
+# Or using curl
+BASE_URL="https://github.com/holomush/holomush/releases/download/${VERSION}"
+curl -LO "${BASE_URL}/holomush_${VERSION#v}_${ARCH}.tar.gz"
+curl -LO "${BASE_URL}/checksums.txt"
+curl -LO "${BASE_URL}/checksums.txt.sig"
+curl -LO "${BASE_URL}/checksums.txt.sig.cert"
+
+# Verify the checksums signature
+cosign verify-blob \
+  --certificate checksums.txt.sig.cert \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  checksums.txt
+
+# Verify the archive checksum
+# Linux
+sha256sum --check --ignore-missing checksums.txt
+
+# macOS (BSD shasum doesn't support --ignore-missing)
+# Option 1: Verify specific file
+grep "holomush_${VERSION#v}_${ARCH}.tar.gz" checksums.txt | shasum -a 256 -c -
+
+# Option 2: Install GNU coreutils and use gsha256sum
+# brew install coreutils
+# gsha256sum --check --ignore-missing checksums.txt
+```
+
+A successful verification shows:
+
+```text
+Verified OK
+holomush_1.0.0_linux_amd64.tar.gz: OK
+```
+
+## Verifying Container Images
+
+Container images are signed and stored in the GitHub Container Registry (ghcr.io).
+
+```bash
+# Verify the container signature
+cosign verify \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/holomush/holomush:v1.0.0
+```
+
+### View Build Provenance
+
+Using GitHub CLI:
+
+```bash
+gh attestation verify oci://ghcr.io/holomush/holomush:v1.0.0 --owner holomush
+```
+
+Using Cosign:
+
+```bash
+cosign verify-attestation \
+  --type slsaprovenance \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/holomush/holomush:v1.0.0
+```
+
+## Using SBOMs for Vulnerability Scanning
+
+Each release includes Software Bill of Materials (SBOM) files in both CycloneDX and SPDX formats.
+
+### Scan Binary SBOMs
+
+Download the SBOM and scan with [Grype](https://github.com/anchore/grype):
+
+```bash
+# Install grype
+brew install grype  # or: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+# Download and scan
+curl -LO "https://github.com/holomush/holomush/releases/download/v1.0.0/holomush_1.0.0_linux_amd64.tar.gz.sbom.cyclonedx.json"
+grype sbom:holomush_1.0.0_linux_amd64.tar.gz.sbom.cyclonedx.json
+```
+
+### Scan Container Images Directly
+
+```bash
+grype ghcr.io/holomush/holomush:v1.0.0
+```
+
+## What Gets Verified
+
+| Check                  | What It Proves                                             |
+| ---------------------- | ---------------------------------------------------------- |
+| Signature verification | Artifact was signed by the HoloMUSH CI pipeline            |
+| Certificate identity   | Signature came from the holomush/holomush repository       |
+| OIDC issuer            | Signature was created during a GitHub Actions workflow     |
+| Transparency log       | Signature is recorded in the public Rekor log              |
+| Build provenance       | Exact commit, workflow, and runner that produced the build |
+
+## Troubleshooting
+
+### "no matching signatures" Error
+
+Ensure you're using the correct certificate identity and OIDC issuer. The identity must match
+the GitHub repository that produced the build.
+
+### Attestation Verification Fails
+
+If `gh attestation verify` fails, try fetching the attestation from the OCI registry:
+
+```bash
+gh attestation verify oci://ghcr.io/holomush/holomush:v1.0.0 --owner holomush --bundle-from-oci
+```
+
+### Certificate Expired
+
+Cosign certificates are short-lived but the signature remains valid because it was recorded
+in the Rekor transparency log at signing time. Verification checks this log entry.
+
+### Network Issues
+
+Verification requires network access to:
+
+- `rekor.sigstore.dev` (transparency log)
+- `fulcio.sigstore.dev` (certificate authority)

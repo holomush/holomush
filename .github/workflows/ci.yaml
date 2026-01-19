@@ -56,6 +56,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check license headers
+        run: task license:check
+
       - name: Lint
         run: task lint
 

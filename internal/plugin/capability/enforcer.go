@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package capability provides runtime capability enforcement for plugins.
 //
 // Pattern matching uses gobwas/glob with '.' as the segment separator:

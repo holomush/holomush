@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package main implements an echo bot plugin for HoloMUSH.
 // This plugin responds to say events by echoing the message back.
 //

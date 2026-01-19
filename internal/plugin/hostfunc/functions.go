@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package hostfunc provides host functions to Lua plugins.
 //
 // Host functions expose server capabilities to plugins in a controlled way.
