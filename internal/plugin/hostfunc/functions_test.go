@@ -4,6 +4,7 @@ package hostfunc_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -541,6 +542,70 @@ func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
 	err := L.DoString(`holomush.kv_delete("")`)
 	if err == nil {
 		t.Error("expected error for empty key")
+	}
+}
+
+func TestHostFunctions_KVSet_EmptyValueAllowed(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	// Empty values should be allowed (useful for clearing/resetting)
+	err := L.DoString(`result, err = holomush.kv_set("mykey", "")`)
+	if err != nil {
+		t.Fatalf("kv_set with empty value failed: %v", err)
+	}
+
+	setErr := L.GetGlobal("err")
+	if setErr.Type() != lua.LTNil {
+		t.Errorf("expected nil error for empty value, got %v", setErr)
+	}
+
+	// Verify we can read it back
+	err = L.DoString(`result, err = holomush.kv_get("mykey")`)
+	if err != nil {
+		t.Fatalf("kv_get failed: %v", err)
+	}
+
+	result := L.GetGlobal("result")
+	if result.Type() != lua.LTString {
+		t.Errorf("expected string result, got %v", result.Type())
+	}
+	if result.String() != "" {
+		t.Errorf("expected empty string, got %q", result.String())
+	}
+}
+
+func TestHostFunctions_KV_CapabilityDenied_ErrorMessage(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	// No capabilities granted
+
+	hf := hostfunc.New(nil, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`holomush.kv_get("key")`)
+	if err == nil {
+		t.Fatal("expected capability error")
+	}
+
+	// Error message should contain plugin name and capability for debugging
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "test-plugin") {
+		t.Errorf("error message should contain plugin name, got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "kv.read") {
+		t.Errorf("error message should contain capability name, got: %s", errMsg)
 	}
 }
 
