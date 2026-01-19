@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -24,23 +23,21 @@ type KVStore interface {
 	Delete(ctx context.Context, namespace, key string) error
 }
 
-// WorldReader provides read-only access to world data.
-type WorldReader interface {
-	// Future: GetLocation, GetCharacter, GetObject
+// CapabilityChecker validates plugin capabilities.
+type CapabilityChecker interface {
+	Check(plugin, capability string) bool
 }
 
 // Functions provides host functions to Lua plugins.
 type Functions struct {
 	kvStore  KVStore
-	world    WorldReader
-	enforcer *capability.Enforcer
+	enforcer CapabilityChecker
 }
 
 // New creates host functions with dependencies.
-func New(kv KVStore, world WorldReader, enforcer *capability.Enforcer) *Functions {
+func New(kv KVStore, enforcer CapabilityChecker) *Functions {
 	return &Functions{
 		kvStore:  kv,
-		world:    world,
 		enforcer: enforcer,
 	}
 }
@@ -89,6 +86,9 @@ func (f *Functions) logFn(pluginName string) lua.LGFunction {
 		case "error":
 			logger.Error(message)
 		default:
+			slog.Warn("invalid log level from plugin, falling back to info",
+				"plugin", pluginName,
+				"requested_level", level)
 			logger.Info(message)
 		}
 		return 0
@@ -108,7 +108,7 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 		key := L.CheckString(1)
 
 		if f.kvStore == nil {
-			slog.Warn("kv_get called but store unavailable",
+			slog.Error("kv_get called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
 			L.Push(lua.LNil)
@@ -148,7 +148,7 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 		value := L.CheckString(2)
 
 		if f.kvStore == nil {
-			slog.Warn("kv_set called but store unavailable",
+			slog.Error("kv_set called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
 			L.Push(lua.LString("kv store not available"))
@@ -176,7 +176,7 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		key := L.CheckString(1)
 
 		if f.kvStore == nil {
-			slog.Warn("kv_delete called but store unavailable",
+			slog.Error("kv_delete called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
 			L.Push(lua.LString("kv store not available"))

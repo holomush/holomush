@@ -16,7 +16,7 @@ func TestHostFunctions_Log(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	hf := hostfunc.New(nil, nil, capability.NewEnforcer())
+	hf := hostfunc.New(nil, capability.NewEnforcer())
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.log("info", "test message")`)
@@ -34,7 +34,6 @@ func TestHostFunctions_Log_Levels(t *testing.T) {
 		{"info level", "info"},
 		{"warn level", "warn"},
 		{"error level", "error"},
-		{"unknown level defaults to info", "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -42,7 +41,7 @@ func TestHostFunctions_Log_Levels(t *testing.T) {
 			L := lua.NewState()
 			defer L.Close()
 
-			hf := hostfunc.New(nil, nil, capability.NewEnforcer())
+			hf := hostfunc.New(nil, capability.NewEnforcer())
 			hf.Register(L, "test-plugin")
 
 			err := L.DoString(`holomush.log("` + tt.level + `", "test message")`)
@@ -53,11 +52,26 @@ func TestHostFunctions_Log_Levels(t *testing.T) {
 	}
 }
 
+func TestHostFunctions_Log_InvalidLevel(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	hf := hostfunc.New(nil, capability.NewEnforcer())
+	hf.Register(L, "test-plugin")
+
+	// Invalid log level should still work (falls back to info) but logs a warning
+	// We can't easily capture slog output, but we verify the function succeeds
+	err := L.DoString(`holomush.log("invalid_level", "test message")`)
+	if err != nil {
+		t.Errorf("log with invalid level should not fail: %v", err)
+	}
+}
+
 func TestHostFunctions_NewRequestID(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	hf := hostfunc.New(nil, nil, capability.NewEnforcer())
+	hf := hostfunc.New(nil, capability.NewEnforcer())
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`id = holomush.new_request_id()`)
@@ -75,7 +89,7 @@ func TestHostFunctions_NewRequestID_Unique(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	hf := hostfunc.New(nil, nil, capability.NewEnforcer())
+	hf := hostfunc.New(nil, capability.NewEnforcer())
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`
@@ -100,7 +114,7 @@ func TestHostFunctions_KV_RequiresCapability(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	// No capabilities granted
 
-	hf := hostfunc.New(nil, nil, enforcer)
+	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_get("key")`)
@@ -120,7 +134,7 @@ func TestHostFunctions_KVSet_RequiresWriteCapability(t *testing.T) {
 	}
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_set("key", "value")`)
@@ -140,7 +154,7 @@ func TestHostFunctions_KVDelete_RequiresWriteCapability(t *testing.T) {
 	}
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_delete("key")`)
@@ -159,7 +173,7 @@ func TestHostFunctions_KV_WithCapability(t *testing.T) {
 	}
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	// Set and get
@@ -189,7 +203,7 @@ func TestHostFunctions_KVGet_ReturnsNilForMissingKey(t *testing.T) {
 	}
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`
@@ -220,7 +234,7 @@ func TestHostFunctions_KVGet_NoStoreAvailable(t *testing.T) {
 	}
 
 	// nil kv store
-	hf := hostfunc.New(nil, nil, enforcer)
+	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`
@@ -246,7 +260,7 @@ func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
 	}
 
 	// nil kv store
-	hf := hostfunc.New(nil, nil, enforcer)
+	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`err = holomush.kv_set("key", "value")`)
@@ -270,7 +284,7 @@ func TestHostFunctions_KVDelete(t *testing.T) {
 	}
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	// Set a key
@@ -307,7 +321,7 @@ func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
 	}
 
 	// nil kv store
-	hf := hostfunc.New(nil, nil, enforcer)
+	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`err = holomush.kv_delete("key")`)
@@ -334,7 +348,7 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 		data:   make(map[string][]byte),
 		getErr: errors.New("database connection failed"),
 	}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`val, err = holomush.kv_get("key")`)
@@ -364,7 +378,7 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 		data:   make(map[string][]byte),
 		setErr: errors.New("write failed: disk full"),
 	}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`err = holomush.kv_set("key", "value")`)
@@ -394,7 +408,7 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 		data:      make(map[string][]byte),
 		deleteErr: errors.New("delete failed: permission denied"),
 	}
-	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`err = holomush.kv_delete("key")`)
@@ -425,7 +439,7 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hfA := hostfunc.New(kvStore, nil, enforcer)
+	hfA := hostfunc.New(kvStore, enforcer)
 	hfA.Register(L1, "plugin-a")
 
 	err := L1.DoString(`holomush.kv_set("secret", "plugin-a-data")`)
@@ -436,7 +450,7 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	// Plugin B tries to read - should get nil (different namespace)
 	L2 := lua.NewState()
 	defer L2.Close()
-	hfB := hostfunc.New(kvStore, nil, enforcer)
+	hfB := hostfunc.New(kvStore, enforcer)
 	hfB.Register(L2, "plugin-b")
 
 	err = L2.DoString(`val, err = holomush.kv_get("secret")`)
