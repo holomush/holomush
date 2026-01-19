@@ -1,26 +1,42 @@
 // Package capability provides runtime capability enforcement for plugins.
+//
+// Pattern matching uses gobwas/glob with '.' as the segment separator:
+//   - '*' matches a single segment (does not cross '.')
+//   - '**' matches zero or more segments (crosses '.')
+//
+// Examples:
+//   - "world.read.*" matches "world.read.location" but NOT "world.read.character.name"
+//   - "world.read.**" matches both "world.read.location" AND "world.read.character.name"
+//   - "**" matches any capability
 package capability
 
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
+
+	"github.com/gobwas/glob"
 )
+
+// compiledGrant holds a pattern and its compiled glob for efficient matching.
+type compiledGrant struct {
+	pattern string
+	glob    glob.Glob
+}
 
 // Enforcer checks plugin capabilities at runtime.
 //
 // Enforcer is safe for concurrent use. The zero value is ready to use
 // without calling NewEnforcer.
 type Enforcer struct {
-	grants map[string][]string // plugin name -> granted capabilities
+	grants map[string][]compiledGrant // plugin name -> compiled grants
 	mu     sync.RWMutex
 }
 
 // NewEnforcer creates a capability enforcer.
 func NewEnforcer() *Enforcer {
 	return &Enforcer{
-		grants: make(map[string][]string),
+		grants: make(map[string][]compiledGrant),
 	}
 }
 
@@ -32,28 +48,37 @@ func NewEnforcer() *Enforcer {
 // all previous grants. If validation fails, no changes are made to the
 // enforcer's state (atomic all-or-nothing semantics).
 //
-// Valid patterns:
-//   - Exact: "world.read.location"
-//   - Wildcard suffix: "world.read.*" (matches "world.read.location", "world.read.foo")
-//   - Root wildcard: ".*" (matches any non-empty capability)
+// Pattern matching uses gobwas/glob with '.' as the segment separator:
+//   - '*' matches a single segment (does not cross '.')
+//   - '**' matches zero or more segments (crosses '.')
+//
+// Examples:
+//   - "world.read.location" - exact match only
+//   - "world.read.*" - matches direct children: "world.read.location", "world.read.foo"
+//   - "world.read.**" - matches all descendants: "world.read.location", "world.read.char.name"
+//   - "*" - matches any single-segment capability
+//   - "**" - matches any capability (root super-wildcard)
 //
 // Invalid patterns (will return error):
 //   - Empty string
-//   - Bare star: "*"
-//   - Middle wildcard: "world.*.read"
-//   - Double wildcard: "world.*.*"
-//   - Star without dot prefix: "world*"
-//   - Trailing dot: "world.read."
+//   - Invalid glob syntax (e.g., unclosed brackets)
 func (e *Enforcer) SetGrants(plugin string, capabilities []string) error {
 	if plugin == "" {
 		return errors.New("plugin name cannot be empty")
 	}
 
-	// Validate all patterns before acquiring lock
-	for i, cap := range capabilities {
-		if err := validatePattern(cap); err != nil {
-			return fmt.Errorf("capability %d (%q): %w", i, cap, err)
+	// Compile all patterns before acquiring lock (fail-fast, atomic)
+	compiled := make([]compiledGrant, len(capabilities))
+	for i, pattern := range capabilities {
+		if pattern == "" {
+			return fmt.Errorf("capability %d: empty capability pattern", i)
 		}
+		// Compile with '.' as separator so '*' doesn't cross segment boundaries
+		g, err := glob.Compile(pattern, '.')
+		if err != nil {
+			return fmt.Errorf("capability %d (%q): %w", i, pattern, err)
+		}
+		compiled[i] = compiledGrant{pattern: pattern, glob: g}
 	}
 
 	e.mu.Lock()
@@ -61,39 +86,15 @@ func (e *Enforcer) SetGrants(plugin string, capabilities []string) error {
 
 	// Initialize map if zero-value struct
 	if e.grants == nil {
-		e.grants = make(map[string][]string)
+		e.grants = make(map[string][]compiledGrant)
 	}
 
-	// Defensive copy to prevent caller from mutating stored slice
-	copied := make([]string, len(capabilities))
-	copy(copied, capabilities)
-	e.grants[plugin] = copied
-	return nil
-}
-
-// validatePattern checks if a capability pattern is well-formed.
-func validatePattern(pattern string) error {
-	if pattern == "" {
-		return errors.New("empty capability pattern")
-	}
-	if pattern == "*" {
-		return errors.New("bare '*' not valid; use '.*' for root wildcard")
-	}
-	if strings.Count(pattern, "*") > 1 {
-		return errors.New("multiple wildcards not supported")
-	}
-	if strings.Contains(pattern, "*") && !strings.HasSuffix(pattern, ".*") {
-		return errors.New("wildcards only valid at end with '.*' suffix")
-	}
-	// Reject trailing dots (except for wildcards like "world.*")
-	if strings.HasSuffix(pattern, ".") && !strings.HasSuffix(pattern, ".*") {
-		return errors.New("trailing dot not allowed; use '.*' for wildcard suffix")
-	}
+	e.grants[plugin] = compiled
 	return nil
 }
 
 // IsRegistered returns true if the plugin has been registered via SetGrants.
-// Returns false for empty plugin names.
+// Returns false for empty plugin names (which cannot be registered via SetGrants).
 // This helps distinguish "plugin not registered" from "plugin lacks capability".
 func (e *Enforcer) IsRegistered(plugin string) bool {
 	e.mu.RLock()
@@ -133,18 +134,49 @@ func (e *Enforcer) GetGrants(plugin string) []string {
 	if !ok {
 		return nil
 	}
-	// Return defensive copy
-	copied := make([]string, len(grants))
-	copy(copied, grants)
-	return copied
+	// Return defensive copy of pattern strings
+	patterns := make([]string, len(grants))
+	for i, g := range grants {
+		patterns[i] = g.pattern
+	}
+	return patterns
+}
+
+// ListPlugins returns a list of all registered plugin names.
+// Returns an empty slice (not nil) if no plugins are registered.
+// The returned slice is a defensive copy; modifying it does not affect
+// the enforcer's state. Order is not guaranteed.
+func (e *Enforcer) ListPlugins() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if len(e.grants) == 0 {
+		return []string{}
+	}
+
+	plugins := make([]string, 0, len(e.grants))
+	for name := range e.grants {
+		plugins = append(plugins, name)
+	}
+	return plugins
 }
 
 // Check returns true if the plugin has the requested capability.
-// Returns false for empty capability strings.
 //
-// Supports wildcard grants: "world.read.*" matches "world.read.location".
-// The root wildcard ".*" matches any non-empty capability.
+// Returns false in these cases (no error, deny by default):
+//   - Empty plugin name
+//   - Empty capability string
+//   - Unknown plugin (not registered via SetGrants)
+//   - Plugin lacks the requested capability
+//
+// Pattern matching uses gobwas/glob with '.' as the segment separator:
+//   - '*' matches a single segment: "world.read.*" matches "world.read.location"
+//   - '**' matches multiple segments: "world.read.**" matches "world.read.char.name"
 func (e *Enforcer) Check(plugin, capability string) bool {
+	if capability == "" {
+		return false
+	}
+
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -159,26 +191,9 @@ func (e *Enforcer) Check(plugin, capability string) bool {
 	}
 
 	for _, grant := range grants {
-		if matchCapability(grant, capability) {
+		if grant.glob.Match(capability) {
 			return true
 		}
-	}
-	return false
-}
-
-// matchCapability handles wildcard matching.
-// "world.read.*" matches "world.read.location" and "world.read.character.name".
-// ".*" is the root wildcard and matches any non-empty capability.
-func matchCapability(grant, requested string) bool {
-	if grant == requested {
-		return true
-	}
-	if strings.HasSuffix(grant, ".*") {
-		if grant == ".*" {
-			return requested != ""
-		}
-		prefix := strings.TrimSuffix(grant, "*")
-		return strings.HasPrefix(requested, prefix)
 	}
 	return false
 }

@@ -10,13 +10,17 @@ import (
 )
 
 func TestCapabilityEnforcer_Check(t *testing.T) {
+	// Tests use gobwas/glob with '.' as separator.
+	// Key semantics:
+	//   - '*' matches a single segment (does not cross '.')
+	//   - '**' matches zero or more segments (crosses '.')
 	tests := []struct {
 		name       string
 		grants     []string
 		capability string
 		want       bool
 	}{
-		// Positive cases
+		// === Exact match ===
 		{
 			name:       "exact match",
 			grants:     []string{"world.read.location"},
@@ -24,17 +28,71 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 			want:       true,
 		},
 		{
-			name:       "wildcard suffix matches child",
+			name:       "exact match single segment",
+			grants:     []string{"world"},
+			capability: "world",
+			want:       true,
+		},
+
+		// === Single-segment wildcard (*) ===
+		{
+			name:       "single wildcard matches direct child",
 			grants:     []string{"world.read.*"},
 			capability: "world.read.location",
 			want:       true,
 		},
 		{
-			name:       "wildcard suffix matches nested",
-			grants:     []string{"world.*"},
+			name:       "single wildcard does NOT match nested (key semantic)",
+			grants:     []string{"world.read.*"},
+			capability: "world.read.character.name",
+			want:       false, // '*' only matches one segment
+		},
+		{
+			name:       "single wildcard at root matches single segment",
+			grants:     []string{"*"},
+			capability: "world",
+			want:       true,
+		},
+		{
+			name:       "single wildcard at root does NOT match multi-segment",
+			grants:     []string{"*"},
+			capability: "world.read",
+			want:       false,
+		},
+
+		// === Super-wildcard (**) - matches all descendants ===
+		{
+			name:       "super wildcard matches direct child",
+			grants:     []string{"world.read.**"},
 			capability: "world.read.location",
 			want:       true,
 		},
+		{
+			name:       "super wildcard matches nested descendants",
+			grants:     []string{"world.read.**"},
+			capability: "world.read.character.name",
+			want:       true,
+		},
+		{
+			name:       "super wildcard matches deeply nested",
+			grants:     []string{"world.**"},
+			capability: "world.read.character.name.first",
+			want:       true,
+		},
+		{
+			name:       "root super wildcard matches everything",
+			grants:     []string{"**"},
+			capability: "world.read.location",
+			want:       true,
+		},
+		{
+			name:       "root super wildcard matches single segment",
+			grants:     []string{"**"},
+			capability: "world",
+			want:       true,
+		},
+
+		// === Multiple grants ===
 		{
 			name:       "multiple grants second matches",
 			grants:     []string{"other.capability", "world.read.location"},
@@ -42,25 +100,13 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 			want:       true,
 		},
 		{
-			name:       "root wildcard matches everything",
-			grants:     []string{".*"},
-			capability: "world.read.location",
-			want:       true,
-		},
-		{
-			name:       "root wildcard matches single-segment capability",
-			grants:     []string{".*"},
-			capability: "world",
-			want:       true,
-		},
-		{
-			name:       "wildcard matches exact prefix boundary",
-			grants:     []string{"world.read.*"},
-			capability: "world.read.",
+			name:       "multiple grants wildcard matches",
+			grants:     []string{"events.*", "world.read.**"},
+			capability: "world.read.character.name",
 			want:       true,
 		},
 
-		// Negative cases
+		// === Negative cases ===
 		{
 			name:       "no match returns false",
 			grants:     []string{"world.read.character"},
@@ -79,8 +125,14 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 			capability: "world.read.location",
 			want:       false,
 		},
+		{
+			name:       "similar prefix boundary - single wildcard respects segments",
+			grants:     []string{"world.read.*"},
+			capability: "world.readonly",
+			want:       false, // 'world.read.*' != 'world.readonly'
+		},
 
-		// Boundary cases
+		// === Boundary cases ===
 		{
 			name:       "empty capability returns false",
 			grants:     []string{"world.read.*"},
@@ -88,8 +140,8 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 			want:       false,
 		},
 		{
-			name:       "root wildcard does not match empty capability",
-			grants:     []string{".*"},
+			name:       "super wildcard does not match empty capability",
+			grants:     []string{"**"},
 			capability: "",
 			want:       false,
 		},
@@ -185,6 +237,10 @@ func TestCapabilityEnforcer_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	var successCount int32
 
+	// Collect errors from goroutines (t.Errorf is not safe in goroutines)
+	var errMu sync.Mutex
+	var errs []string
+
 	// Concurrent writers
 	for i := range 10 {
 		wg.Add(1)
@@ -192,7 +248,9 @@ func TestCapabilityEnforcer_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			plugin := fmt.Sprintf("plugin-%d", n)
 			if err := e.SetGrants(plugin, []string{"world.read.*"}); err != nil {
-				t.Errorf("SetGrants failed for %s: %v", plugin, err)
+				errMu.Lock()
+				errs = append(errs, fmt.Sprintf("SetGrants failed for %s: %v", plugin, err))
+				errMu.Unlock()
 			}
 		}(i)
 	}
@@ -210,6 +268,11 @@ func TestCapabilityEnforcer_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// Report any errors after goroutines complete
+	for _, errMsg := range errs {
+		t.Error(errMsg)
+	}
 
 	// At least some checks should have succeeded (race means not all)
 	if successCount == 0 {
@@ -290,25 +353,28 @@ func TestCapabilityEnforcer_Check_SimilarPrefixBoundary(t *testing.T) {
 }
 
 func TestCapabilityEnforcer_SetGrants_PatternValidation(t *testing.T) {
+	// Pattern validation uses gobwas/glob with '.' as separator.
+	// Most patterns are valid; only empty strings are rejected by us.
+	// Invalid glob syntax is rejected by gobwas/glob.Compile.
 	tests := []struct {
 		name    string
 		pattern string
 		wantErr bool
 	}{
-		// Valid patterns
+		// Valid patterns - all of these work with gobwas/glob
 		{name: "exact capability", pattern: "world.read.location", wantErr: false},
-		{name: "wildcard suffix", pattern: "world.read.*", wantErr: false},
-		{name: "root wildcard", pattern: ".*", wantErr: false},
+		{name: "single segment wildcard", pattern: "world.read.*", wantErr: false},
+		{name: "super wildcard", pattern: "world.read.**", wantErr: false},
+		{name: "root single wildcard", pattern: "*", wantErr: false},
+		{name: "root super wildcard", pattern: "**", wantErr: false},
 		{name: "single segment", pattern: "world", wantErr: false},
+		{name: "middle wildcard", pattern: "world.*.read", wantErr: false},
+		{name: "multiple wildcards", pattern: "world.*.read.*", wantErr: false},
+		{name: "trailing dot with wildcard", pattern: "world.read.*", wantErr: false},
 
 		// Invalid patterns
 		{name: "empty string", pattern: "", wantErr: true},
-		{name: "bare star", pattern: "*", wantErr: true},
-		{name: "double wildcard", pattern: "world.*.*", wantErr: true},
-		{name: "middle wildcard", pattern: "world.*.read", wantErr: true},
-		{name: "star without dot prefix", pattern: "world*", wantErr: true},
-		{name: "missing dot before star", pattern: "worldread*", wantErr: true},
-		{name: "trailing dot", pattern: "world.read.", wantErr: true},
+		{name: "unclosed bracket", pattern: "world.[read", wantErr: true}, // invalid glob syntax
 	}
 
 	for _, tt := range tests {
@@ -325,7 +391,7 @@ func TestCapabilityEnforcer_SetGrants_PatternValidation(t *testing.T) {
 func TestCapabilityEnforcer_SetGrants_MultiplePatterns_OneInvalid(t *testing.T) {
 	e := capability.NewEnforcer()
 	// If one pattern is invalid, the whole call should fail
-	err := e.SetGrants("plugin", []string{"world.read.*", "*", "events.emit.*"})
+	err := e.SetGrants("plugin", []string{"world.read.*", "", "events.emit.*"})
 	if err == nil {
 		t.Error("SetGrants() should fail if any pattern is invalid")
 	}
@@ -612,4 +678,87 @@ func FuzzCapabilityEnforcer_RemoveGrants(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestCapabilityEnforcer_ListPlugins(t *testing.T) {
+	e := capability.NewEnforcer()
+
+	// Empty enforcer should return empty slice
+	got := e.ListPlugins()
+	if len(got) != 0 {
+		t.Errorf("ListPlugins() on empty enforcer = %v, want empty slice", got)
+	}
+
+	// Register some plugins
+	if err := e.SetGrants("plugin-a", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+	if err := e.SetGrants("plugin-b", []string{"events.emit.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	got = e.ListPlugins()
+	if len(got) != 2 {
+		t.Errorf("ListPlugins() returned %d plugins, want 2", len(got))
+	}
+
+	// Check both plugins are present (order not guaranteed)
+	found := make(map[string]bool)
+	for _, p := range got {
+		found[p] = true
+	}
+	if !found["plugin-a"] || !found["plugin-b"] {
+		t.Errorf("ListPlugins() = %v, want [plugin-a, plugin-b]", got)
+	}
+}
+
+func TestCapabilityEnforcer_ListPlugins_ZeroValue(t *testing.T) {
+	var e capability.Enforcer
+	got := e.ListPlugins()
+	if got == nil {
+		t.Error("ListPlugins() on zero value should return empty slice, not nil")
+	}
+	if len(got) != 0 {
+		t.Errorf("ListPlugins() on zero value = %v, want empty slice", got)
+	}
+}
+
+func TestCapabilityEnforcer_ListPlugins_AfterRemove(t *testing.T) {
+	e := capability.NewEnforcer()
+
+	if err := e.SetGrants("plugin-a", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+	if err := e.SetGrants("plugin-b", []string{"events.emit.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Remove one plugin
+	e.RemoveGrants("plugin-a")
+
+	got := e.ListPlugins()
+	if len(got) != 1 {
+		t.Errorf("ListPlugins() after removal = %v, want 1 plugin", got)
+	}
+	if len(got) == 1 && got[0] != "plugin-b" {
+		t.Errorf("ListPlugins() = %v, want [plugin-b]", got)
+	}
+}
+
+func TestCapabilityEnforcer_ListPlugins_DefensiveCopy(t *testing.T) {
+	e := capability.NewEnforcer()
+	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Get list and mutate it
+	got := e.ListPlugins()
+	if len(got) > 0 {
+		got[0] = "mutated"
+	}
+
+	// Enforcer should not be affected
+	if !e.IsRegistered("plugin") {
+		t.Error("ListPlugins() should return a defensive copy")
+	}
 }
