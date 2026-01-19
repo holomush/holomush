@@ -2130,7 +2130,7 @@ message Event {
     string stream = 2;
     string type = 3;
     int64 timestamp = 4;
-    uint32 actor_kind = 5;
+    string actor_kind = 5;  // "character", "system", "plugin"
     string actor_id = 6;
     bytes payload = 7;  // JSON-encoded
 }
@@ -2287,7 +2287,7 @@ type Event struct {
     Stream    string
     Type      string
     Timestamp int64
-    ActorKind uint32
+    ActorKind string // "character", "system", "plugin"
     ActorID   string
     Payload   []byte
 }
@@ -2454,7 +2454,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
         Stream:    event.Stream,
         Type:      string(event.Type),
         Timestamp: event.Timestamp,
-        ActorKind: uint32(event.ActorKind),
+        ActorKind: actorKindToString(event.ActorKind),
         ActorID:   event.ActorID,
         Payload:   []byte(event.Payload),
     }
@@ -2505,6 +2505,21 @@ func expandBinaryPath(template, dir string) string {
     result := strings.ReplaceAll(template, "${os}", runtime.GOOS)
     result = strings.ReplaceAll(result, "${arch}", runtime.GOARCH)
     return dir + "/" + result
+}
+
+// actorKindToString converts ActorKind to string for proto/SDK.
+// Note: This is duplicated from lua/host.go; consider shared package in implementation.
+func actorKindToString(kind pluginpkg.ActorKind) string {
+    switch kind {
+    case pluginpkg.ActorCharacter:
+        return "character"
+    case pluginpkg.ActorSystem:
+        return "system"
+    case pluginpkg.ActorPlugin:
+        return "plugin"
+    default:
+        return "unknown"
+    }
 }
 ```
 
