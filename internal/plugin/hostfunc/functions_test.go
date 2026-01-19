@@ -69,11 +69,37 @@ func TestHostFunctions_Log_InvalidLevel(t *testing.T) {
 	hf := hostfunc.New(nil, capability.NewEnforcer())
 	hf.Register(L, "test-plugin")
 
-	// Invalid log level should still work (falls back to info) but logs a warning
-	// We can't easily capture slog output, but we verify the function succeeds
+	// Invalid log level should raise an error so plugin developers know their code is wrong
 	err := L.DoString(`holomush.log("invalid_level", "test message")`)
-	if err != nil {
-		t.Errorf("log with invalid level should not fail: %v", err)
+	if err == nil {
+		t.Error("expected error for invalid log level")
+	}
+}
+
+func TestHostFunctions_Log_InvalidLevel_ErrorMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		level string
+	}{
+		{"typo warn", "warning"},
+		{"typo error", "erro"},
+		{"uppercase", "INFO"},
+		{"unknown", "trace"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+
+			hf := hostfunc.New(nil, capability.NewEnforcer())
+			hf.Register(L, "test-plugin")
+
+			err := L.DoString(`holomush.log("` + tt.level + `", "test message")`)
+			if err == nil {
+				t.Errorf("expected error for invalid log level %q", tt.level)
+			}
+		})
 	}
 }
 

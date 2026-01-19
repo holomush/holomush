@@ -94,10 +94,11 @@ func (f *Functions) logFn(pluginName string) lua.LGFunction {
 		case "error":
 			logger.Error(message)
 		default:
-			slog.Warn("invalid log level from plugin, falling back to info",
+			slog.Warn("invalid log level from plugin",
 				"plugin", pluginName,
 				"requested_level", level)
-			logger.Info(message)
+			L.RaiseError("invalid log level %q: must be debug, info, warn, or error", level)
+			return 0
 		}
 		return 0
 	}
