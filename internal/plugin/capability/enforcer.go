@@ -29,7 +29,8 @@ func NewEnforcer() *Enforcer {
 //
 // The capabilities slice is copied, so callers may safely modify it after
 // the call returns. Calling SetGrants again for the same plugin replaces
-// all previous grants.
+// all previous grants. If validation fails, no changes are made to the
+// enforcer's state (atomic all-or-nothing semantics).
 //
 // Valid patterns:
 //   - Exact: "world.read.location"
@@ -92,6 +93,7 @@ func validatePattern(pattern string) error {
 }
 
 // IsRegistered returns true if the plugin has been registered via SetGrants.
+// Returns false for empty plugin names.
 // This helps distinguish "plugin not registered" from "plugin lacks capability".
 func (e *Enforcer) IsRegistered(plugin string) bool {
 	e.mu.RLock()
@@ -104,7 +106,41 @@ func (e *Enforcer) IsRegistered(plugin string) bool {
 	return ok
 }
 
+// RemoveGrants unregisters a plugin, removing all its capabilities.
+// Safe to call for unknown plugins or on a zero-value Enforcer.
+func (e *Enforcer) RemoveGrants(plugin string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.grants == nil {
+		return
+	}
+	delete(e.grants, plugin)
+}
+
+// GetGrants returns a copy of the capabilities granted to a plugin.
+// Returns nil if the plugin is not registered.
+// The returned slice is a defensive copy; modifying it does not affect
+// the enforcer's state.
+func (e *Enforcer) GetGrants(plugin string) []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.grants == nil {
+		return nil
+	}
+	grants, ok := e.grants[plugin]
+	if !ok {
+		return nil
+	}
+	// Return defensive copy
+	copied := make([]string, len(grants))
+	copy(copied, grants)
+	return copied
+}
+
 // Check returns true if the plugin has the requested capability.
+// Returns false for empty capability strings.
 //
 // Supports wildcard grants: "world.read.*" matches "world.read.location".
 // The root wildcard ".*" matches any non-empty capability.
@@ -132,13 +168,12 @@ func (e *Enforcer) Check(plugin, capability string) bool {
 
 // matchCapability handles wildcard matching.
 // "world.read.*" matches "world.read.location" and "world.read.character.name".
-// ".*" is the root wildcard and matches everything.
+// ".*" is the root wildcard and matches any non-empty capability.
 func matchCapability(grant, requested string) bool {
 	if grant == requested {
 		return true
 	}
 	if strings.HasSuffix(grant, ".*") {
-		// Root wildcard matches everything
 		if grant == ".*" {
 			return requested != ""
 		}

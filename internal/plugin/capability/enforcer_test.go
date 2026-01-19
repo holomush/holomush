@@ -335,3 +335,281 @@ func TestCapabilityEnforcer_SetGrants_MultiplePatterns_OneInvalid(t *testing.T) 
 		t.Error("plugin should not be registered after failed SetGrants")
 	}
 }
+
+func TestCapabilityEnforcer_IsRegistered_EmptyPluginName(t *testing.T) {
+	e := capability.NewEnforcer()
+	if err := e.SetGrants("valid-plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Empty plugin name should return false
+	if e.IsRegistered("") {
+		t.Error("IsRegistered() should return false for empty plugin name")
+	}
+}
+
+func TestCapabilityEnforcer_RemoveGrants(t *testing.T) {
+	e := capability.NewEnforcer()
+
+	// Setup: register a plugin
+	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+	if !e.IsRegistered("plugin") {
+		t.Fatal("plugin should be registered before removal")
+	}
+	if !e.Check("plugin", "world.read.location") {
+		t.Fatal("plugin should have grant before removal")
+	}
+
+	// Remove grants
+	e.RemoveGrants("plugin")
+
+	// Verify plugin is no longer registered
+	if e.IsRegistered("plugin") {
+		t.Error("plugin should not be registered after RemoveGrants")
+	}
+	if e.Check("plugin", "world.read.location") {
+		t.Error("plugin should not have grants after RemoveGrants")
+	}
+}
+
+func TestCapabilityEnforcer_RemoveGrants_UnknownPlugin(t *testing.T) {
+	e := capability.NewEnforcer()
+	// Should not panic for unknown plugin
+	e.RemoveGrants("unknown")
+	// Verify enforcer still works after removing unknown plugin
+	if e.IsRegistered("unknown") {
+		t.Error("unknown plugin should not be registered")
+	}
+}
+
+func TestCapabilityEnforcer_RemoveGrants_ZeroValue(t *testing.T) {
+	var e capability.Enforcer
+	// Should not panic on zero value
+	e.RemoveGrants("any")
+	// Verify enforcer still works after operation on zero value
+	if e.IsRegistered("any") {
+		t.Error("plugin should not be registered on zero value")
+	}
+}
+
+func TestCapabilityEnforcer_GetGrants(t *testing.T) {
+	e := capability.NewEnforcer()
+	grants := []string{"world.read.*", "events.emit.*"}
+	if err := e.SetGrants("plugin", grants); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	got := e.GetGrants("plugin")
+	if len(got) != len(grants) {
+		t.Errorf("GetGrants() returned %d grants, want %d", len(got), len(grants))
+	}
+	for i, want := range grants {
+		if got[i] != want {
+			t.Errorf("GetGrants()[%d] = %q, want %q", i, got[i], want)
+		}
+	}
+}
+
+func TestCapabilityEnforcer_GetGrants_UnknownPlugin(t *testing.T) {
+	e := capability.NewEnforcer()
+	got := e.GetGrants("unknown")
+	if got != nil {
+		t.Errorf("GetGrants() for unknown plugin = %v, want nil", got)
+	}
+}
+
+func TestCapabilityEnforcer_GetGrants_ZeroValue(t *testing.T) {
+	var e capability.Enforcer
+	got := e.GetGrants("any")
+	if got != nil {
+		t.Errorf("GetGrants() on zero value = %v, want nil", got)
+	}
+}
+
+func TestCapabilityEnforcer_GetGrants_DefensiveCopy(t *testing.T) {
+	e := capability.NewEnforcer()
+	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Get grants and mutate the returned slice
+	got := e.GetGrants("plugin")
+	got[0] = "mutated"
+
+	// Enforcer should not be affected
+	if !e.Check("plugin", "world.read.location") {
+		t.Error("GetGrants() should return a defensive copy")
+	}
+}
+
+func TestCapabilityEnforcer_RemoveGrants_EmptyPluginName(t *testing.T) {
+	e := capability.NewEnforcer()
+	if err := e.SetGrants("valid-plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Removing empty plugin name should not affect other plugins
+	e.RemoveGrants("")
+
+	// Valid plugin should still be registered
+	if !e.IsRegistered("valid-plugin") {
+		t.Error("valid-plugin should still be registered after removing empty string")
+	}
+}
+
+func TestCapabilityEnforcer_GetGrants_EmptyPluginName(t *testing.T) {
+	e := capability.NewEnforcer()
+	if err := e.SetGrants("valid-plugin", []string{"world.read.*"}); err != nil {
+		t.Fatalf("SetGrants() failed: %v", err)
+	}
+
+	// Getting grants for empty plugin name should return nil
+	got := e.GetGrants("")
+	if got != nil {
+		t.Errorf("GetGrants(\"\") = %v, want nil", got)
+	}
+}
+
+func TestCapabilityEnforcer_ConcurrentAccess_AllMethods(t *testing.T) {
+	e := capability.NewEnforcer()
+	var wg sync.WaitGroup
+
+	// Pre-register some plugins
+	for i := range 5 {
+		plugin := fmt.Sprintf("plugin-%d", i)
+		if err := e.SetGrants(plugin, []string{"world.read.*"}); err != nil {
+			t.Fatalf("SetGrants() failed: %v", err)
+		}
+	}
+
+	// Concurrent SetGrants
+	for i := range 10 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			plugin := fmt.Sprintf("new-plugin-%d", n)
+			_ = e.SetGrants(plugin, []string{"events.emit.*"})
+		}(i)
+	}
+
+	// Concurrent Check
+	for i := range 50 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			plugin := fmt.Sprintf("plugin-%d", n%5)
+			_ = e.Check(plugin, "world.read.location")
+		}(i)
+	}
+
+	// Concurrent IsRegistered
+	for i := range 20 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			plugin := fmt.Sprintf("plugin-%d", n%5)
+			_ = e.IsRegistered(plugin)
+		}(i)
+	}
+
+	// Concurrent GetGrants
+	for i := range 20 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			plugin := fmt.Sprintf("plugin-%d", n%5)
+			_ = e.GetGrants(plugin)
+		}(i)
+	}
+
+	// Concurrent RemoveGrants
+	for i := range 5 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			plugin := fmt.Sprintf("plugin-%d", n)
+			e.RemoveGrants(plugin)
+		}(i)
+	}
+
+	wg.Wait()
+	// If we get here without race detector errors, the test passes
+}
+
+func FuzzCapabilityEnforcer_GetGrants(f *testing.F) {
+	// Seed corpus with interesting plugin names
+	f.Add("plugin")
+	f.Add("")
+	f.Add("a")
+	f.Add("plugin-with-dashes")
+	f.Add("plugin.with.dots")
+	f.Add("plugin_with_underscores")
+	f.Add("UPPERCASE")
+	f.Add("mixed-CASE_123")
+	f.Add("unicode-плагін")
+	f.Add(string([]byte{0x00, 0x01, 0x02})) // binary data
+
+	f.Fuzz(func(t *testing.T, pluginName string) {
+		e := capability.NewEnforcer()
+
+		// GetGrants on unknown plugin should return nil, never panic
+		got := e.GetGrants(pluginName)
+		if got != nil {
+			t.Errorf("GetGrants(%q) on empty enforcer = %v, want nil", pluginName, got)
+		}
+
+		// If plugin name is valid for SetGrants, test round-trip
+		if pluginName != "" {
+			grants := []string{"world.read.*"}
+			if err := e.SetGrants(pluginName, grants); err != nil {
+				// SetGrants doesn't validate plugin names beyond empty, so this shouldn't fail
+				t.Errorf("SetGrants(%q) failed unexpectedly: %v", pluginName, err)
+				return
+			}
+
+			got = e.GetGrants(pluginName)
+			if len(got) != 1 || got[0] != "world.read.*" {
+				t.Errorf("GetGrants(%q) = %v, want %v", pluginName, got, grants)
+			}
+		}
+	})
+}
+
+func FuzzCapabilityEnforcer_RemoveGrants(f *testing.F) {
+	// Seed corpus
+	f.Add("plugin")
+	f.Add("")
+	f.Add("unknown")
+	f.Add("unicode-плагін")
+
+	f.Fuzz(func(t *testing.T, pluginName string) {
+		e := capability.NewEnforcer()
+
+		// RemoveGrants should never panic, even on unknown/empty plugins
+		e.RemoveGrants(pluginName)
+
+		// After removal, plugin should not be registered
+		if e.IsRegistered(pluginName) {
+			t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
+		}
+
+		// If plugin name is valid, test removal of registered plugin
+		if pluginName != "" {
+			if err := e.SetGrants(pluginName, []string{"world.read.*"}); err != nil {
+				t.Errorf("SetGrants(%q) failed: %v", pluginName, err)
+				return
+			}
+			if !e.IsRegistered(pluginName) {
+				t.Errorf("IsRegistered(%q) after SetGrants = false, want true", pluginName)
+			}
+
+			e.RemoveGrants(pluginName)
+
+			if e.IsRegistered(pluginName) {
+				t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
+			}
+		}
+	})
+}
