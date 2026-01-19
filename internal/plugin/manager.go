@@ -93,6 +93,11 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 
 // LoadAll discovers and loads all plugins in the plugins directory.
 // Invalid plugins are logged and skipped.
+//
+// Design: LoadAll uses graceful degradation - individual plugin failures are
+// logged as warnings but don't fail the entire load. This allows the server to
+// start even if some plugins have issues. Callers who need strict loading should
+// use Discover + loadPlugin individually with error checking.
 func (m *Manager) LoadAll(ctx context.Context) error {
 	discovered, err := m.Discover(ctx)
 	if err != nil {
@@ -112,10 +117,15 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 }
 
 // loadPlugin loads a single discovered plugin.
+//
+// Design: Returns nil (not error) for unsupported configurations to support
+// graceful degradation. This allows running without Lua support or before
+// binary plugin support is implemented. The warning logs provide visibility.
 func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	switch dp.Manifest.Type {
 	case TypeLua:
 		if m.luaHost == nil {
+			// Design: Allow running without Lua host configured (graceful degradation).
 			slog.Warn("no Lua host configured, skipping Lua plugin",
 				"plugin", dp.Manifest.Name)
 			return nil
