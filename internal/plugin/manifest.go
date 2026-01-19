@@ -19,23 +19,23 @@ const (
 
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
-	Name         string        `yaml:"name"`
-	Version      string        `yaml:"version"`
-	Type         Type          `yaml:"type"`
-	Events       []string      `yaml:"events,omitempty"`
-	Capabilities []string      `yaml:"capabilities,omitempty"`
-	LuaPlugin    *LuaConfig    `yaml:"lua-plugin,omitempty"`
-	BinaryPlugin *BinaryConfig `yaml:"binary-plugin,omitempty"`
+	Name         string        `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z]([a-z0-9-]*[a-z0-9])?$"`
+	Version      string        `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
+	Type         Type          `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary"`
+	Events       []string      `yaml:"events,omitempty" json:"events,omitempty"`
+	Capabilities []string      `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	LuaPlugin    *LuaConfig    `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
+	BinaryPlugin *BinaryConfig `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
 }
 
 // LuaConfig holds Lua-specific configuration.
 type LuaConfig struct {
-	Entry string `yaml:"entry"`
+	Entry string `yaml:"entry" json:"entry" jsonschema:"required,minLength=1"`
 }
 
 // BinaryConfig holds binary plugin configuration.
 type BinaryConfig struct {
-	Executable string `yaml:"executable"`
+	Executable string `yaml:"executable" json:"executable" jsonschema:"required,minLength=1"`
 }
 
 // maxNameLength is the maximum allowed length for plugin names.
