@@ -1,5 +1,9 @@
 -- Echo bot: repeats messages back to the room
 -- Demonstrates basic event handling and response
+--
+-- NOTE: This is an example plugin using simple pattern matching for JSON.
+-- For production plugins requiring complex JSON handling, use a proper JSON library.
+-- Limitations: does not handle escaped quotes or special characters in messages.
 
 function on_event(event)
     -- Only respond to say events
@@ -19,7 +23,8 @@ function on_event(event)
         return nil
     end
 
-    -- Extract message from JSON payload
+    -- Extract message from JSON payload using simple pattern matching
+    -- Note: This pattern does not handle escaped quotes in messages
     local msg = payload:match('"message":"([^"]*)"')
     if not msg or msg == "" then
         return nil

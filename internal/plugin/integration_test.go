@@ -1,3 +1,5 @@
+//go:build integration
+
 package plugin_test
 
 import (
@@ -6,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -217,6 +220,50 @@ func TestEchoBot_Integration(t *testing.T) {
 			t.Errorf("len(emits) = %d, want 0 (should ignore empty messages)", len(emits))
 		}
 	})
+
+	// Test: echo bot handles payload without message key
+	t.Run("handles payload without message key", func(t *testing.T) {
+		event := pluginpkg.Event{
+			ID:        "01MNO",
+			Stream:    "location:123",
+			Type:      pluginpkg.EventTypeSay,
+			Timestamp: time.Now().UnixMilli(),
+			ActorKind: pluginpkg.ActorCharacter,
+			ActorID:   "char_1",
+			Payload:   `{"text":"wrong key"}`, // No "message" key
+		}
+
+		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
+		if err != nil {
+			t.Fatalf("DeliverEvent() error = %v", err)
+		}
+
+		if len(emits) != 0 {
+			t.Errorf("len(emits) = %d, want 0 (should ignore payload without message key)", len(emits))
+		}
+	})
+
+	// Test: echo bot handles empty payload
+	t.Run("handles empty payload", func(t *testing.T) {
+		event := pluginpkg.Event{
+			ID:        "01PQR",
+			Stream:    "location:123",
+			Type:      pluginpkg.EventTypeSay,
+			Timestamp: time.Now().UnixMilli(),
+			ActorKind: pluginpkg.ActorCharacter,
+			ActorID:   "char_1",
+			Payload:   "", // Empty payload
+		}
+
+		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
+		if err != nil {
+			t.Fatalf("DeliverEvent() error = %v", err)
+		}
+
+		if len(emits) != 0 {
+			t.Errorf("len(emits) = %d, want 0 (should handle empty payload gracefully)", len(emits))
+		}
+	})
 }
 
 // TestEchoBot_Subscriber tests the full event flow with Subscriber.
@@ -282,7 +329,7 @@ func TestEchoBot_Subscriber(t *testing.T) {
 
 	// Send a say event
 	events <- pluginpkg.Event{
-		ID:        "01MNO",
+		ID:        "01STU",
 		Stream:    "location:123",
 		Type:      pluginpkg.EventTypeSay,
 		Timestamp: time.Now().UnixMilli(),
@@ -351,16 +398,23 @@ func findPluginsDir(t *testing.T) string {
 	return ""
 }
 
-// mockEmitter captures emitted events for testing.
+// mockEmitter captures emitted events for testing with thread-safe access.
 type mockEmitter struct {
+	mu      sync.Mutex
 	emitted []pluginpkg.EmitEvent
 }
 
 func (e *mockEmitter) EmitPluginEvent(_ context.Context, _ string, event pluginpkg.EmitEvent) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.emitted = append(e.emitted, event)
 	return nil
 }
 
 func (e *mockEmitter) getEmitted() []pluginpkg.EmitEvent {
-	return e.emitted
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	result := make([]pluginpkg.EmitEvent, len(e.emitted))
+	copy(result, e.emitted)
+	return result
 }
