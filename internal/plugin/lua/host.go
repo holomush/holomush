@@ -97,13 +97,13 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	// Create fresh state for this event
 	L, err := h.factory.NewState(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create state: %w", err)
+		return nil, fmt.Errorf("plugin %s: failed to create state: %w", name, err)
 	}
 	defer L.Close()
 
 	// Load plugin code
 	if err := L.DoString(code); err != nil {
-		return nil, fmt.Errorf("failed to load plugin code: %w", err)
+		return nil, fmt.Errorf("plugin %s: failed to load code: %w", name, err)
 	}
 
 	// Check if on_event exists
@@ -121,7 +121,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 		NRet:    1,
 		Protect: true,
 	}, eventTable); err != nil {
-		return nil, fmt.Errorf("on_event failed: %w", err)
+		return nil, fmt.Errorf("plugin %s: on_event failed: %w", name, err)
 	}
 
 	// Get return value

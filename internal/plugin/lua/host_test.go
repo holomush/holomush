@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/holomush/holomush/internal/plugin"
@@ -112,8 +113,15 @@ end
 		t.Fatalf("len(emits) = %d, want 1", len(emits))
 	}
 
+	// Verify all fields of the emitted event
 	if emits[0].Stream != "location:123" {
 		t.Errorf("emit.Stream = %q, want %q", emits[0].Stream, "location:123")
+	}
+	if emits[0].Type != "say" {
+		t.Errorf("emit.Type = %q, want %q", emits[0].Type, "say")
+	}
+	if !strings.Contains(emits[0].Payload, "Echo:") {
+		t.Errorf("emit.Payload = %q, want to contain %q", emits[0].Payload, "Echo:")
 	}
 }
 
@@ -268,5 +276,285 @@ func TestLuaHost_Close(t *testing.T) {
 	err := host.Load(context.Background(), manifest, dir)
 	if err == nil {
 		t.Error("expected error when loading after close")
+	}
+}
+
+func TestLuaHost_DeliverEvent_RuntimeError(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin that throws a runtime error
+	writeMainLua(t, dir, `
+function on_event(event)
+    error("intentional failure")
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "error-plugin",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	_, err := host.DeliverEvent(context.Background(), "error-plugin", event)
+	if err == nil {
+		t.Error("expected error when plugin throws runtime error")
+	}
+	// Error should include plugin name for debugging
+	if !strings.Contains(err.Error(), "error-plugin") {
+		t.Errorf("error should contain plugin name 'error-plugin', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "on_event failed") {
+		t.Errorf("error should contain 'on_event failed', got: %v", err)
+	}
+}
+
+func TestLuaHost_DeliverEvent_ActorKinds(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin that returns the actor_kind it received
+	writeMainLua(t, dir, `
+function on_event(event)
+    return {
+        {
+            stream = "test:1",
+            type = "echo",
+            payload = event.actor_kind
+        }
+    }
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "actor-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		kind     pluginpkg.ActorKind
+		expected string
+	}{
+		{pluginpkg.ActorCharacter, "character"},
+		{pluginpkg.ActorSystem, "system"},
+		{pluginpkg.ActorPlugin, "plugin"},
+		{pluginpkg.ActorKind(99), "unknown"}, // Unknown kind
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			event := pluginpkg.Event{
+				ID:        "01ABC",
+				Type:      "say",
+				ActorKind: tt.kind,
+			}
+
+			emits, err := host.DeliverEvent(context.Background(), "actor-test", event)
+			if err != nil {
+				t.Fatalf("DeliverEvent() error = %v", err)
+			}
+
+			if len(emits) != 1 {
+				t.Fatalf("len(emits) = %d, want 1", len(emits))
+			}
+
+			if emits[0].Payload != tt.expected {
+				t.Errorf("actor_kind = %q, want %q", emits[0].Payload, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLuaHost_DeliverEvent_NonTableReturn(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin that returns a string instead of a table
+	writeMainLua(t, dir, `
+function on_event(event)
+    return "not a table"
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "bad-return",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
+	if err != nil {
+		t.Fatalf("DeliverEvent() error = %v", err)
+	}
+
+	// Non-table returns should be gracefully ignored (empty emits)
+	if len(emits) != 0 {
+		t.Errorf("expected empty emits for non-table return, got %d", len(emits))
+	}
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin that returns a mix of valid and invalid emit events
+	writeMainLua(t, dir, `
+function on_event(event)
+    return {
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        },
+        "not a table",  -- Should be skipped
+        123,            -- Should be skipped
+        {
+            stream = "valid:2",
+            type = "test",
+            payload = "also valid"
+        }
+    }
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "mixed-return",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "mixed-return", event)
+	if err != nil {
+		t.Fatalf("DeliverEvent() error = %v", err)
+	}
+
+	// Should only get the 2 valid emit events
+	if len(emits) != 2 {
+		t.Fatalf("len(emits) = %d, want 2 (valid events only)", len(emits))
+	}
+
+	if emits[0].Stream != "valid:1" {
+		t.Errorf("emits[0].Stream = %q, want %q", emits[0].Stream, "valid:1")
+	}
+	if emits[1].Stream != "valid:2" {
+		t.Errorf("emits[1].Stream = %q, want %q", emits[1].Stream, "valid:2")
+	}
+}
+
+func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `function on_event(event) return nil end`)
+
+	host := pluginlua.NewHost()
+
+	manifest := &plugin.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := host.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	// DeliverEvent should error after close
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	_, err := host.DeliverEvent(context.Background(), "test-plugin", event)
+	if err == nil {
+		t.Error("expected error when delivering after close")
+	}
+}
+
+func TestLuaHost_DeliverEvent_AllFields(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin that verifies all event fields are accessible
+	writeMainLua(t, dir, `
+function on_event(event)
+    return {
+        {
+            stream = "test:1",
+            type = "echo",
+            payload = event.id .. "|" .. event.stream .. "|" .. event.type .. "|" ..
+                      tostring(event.timestamp) .. "|" .. event.actor_kind .. "|" .. event.actor_id
+        }
+    }
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "field-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	event := pluginpkg.Event{
+		ID:        "01ABC",
+		Stream:    "location:123",
+		Type:      "say",
+		Timestamp: 1705591234000,
+		ActorKind: pluginpkg.ActorCharacter,
+		ActorID:   "char_1",
+		Payload:   "Hello",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "field-test", event)
+	if err != nil {
+		t.Fatalf("DeliverEvent() error = %v", err)
+	}
+
+	if len(emits) != 1 {
+		t.Fatalf("len(emits) = %d, want 1", len(emits))
+	}
+
+	expected := "01ABC|location:123|say|1705591234000|character|char_1"
+	if emits[0].Payload != expected {
+		t.Errorf("payload = %q, want %q", emits[0].Payload, expected)
 	}
 }
