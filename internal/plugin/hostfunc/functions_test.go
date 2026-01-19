@@ -3,6 +3,8 @@ package hostfunc_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 
 	"github.com/holomush/holomush/internal/plugin/capability"
@@ -319,20 +321,168 @@ func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
 	}
 }
 
+func TestHostFunctions_KVGet_StoreError(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{
+		data:   make(map[string][]byte),
+		getErr: errors.New("database connection failed"),
+	}
+	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`val, err = holomush.kv_get("key")`)
+	if err != nil {
+		t.Fatalf("kv_get failed: %v", err)
+	}
+
+	errVal := L.GetGlobal("err")
+	if errVal.Type() != lua.LTString {
+		t.Fatalf("expected error string, got %v", errVal.Type())
+	}
+	if errVal.String() != "database connection failed" {
+		t.Errorf("error = %q, want %q", errVal.String(), "database connection failed")
+	}
+}
+
+func TestHostFunctions_KVSet_StoreError(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{
+		data:   make(map[string][]byte),
+		setErr: errors.New("write failed: disk full"),
+	}
+	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`err = holomush.kv_set("key", "value")`)
+	if err != nil {
+		t.Fatalf("kv_set failed: %v", err)
+	}
+
+	errVal := L.GetGlobal("err")
+	if errVal.Type() != lua.LTString {
+		t.Fatalf("expected error string, got %v", errVal.Type())
+	}
+	if errVal.String() != "write failed: disk full" {
+		t.Errorf("error = %q, want %q", errVal.String(), "write failed: disk full")
+	}
+}
+
+func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+
+	kvStore := &mockKVStore{
+		data:      make(map[string][]byte),
+		deleteErr: errors.New("delete failed: permission denied"),
+	}
+	hf := hostfunc.New(kvStore, nil, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`err = holomush.kv_delete("key")`)
+	if err != nil {
+		t.Fatalf("kv_delete failed: %v", err)
+	}
+
+	errVal := L.GetGlobal("err")
+	if errVal.Type() != lua.LTString {
+		t.Fatalf("expected error string, got %v", errVal.Type())
+	}
+	if errVal.String() != "delete failed: permission denied" {
+		t.Errorf("error = %q, want %q", errVal.String(), "delete failed: permission denied")
+	}
+}
+
+func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+
+	// Plugin A writes
+	L1 := lua.NewState()
+	defer L1.Close()
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("plugin-a", []string{"kv.read", "kv.write"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := enforcer.SetGrants("plugin-b", []string{"kv.read"}); err != nil {
+		t.Fatal(err)
+	}
+
+	hfA := hostfunc.New(kvStore, nil, enforcer)
+	hfA.Register(L1, "plugin-a")
+
+	err := L1.DoString(`holomush.kv_set("secret", "plugin-a-data")`)
+	if err != nil {
+		t.Fatalf("plugin-a kv_set failed: %v", err)
+	}
+
+	// Plugin B tries to read - should get nil (different namespace)
+	L2 := lua.NewState()
+	defer L2.Close()
+	hfB := hostfunc.New(kvStore, nil, enforcer)
+	hfB.Register(L2, "plugin-b")
+
+	err = L2.DoString(`val, err = holomush.kv_get("secret")`)
+	if err != nil {
+		t.Fatalf("plugin-b kv_get failed: %v", err)
+	}
+
+	val := L2.GetGlobal("val")
+	if val.Type() != lua.LTNil {
+		t.Errorf("plugin-b should not see plugin-a's data, got %v", val)
+	}
+}
+
 type mockKVStore struct {
-	data map[string][]byte
+	data      map[string][]byte
+	getErr    error
+	setErr    error
+	deleteErr error
+	mu        sync.RWMutex
 }
 
 func (m *mockKVStore) Get(_ context.Context, namespace, key string) ([]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
 	return m.data[namespace+":"+key], nil
 }
 
 func (m *mockKVStore) Set(_ context.Context, namespace, key string, value []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.setErr != nil {
+		return m.setErr
+	}
 	m.data[namespace+":"+key] = value
 	return nil
 }
 
 func (m *mockKVStore) Delete(_ context.Context, namespace, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
 	delete(m.data, namespace+":"+key)
 	return nil
 }

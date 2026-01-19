@@ -7,11 +7,15 @@ package hostfunc
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 )
+
+// kvTimeout is the default timeout for KV operations to prevent indefinite hangs.
+const kvTimeout = 5 * time.Second
 
 // KVStore provides namespaced key-value storage.
 type KVStore interface {
@@ -104,13 +108,23 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 		key := L.CheckString(1)
 
 		if f.kvStore == nil {
+			slog.Warn("kv_get called but store unavailable",
+				"plugin", pluginName,
+				"key", key)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("kv store not available"))
 			return 2
 		}
 
-		value, err := f.kvStore.Get(context.Background(), pluginName, key)
+		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		defer cancel()
+
+		value, err := f.kvStore.Get(ctx, pluginName, key)
 		if err != nil {
+			slog.Error("kv_get failed",
+				"plugin", pluginName,
+				"key", key,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2
@@ -134,11 +148,21 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 		value := L.CheckString(2)
 
 		if f.kvStore == nil {
+			slog.Warn("kv_set called but store unavailable",
+				"plugin", pluginName,
+				"key", key)
 			L.Push(lua.LString("kv store not available"))
 			return 1
 		}
 
-		if err := f.kvStore.Set(context.Background(), pluginName, key, []byte(value)); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		defer cancel()
+
+		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
+			slog.Error("kv_set failed",
+				"plugin", pluginName,
+				"key", key,
+				"error", err)
 			L.Push(lua.LString(err.Error()))
 			return 1
 		}
@@ -152,11 +176,21 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		key := L.CheckString(1)
 
 		if f.kvStore == nil {
+			slog.Warn("kv_delete called but store unavailable",
+				"plugin", pluginName,
+				"key", key)
 			L.Push(lua.LString("kv store not available"))
 			return 1
 		}
 
-		if err := f.kvStore.Delete(context.Background(), pluginName, key); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		defer cancel()
+
+		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {
+			slog.Error("kv_delete failed",
+				"plugin", pluginName,
+				"key", key,
+				"error", err)
 			L.Push(lua.LString(err.Error()))
 			return 1
 		}
