@@ -262,6 +262,7 @@ func (e *CapabilityEnforcer) Check(plugin, capability string) bool {
 }
 
 // matchCapability handles wildcards using prefix matching.
+// Wildcards are only valid as a suffix (e.g., "world.read.*"); a "*" elsewhere is literal.
 // "world.read.*" matches any capability starting with "world.read." including nested paths.
 // Design choice: prefix matching is simpler and sufficient for v1; single-level wildcards
 // (e.g., "world.read.*" matching only immediate children) MAY be added if needed later.
@@ -505,25 +506,27 @@ func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
 
 ### API Reference
 
-| Function                                  | Capability               | Returns                     |
-| ----------------------------------------- | ------------------------ | --------------------------- |
-| `holomush.emit_event(stream, type, data)` | `events.emit.<type>`[^1] | `nil, err` on failure       |
-| `holomush.query_location(id)`             | `world.read.location`    | `location, err`             |
-| `holomush.query_character(id)`            | `world.read.character`   | `character, err`            |
-| `holomush.query_object(id)`               | `world.read.object`      | `object, err`               |
-| `holomush.kv_get(key)`                    | `kv.read`                | `value, err`[^2]            |
-| `holomush.kv_set(key, value)`             | `kv.write`               | `nil, err`[^3]              |
-| `holomush.kv_delete(key)`                 | `kv.write`               | `nil, err`                  |
-| `holomush.new_request_id()`               | (none)                   | `ulid_string` (never fails) |
-| `holomush.log(level, message)`            | (none)                   | (no return)                 |
+| Function                                  | Capability                 | Returns               |
+| ----------------------------------------- | -------------------------- | --------------------- |
+| `holomush.emit_event(stream, type, data)` | `events.emit.<stream>`[^1] | `nil, err` on failure |
+| `holomush.query_location(id)`             | `world.read.location`      | `location, err`       |
+| `holomush.query_character(id)`            | `world.read.character`     | `character, err`      |
+| `holomush.query_object(id)`               | `world.read.object`        | `object, err`         |
+| `holomush.kv_get(key)`                    | `kv.read`                  | `value, err`[^2]      |
+| `holomush.kv_set(key, value)`             | `kv.write`                 | `nil, err`[^3]        |
+| `holomush.kv_delete(key)`                 | `kv.write`                 | `nil, err`            |
+| `holomush.new_request_id()`               | (none)                     | `ulid_string`[^4]     |
+| `holomush.log(level, message)`            | (none)                     | (no return)           |
 
-[^1]: Capability determined dynamically from stream parameter. Stream format is
-    `<type>:<id>` (e.g., `location:123`). Emitting to `location:123` requires
+[^1]: Capability determined dynamically from the stream parameter's prefix. Stream format
+    is `<prefix>:<id>` (e.g., `location:123`). Emitting to `location:123` requires
     `events.emit.location` capability.
 
 [^2]: Returns deserialized Lua table if value was stored as table; string otherwise.
 
 [^3]: Value can be string or table. Tables are automatically JSON-serialized.
+
+[^4]: Never fails. Generates a locally-computed ULID; no network or database call required.
 
 ### Error Semantics
 
@@ -606,7 +609,7 @@ Plugin-to-plugin events use `plugin:<plugin-name>` streams:
 
 - To call another plugin: emit to `plugin:target-plugin` with type `plugin_request`
 - Target plugin subscribes to `plugin_request` in its manifest
-- Requires `events.emit.plugin` capability (implied by `events.emit.*`)
+- Requires `events.emit.plugin` capability (or `events.emit.*` which matches via prefix)
 - Response returns via `plugin_response` to the caller's `plugin:<caller>` stream
 
 This pattern enables loose coupling—plugins communicate through events without direct
@@ -793,6 +796,11 @@ others or crash the server.
 | Capability denied    | Lua error raised, logged with audit      |
 | Invalid event return | Logged, ignored, continues               |
 
+> **Note:** "Lua panic" refers to unprotected execution errors that would otherwise propagate
+> to Go; these are caught via protected calls (`CallByParam` with `Protect: true`). "Lua error
+> return" refers to explicit `error()` calls in plugin code, which are also caught by protected
+> calls and treated as graceful failures.
+
 ### Timeout Configuration
 
 - Default: 5 seconds per event delivery
@@ -877,10 +885,24 @@ during implementation of the new system.
 
 New code lives in `internal/plugin/`. Do not add dependencies on `internal/wasm/`.
 
+## Implementation Considerations
+
+The following are design recommendations for implementers, not requirements:
+
+| Consideration                        | Rationale                                                           |
+| ------------------------------------ | ------------------------------------------------------------------- |
+| Return `PluginHandle` from `Load`    | Eliminates string-coupling; enforces "must load before use"         |
+| Pre-bind KV namespace per plugin     | Prevents cross-namespace access bugs at compile time                |
+| Define sentinel errors               | `ErrPluginNotFound`, `ErrCapabilityDenied` improve debuggability    |
+| Document returned pointer mutability | `*Location`, `*Character`, `*Object` SHOULD be treated as immutable |
+
+These patterns MAY be adopted during implementation if they prove valuable without adding
+unnecessary complexity.
+
 ## Acceptance Criteria
 
 - [ ] Design document covers phases 2.1-2.6 (2.7 Echo bot is implementation)
-- [ ] Host function API fully specified
+- [ ] Host function API specified (interface-level; protobuf details during implementation)
 - [ ] Capability model documented
 - [ ] go-plugin integration approach defined
 - [ ] Security model for sandboxing documented
