@@ -106,6 +106,9 @@ func (f *Functions) logFn(pluginName string) lua.LGFunction {
 
 func (f *Functions) newRequestIDFn() lua.LGFunction {
 	return func(L *lua.LState) int {
+		// ulid.Make() cannot panic per library documentation:
+		// "NOTE: MustNew can't panic since DefaultEntropy never returns an error."
+		// See: https://github.com/oklog/ulid/blob/main/ulid.go (func Make)
 		id := ulid.Make()
 		L.Push(lua.LString(id.String()))
 		return 1
