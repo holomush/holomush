@@ -3,6 +3,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -100,15 +101,33 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 	// Use timeout for plugin execution
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		defer cancel()
 
 		emits, err := s.host.DeliverEvent(ctx, pluginName, event)
 		if err != nil {
-			slog.Error("failed to deliver event to plugin",
-				"plugin", pluginName,
-				"event_id", event.ID,
-				"error", err)
+			switch {
+			case errors.Is(err, context.DeadlineExceeded):
+				slog.Warn("plugin event delivery timed out",
+					"plugin", pluginName,
+					"event_id", event.ID,
+					"stream", event.Stream,
+					"event_type", string(event.Type),
+					"timeout", "5s")
+			case errors.Is(err, context.Canceled):
+				slog.Debug("plugin event delivery canceled",
+					"plugin", pluginName,
+					"event_id", event.ID)
+			default:
+				slog.Error("failed to deliver event to plugin",
+					"plugin", pluginName,
+					"event_id", event.ID,
+					"stream", event.Stream,
+					"event_type", string(event.Type),
+					"error", err)
+			}
 			return
 		}
 
