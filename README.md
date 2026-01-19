@@ -85,11 +85,33 @@ task fmt
 
 See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
 
+## Release Verification
+
+All releases are cryptographically signed and include SBOMs for vulnerability tracking.
+
+```bash
+# Verify binary signature
+cosign verify-blob --certificate holomush.tar.gz.cert \
+  --signature holomush.tar.gz.sig \
+  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  holomush.tar.gz
+
+# Verify container image
+cosign verify \
+  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/holomush/holomush:v1.0.0
+```
+
+See [Verifying Releases](docs/reference/verifying-releases.md) for complete instructions.
+
 ## Documentation
 
 - [Getting Started](docs/reference/getting-started.md) - Setup and usage guide
 - [Architecture Overview](docs/reference/architecture-overview.md) - System design summary
 - [Full Architecture Design](docs/plans/2026-01-17-holomush-architecture-design.md) - Detailed specifications
+- [Verifying Releases](docs/reference/verifying-releases.md) - How to verify signed releases
 - [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License

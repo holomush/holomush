@@ -155,6 +155,32 @@ type NotFoundError struct {
 - Avoid abbreviations except well-known ones (ID, URL, HTTP)
 - Package names are lowercase, single words when possible
 
+### License Headers
+
+All source files MUST include SPDX license headers at the top:
+
+```go
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// Package foo ...
+package foo
+```
+
+| Requirement                           | Description                                           |
+| ------------------------------------- | ----------------------------------------------------- |
+| **MUST** include SPDX header          | All `.go` files in `cmd/`, `internal/`, `pkg/`        |
+| **MUST NOT** add to generated files   | Skip `*.pb.go` files                                  |
+| **SHOULD** use `task license:add`     | Automatically adds headers to files missing them      |
+| **Auto-added on commit**              | Lefthook pre-commit hook adds headers automatically   |
+
+**Commands:**
+
+```bash
+task license:check   # Verify all files have headers
+task license:add     # Add missing headers
+```
+
 ## Testing
 
 ### Coverage Requirements

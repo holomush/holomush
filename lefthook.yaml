@@ -9,6 +9,12 @@ pre-commit:
   exclude:
     - ".worktrees/**"
   commands:
+    license-headers:
+      glob: "*.go"
+      exclude: "*.pb.go"
+      run: addlicense -f LICENSE_HEADER {staged_files}
+      stage_fixed: true
+
     lint-go:
       glob: "*.go"
       run: golangci-lint run --new-from-rev=HEAD~1
