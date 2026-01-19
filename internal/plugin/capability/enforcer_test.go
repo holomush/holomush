@@ -12,8 +12,9 @@ import (
 func TestCapabilityEnforcer_Check(t *testing.T) {
 	// Tests use gobwas/glob with '.' as separator.
 	// Key semantics:
-	//   - '*' matches a single segment (does not cross '.')
-	//   - '**' matches zero or more segments (crosses '.')
+	//   - '*' matches exactly one segment (does not cross '.')
+	//   - '**' matches one or more segments when trailing (e.g., "world.**")
+	//   - '**' matches zero or more segments at root or in middle position
 	tests := []struct {
 		name       string
 		grants     []string
@@ -481,7 +482,9 @@ func TestCapabilityEnforcer_RemoveGrants(t *testing.T) {
 	}
 
 	// Remove grants
-	e.RemoveGrants("plugin")
+	if err := e.RemoveGrants("plugin"); err != nil {
+		t.Fatalf("RemoveGrants() failed: %v", err)
+	}
 
 	// Verify plugin is no longer registered
 	if e.IsRegistered("plugin") {
@@ -494,8 +497,10 @@ func TestCapabilityEnforcer_RemoveGrants(t *testing.T) {
 
 func TestCapabilityEnforcer_RemoveGrants_UnknownPlugin(t *testing.T) {
 	e := capability.NewEnforcer()
-	// Should not panic for unknown plugin
-	e.RemoveGrants("unknown")
+	// Should not panic or error for unknown plugin
+	if err := e.RemoveGrants("unknown"); err != nil {
+		t.Errorf("RemoveGrants() for unknown plugin should not error: %v", err)
+	}
 	// Verify enforcer still works after removing unknown plugin
 	if e.IsRegistered("unknown") {
 		t.Error("unknown plugin should not be registered")
@@ -504,8 +509,10 @@ func TestCapabilityEnforcer_RemoveGrants_UnknownPlugin(t *testing.T) {
 
 func TestCapabilityEnforcer_RemoveGrants_ZeroValue(t *testing.T) {
 	var e capability.Enforcer
-	// Should not panic on zero value
-	e.RemoveGrants("any")
+	// Should not panic or error on zero value
+	if err := e.RemoveGrants("any"); err != nil {
+		t.Errorf("RemoveGrants() on zero value should not error: %v", err)
+	}
 	// Verify enforcer still works after operation on zero value
 	if e.IsRegistered("any") {
 		t.Error("plugin should not be registered on zero value")
@@ -568,8 +575,11 @@ func TestCapabilityEnforcer_RemoveGrants_EmptyPluginName(t *testing.T) {
 		t.Fatalf("SetGrants() failed: %v", err)
 	}
 
-	// Removing empty plugin name should not affect other plugins
-	e.RemoveGrants("")
+	// Removing empty plugin name should return error for consistency with SetGrants
+	err := e.RemoveGrants("")
+	if err == nil {
+		t.Error("RemoveGrants(\"\") should return error")
+	}
 
 	// Valid plugin should still be registered
 	if !e.IsRegistered("valid-plugin") {
@@ -648,7 +658,7 @@ func TestCapabilityEnforcer_ConcurrentAccess_AllMethods(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			plugin := fmt.Sprintf("plugin-%d", n)
-			e.RemoveGrants(plugin)
+			_ = e.RemoveGrants(plugin)
 		}(i)
 	}
 
@@ -714,29 +724,38 @@ func FuzzCapabilityEnforcer_RemoveGrants(f *testing.F) {
 	f.Fuzz(func(t *testing.T, pluginName string) {
 		e := capability.NewEnforcer()
 
-		// RemoveGrants should never panic, even on unknown/empty plugins
-		e.RemoveGrants(pluginName)
+		// RemoveGrants should never panic; returns error only for empty plugin name
+		err := e.RemoveGrants(pluginName)
+		if pluginName == "" {
+			if err == nil {
+				t.Error("RemoveGrants(\"\") should return error")
+			}
+			return // Empty plugin name is not valid, skip remaining tests
+		}
+		if err != nil {
+			t.Errorf("RemoveGrants(%q) failed unexpectedly: %v", pluginName, err)
+		}
 
 		// After removal, plugin should not be registered
 		if e.IsRegistered(pluginName) {
 			t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
 		}
 
-		// If plugin name is valid, test removal of registered plugin
-		if pluginName != "" {
-			if err := e.SetGrants(pluginName, []string{"world.read.*"}); err != nil {
-				t.Errorf("SetGrants(%q) failed: %v", pluginName, err)
-				return
-			}
-			if !e.IsRegistered(pluginName) {
-				t.Errorf("IsRegistered(%q) after SetGrants = false, want true", pluginName)
-			}
+		// Test removal of registered plugin
+		if err := e.SetGrants(pluginName, []string{"world.read.*"}); err != nil {
+			t.Errorf("SetGrants(%q) failed: %v", pluginName, err)
+			return
+		}
+		if !e.IsRegistered(pluginName) {
+			t.Errorf("IsRegistered(%q) after SetGrants = false, want true", pluginName)
+		}
 
-			e.RemoveGrants(pluginName)
+		if err := e.RemoveGrants(pluginName); err != nil {
+			t.Errorf("RemoveGrants(%q) failed: %v", pluginName, err)
+		}
 
-			if e.IsRegistered(pluginName) {
-				t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
-			}
+		if e.IsRegistered(pluginName) {
+			t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
 		}
 	})
 }
@@ -837,7 +856,9 @@ func TestCapabilityEnforcer_ListPlugins_AfterRemove(t *testing.T) {
 	}
 
 	// Remove one plugin
-	e.RemoveGrants("plugin-a")
+	if err := e.RemoveGrants("plugin-a"); err != nil {
+		t.Fatalf("RemoveGrants() failed: %v", err)
+	}
 
 	got := e.ListPlugins()
 	if len(got) != 1 {

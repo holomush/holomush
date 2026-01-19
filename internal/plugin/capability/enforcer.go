@@ -32,7 +32,7 @@ type compiledGrant struct {
 // Enforcer is safe for concurrent use. The zero value is ready to use
 // without calling NewEnforcer.
 type Enforcer struct {
-	grants map[string][]compiledGrant // plugin name -> compiled grants
+	grants map[string][]compiledGrant
 	mu     sync.RWMutex
 }
 
@@ -61,7 +61,7 @@ func NewEnforcer() *Enforcer {
 //   - "world.read.**" - matches descendants: "world.read.location", "world.read.char.name"
 //     (but NOT "world.read" - trailing ** requires at least one segment)
 //   - "*" - matches any single-segment capability
-//   - "**" - matches any capability (root super-wildcard, including empty)
+//   - "**" - matches any non-empty capability (root super-wildcard)
 //
 // Invalid patterns (will return error):
 //   - Empty string
@@ -88,7 +88,6 @@ func (e *Enforcer) SetGrants(plugin string, capabilities []string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Initialize map if zero-value struct
 	if e.grants == nil {
 		e.grants = make(map[string][]compiledGrant)
 	}
@@ -112,15 +111,21 @@ func (e *Enforcer) IsRegistered(plugin string) bool {
 }
 
 // RemoveGrants unregisters a plugin, removing all its capabilities.
+// Returns an error if the plugin name is empty, for consistency with SetGrants.
 // Safe to call for unknown plugins or on a zero-value Enforcer.
-func (e *Enforcer) RemoveGrants(plugin string) {
+func (e *Enforcer) RemoveGrants(plugin string) error {
+	if plugin == "" {
+		return errors.New("plugin name cannot be empty")
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.grants == nil {
-		return
+		return nil
 	}
 	delete(e.grants, plugin)
+	return nil
 }
 
 // GetGrants returns a copy of the capabilities granted to a plugin.
@@ -138,7 +143,6 @@ func (e *Enforcer) GetGrants(plugin string) []string {
 	if !ok {
 		return nil
 	}
-	// Return defensive copy of pattern strings
 	patterns := make([]string, len(grants))
 	for i, g := range grants {
 		patterns[i] = g.pattern
@@ -187,11 +191,9 @@ func (e *Enforcer) Check(plugin, capability string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	// Handle zero-value struct
 	if e.grants == nil {
 		return false
 	}
-
 	grants, ok := e.grants[plugin]
 	if !ok {
 		return false
