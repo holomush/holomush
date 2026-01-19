@@ -29,7 +29,6 @@ func WithLuaHost(h Host) ManagerOption {
 }
 
 // NewManager creates a plugin manager.
-// If no LuaHost is provided via options, a default one is created lazily.
 func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
 	m := &Manager{
 		pluginsDir: pluginsDir,
@@ -129,6 +128,12 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 		slog.Warn("binary plugins not yet supported, skipping",
 			"plugin", dp.Manifest.Name)
 		return nil
+	default:
+		// Unknown types should be rejected by Manifest.Validate, but handle defensively.
+		slog.Warn("unknown plugin type, skipping",
+			"plugin", dp.Manifest.Name,
+			"type", dp.Manifest.Type)
+		return nil
 	}
 
 	m.mu.Lock()
@@ -163,12 +168,14 @@ func (m *Manager) Close(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Clear loaded map first to ensure consistent state even if close fails.
+	m.loaded = make(map[string]*DiscoveredPlugin)
+
 	if m.luaHost != nil {
 		if err := m.luaHost.Close(ctx); err != nil {
 			return fmt.Errorf("close lua host: %w", err)
 		}
 	}
 
-	m.loaded = make(map[string]*DiscoveredPlugin)
 	return nil
 }

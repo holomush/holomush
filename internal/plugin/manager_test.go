@@ -2,6 +2,7 @@ package plugin_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,7 +10,45 @@ import (
 
 	"github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 )
+
+// mockHost is a test Host implementation for error testing.
+type mockHost struct {
+	loadErr  error
+	closeErr error
+	plugins  []string
+}
+
+func (h *mockHost) Load(_ context.Context, m *plugin.Manifest, _ string) error {
+	if h.loadErr != nil {
+		return h.loadErr
+	}
+	h.plugins = append(h.plugins, m.Name)
+	return nil
+}
+
+func (h *mockHost) Unload(_ context.Context, name string) error {
+	for i, p := range h.plugins {
+		if p == name {
+			h.plugins = append(h.plugins[:i], h.plugins[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (h *mockHost) DeliverEvent(_ context.Context, _ string, _ pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
+	return nil, nil
+}
+
+func (h *mockHost) Plugins() []string {
+	return h.plugins
+}
+
+func (h *mockHost) Close(_ context.Context) error {
+	return h.closeErr
+}
 
 // Helper functions for creating test fixtures with secure permissions.
 func mkdirAll(t *testing.T, path string) {
@@ -444,5 +483,42 @@ func TestManager_Close(t *testing.T) {
 	// After close, ListPlugins should return empty
 	if len(mgr.ListPlugins()) != 0 {
 		t.Errorf("ListPlugins() after Close() = %v, want empty", mgr.ListPlugins())
+	}
+}
+
+func TestManager_Close_PropagatesHostError(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Create a plugin
+	echoDir := filepath.Join(pluginsDir, "echo-bot")
+	mkdirAll(t, echoDir)
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
+
+	hostErr := errors.New("cleanup failed")
+	mock := &mockHost{closeErr: hostErr}
+	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(mock))
+	if err := mgr.LoadAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify plugin is loaded
+	if len(mgr.ListPlugins()) != 1 {
+		t.Fatal("expected 1 plugin to be loaded")
+	}
+
+	// Close should return the error
+	err := mgr.Close(context.Background())
+	if err == nil {
+		t.Fatal("Close() should return error from host")
+	}
+	if !errors.Is(err, hostErr) {
+		t.Errorf("Close() error = %v, want error wrapping %v", err, hostErr)
+	}
+
+	// Even on error, loaded map should be cleared
+	if len(mgr.ListPlugins()) != 0 {
+		t.Errorf("ListPlugins() after failed Close() = %v, want empty", mgr.ListPlugins())
 	}
 }
