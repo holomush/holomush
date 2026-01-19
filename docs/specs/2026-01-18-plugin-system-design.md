@@ -13,7 +13,7 @@ extension model that all game systems build upon.
 
 ### Goals
 
-- Lightweight Lua scripts for commands and simple behaviors (~40KB per instance)
+- Lightweight Lua scripts for commands and simple behaviors (minimal memory per state)
 - Process-isolated go-plugin for complex systems (combat, economy, Discord)
 - Unified capability model for both plugin types
 - Event-driven communication with no blocking calls
@@ -21,7 +21,7 @@ extension model that all game systems build upon.
 
 ### Non-Goals
 
-- WASM plugins (spike completed, Lua is more efficient for our scale)
+- WASM plugins via Extism (Phase 1.6 spike completed; Lua chosen for v1 due to lower memory footprint and simpler embedding)
 - Hot reload in v1 (planned for future)
 - Plugin marketplace or distribution system
 
@@ -302,11 +302,20 @@ func (f *simpleFactory) NewState(ctx context.Context, pluginName string) (*lua.L
         SkipOpenLibs: true,  // Sandbox: don't load os, io, etc.
     })
 
-    // Load only safe libraries
-    lua.OpenBase(L)
-    lua.OpenTable(L)
-    lua.OpenString(L)
-    lua.OpenMath(L)
+    // Load only safe libraries using gopher-lua's loader pattern
+    for _, pair := range []struct {
+        name string
+        fn   lua.LGFunction
+    }{
+        {lua.BaseLibName, lua.OpenBase},
+        {lua.TabLibName, lua.OpenTable},
+        {lua.StringLibName, lua.OpenString},
+        {lua.MathLibName, lua.OpenMath},
+    } {
+        L.Push(L.NewFunction(pair.fn))
+        L.Push(lua.LString(pair.name))
+        L.Call(1, 0)
+    }
 
     // Register host functions
     f.hostFuncs.Register(L, pluginName)
@@ -357,6 +366,29 @@ type luaPlugin struct {
 Host functions provide the API available to plugins. All functions (except `log`)
 require capability checks.
 
+### Supporting Interfaces
+
+```go
+// KVStore provides namespaced key-value storage for plugins.
+type KVStore interface {
+    Get(ctx context.Context, namespace, key string) ([]byte, error)
+    Set(ctx context.Context, namespace, key string, value []byte) error
+    Delete(ctx context.Context, namespace, key string) error
+}
+
+// EventEmitter sends events to the event bus.
+type EventEmitter interface {
+    Emit(ctx context.Context, stream, eventType string, payload []byte) error
+}
+
+// WorldReader provides read-only access to world data.
+type WorldReader interface {
+    GetLocation(ctx context.Context, id string) (*Location, error)
+    GetCharacter(ctx context.Context, id string) (*Character, error)
+    GetObject(ctx context.Context, id string) (*Object, error)
+}
+```
+
 ### Function Registry
 
 ```go
@@ -371,8 +403,9 @@ type HostFunctions struct {
 func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
     mod := L.NewTable()
 
-    // Event emission
-    L.SetField(mod, "emit_event", h.wrap(pluginName, "events.emit", h.emitEvent))
+    // Event emission - capability checked dynamically based on stream parameter
+    // e.g., "location:123" checks events.emit.location, "session:456" checks events.emit.session
+    L.SetField(mod, "emit_event", h.wrapDynamic(pluginName, h.emitEvent))
 
     // World queries
     L.SetField(mod, "query_location", h.wrap(pluginName, "world.read.location", h.queryLocation))
@@ -477,6 +510,9 @@ function on_event(event)
 end
 ```
 
+**Note:** Table values passed to `kv_set` are automatically JSON-serialized; `kv_get`
+returns the deserialized Lua table. String values are stored as-is.
+
 ## go-plugin Integration
 
 Heavy plugins use HashiCorp go-plugin for process isolation with gRPC communication.
@@ -511,7 +547,7 @@ message Event {
     int64 timestamp = 4;
     string actor_kind = 5;
     string actor_id = 6;
-    bytes payload = 7;
+    bytes payload = 7;  // JSON-encoded payload; plugins decode as needed
 }
 ```
 
@@ -521,19 +557,27 @@ message Event {
 type GoPluginHost struct {
     clients  map[string]*plugin.Client
     plugins  map[string]PluginRPC
-    hostSrv  *HostFunctionsServer
+    hostFns  *HostFunctions
+    enforcer *CapabilityEnforcer
     mu       sync.RWMutex
 }
 
 func (h *GoPluginHost) Load(ctx context.Context, manifest Manifest, dir string) error {
     binary := expandBinaryPath(manifest.BinaryPlugin.Executable, dir)
 
+    // go-plugin uses a broker for bidirectional communication.
+    // The plugin calls back to host functions via the broker.
     client := plugin.NewClient(&plugin.ClientConfig{
         HandshakeConfig:  handshake,
-        Plugins:          pluginMap,
+        Plugins: map[string]plugin.Plugin{
+            "plugin": &pluginGRPCPlugin{
+                hostFns:  h.hostFns,
+                enforcer: h.enforcer,
+                plugin:   manifest.Name,
+            },
+        },
         Cmd:              exec.Command(binary),
         AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-        GRPCServer:       h.hostSrv,
     })
 
     rpcClient, err := client.Client()
@@ -607,6 +651,10 @@ others or crash the server.
 - Configurable per-plugin in server config
 - Context cancellation propagated to host functions
 
+When timeout fires, context cancellation propagates to all in-flight host function
+calls. Long-running host calls (e.g., `query_location` with slow database) SHOULD
+check `ctx.Done()` and return early with an appropriate error.
+
 ## Observability
 
 ### OTel Tracing
@@ -673,13 +721,14 @@ internal/plugin/testdata/
 
 ## Migration from WASM
 
-The existing `internal/wasm/` package (Extism spike) will be:
+The existing `internal/wasm/` package (Extism spike) is already marked deprecated
+in the source code. It will be:
 
-1. Retained as reference for OTel patterns
-2. Deprecated but not deleted (may be useful for future WASM support)
-3. Not used by new plugin system
+1. Retained as reference for OTel patterns (see `ExtismHost` tracing implementation)
+2. Not deleted (may be useful if WASM support is revisited)
+3. Not used by the new plugin system
 
-New code lives in `internal/plugin/`.
+New code lives in `internal/plugin/`. Do not add dependencies on `internal/wasm/`.
 
 ## Acceptance Criteria
 
