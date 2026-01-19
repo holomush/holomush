@@ -39,6 +39,19 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+sboms:
+  - id: binary-sbom
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.cyclonedx.json"
+      - "{{ .ArtifactName }}.sbom.spdx.json"
+
+  - id: source-sbom
+    artifacts: source
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_source.sbom.cyclonedx.json"
+      - "{{ .ProjectName }}_{{ .Version }}_source.sbom.spdx.json"
+
 changelog:
   sort: asc
   filters:
