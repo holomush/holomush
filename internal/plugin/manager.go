@@ -106,7 +106,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 
 	for _, dp := range discovered {
 		if err := m.loadPlugin(ctx, dp); err != nil {
-			slog.Warn("failed to load plugin",
+			slog.Error("failed to load plugin",
 				"plugin", dp.Manifest.Name,
 				"error", err)
 			continue
