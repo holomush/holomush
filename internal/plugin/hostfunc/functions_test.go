@@ -514,6 +514,40 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	}
 }
 
+func TestHostFunctions_KV_MissingArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		caps []string
+	}{
+		{"kv_get no args", `holomush.kv_get()`, []string{"kv.read"}},
+		{"kv_set no args", `holomush.kv_set()`, []string{"kv.write"}},
+		{"kv_set only key", `holomush.kv_set("key")`, []string{"kv.write"}},
+		{"kv_delete no args", `holomush.kv_delete()`, []string{"kv.write"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+
+			enforcer := capability.NewEnforcer()
+			if err := enforcer.SetGrants("test-plugin", tt.caps); err != nil {
+				t.Fatal(err)
+			}
+
+			kvStore := &mockKVStore{data: make(map[string][]byte)}
+			hf := hostfunc.New(kvStore, enforcer)
+			hf.Register(L, "test-plugin")
+
+			err := L.DoString(tt.code)
+			if err == nil {
+				t.Errorf("expected error for %s", tt.name)
+			}
+		})
+	}
+}
+
 func TestHostFunctions_KVGet_EmptyKeyRejected(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
