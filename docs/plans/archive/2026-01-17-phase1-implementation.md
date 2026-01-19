@@ -1,5 +1,7 @@
 # Phase 1: Tracer Bullet Implementation Plan
 
+**Status:** Archived (superseded by roadmap)
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Build a functional telnet server where users connect, chat, disconnect, reconnect, and see missed events.

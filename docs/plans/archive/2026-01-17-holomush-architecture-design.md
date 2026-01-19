@@ -1,6 +1,6 @@
 # HoloMUSH Architecture Design
 
-**Status:** Draft
+**Status:** Archived (superseded by roadmap)
 **Date:** 2026-01-17
 **Version:** 0.1.0
 
