@@ -267,13 +267,13 @@ plugins:
 Pattern matching uses [gobwas/glob](https://github.com/gobwas/glob) with `.` as the segment
 separator. This provides well-defined, battle-tested glob semantics:
 
-| Pattern         | Matches                                            | Does NOT Match              |
-| --------------- | -------------------------------------------------- | --------------------------- |
-| `world.read.*`  | `world.read.location`, `world.read.foo`            | `world.read.character.name` |
-| `world.read.**` | `world.read.location`, `world.read.character.name` | `world.write.location`      |
-| `*`             | `world`, `events`                                  | `world.read`                |
-| `**`            | Any capability                                     | Empty string                |
-| `world.*.read`  | `world.foo.read`, `world.bar.read`                 | `world.foo.bar.read`        |
+| Pattern         | Matches                                            | Does NOT Match                       |
+| --------------- | -------------------------------------------------- | ------------------------------------ |
+| `world.read.*`  | `world.read.location`, `world.read.foo`            | `world.read.character.name`          |
+| `world.read.**` | `world.read.location`, `world.read.character.name` | `world.read`, `world.write.location` |
+| `*`             | `world`, `events`                                  | `world.read`                         |
+| `**`            | Any capability                                     | Empty string                         |
+| `world.*.read`  | `world.foo.read`, `world.bar.read`                 | `world.foo.bar.read`                 |
 
 **Key semantics:**
 
