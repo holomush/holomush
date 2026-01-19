@@ -17,12 +17,12 @@ func main() {
 	}
 
 	outPath := filepath.Join("schemas", "plugin.schema.json")
-	if err := os.MkdirAll(filepath.Dir(outPath), 0750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o750); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := os.WriteFile(outPath, schema, 0600); err != nil {
+	if err := os.WriteFile(outPath, schema, 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
 		os.Exit(1)
 	}
