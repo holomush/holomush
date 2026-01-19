@@ -1,4 +1,6 @@
-// api/proto/holomush/core/v1/core.proto
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 syntax = "proto3";
 
 package holomush.core.v1;

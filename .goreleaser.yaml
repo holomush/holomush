@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
 # goreleaser configuration
 # https://goreleaser.com
 
@@ -39,18 +42,54 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# SBOM generation - separate entries for each format (syft generates one format per run)
 sboms:
-  - id: binary-sbom
+  - id: binary-sbom-cyclonedx
     artifacts: archive
     documents:
       - "{{ .ArtifactName }}.sbom.cyclonedx.json"
-      - "{{ .ArtifactName }}.sbom.spdx.json"
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
 
-  - id: source-sbom
+  - id: binary-sbom-spdx
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.sbom.spdx.json"
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+  - id: source-sbom-cyclonedx
     artifacts: source
     documents:
       - "{{ .ProjectName }}_{{ .Version }}_source.sbom.cyclonedx.json"
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
+
+  - id: source-sbom-spdx
+    artifacts: source
+    documents:
       - "{{ .ProjectName }}_{{ .Version }}_source.sbom.spdx.json"
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+# Keyless signing with Cosign (uses GitHub Actions OIDC)
+# Signing happens BEFORE release publication - artifacts are never published unsigned
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    args:
+      - "sign-blob"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${signature}.cert"
+      - "${artifact}"
+      - "--yes"
+
+# Sign container images with Cosign keyless signing
+docker_signs:
+  - cmd: cosign
+    artifacts: manifests
+    output: true
+    args:
+      - "sign"
+      - "${artifact}"
+      - "--yes"
 
 changelog:
   sort: asc

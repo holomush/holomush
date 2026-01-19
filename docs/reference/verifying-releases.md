@@ -19,36 +19,52 @@ go install github.com/sigstore/cosign/v2/cmd/cosign@latest
 
 ## Verifying Binary Releases
 
-Each binary release includes:
+Each release includes:
 
-- The archive (`.tar.gz`)
-- A signature file (`.tar.gz.sig`)
-- A certificate file (`.tar.gz.cert`)
+- Binary archives (`.tar.gz`) for multiple platforms
+- A checksums file (`checksums.txt`) with SHA256 hashes
+- A signature file (`checksums.txt.sig`) signing the checksums
+- A certificate file (`checksums.txt.sig.cert`) with the signing identity
+- SBOM files in CycloneDX and SPDX formats
 
 ### Download and Verify
 
 ```bash
-# Download the release, signature, and certificate
+# Download the release assets
 VERSION="v1.0.0"
-ARCH="linux_amd64"
+ARCH="linux_amd64"  # or: darwin_amd64, darwin_arm64, linux_arm64
 
-curl -LO "https://github.com/holomush/holomush/releases/download/${VERSION}/holomush_${VERSION#v}_${ARCH}.tar.gz"
-curl -LO "https://github.com/holomush/holomush/releases/download/${VERSION}/holomush_${VERSION#v}_${ARCH}.tar.gz.sig"
-curl -LO "https://github.com/holomush/holomush/releases/download/${VERSION}/holomush_${VERSION#v}_${ARCH}.tar.gz.cert"
+# Using GitHub CLI (recommended)
+gh release download "${VERSION}" -R holomush/holomush \
+  -p "holomush_${VERSION#v}_${ARCH}.tar.gz" \
+  -p "checksums.txt" \
+  -p "checksums.txt.sig" \
+  -p "checksums.txt.sig.cert"
 
-# Verify the signature
+# Or using curl
+BASE_URL="https://github.com/holomush/holomush/releases/download/${VERSION}"
+curl -LO "${BASE_URL}/holomush_${VERSION#v}_${ARCH}.tar.gz"
+curl -LO "${BASE_URL}/checksums.txt"
+curl -LO "${BASE_URL}/checksums.txt.sig"
+curl -LO "${BASE_URL}/checksums.txt.sig.cert"
+
+# Verify the checksums signature
 cosign verify-blob \
-  --certificate "holomush_${VERSION#v}_${ARCH}.tar.gz.cert" \
-  --signature "holomush_${VERSION#v}_${ARCH}.tar.gz.sig" \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate checksums.txt.sig.cert \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  "holomush_${VERSION#v}_${ARCH}.tar.gz"
+  checksums.txt
+
+# Verify the archive checksum
+sha256sum --check --ignore-missing checksums.txt
 ```
 
 A successful verification shows:
 
 ```text
 Verified OK
+holomush_1.0.0_linux_amd64.tar.gz: OK
 ```
 
 ## Verifying Container Images
@@ -58,7 +74,7 @@ Container images are signed and stored in the GitHub Container Registry (ghcr.io
 ```bash
 # Verify the container signature
 cosign verify \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/holomush/holomush:v1.0.0
 ```
@@ -76,7 +92,7 @@ Using Cosign:
 ```bash
 cosign verify-attestation \
   --type slsaprovenance \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/holomush/holomush:v1.0.0
 ```

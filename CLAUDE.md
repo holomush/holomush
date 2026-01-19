@@ -191,14 +191,23 @@ package foo
 # Copyright 2026 HoloMUSH Contributors
 ```
 
-| Requirement                         | Description                                              |
-| ----------------------------------- | -------------------------------------------------------- |
-| **MUST** include SPDX header        | All `.go`, `.lua`, `.sh`, `.py` files                    |
-| **MUST NOT** add to generated files | Skip `*.pb.go` files                                     |
-| **SHOULD** use `task license:add`   | Automatically adds headers to files missing them         |
-| **Auto-added on commit**            | Lefthook pre-commit hook adds headers automatically      |
+**Protobuf files:**
 
-**Directories checked:** `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`
+```protobuf
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+```
+
+| Requirement                         | Description                                         |
+| ----------------------------------- | --------------------------------------------------- |
+| **MUST** include SPDX header        | All `.go`, `.lua`, `.sh`, `.py`, `.proto` files     |
+| **MUST NOT** add to generated files | Skip `*.pb.go` files                                |
+| **SHOULD** use `task license:add`   | Automatically adds headers to files missing them    |
+| **Auto-added on commit**            | Lefthook pre-commit hook adds headers automatically |
+
+**Directories checked:** `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`
 
 **Commands:**
 

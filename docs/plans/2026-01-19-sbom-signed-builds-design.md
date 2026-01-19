@@ -1,7 +1,7 @@
 # Signed Builds and SBOM Design
 
 **Date:** 2026-01-19
-**Status:** Draft
+**Status:** Implemented
 **Author:** Sean + Claude
 
 ## Overview
@@ -74,23 +74,47 @@ package foo
 
 **Enforcement:** CI checks via `google/addlicense`.
 
-### 2. GoReleaser SBOM Configuration
+### 2. GoReleaser SBOM and Signing Configuration
 
 Add to `.goreleaser.yaml`:
 
 ```yaml
+# SBOM generation - separate entries for each format (syft generates one format per run)
 sboms:
-  - id: binary-sbom
+  - id: binary-sbom-cyclonedx
     artifacts: archive
     documents:
       - "{{ .ArtifactName }}.sbom.cyclonedx.json"
-      - "{{ .ArtifactName }}.sbom.spdx.json"
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
 
-  - id: source-sbom
-    artifacts: source
+  - id: binary-sbom-spdx
+    artifacts: archive
     documents:
-      - "{{ .ProjectName }}_{{ .Version }}_source.sbom.cyclonedx.json"
-      - "{{ .ProjectName }}_{{ .Version }}_source.sbom.spdx.json"
+      - "{{ .ArtifactName }}.sbom.spdx.json"
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+# Keyless signing with Cosign (uses GitHub Actions OIDC)
+# Signing happens BEFORE release publication - artifacts are never published unsigned
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    args:
+      - "sign-blob"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${signature}.cert"
+      - "${artifact}"
+      - "--yes"
+
+# Sign container images with Cosign keyless signing
+docker_signs:
+  - cmd: cosign
+    artifacts: manifests
+    output: true
+    args:
+      - "sign"
+      - "${artifact}"
+      - "--yes"
 ```
 
 ### 3. Release Workflow
@@ -105,29 +129,29 @@ permissions:
   attestations: write # Required for provenance attestations
 
 jobs:
+  release-please:
+  # Creates releases on main push via googleapis/release-please-action
+
   goreleaser:
-  # Build binaries, containers, generate SBOMs
+    needs: release-please
+    # Build, sign (atomically via GoReleaser), and release
+    # GoReleaser handles: build → sign → publish (never unsigned)
 
-  sign-binaries:
+  attest-provenance:
     needs: goreleaser
-    # Sign .tar.gz files with cosign sign-blob
-
-  attest-binaries:
-    needs: goreleaser
-    # Generate SLSA provenance via actions/attest-build-provenance
-
-  sign-containers:
-    needs: goreleaser
-    # Sign container images with cosign sign
+    # Generate SLSA provenance for binary archives
 
   attest-containers:
-    needs: [goreleaser, sign-containers]
-    # Attach SLSA provenance to registry
-
-  sbom-containers:
     needs: goreleaser
-    # Generate and attach SBOM attestation to registry
+    # Generate SLSA provenance for container images
+
+  verify-release:
+    needs: [goreleaser, attest-provenance, attest-containers]
+    # Final verification that all signatures and attestations succeeded
 ```
+
+**Key principle:** GoReleaser handles signing atomically before publishing. Releases
+are never published with unsigned artifacts.
 
 ### 4. CI License Check
 
@@ -165,17 +189,23 @@ license:add:
 
 ```bash
 # Download release artifacts
-curl -LO .../holomush_1.0.0_linux_amd64.tar.gz
-curl -LO .../holomush_1.0.0_linux_amd64.tar.gz.sig
-curl -LO .../holomush_1.0.0_linux_amd64.tar.gz.cert
+VERSION="v1.0.0"
+ARCH="linux_amd64"  # or: darwin_amd64, darwin_arm64, linux_arm64
 
-# Verify signature
+gh release download "${VERSION}" -R holomush/holomush \
+  -p "holomush_${VERSION#v}_${ARCH}.tar.gz" \
+  -p "checksums.txt*"
+
+# Verify checksums signature
 cosign verify-blob \
-  --certificate holomush_1.0.0_linux_amd64.tar.gz.cert \
-  --signature holomush_1.0.0_linux_amd64.tar.gz.sig \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate checksums.txt.sig.cert \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  holomush_1.0.0_linux_amd64.tar.gz
+  checksums.txt
+
+# Verify archive checksum
+sha256sum --check --ignore-missing checksums.txt
 ```
 
 ### Verifying Container Images
@@ -183,7 +213,7 @@ cosign verify-blob \
 ```bash
 # Verify signature
 cosign verify \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/holomush/holomush:v1.0.0
 

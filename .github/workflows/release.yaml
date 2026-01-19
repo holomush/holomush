@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
 name: Release
 
 on:
@@ -28,17 +31,24 @@ jobs:
           release-type: go
 
   goreleaser:
-    name: GoReleaser
+    name: Build, Sign, and Release
     runs-on: ubuntu-latest
     needs: release-please
     if: needs.release-please.outputs.release_created || startsWith(github.ref, 'refs/tags/')
     outputs:
-      artifacts: ${{ steps.goreleaser.outputs.artifacts }}
-      metadata: ${{ steps.goreleaser.outputs.metadata }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${VERSION}"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -64,49 +74,69 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
 
+      # GoReleaser handles building, signing, and releasing atomically.
+      # Signing happens BEFORE artifacts are published - releases are never
+      # published with unsigned artifacts.
       - name: Run GoReleaser
         id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: latest
+          version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  sign-and-attest:
-    name: Sign and Attest
+      # Upload artifacts for provenance attestation
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*.tar.gz
+          retention-days: 1
+
+  # Provenance attestation runs after goreleaser completes.
+  # This adds SLSA provenance to the already-signed artifacts.
+  attest-provenance:
+    name: Attest Provenance
     runs-on: ubuntu-latest
     needs: goreleaser
-    if: needs.goreleaser.result == 'success'
+    permissions:
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Download release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify artifacts exist
         run: |
-          mkdir -p dist
-          gh release download ${{ github.ref_name }} -D dist -p '*.tar.gz'
+          set -euo pipefail
+          count=$(find dist -name '*.tar.gz' -type f | wc -l)
+          if [[ $count -eq 0 ]]; then
+            echo "ERROR: No release artifacts found"
+            exit 1
+          fi
+          echo "Found ${count} artifacts to attest"
+          ls -la dist/
 
-      - name: Sign binaries with Cosign
-        run: |
-          cd dist
-          for f in *.tar.gz; do
-            cosign sign-blob --yes "$f" \
-              --output-signature "${f}.sig" \
-              --output-certificate "${f}.cert"
-          done
+      - name: Attest binary provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*.tar.gz"
 
-      - name: Upload signatures to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload ${{ github.ref_name }} dist/*.sig dist/*.cert --clobber
-
+  # Attest container images for provenance
+  attest-containers:
+    name: Attest Container Provenance
+    runs-on: ubuntu-latest
+    needs: goreleaser
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
+    steps:
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -114,29 +144,81 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sign container images
+      - name: Get image digest
+        id: digest
         run: |
-          VERSION="${{ github.ref_name }}"
-          cosign sign --yes "ghcr.io/holomush/holomush:${VERSION}"
-          cosign sign --yes "ghcr.io/holomush/holomush:${VERSION}-amd64"
-          cosign sign --yes "ghcr.io/holomush/holomush:${VERSION}-arm64"
+          set -euo pipefail
+          VERSION="${{ needs.goreleaser.outputs.version }}"
+          IMAGE="ghcr.io/holomush/holomush:${VERSION}"
 
-  attest-provenance:
-    name: Attest Provenance
+          echo "Fetching digest for ${IMAGE}"
+          DIGEST=$(docker manifest inspect "${IMAGE}" --verbose 2>/dev/null \
+            | jq -r '.Descriptor.digest // .digest' | head -1)
+
+          if [[ -z "${DIGEST}" || "${DIGEST}" == "null" ]]; then
+            echo "ERROR: Could not get digest for ${IMAGE}"
+            exit 1
+          fi
+
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Image digest: ${DIGEST}"
+
+      - name: Attest container provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/holomush/holomush
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+  # Final verification step - ensures all signing and attestation succeeded
+  verify-release:
+    name: Verify Release
     runs-on: ubuntu-latest
-    needs: goreleaser
-    if: needs.goreleaser.result == 'success'
+    needs: [goreleaser, attest-provenance, attest-containers]
     steps:
-      - uses: actions/checkout@v4
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
 
-      - name: Download release assets
+      - name: Verify checksums signature
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p dist
-          gh release download ${{ github.ref_name }} -D dist -p '*.tar.gz'
+          set -euo pipefail
+          VERSION="${{ needs.goreleaser.outputs.version }}"
 
-      - name: Attest binary provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: "dist/*.tar.gz"
+          echo "Verifying release ${VERSION}..."
+
+          # Download checksums and signature
+          mkdir -p dist
+          gh release download "${VERSION}" -R holomush/holomush -D dist \
+            -p 'checksums.txt' -p 'checksums.txt.sig' -p 'checksums.txt.sig.cert'
+
+          # Verify signature
+          cosign verify-blob \
+            --certificate dist/checksums.txt.sig.cert \
+            --signature dist/checksums.txt.sig \
+            --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            dist/checksums.txt
+
+          echo "✓ Checksums signature verified"
+
+      - name: Verify container signature
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.goreleaser.outputs.version }}"
+
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "ghcr.io/holomush/holomush:${VERSION}"
+
+          echo "✓ Container signature verified"
+
+      - name: Release verification complete
+        run: |
+          echo "✓ All release artifacts are properly signed and attested"
+          echo "  - Binary checksums: signed with Cosign"
+          echo "  - Container images: signed with Cosign"
+          echo "  - Binary provenance: attested"
+          echo "  - Container provenance: attested"

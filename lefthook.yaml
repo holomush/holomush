@@ -10,9 +10,14 @@ pre-commit:
     - ".worktrees/**"
   commands:
     license-headers:
-      glob: "*.{go,lua,sh,py}"
+      glob: "*.{go,lua,sh,py,proto}"
       exclude: "*.pb.go"
-      run: addlicense -f LICENSE_HEADER {staged_files}
+      run: |
+        command -v addlicense >/dev/null 2>&1 || {
+          echo "Installing addlicense..."
+          go install github.com/google/addlicense@latest
+        }
+        addlicense -f LICENSE_HEADER {staged_files}
       stage_fixed: true
 
     lint-go:

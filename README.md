@@ -90,16 +90,24 @@ See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
 All releases are cryptographically signed and include SBOMs for vulnerability tracking.
 
 ```bash
-# Verify binary signature
-cosign verify-blob --certificate holomush.tar.gz.cert \
-  --signature holomush.tar.gz.sig \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+# Download release assets (adjust VERSION and ARCH as needed)
+VERSION="v1.0.0"
+ARCH="linux_amd64"  # or: darwin_amd64, darwin_arm64, linux_arm64
+gh release download "${VERSION}" -R holomush/holomush \
+  -p "holomush_${VERSION#v}_${ARCH}.tar.gz" \
+  -p "checksums.txt*"
+
+# Verify checksums signature
+cosign verify-blob \
+  --certificate checksums.txt.sig.cert \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  holomush.tar.gz
+  checksums.txt
 
 # Verify container image
 cosign verify \
-  --certificate-identity-regexp "github.com/holomush/holomush" \
+  --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   ghcr.io/holomush/holomush:v1.0.0
 ```
