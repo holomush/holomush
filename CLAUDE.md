@@ -159,6 +159,8 @@ type NotFoundError struct {
 
 All source files MUST include SPDX license headers at the top:
 
+**Go files:**
+
 ```go
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
@@ -167,12 +169,29 @@ All source files MUST include SPDX license headers at the top:
 package foo
 ```
 
-| Requirement                           | Description                                           |
-| ------------------------------------- | ----------------------------------------------------- |
-| **MUST** include SPDX header          | All `.go` files in `cmd/`, `internal/`, `pkg/`        |
-| **MUST NOT** add to generated files   | Skip `*.pb.go` files                                  |
-| **SHOULD** use `task license:add`     | Automatically adds headers to files missing them      |
-| **Auto-added on commit**              | Lefthook pre-commit hook adds headers automatically   |
+**Lua plugins:**
+
+```lua
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+```
+
+**Shell scripts:**
+
+```bash
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+```
+
+| Requirement                         | Description                                              |
+| ----------------------------------- | -------------------------------------------------------- |
+| **MUST** include SPDX header        | All `.go`, `.lua`, `.sh` files                           |
+| **MUST NOT** add to generated files | Skip `*.pb.go` files                                     |
+| **SHOULD** use `task license:add`   | Automatically adds headers to files missing them         |
+| **Auto-added on commit**            | Lefthook pre-commit hook adds headers automatically      |
+
+**Directories checked:** `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`
 
 **Commands:**
 
