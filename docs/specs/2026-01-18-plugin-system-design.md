@@ -109,9 +109,10 @@ events:
 # Capabilities requested (denied by default)
 capabilities:
   - events.emit.location
+  - events.emit.session # Required for system.prompt (prompts go to session streams)
   - world.read.*
   - kv.*
-  - system.prompt
+  - system.prompt # Required to emit "prompt" event type
 
 # Required when type: lua
 lua-plugin:
@@ -177,9 +178,14 @@ net
   net.websocket             # WebSocket connections (go-plugin only)
 
 system
-  system.prompt             # Send prompts to users
-  system.disconnect         # Disconnect sessions
+  system.prompt             # Send prompts to users (via emit_event with type="prompt")
+  system.disconnect         # Disconnect sessions (via emit_event with type="disconnect")
 ```
+
+> **Note:** `system.*` capabilities are enforced via event type checks in `emit_event`,
+> not via separate host functions. Emitting a `prompt` event requires `system.prompt`;
+> emitting a `disconnect` event requires `system.disconnect`. This provides fine-grained
+> control over privileged actions while using the unified event mechanism.
 
 ### Enforcement
 
@@ -364,7 +370,7 @@ On `LuaHost.Load()`:
 On `LuaHost.DeliverEvent()`:
 
 1. Get fresh state from factory
-2. Load pre-compiled bytecode via `L.DoCompiledChunk()`
+2. Load pre-compiled bytecode into state
 3. Call `on_event(event)` function
 4. Collect return value (emit events table or nil)
 5. Close state
@@ -445,10 +451,10 @@ func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
     L.SetField(mod, "kv_set", h.wrap(pluginName, "kv.write", h.kvSet))
     L.SetField(mod, "kv_delete", h.wrap(pluginName, "kv.write", h.kvDelete))
 
-    // Request IDs
+    // Request IDs (no capability required - generates correlation IDs only)
     L.SetField(mod, "new_request_id", h.newRequestID)
 
-    // Logging (always allowed)
+    // Logging (no capability required)
     L.SetField(mod, "log", h.log)
 
     L.SetGlobal("holomush", mod)
@@ -476,6 +482,19 @@ func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
 [^2]: Value can be string or table. Tables are automatically JSON-serialized;
     `kv_get` returns deserialized Lua tables.
 
+### Error Semantics
+
+Host functions that fail (database errors, missing resources, etc.) return `nil, error_string`
+to Lua. Plugins SHOULD check for errors:
+
+```lua
+local location, err = holomush.query_location(id)
+if err then
+    holomush.log("error", "failed to query location: " .. err)
+    return
+end
+```
+
 ### Capability Wrapper
 
 ```go
@@ -489,20 +508,37 @@ func (h *HostFunctions) wrap(plugin, cap string, fn lua.LGFunction) lua.LGFuncti
     }
 }
 
-// wrapDynamic determines capability from first argument (stream parameter).
-// "location:123" → events.emit.location, "session:456" → events.emit.session
+// wrapDynamic determines capabilities from stream and event type parameters.
+// Stream: "location:123" → events.emit.location, "session:456" → events.emit.session
+// Event type: "prompt" → system.prompt, "disconnect" → system.disconnect
 func (h *HostFunctions) wrapDynamic(plugin string, fn lua.LGFunction) lua.LGFunction {
     return func(L *lua.LState) int {
         stream := L.CheckString(1)
-        streamType := strings.SplitN(stream, ":", 2)[0] // "location:123" → "location"
-        cap := "events.emit." + streamType
+        eventType := L.CheckString(2)
 
-        if !h.enforcer.Check(plugin, cap) {
-            L.RaiseError("capability denied: %s requires %s", plugin, cap)
+        // Check stream capability
+        streamType := strings.SplitN(stream, ":", 2)[0]
+        if !h.enforcer.Check(plugin, "events.emit."+streamType) {
+            L.RaiseError("capability denied: %s requires events.emit.%s", plugin, streamType)
             return 0
         }
+
+        // Check system capabilities for privileged event types
+        if cap, ok := systemCapabilities[eventType]; ok {
+            if !h.enforcer.Check(plugin, cap) {
+                L.RaiseError("capability denied: %s requires %s", plugin, cap)
+                return 0
+            }
+        }
+
         return fn(L)
     }
+}
+
+// systemCapabilities maps privileged event types to required capabilities.
+var systemCapabilities = map[string]string{
+    "prompt":     "system.prompt",
+    "disconnect": "system.disconnect",
 }
 ```
 
