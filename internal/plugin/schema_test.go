@@ -165,6 +165,26 @@ lua-plugin:
   entry: main.lua
 `,
 		},
+		{
+			name: "consecutive hyphens not allowed",
+			yaml: `
+name: test--plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+		},
+		{
+			name: "trailing hyphen not allowed",
+			yaml: `
+name: test-plugin-
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -316,5 +336,60 @@ type: [invalid`
 	err := plugin.ValidateSchema([]byte(yaml))
 	if err == nil {
 		t.Error("ValidateSchema() expected error for invalid YAML")
+	}
+}
+
+func TestValidateSchema_WithEngineField(t *testing.T) {
+	yaml := `
+name: test-plugin
+version: 1.0.0
+type: lua
+engine: ">= 2.0.0"
+lua-plugin:
+  entry: main.lua
+`
+	err := plugin.ValidateSchema([]byte(yaml))
+	if err != nil {
+		t.Errorf("ValidateSchema() error = %v, want nil for manifest with engine field", err)
+	}
+}
+
+func TestValidateSchema_WithDependenciesField(t *testing.T) {
+	yaml := `
+name: test-plugin
+version: 1.0.0
+type: lua
+dependencies:
+  auth-plugin: "^1.0.0"
+  logging-plugin: "~2.0.0"
+lua-plugin:
+  entry: main.lua
+`
+	err := plugin.ValidateSchema([]byte(yaml))
+	if err != nil {
+		t.Errorf("ValidateSchema() error = %v, want nil for manifest with dependencies field", err)
+	}
+}
+
+func TestValidateSchema_WithAllOptionalFields(t *testing.T) {
+	yaml := `
+name: full-plugin
+version: 1.0.0
+type: lua
+engine: ">= 2.0.0, < 3.0.0"
+dependencies:
+  auth-plugin: "^1.0.0"
+  logging-plugin: "~2.0.0"
+events:
+  - say
+  - pose
+capabilities:
+  - events.emit.location
+lua-plugin:
+  entry: main.lua
+`
+	err := plugin.ValidateSchema([]byte(yaml))
+	if err != nil {
+		t.Errorf("ValidateSchema() error = %v, want nil for manifest with all optional fields", err)
 	}
 }
