@@ -29,6 +29,16 @@ pre-commit:
     format-check:
       run: dprint check
 
+    schema-sync:
+      glob: "internal/plugin/*.go"
+      run: |
+        task generate:schema
+        if ! git diff --exit-code schemas/plugin.schema.json; then
+          echo "Schema out of sync. Run 'task generate:schema' and commit."
+          exit 1
+        fi
+      stage_fixed: true
+
 commit-msg:
   commands:
     conventional-commit:

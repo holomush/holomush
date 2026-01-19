@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://holomush.dev/schemas/plugin.schema.json",
+  "properties": {
+    "name": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z](-?[a-z0-9])*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "lua",
+        "binary"
+      ]
+    },
+    "engine": {
+      "type": "string",
+      "description": "HoloMUSH version constraint (e.g. \u003e= 2.0.0)"
+    },
+    "dependencies": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object",
+      "description": "Plugin dependencies with version constraints"
+    },
+    "events": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "capabilities": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "lua-plugin": {
+      "properties": {
+        "entry": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "entry"
+      ]
+    },
+    "binary-plugin": {
+      "properties": {
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "executable"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "type"
+  ],
+  "title": "HoloMUSH Plugin Manifest",
+  "description": "Schema for plugin.yaml manifest files"
+}

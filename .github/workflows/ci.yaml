@@ -48,6 +48,14 @@ jobs:
           task plugin:build
           task test:fixtures:build
 
+      - name: Verify schema is current
+        run: |
+          task generate:schema
+          if ! git diff --exit-code schemas/plugin.schema.json; then
+            echo "::error::Schema out of sync with Go types. Run 'task generate:schema' and commit."
+            exit 1
+          fi
+
       - name: Lint
         run: task lint
 

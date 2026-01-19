@@ -104,9 +104,17 @@ event subscriptions, and required capabilities.
 # NOTE: Schema URL is placeholder; actual path determined during implementation
 
 # Required fields
-name: echo-bot # Unique identifier, pattern: ^[a-z][a-z0-9-]*$
-version: 1.0.0 # Semver
+name: echo-bot # Unique identifier, pattern: ^[a-z](-?[a-z0-9])*$
+version: 1.0.0 # Semver (strict: MAJOR.MINOR.PATCH[-prerelease][+build])
 type: lua # Required enum: "lua" | "binary"
+
+# Optional: HoloMUSH engine version constraint
+engine: ">= 2.0.0" # Semver constraint (supports >=, <=, ^, ~, x wildcards, ranges)
+
+# Optional: Plugin dependencies with version constraints
+dependencies:
+  auth-plugin: "^1.0.0" # Compatible with 1.x (>=1.0.0, <2.0.0)
+  logging-plugin: "~2.0.0" # Patch updates only (>=2.0.0, <2.1.0)
 
 # Event subscriptions
 events:
@@ -132,18 +140,35 @@ binary-plugin:
 
 ### Validation Rules
 
-| Rule                                                          | Enforcement    |
-| ------------------------------------------------------------- | -------------- |
-| `name` MUST match `^[a-z][a-z0-9-]*$`                         | Schema         |
-| `version` MUST be valid semver                                | Schema         |
-| `type` MUST be `lua` or `binary`                              | Schema         |
-| When `type: lua`, `lua-plugin` MUST be present                | Schema (oneOf) |
-| When `type: binary`, `binary-plugin` MUST be present          | Schema (oneOf) |
-| Requested capabilities MUST be subset of granted capabilities | Runtime        |
+| Rule                                                                 | Enforcement    |
+| -------------------------------------------------------------------- | -------------- |
+| `name` MUST match `^[a-z](-?[a-z0-9])*$` (no consecutive hyphens)    | Schema         |
+| `version` MUST be valid strict semver (e.g., `1.0.0`, `1.0.0-alpha`) | Schema         |
+| `type` MUST be `lua` or `binary`                                     | Schema         |
+| `engine` if present MUST be valid semver constraint                  | Runtime        |
+| `dependencies` values MUST be valid semver constraints               | Runtime        |
+| When `type: lua`, `lua-plugin` MUST be present                       | Schema (oneOf) |
+| When `type: binary`, `binary-plugin` MUST be present                 | Schema (oneOf) |
+| Requested capabilities MUST be subset of granted capabilities        | Runtime        |
 
-> **Version compatibility:** Plugin versions are informational in v1—the host does not
-> enforce version constraints. Future versions MAY introduce a `min_host_version` field
-> for plugins to declare host API compatibility requirements.
+### Version Constraint Syntax
+
+The `engine` and `dependencies` fields accept semver constraints using the
+[Masterminds/semver](https://github.com/Masterminds/semver) library syntax:
+
+| Operator | Example             | Meaning                       |
+| -------- | ------------------- | ----------------------------- |
+| `>=`     | `>= 1.0.0`          | Greater than or equal         |
+| `<=`     | `<= 2.0.0`          | Less than or equal            |
+| `^`      | `^1.2.0`            | Compatible (>=1.2.0, <2.0.0)  |
+| `~`      | `~1.2.0`            | Patch-level (>=1.2.0, <1.3.0) |
+| `x`      | `1.x`, `1.2.x`      | Wildcard                      |
+| `,`      | `>= 1.0.0, < 2.0.0` | AND (range)                   |
+| `\|\|`   | `1.x \|\| 2.x`      | OR                            |
+
+> **Version enforcement:** In v1, `engine` and `dependencies` constraints are validated
+> at manifest parse time but not enforced at runtime. The plugin manager will log warnings
+> for unmet constraints. Future versions MAY refuse to load plugins with unmet constraints.
 
 ### Binary Executable Variables
 
