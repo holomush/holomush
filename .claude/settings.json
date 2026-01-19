@@ -10,7 +10,9 @@
       "WebFetch(domain:index.crates.io)",
       "WebFetch(domain:static.crates.io)",
       "Edit(~/Library/Caches/**)",
-      "Edit(~/go/pkg/**)"
+      "Edit(~/go/pkg/**)",
+      "Edit(.git/**)",
+      "Edit(/.worktrees/**)"
     ]
   },
   "sandbox": {
