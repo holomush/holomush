@@ -12,6 +12,16 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+func TestNew_NilEnforcerPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic for nil enforcer")
+		}
+	}()
+
+	hostfunc.New(nil, nil)
+}
+
 func TestHostFunctions_Log(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
@@ -176,13 +186,23 @@ func TestHostFunctions_KV_WithCapability(t *testing.T) {
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	// Set and get
-	err := L.DoString(`holomush.kv_set("mykey", "myvalue")`)
+	// Set returns (nil, nil) on success
+	err := L.DoString(`result, err = holomush.kv_set("mykey", "myvalue")`)
 	if err != nil {
 		t.Fatalf("kv_set failed: %v", err)
 	}
 
-	err = L.DoString(`result = holomush.kv_get("mykey")`)
+	setResult := L.GetGlobal("result")
+	setErr := L.GetGlobal("err")
+	if setResult.Type() != lua.LTNil {
+		t.Errorf("kv_set result = %v, want nil", setResult)
+	}
+	if setErr.Type() != lua.LTNil {
+		t.Errorf("kv_set err = %v, want nil", setErr)
+	}
+
+	// Get returns (value, nil) on success
+	err = L.DoString(`result, err = holomush.kv_get("mykey")`)
 	if err != nil {
 		t.Fatalf("kv_get failed: %v", err)
 	}
@@ -263,12 +283,16 @@ func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
 	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`err = holomush.kv_set("key", "value")`)
+	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
 	if err != nil {
 		t.Fatalf("kv_set failed: %v", err)
 	}
 
+	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
+	if result.Type() != lua.LTNil {
+		t.Errorf("expected nil result, got %v", result.Type())
+	}
 	if errVal.Type() != lua.LTString {
 		t.Errorf("expected error string when kv store unavailable, got %v", errVal.Type())
 	}
@@ -324,12 +348,16 @@ func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
 	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`err = holomush.kv_delete("key")`)
+	err := L.DoString(`result, err = holomush.kv_delete("key")`)
 	if err != nil {
 		t.Fatalf("kv_delete failed: %v", err)
 	}
 
+	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
+	if result.Type() != lua.LTNil {
+		t.Errorf("expected nil result, got %v", result.Type())
+	}
 	if errVal.Type() != lua.LTString {
 		t.Errorf("expected error string when kv store unavailable, got %v", errVal.Type())
 	}
@@ -381,12 +409,16 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`err = holomush.kv_set("key", "value")`)
+	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
 	if err != nil {
 		t.Fatalf("kv_set failed: %v", err)
 	}
 
+	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
+	if result.Type() != lua.LTNil {
+		t.Errorf("expected nil result, got %v", result.Type())
+	}
 	if errVal.Type() != lua.LTString {
 		t.Fatalf("expected error string, got %v", errVal.Type())
 	}
@@ -411,12 +443,16 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`err = holomush.kv_delete("key")`)
+	err := L.DoString(`result, err = holomush.kv_delete("key")`)
 	if err != nil {
 		t.Fatalf("kv_delete failed: %v", err)
 	}
 
+	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
+	if result.Type() != lua.LTNil {
+		t.Errorf("expected nil result, got %v", result.Type())
+	}
 	if errVal.Type() != lua.LTString {
 		t.Fatalf("expected error string, got %v", errVal.Type())
 	}

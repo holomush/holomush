@@ -35,7 +35,12 @@ type Functions struct {
 }
 
 // New creates host functions with dependencies.
+// Panics if enforcer is nil (required dependency).
+// KVStore may be nil; KV functions will return errors if called.
 func New(kv KVStore, enforcer CapabilityChecker) *Functions {
+	if enforcer == nil {
+		panic("hostfunc.New: enforcer cannot be nil")
+	}
 	return &Functions{
 		kvStore:  kv,
 		enforcer: enforcer,
@@ -63,6 +68,9 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 func (f *Functions) wrap(plugin, capName string, fn lua.LGFunction) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if !f.enforcer.Check(plugin, capName) {
+			slog.Warn("capability denied",
+				"plugin", plugin,
+				"capability", capName)
 			L.RaiseError("capability denied: %s requires %s", plugin, capName)
 			return 0
 		}
@@ -151,8 +159,9 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			slog.Error("kv_set called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
+			L.Push(lua.LNil)
 			L.Push(lua.LString("kv store not available"))
-			return 1
+			return 2
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
@@ -163,11 +172,14 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 				"plugin", pluginName,
 				"key", key,
 				"error", err)
+			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
-			return 1
+			return 2
 		}
 
-		return 0
+		L.Push(lua.LNil) // No result
+		L.Push(lua.LNil) // No error
+		return 2
 	}
 }
 
@@ -179,8 +191,9 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 			slog.Error("kv_delete called but store unavailable",
 				"plugin", pluginName,
 				"key", key)
+			L.Push(lua.LNil)
 			L.Push(lua.LString("kv store not available"))
-			return 1
+			return 2
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
@@ -191,10 +204,13 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 				"plugin", pluginName,
 				"key", key,
 				"error", err)
+			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
-			return 1
+			return 2
 		}
 
-		return 0
+		L.Push(lua.LNil) // No result
+		L.Push(lua.LNil) // No error
+		return 2
 	}
 }
