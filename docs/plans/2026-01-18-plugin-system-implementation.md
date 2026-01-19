@@ -570,19 +570,19 @@ func (f *StateFactory) NewState(_ context.Context) (*lua.LState, error) {
 }
 ```
 
-### Step 4: Run test to verify it passes
+### Step 4: Add gopher-lua dependency
+
+```bash
+go get github.com/yuin/gopher-lua
+```
+
+### Step 5: Run test to verify it passes
 
 ```bash
 task test -- -run TestStateFactory ./internal/plugin/lua/...
 ```
 
 Expected: PASS
-
-### Step 5: Add gopher-lua dependency
-
-```bash
-go get github.com/yuin/gopher-lua
-```
 
 ### Step 6: Commit
 
@@ -1264,11 +1264,13 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 
         if value == nil {
             L.Push(lua.LNil)
-            return 1
+            L.Push(lua.LNil) // No error, just not found
+            return 2
         }
 
         L.Push(lua.LString(string(value)))
-        return 1
+        L.Push(lua.LNil) // No error
+        return 2
     }
 }
 
