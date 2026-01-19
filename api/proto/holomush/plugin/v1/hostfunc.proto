@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// api/proto/holomush/plugin/v1/hostfunc.proto
+syntax = "proto3";
+
+package holomush.plugin.v1;
+
+option go_package = "github.com/holomush/holomush/internal/proto/holomush/plugin/v1;pluginv1";
+
+import "holomush/plugin/v1/plugin.proto";
+
+// HostFunctions service provides host capabilities to plugins.
+// This service is implemented by the host (the gRPC server runs in the host process).
+// Plugins call these methods to interact with the game world.
+service HostFunctions {
+  // EmitEvent publishes an event to a stream.
+  rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
+
+  // QueryRoom retrieves information about a room.
+  rpc QueryRoom(QueryRoomRequest) returns (QueryRoomResponse);
+
+  // QueryCharacter retrieves information about a character.
+  rpc QueryCharacter(QueryCharacterRequest) returns (QueryCharacterResponse);
+
+  // QueryRoomCharacters retrieves all characters in a room.
+  rpc QueryRoomCharacters(QueryRoomCharactersRequest) returns (QueryRoomCharactersResponse);
+
+  // KVGet retrieves a value from the plugin's key-value store.
+  rpc KVGet(KVGetRequest) returns (KVGetResponse);
+
+  // KVSet stores a value in the plugin's key-value store.
+  rpc KVSet(KVSetRequest) returns (KVSetResponse);
+
+  // KVDelete removes a value from the plugin's key-value store.
+  rpc KVDelete(KVDeleteRequest) returns (KVDeleteResponse);
+
+  // Log writes a log message through the host's logging system.
+  rpc Log(LogRequest) returns (LogResponse);
+}
+
+// LogLevel specifies the severity of a log message.
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARN = 3;
+  LOG_LEVEL_ERROR = 4;
+}
+
+// EmitEventRequest wraps an event for emission by the host.
+message EmitEventRequest {
+  // The event to emit.
+  EmitEvent event = 1;
+}
+
+// EmitEventResponse indicates success or failure.
+message EmitEventResponse {
+  // Whether the event was successfully emitted.
+  bool success = 1;
+  // Error message if success is false.
+  string error = 2;
+}
+
+// QueryRoomRequest requests information about a room.
+message QueryRoomRequest {
+  // Room identifier.
+  string room_id = 1;
+}
+
+// QueryRoomResponse contains room information.
+message QueryRoomResponse {
+  // Room information (nil if not found).
+  RoomInfo room = 1;
+  // Error message if query failed.
+  string error = 2;
+}
+
+// RoomInfo contains basic room information.
+message RoomInfo {
+  // Room identifier.
+  string id = 1;
+  // Room name/title.
+  string name = 2;
+  // Room description.
+  string description = 3;
+}
+
+// QueryCharacterRequest requests information about a character.
+message QueryCharacterRequest {
+  // Character identifier.
+  string character_id = 1;
+}
+
+// QueryCharacterResponse contains character information.
+message QueryCharacterResponse {
+  // Character information (nil if not found).
+  CharacterInfo character = 1;
+  // Error message if query failed.
+  string error = 2;
+}
+
+// CharacterInfo contains basic character information.
+message CharacterInfo {
+  // Character identifier.
+  string id = 1;
+  // Character name.
+  string name = 2;
+}
+
+// QueryRoomCharactersRequest requests all characters in a room.
+message QueryRoomCharactersRequest {
+  // Room identifier.
+  string room_id = 1;
+}
+
+// QueryRoomCharactersResponse contains the list of characters.
+message QueryRoomCharactersResponse {
+  // Characters in the room.
+  repeated CharacterInfo characters = 1;
+  // Error message if query failed.
+  string error = 2;
+}
+
+// KVGetRequest retrieves a value by key.
+message KVGetRequest {
+  // Key to look up.
+  string key = 1;
+}
+
+// KVGetResponse contains the retrieved value.
+message KVGetResponse {
+  // Value if found.
+  bytes value = 1;
+  // Whether the key was found.
+  bool found = 2;
+  // Error message if query failed.
+  string error = 3;
+}
+
+// KVSetRequest stores a key-value pair.
+message KVSetRequest {
+  // Key to store.
+  string key = 1;
+  // Value to store.
+  bytes value = 2;
+}
+
+// KVSetResponse indicates success or failure.
+message KVSetResponse {
+  // Whether the value was successfully stored.
+  bool success = 1;
+  // Error message if success is false.
+  string error = 2;
+}
+
+// KVDeleteRequest removes a key.
+message KVDeleteRequest {
+  // Key to delete.
+  string key = 1;
+}
+
+// KVDeleteResponse indicates success or failure.
+message KVDeleteResponse {
+  // Whether the key was deleted (true even if key didn't exist).
+  bool deleted = 1;
+  // Error message if deletion failed.
+  string error = 2;
+}
+
+// LogRequest writes a log message.
+message LogRequest {
+  // Log level.
+  LogLevel level = 1;
+  // Log message.
+  string message = 2;
+  // Additional structured fields.
+  map<string, string> fields = 3;
+}
+
+// LogResponse is empty (logging is fire-and-forget).
+message LogResponse {}

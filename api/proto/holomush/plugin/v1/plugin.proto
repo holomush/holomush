@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// api/proto/holomush/plugin/v1/plugin.proto
+syntax = "proto3";
+
+package holomush.plugin.v1;
+
+option go_package = "github.com/holomush/holomush/internal/proto/holomush/plugin/v1;pluginv1";
+
+// Plugin service is called by the go-plugin host to send events to binary plugins.
+// This service is implemented by the plugin (the gRPC server runs in the plugin process).
+service Plugin {
+  // HandleEvent delivers an event to the plugin and receives any response events.
+  rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
+}
+
+// Event represents a game event delivered to plugins.
+// Compatible with pkg/plugin.Event but uses protobuf types.
+message Event {
+  // Unique event identifier (ULID string).
+  string id = 1;
+  // Stream the event belongs to (e.g., "room:room_abc123").
+  string stream = 2;
+  // Event type (e.g., "say", "pose", "arrive", "leave", "system").
+  string type = 3;
+  // Timestamp in Unix milliseconds.
+  int64 timestamp = 4;
+  // Actor kind as string (e.g., "character", "system", "plugin").
+  // Using string instead of enum for flexibility and compatibility.
+  string actor_kind = 5;
+  // Actor identifier.
+  string actor_id = 6;
+  // JSON-encoded payload.
+  string payload = 7;
+}
+
+// EmitEvent represents an event that a plugin wants to emit.
+// Compatible with pkg/plugin.EmitEvent.
+message EmitEvent {
+  // Target stream for the event.
+  string stream = 1;
+  // Event type.
+  string type = 2;
+  // JSON-encoded payload.
+  string payload = 3;
+}
+
+// HandleEventRequest wraps an event for delivery to the plugin.
+message HandleEventRequest {
+  // The event to handle.
+  Event event = 1;
+}
+
+// HandleEventResponse contains any events the plugin wants to emit.
+message HandleEventResponse {
+  // Events to emit in response.
+  repeated EmitEvent emit_events = 1;
+}
