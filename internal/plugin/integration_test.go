@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -27,47 +28,12 @@ import (
 // 4. Echo bot ignores events from plugins (prevents loops)
 // 5. Capability enforcement works (events.emit.location)
 func TestEchoBot_Integration(t *testing.T) {
-	// Find the echo-bot plugin in the plugins directory
-	// The plugin should be at plugins/echo-bot relative to repo root
-	pluginsDir := findPluginsDir(t)
-	echoBotDir := filepath.Join(pluginsDir, "echo-bot")
+	fixture := setupEchoBotTest(t)
+	defer fixture.Cleanup()
 
-	// Verify plugin directory exists
-	if _, err := os.Stat(echoBotDir); os.IsNotExist(err) {
-		t.Fatalf("echo-bot plugin not found at %s", echoBotDir)
-	}
-
-	// Create manager and discover plugins
-	enforcer := capability.NewEnforcer()
-	hostFuncs := hostfunc.New(nil, enforcer)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-	defer func() {
-		if err := luaHost.Close(context.Background()); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	}()
-
-	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
-
-	// Discover plugins
 	ctx := context.Background()
-	discovered, err := manager.Discover(ctx)
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	// Find echo-bot in discovered plugins
-	var echoBotPlugin *plugin.DiscoveredPlugin
-	for _, dp := range discovered {
-		if dp.Manifest.Name == "echo-bot" {
-			echoBotPlugin = dp
-			break
-		}
-	}
-
-	if echoBotPlugin == nil {
-		t.Fatal("echo-bot plugin not discovered")
-	}
+	luaHost := fixture.LuaHost
+	echoBotPlugin := fixture.Plugin
 
 	// Verify manifest
 	if echoBotPlugin.Manifest.Type != plugin.TypeLua {
@@ -78,37 +44,13 @@ func TestEchoBot_Integration(t *testing.T) {
 	}
 
 	// Verify events subscription
-	hasEvents := false
-	for _, evt := range echoBotPlugin.Manifest.Events {
-		if evt == "say" {
-			hasEvents = true
-			break
-		}
-	}
-	if !hasEvents {
+	if !slices.Contains(echoBotPlugin.Manifest.Events, "say") {
 		t.Error("echo-bot manifest should have 'say' in events")
 	}
 
 	// Verify capabilities
-	hasCapability := false
-	for _, cap := range echoBotPlugin.Manifest.Capabilities {
-		if cap == "events.emit.location" {
-			hasCapability = true
-			break
-		}
-	}
-	if !hasCapability {
+	if !slices.Contains(echoBotPlugin.Manifest.Capabilities, "events.emit.location") {
 		t.Error("echo-bot manifest should have 'events.emit.location' capability")
-	}
-
-	// Load the plugin
-	if err := luaHost.Load(ctx, echoBotPlugin.Manifest, echoBotPlugin.Dir); err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	// Grant capabilities to the plugin
-	if err := enforcer.SetGrants("echo-bot", echoBotPlugin.Manifest.Capabilities); err != nil {
-		t.Fatalf("SetGrants() error = %v", err)
 	}
 
 	// Test: echo bot responds to say events from characters
@@ -268,60 +210,18 @@ func TestEchoBot_Integration(t *testing.T) {
 
 // TestEchoBot_Subscriber tests the full event flow with Subscriber.
 func TestEchoBot_Subscriber(t *testing.T) {
-	pluginsDir := findPluginsDir(t)
-	echoBotDir := filepath.Join(pluginsDir, "echo-bot")
-
-	if _, err := os.Stat(echoBotDir); os.IsNotExist(err) {
-		t.Fatalf("echo-bot plugin not found at %s", echoBotDir)
-	}
-
-	// Set up components
-	enforcer := capability.NewEnforcer()
-	hostFuncs := hostfunc.New(nil, enforcer)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-	defer func() {
-		if err := luaHost.Close(context.Background()); err != nil {
-			t.Errorf("Close() error = %v", err)
-		}
-	}()
-
-	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
-
-	ctx := context.Background()
-	discovered, err := manager.Discover(ctx)
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	var echoBotPlugin *plugin.DiscoveredPlugin
-	for _, dp := range discovered {
-		if dp.Manifest.Name == "echo-bot" {
-			echoBotPlugin = dp
-			break
-		}
-	}
-
-	if echoBotPlugin == nil {
-		t.Fatal("echo-bot plugin not discovered")
-	}
-
-	// Load and configure
-	if err := luaHost.Load(ctx, echoBotPlugin.Manifest, echoBotPlugin.Dir); err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if err := enforcer.SetGrants("echo-bot", echoBotPlugin.Manifest.Capabilities); err != nil {
-		t.Fatalf("SetGrants() error = %v", err)
-	}
+	fixture := setupEchoBotTest(t)
+	defer fixture.Cleanup()
 
 	// Create mock emitter to capture emitted events
 	emitter := &mockEmitter{}
 
 	// Create subscriber
-	subscriber := plugin.NewSubscriber(luaHost, emitter)
-	subscriber.Subscribe("echo-bot", "location:123", echoBotPlugin.Manifest.Events)
+	subscriber := plugin.NewSubscriber(fixture.LuaHost, emitter)
+	subscriber.Subscribe("echo-bot", "location:123", fixture.Plugin.Manifest.Events)
 
 	// Start subscriber with event channel
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	events := make(chan pluginpkg.Event, 10)
@@ -362,6 +262,73 @@ func TestEchoBot_Subscriber(t *testing.T) {
 
 	if !strings.Contains(payload["message"], "Echo:") {
 		t.Errorf("payload.message = %q, want to contain 'Echo:'", payload["message"])
+	}
+}
+
+// echoBotFixture contains all components needed for echo-bot integration tests.
+type echoBotFixture struct {
+	LuaHost  *pluginlua.Host
+	Enforcer *capability.Enforcer
+	Plugin   *plugin.DiscoveredPlugin
+	Cleanup  func()
+}
+
+// setupEchoBotTest creates all components needed to test the echo-bot plugin.
+func setupEchoBotTest(t *testing.T) *echoBotFixture {
+	t.Helper()
+
+	pluginsDir := findPluginsDir(t)
+	echoBotDir := filepath.Join(pluginsDir, "echo-bot")
+
+	if _, err := os.Stat(echoBotDir); os.IsNotExist(err) {
+		t.Fatalf("echo-bot plugin not found at %s", echoBotDir)
+	}
+
+	enforcer := capability.NewEnforcer()
+	hostFuncs := hostfunc.New(nil, enforcer)
+	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
+
+	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+
+	ctx := context.Background()
+	discovered, err := manager.Discover(ctx)
+	if err != nil {
+		luaHost.Close(ctx) //nolint:errcheck
+		t.Fatalf("Discover() error = %v", err)
+	}
+
+	var echoBotPlugin *plugin.DiscoveredPlugin
+	for _, dp := range discovered {
+		if dp.Manifest.Name == "echo-bot" {
+			echoBotPlugin = dp
+			break
+		}
+	}
+
+	if echoBotPlugin == nil {
+		luaHost.Close(ctx) //nolint:errcheck
+		t.Fatal("echo-bot plugin not discovered")
+	}
+
+	if err := luaHost.Load(ctx, echoBotPlugin.Manifest, echoBotPlugin.Dir); err != nil {
+		luaHost.Close(ctx) //nolint:errcheck
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if err := enforcer.SetGrants("echo-bot", echoBotPlugin.Manifest.Capabilities); err != nil {
+		luaHost.Close(ctx) //nolint:errcheck
+		t.Fatalf("SetGrants() error = %v", err)
+	}
+
+	return &echoBotFixture{
+		LuaHost:  luaHost,
+		Enforcer: enforcer,
+		Plugin:   echoBotPlugin,
+		Cleanup: func() {
+			if err := luaHost.Close(context.Background()); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
+		},
 	}
 }
 
