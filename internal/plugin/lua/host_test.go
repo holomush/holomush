@@ -17,7 +17,7 @@ import (
 // writeMainLua creates a main.lua plugin file in the given directory.
 func writeMainLua(t *testing.T, dir, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "main.lua"), []byte(content), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "main.lua"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
