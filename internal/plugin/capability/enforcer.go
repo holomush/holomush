@@ -9,7 +9,7 @@
 //   - "world.read.*" matches "world.read.location" but NOT "world.read.character.name"
 //   - "world.read.**" matches "world.read.location" AND "world.read.character.name"
 //     but NOT "world.read" (requires at least one segment after the prefix)
-//   - "**" matches any capability including empty and single-segment
+//   - "**" matches any non-empty capability (empty capabilities are rejected before matching)
 //   - "a.**.b" matches "a.b", "a.x.b", and "a.x.y.b" (zero or more in middle)
 package capability
 

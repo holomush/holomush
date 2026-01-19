@@ -92,6 +92,46 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 			want:       true,
 		},
 
+		// === Trailing ** requires at least one segment ===
+		{
+			name:       "trailing super wildcard does NOT match prefix itself",
+			grants:     []string{"world.read.**"},
+			capability: "world.read",
+			want:       false, // trailing ** requires at least one segment after prefix
+		},
+		{
+			name:       "trailing super wildcard at single segment does NOT match that segment",
+			grants:     []string{"world.**"},
+			capability: "world",
+			want:       false, // trailing ** requires at least one segment after prefix
+		},
+
+		// === Middle ** position (zero or more segments) ===
+		{
+			name:       "middle super wildcard matches zero segments",
+			grants:     []string{"a.**.b"},
+			capability: "a.b",
+			want:       true, // ** in middle matches zero segments
+		},
+		{
+			name:       "middle super wildcard matches one segment",
+			grants:     []string{"a.**.b"},
+			capability: "a.x.b",
+			want:       true,
+		},
+		{
+			name:       "middle super wildcard matches multiple segments",
+			grants:     []string{"a.**.b"},
+			capability: "a.x.y.z.b",
+			want:       true,
+		},
+		{
+			name:       "middle super wildcard in realistic capability",
+			grants:     []string{"world.**.location"},
+			capability: "world.read.character.location",
+			want:       true,
+		},
+
 		// === Multiple grants ===
 		{
 			name:       "multiple grants second matches",
@@ -612,6 +652,15 @@ func TestCapabilityEnforcer_ConcurrentAccess_AllMethods(t *testing.T) {
 		}(i)
 	}
 
+	// Concurrent ListPlugins
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = e.ListPlugins()
+		}()
+	}
+
 	wg.Wait()
 	// If we get here without race detector errors, the test passes
 }
@@ -688,6 +737,48 @@ func FuzzCapabilityEnforcer_RemoveGrants(f *testing.F) {
 			if e.IsRegistered(pluginName) {
 				t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
 			}
+		}
+	})
+}
+
+func FuzzCapabilityEnforcer_Check(f *testing.F) {
+	// Seed corpus with interesting plugin/capability combinations
+	f.Add("plugin", "world.read.location")
+	f.Add("", "capability")
+	f.Add("plugin", "")
+	f.Add("", "")
+	f.Add("plugin", "world.read.character.name")
+	f.Add("unicode-плагін", "world.читання.локація")
+
+	f.Fuzz(func(t *testing.T, pluginName, capabilityName string) {
+		e := capability.NewEnforcer()
+
+		// Check on empty enforcer should never panic
+		got := e.Check(pluginName, capabilityName)
+
+		// Empty plugin or capability should always return false
+		if pluginName == "" || capabilityName == "" {
+			if got {
+				t.Errorf("Check(%q, %q) = true, want false for empty input", pluginName, capabilityName)
+			}
+			return
+		}
+
+		// Unknown plugin should return false
+		if got {
+			t.Errorf("Check(%q, %q) = true for unknown plugin, want false", pluginName, capabilityName)
+		}
+
+		// Register plugin with super wildcard and verify Check returns true
+		if err := e.SetGrants(pluginName, []string{"**"}); err != nil {
+			// SetGrants might fail for unusual plugin names, that's OK
+			return
+		}
+
+		// With ** grant, any non-empty capability should return true
+		got = e.Check(pluginName, capabilityName)
+		if !got {
+			t.Errorf("Check(%q, %q) = false with ** grant, want true", pluginName, capabilityName)
 		}
 	})
 }
