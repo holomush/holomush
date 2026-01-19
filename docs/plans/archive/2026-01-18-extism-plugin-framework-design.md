@@ -1,6 +1,6 @@
 # Extism Plugin Framework Design
 
-**Status:** Draft
+**Status:** Archived (superseded by roadmap)
 **Date:** 2026-01-18
 **Task:** holomush-n1o
 

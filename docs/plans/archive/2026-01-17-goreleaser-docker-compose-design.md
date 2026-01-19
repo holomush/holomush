@@ -1,6 +1,6 @@
 # Goreleaser + Docker Compose Design
 
-**Status:** Approved
+**Status:** Archived (superseded by roadmap)
 **Date:** 2026-01-17
 **Tasks:** holomush-6me, holomush-hju
 

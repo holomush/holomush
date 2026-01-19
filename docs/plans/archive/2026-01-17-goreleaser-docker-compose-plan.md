@@ -1,5 +1,7 @@
 # Goreleaser + Docker Compose Implementation Plan
 
+**Status:** Archived (superseded by roadmap)
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add Taskfile tasks for goreleaser testing and create docker-compose for local development.

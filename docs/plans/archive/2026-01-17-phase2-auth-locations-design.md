@@ -1,6 +1,6 @@
 # Phase 2 Design: Authentication & Locations
 
-**Status:** Approved
+**Status:** Archived (superseded by roadmap)
 **Date:** 2026-01-17
 **Version:** 1.0.0
 
