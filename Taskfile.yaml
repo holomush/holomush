@@ -54,6 +54,18 @@ tasks:
     generates:
       - internal/proto/**/*.go
 
+  # Schema generation
+  generate:schema:
+    desc: Generate plugin JSON Schema from Go types
+    cmds:
+      - go run cmd/gen-schema/main.go
+    sources:
+      - cmd/gen-schema/main.go
+      - internal/plugin/manifest.go
+      - internal/plugin/schema.go
+    generates:
+      - schemas/plugin.schema.json
+
   # Testing
   test:
     desc: Run all tests
