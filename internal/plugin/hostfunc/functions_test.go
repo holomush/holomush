@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package hostfunc_test tests host function implementations.
 package hostfunc_test
 

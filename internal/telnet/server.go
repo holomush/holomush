@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package telnet provides the telnet protocol adapter.
 package telnet
 

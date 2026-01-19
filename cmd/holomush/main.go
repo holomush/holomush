@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package main is the entry point for the HoloMUSH server.
 package main
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Command gen-schema generates the plugin JSON Schema file.
 package main
 

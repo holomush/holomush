@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package grpc provides the gRPC server implementation for HoloMUSH Core.
 package grpc
 

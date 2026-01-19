@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+
 -- Players (accounts)
 CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY,

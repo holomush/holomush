@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package logging provides structured logging with OpenTelemetry trace context.
 package logging
 

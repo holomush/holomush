@@ -10,6 +10,8 @@ permissions:
   contents: write
   packages: write
   pull-requests: write
+  id-token: write        # Required for Cosign keyless signing
+  attestations: write    # Required for provenance attestations
 
 jobs:
   release-please:
@@ -30,6 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: release-please
     if: needs.release-please.outputs.release_created || startsWith(github.ref, 'refs/tags/')
+    outputs:
+      artifacts: ${{ steps.goreleaser.outputs.artifacts }}
+      metadata: ${{ steps.goreleaser.outputs.metadata }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,7 +58,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: Run GoReleaser
+        id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -61,3 +73,70 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sign-and-attest:
+    name: Sign and Attest
+    runs-on: ubuntu-latest
+    needs: goreleaser
+    if: needs.goreleaser.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download ${{ github.ref_name }} -D dist -p '*.tar.gz'
+
+      - name: Sign binaries with Cosign
+        run: |
+          cd dist
+          for f in *.tar.gz; do
+            cosign sign-blob --yes "$f" \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.cert"
+          done
+
+      - name: Upload signatures to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} dist/*.sig dist/*.cert --clobber
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign container images
+        run: |
+          VERSION="${{ github.ref_name }}"
+          cosign sign --yes "ghcr.io/holomush/holomush:${VERSION}"
+          cosign sign --yes "ghcr.io/holomush/holomush:${VERSION}-amd64"
+          cosign sign --yes "ghcr.io/holomush/holomush:${VERSION}-arm64"
+
+  attest-provenance:
+    name: Attest Provenance
+    runs-on: ubuntu-latest
+    needs: goreleaser
+    if: needs.goreleaser.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download ${{ github.ref_name }} -D dist -p '*.tar.gz'
+
+      - name: Attest binary provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*.tar.gz"

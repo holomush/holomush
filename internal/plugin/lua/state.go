@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 // Package lua provides a sandboxed Lua runtime for plugin execution.
 package lua
 
