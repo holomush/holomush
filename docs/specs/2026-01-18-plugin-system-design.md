@@ -229,7 +229,9 @@ func (e *CapabilityEnforcer) Check(plugin, capability string) bool {
     return false
 }
 
-// matchCapability handles wildcards: "world.read.*" matches "world.read.location"
+// matchCapability handles wildcards at the final level using prefix matching.
+// "world.read.*" matches "world.read.location" and "world.read.location.nested".
+// For strict single-level matching, split on "." and compare segments (not implemented here).
 func matchCapability(grant, requested string) bool {
     if grant == requested {
         return true
@@ -302,7 +304,7 @@ func (f *simpleFactory) NewState(ctx context.Context, pluginName string) (*lua.L
         SkipOpenLibs: true,  // Sandbox: don't load os, io, etc.
     })
 
-    // Load only safe libraries using gopher-lua's loader pattern
+    // Load only safe libraries using gopher-lua's CallByParam for error handling
     for _, pair := range []struct {
         name string
         fn   lua.LGFunction
@@ -312,9 +314,14 @@ func (f *simpleFactory) NewState(ctx context.Context, pluginName string) (*lua.L
         {lua.StringLibName, lua.OpenString},
         {lua.MathLibName, lua.OpenMath},
     } {
-        L.Push(L.NewFunction(pair.fn))
-        L.Push(lua.LString(pair.name))
-        L.Call(1, 0)
+        if err := L.CallByParam(lua.P{
+            Fn:      L.NewFunction(pair.fn),
+            NRet:    0,
+            Protect: true,
+        }, lua.LString(pair.name)); err != nil {
+            L.Close()
+            return nil, fmt.Errorf("open library %s: %w", pair.name, err)
+        }
     }
 
     // Register host functions
@@ -335,14 +342,24 @@ type LuaHost struct {
 
 type luaPlugin struct {
     manifest Manifest
-    code     []byte  // Compiled Lua bytecode
+    code     []byte  // Compiled Lua bytecode (via lua.CompileString at Load time)
 }
 ```
 
+### Plugin Loading Flow
+
+On `LuaHost.Load()`:
+
+1. Read `main.lua` from disk
+2. Compile to bytecode via `lua.CompileString()` (one-time cost)
+3. Store bytecode in `luaPlugin.code`
+
 ### Event Delivery Flow
 
+On `LuaHost.DeliverEvent()`:
+
 1. Get fresh state from factory
-2. Load plugin bytecode
+2. Load pre-compiled bytecode via `L.DoCompiledChunk()`
 3. Call `on_event(event)` function
 4. Collect return value (emit events table or nil)
 5. Close state
@@ -453,6 +470,22 @@ func (h *HostFunctions) wrap(plugin, cap string, fn lua.LGFunction) lua.LGFuncti
         return fn(L)
     }
 }
+
+// wrapDynamic determines capability from first argument (stream parameter).
+// "location:123" → events.emit.location, "session:456" → events.emit.session
+func (h *HostFunctions) wrapDynamic(plugin string, fn lua.LGFunction) lua.LGFunction {
+    return func(L *lua.LState) int {
+        stream := L.CheckString(1)
+        streamType := strings.SplitN(stream, ":", 2)[0] // "location:123" → "location"
+        cap := "events.emit." + streamType
+
+        if !h.enforcer.Check(plugin, cap) {
+            L.RaiseError("capability denied: %s requires %s", plugin, cap)
+            return 0
+        }
+        return fn(L)
+    }
+}
 ```
 
 ## Plugin Interaction Patterns
@@ -549,6 +582,9 @@ message Event {
     string actor_id = 6;
     bytes payload = 7;  // JSON-encoded payload; plugins decode as needed
 }
+
+// Request/response messages elided for brevity.
+// Full definitions in api/proto/plugin/v1/ during implementation.
 ```
 
 ### GoPluginHost
@@ -590,8 +626,11 @@ func (h *GoPluginHost) Load(ctx context.Context, manifest Manifest, dir string) 
         return fmt.Errorf("dispense plugin: %w", err)
     }
 
+    h.mu.Lock()
     h.clients[manifest.Name] = client
     h.plugins[manifest.Name] = raw.(PluginRPC)
+    h.mu.Unlock()
+
     return nil
 }
 ```
@@ -732,12 +771,12 @@ New code lives in `internal/plugin/`. Do not add dependencies on `internal/wasm/
 
 ## Acceptance Criteria
 
-- [ ] Design document covers all phases 2.1-2.7
+- [ ] Design document covers phases 2.1-2.6 (2.7 Echo bot is implementation)
 - [ ] Host function API fully specified
 - [ ] Capability model documented
 - [ ] go-plugin integration approach defined
 - [ ] Security model for sandboxing documented
-- [ ] JSON Schema for plugin.yaml defined
+- [ ] JSON Schema for plugin.yaml specified (actual schema created during implementation)
 - [ ] Plugin interaction patterns documented
 - [ ] Design reviewed and approved
 
