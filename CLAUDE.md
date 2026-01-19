@@ -8,11 +8,29 @@ HoloMUSH is a modern MUSH platform with:
 
 - Go core with event-oriented architecture
 - Dual protocol support (telnet + web)
-- WASM plugin system via wazero
+- WASM plugin system via Extism
 - PostgreSQL for all data
 - SvelteKit PWA for web client
 
 **Architecture Reference**: [docs/plans/2026-01-17-holomush-architecture-design.md](docs/plans/2026-01-17-holomush-architecture-design.md)
+
+---
+
+## ⚠️ Protected Branch Policy
+
+**`main` is a protected branch.** Direct commits to main are not allowed.
+
+| Requirement                        | Description                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| **MUST** create feature branch     | All work happens on feature branches, not main      |
+| **MUST** submit PR for review      | All changes to main require a pull request          |
+| **MUST** pass CI checks            | Tests and linting must pass before merge            |
+| **MUST** use squash merge          | All PRs are squash merged to maintain clean history |
+| **MUST NOT** push directly to main | Branch protection enforces this                     |
+
+**See:** [Pull Request Guide](docs/reference/pull-request-guide.md) for the complete workflow.
+
+---
 
 ## Development Principles
 
