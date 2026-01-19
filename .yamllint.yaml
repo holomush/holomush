@@ -5,6 +5,7 @@ extends: default
 
 ignore:
   - .beads/
+  - dist/
 
 rules:
   # Line length - allow longer lines for URLs and such

@@ -264,9 +264,27 @@ plugins:
 
 ### CapabilityEnforcer
 
+Pattern matching uses [gobwas/glob](https://github.com/gobwas/glob) with `.` as the segment
+separator. This provides well-defined, battle-tested glob semantics:
+
+| Pattern         | Matches                                            | Does NOT Match                       |
+| --------------- | -------------------------------------------------- | ------------------------------------ |
+| `world.read.*`  | `world.read.location`, `world.read.foo`            | `world.read.character.name`          |
+| `world.read.**` | `world.read.location`, `world.read.character.name` | `world.read`, `world.write.location` |
+| `*`             | `world`, `events`                                  | `world.read`                         |
+| `**`            | Any capability                                     | Empty string                         |
+| `world.*.read`  | `world.foo.read`, `world.bar.read`                 | `world.foo.bar.read`                 |
+
+**Key semantics:**
+
+- `*` matches a single segment (does NOT cross `.` boundaries)
+- `**` matches zero or more segments (crosses `.` boundaries)
+- Patterns are compiled once at `SetGrants` time for efficient matching
+- Invalid glob syntax (e.g., unclosed brackets) returns an error
+
 ```go
 type CapabilityEnforcer struct {
-    grants map[string][]string  // plugin -> granted capabilities
+    grants map[string][]compiledGrant  // plugin -> compiled globs
     mu     sync.RWMutex
 }
 
@@ -276,29 +294,32 @@ func (e *CapabilityEnforcer) Check(plugin, capability string) bool {
 
     grants := e.grants[plugin]
     for _, grant := range grants {
-        if matchCapability(grant, capability) {
+        if grant.glob.Match(capability) {
             return true
         }
     }
     return false
 }
 
-// matchCapability handles wildcards using prefix matching.
-// Wildcards are only valid as a suffix (e.g., "world.read.*"); a "*" elsewhere is literal.
-// "world.read.*" matches any capability starting with "world.read." including nested paths.
-// Design choice: prefix matching is simpler and sufficient for v1; single-level wildcards
-// (e.g., "world.read.*" matching only immediate children) MAY be added if needed later.
-func matchCapability(grant, requested string) bool {
-    if grant == requested {
-        return true
+// SetGrants compiles patterns using gobwas/glob with '.' as separator.
+// Returns error if any pattern is empty or has invalid glob syntax.
+func (e *CapabilityEnforcer) SetGrants(plugin string, patterns []string) error {
+    for i, pattern := range patterns {
+        g, err := glob.Compile(pattern, '.') // '.' is segment separator
+        if err != nil {
+            return fmt.Errorf("capability %d (%q): %w", i, pattern, err)
+        }
+        // ... store compiled glob
     }
-    if strings.HasSuffix(grant, ".*") {
-        prefix := strings.TrimSuffix(grant, "*")
-        return strings.HasPrefix(requested, prefix)
-    }
-    return false
 }
 ```
+
+**Design rationale:** Using gobwas/glob provides:
+
+1. **Well-defined semantics** - No ambiguity about what `*` vs `**` means
+2. **Battle-tested implementation** - Used by 40k+ projects
+3. **Performance** - Patterns compile once, match fast
+4. **Flexibility** - Middle wildcards (`world.*.read`) work correctly
 
 ### Audit Logging
 
@@ -662,7 +683,7 @@ Plugin-to-plugin events use `plugin:<plugin-name>` streams:
 
 - To call another plugin: emit to `plugin:target-plugin` with type `plugin_request`
 - Target plugin subscribes to `plugin_request` in its manifest
-- Requires `events.emit.plugin` capability (or `events.emit.*` which matches via prefix)
+- Requires `events.emit.plugin` capability (or `events.emit.*` single-segment wildcard)
 - Response returns via `plugin_response` to the caller's `plugin:<caller>` stream
 
 This pattern enables loose coupling—plugins communicate through events without direct
