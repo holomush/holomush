@@ -154,13 +154,24 @@ lua-plugin:
 `,
 			wantErr: "name",
 		},
+		{
+			name: "consecutive hyphens",
+			yaml: `
+name: test--plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: "name",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := plugin.ParseManifest([]byte(tt.yaml))
 			if err == nil {
-				t.Error("expected error for invalid name")
+				t.Fatal("expected error for invalid name")
 			}
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
@@ -403,6 +414,74 @@ func TestParseManifest_EmptyInput(t *testing.T) {
 			_, err := plugin.ParseManifest(tt.input)
 			if err == nil {
 				t.Error("ParseManifest() should return error for empty input")
+			}
+		})
+	}
+}
+
+func TestParseManifest_InvalidVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		wantErr string
+	}{
+		{name: "not semver - plain text", version: "latest", wantErr: "version"},
+		{name: "not semver - single number", version: "1", wantErr: "version"},
+		{name: "not semver - two numbers", version: "1.0", wantErr: "version"},
+		{name: "not semver - leading v", version: "v1.0.0", wantErr: "version"},
+		{name: "not semver - spaces", version: "1.0.0 beta", wantErr: "version"},
+		{name: "not semver - invalid prerelease", version: "1.0.0-", wantErr: "version"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := `
+name: test
+version: ` + tt.version + `
+type: lua
+lua-plugin:
+  entry: main.lua
+`
+			_, err := plugin.ParseManifest([]byte(yaml))
+			if err == nil {
+				t.Fatalf("expected error for version %q", tt.version)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseManifest_ValidVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+	}{
+		{name: "basic semver", version: "1.0.0"},
+		{name: "with prerelease", version: "1.0.0-alpha"},
+		{name: "with prerelease and number", version: "1.0.0-alpha.1"},
+		{name: "with build metadata", version: "1.0.0+build"},
+		{name: "with prerelease and build", version: "1.0.0-beta.2+build.123"},
+		{name: "zero version", version: "0.0.0"},
+		{name: "large numbers", version: "100.200.300"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := `
+name: test
+version: ` + tt.version + `
+type: lua
+lua-plugin:
+  entry: main.lua
+`
+			m, err := plugin.ParseManifest([]byte(yaml))
+			if err != nil {
+				t.Errorf("ParseManifest() error = %v for version %q", err, tt.version)
+			}
+			if m != nil && m.Version != tt.version {
+				t.Errorf("Version = %q, want %q", m.Version, tt.version)
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,7 +20,7 @@ const (
 
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
-	Name         string        `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z]([a-z0-9-]*[a-z0-9])?$"`
+	Name         string        `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
 	Version      string        `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
 	Type         Type          `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary"`
 	Events       []string      `yaml:"events,omitempty" json:"events,omitempty"`
@@ -42,9 +43,9 @@ type BinaryConfig struct {
 const maxNameLength = 64
 
 // namePattern validates plugin names: must start with lowercase letter,
-// followed by lowercase letters, digits, or hyphens.
+// followed by lowercase letters, digits, or single hyphens (no consecutive hyphens).
 // Cannot end with a hyphen. Single character names are allowed.
-var namePattern = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
+var namePattern = regexp.MustCompile(`^[a-z](-?[a-z0-9])*$`)
 
 // ParseManifest parses and validates a plugin.yaml file.
 func ParseManifest(data []byte) (*Manifest, error) {
@@ -67,7 +68,7 @@ func ParseManifest(data []byte) (*Manifest, error) {
 // Validate checks manifest constraints.
 func (m *Manifest) Validate() error {
 	if m.Name == "" || !namePattern.MatchString(m.Name) {
-		return fmt.Errorf("name %q must start with a-z, contain only a-z, 0-9, hyphens, and not end with a hyphen", m.Name)
+		return fmt.Errorf("name %q must start with a-z, contain only a-z, 0-9, single hyphens, and not end with a hyphen", m.Name)
 	}
 	if len(m.Name) > maxNameLength {
 		return fmt.Errorf("name must be %d characters or less, got %d", maxNameLength, len(m.Name))
@@ -75,6 +76,9 @@ func (m *Manifest) Validate() error {
 
 	if m.Version == "" {
 		return fmt.Errorf("version is required")
+	}
+	if _, err := semver.StrictNewVersion(m.Version); err != nil {
+		return fmt.Errorf("version %q must be valid semver (e.g., 1.0.0): %w", m.Version, err)
 	}
 
 	switch m.Type {
