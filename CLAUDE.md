@@ -176,6 +176,13 @@ package foo
 -- Copyright 2026 HoloMUSH Contributors
 ```
 
+**Python plugins:**
+
+```python
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+```
+
 **Shell scripts:**
 
 ```bash
@@ -186,7 +193,7 @@ package foo
 
 | Requirement                         | Description                                              |
 | ----------------------------------- | -------------------------------------------------------- |
-| **MUST** include SPDX header        | All `.go`, `.lua`, `.sh` files                           |
+| **MUST** include SPDX header        | All `.go`, `.lua`, `.sh`, `.py` files                    |
 | **MUST NOT** add to generated files | Skip `*.pb.go` files                                     |
 | **SHOULD** use `task license:add`   | Automatically adds headers to files missing them         |
 | **Auto-added on commit**            | Lefthook pre-commit hook adds headers automatically      |

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
 """Echo plugin - responds to say events with echoed message."""
 
 import json

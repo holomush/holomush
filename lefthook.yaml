@@ -10,7 +10,7 @@ pre-commit:
     - ".worktrees/**"
   commands:
     license-headers:
-      glob: "*.{go,lua,sh}"
+      glob: "*.{go,lua,sh,py}"
       exclude: "*.pb.go"
       run: addlicense -f LICENSE_HEADER {staged_files}
       stage_fixed: true
