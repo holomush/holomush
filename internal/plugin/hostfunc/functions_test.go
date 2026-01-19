@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -609,6 +610,37 @@ func TestHostFunctions_KV_CapabilityDenied_ErrorMessage(t *testing.T) {
 	}
 }
 
+func TestHostFunctions_KVGet_Timeout(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	enforcer := capability.NewEnforcer()
+	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a slow store that exceeds the 5-second timeout
+	kvStore := &slowKVStore{delay: 10 * time.Second}
+	hf := hostfunc.New(kvStore, enforcer)
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`val, err = holomush.kv_get("key")`)
+	if err != nil {
+		t.Fatalf("kv_get raised error instead of returning error tuple: %v", err)
+	}
+
+	errVal := L.GetGlobal("err")
+	if errVal.Type() != lua.LTString {
+		t.Errorf("expected error string for timeout, got %v", errVal.Type())
+	}
+
+	// Error should indicate deadline/timeout
+	errMsg := errVal.String()
+	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
+		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
+	}
+}
+
 func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 
@@ -683,4 +715,36 @@ func (m *mockKVStore) Delete(_ context.Context, namespace, key string) error {
 	}
 	delete(m.data, namespace+":"+key)
 	return nil
+}
+
+// slowKVStore simulates a slow KV store that exceeds timeouts.
+type slowKVStore struct {
+	delay time.Duration
+}
+
+func (s *slowKVStore) Get(ctx context.Context, _, _ string) ([]byte, error) {
+	select {
+	case <-time.After(s.delay):
+		return []byte("value"), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (s *slowKVStore) Set(ctx context.Context, _, _ string, _ []byte) error {
+	select {
+	case <-time.After(s.delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *slowKVStore) Delete(ctx context.Context, _, _ string) error {
+	select {
+	case <-time.After(s.delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
