@@ -99,7 +99,7 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.beads" "#.git" "#.worktrees" "#dist" ".claude/**/*.md"
+      - markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.beads" "#.git" "#.worktrees" "#dist" "#.claude"
 
   lint:yaml:
     desc: Lint YAML files
