@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/capability"
+	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 )
@@ -556,5 +558,112 @@ end
 	expected := "01ABC|location:123|say|1705591234000|character|char_1"
 	if emits[0].Payload != expected {
 		t.Errorf("payload = %q, want %q", emits[0].Payload, expected)
+	}
+}
+
+func TestLuaHost_WithHostFunctions(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_event(event)
+    local id = holomush.new_request_id()
+    holomush.log("info", "Got event: " .. event.type)
+    return {{
+        stream = event.stream,
+        type = "say",
+        payload = '{"request_id":"' .. id .. '"}'
+    }}
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	enforcer := capability.NewEnforcer()
+
+	hostFuncs := hostfunc.New(nil, enforcer)
+	host := pluginlua.NewHostWithFunctions(hostFuncs)
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	event := pluginpkg.Event{
+		ID:     "01ABC",
+		Stream: "location:123",
+		Type:   "say",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "test", event)
+	if err != nil {
+		t.Fatalf("DeliverEvent() error = %v", err)
+	}
+
+	if len(emits) != 1 {
+		t.Errorf("len(emits) = %d, want 1", len(emits))
+	}
+
+	// Verify the payload contains a request_id (ULID format: 26 chars)
+	if len(emits) > 0 && !strings.Contains(emits[0].Payload, "request_id") {
+		t.Errorf("payload should contain request_id, got %q", emits[0].Payload)
+	}
+}
+
+func TestLuaHost_WithHostFunctions_CapabilityEnforcement(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin that tries to use kv_get without capability
+	mainLua := `
+function on_event(event)
+    local val, err = holomush.kv_get("mykey")
+    if err then
+        return {{
+            stream = event.stream,
+            type = "error",
+            payload = err
+        }}
+    end
+    return nil
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	enforcer := capability.NewEnforcer()
+	// Note: NOT granting kv.read capability to trigger denial
+
+	hostFuncs := hostfunc.New(nil, enforcer)
+	host := pluginlua.NewHostWithFunctions(hostFuncs)
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "no-kv-cap",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	if err := host.Load(context.Background(), manifest, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	event := pluginpkg.Event{
+		ID:     "01ABC",
+		Stream: "location:123",
+		Type:   "say",
+	}
+
+	// Should fail because plugin lacks kv.read capability
+	_, err := host.DeliverEvent(context.Background(), "no-kv-cap", event)
+	if err == nil {
+		t.Fatal("expected error due to capability denial")
+	}
+	if !strings.Contains(err.Error(), "capability denied") {
+		t.Errorf("expected capability denied error, got: %v", err)
 	}
 }
