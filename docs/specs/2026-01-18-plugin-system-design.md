@@ -141,6 +141,10 @@ binary-plugin:
 | When `type: binary`, `binary-plugin` MUST be present          | Schema (oneOf) |
 | Requested capabilities MUST be subset of granted capabilities | Runtime        |
 
+> **Version compatibility:** Plugin versions are informational in v1—the host does not
+> enforce version constraints. Future versions MAY introduce a `min_host_version` field
+> for plugins to declare host API compatibility requirements.
+
 ### Binary Executable Variables
 
 The `executable` field supports variable expansion for cross-platform binaries:
@@ -169,6 +173,23 @@ plugins/
 
 Plugins operate in a sandboxed environment. All access to host functions requires
 explicit capability grants.
+
+### Stream Types
+
+Plugins interact with the system through typed event streams. The plugin system extends
+the core stream types with plugin-specific streams:
+
+| Stream Prefix | Purpose                                   | Example          |
+| ------------- | ----------------------------------------- | ---------------- |
+| `location:`   | Room activity (says, poses, arrivals)     | `location:01ABC` |
+| `session:`    | Plugin-to-user prompts and system actions | `session:01XYZ`  |
+| `plugin:`     | Cross-plugin communication                | `plugin:combat`  |
+
+> **Note:** `session:` streams are introduced by this design for plugin-to-user
+> interactive communication (prompts, disconnects). This is distinct from `char:`
+> streams used elsewhere for character-specific notifications. Sessions represent
+> the user's connection; characters represent in-game entities. Plugins target
+> sessions because prompts and disconnects operate at the connection level.
 
 ### Capability Hierarchy
 
@@ -232,6 +253,7 @@ plugins:
       - kv.*
   combat-system:
     enabled: true
+    timeout: 10s # Override default 5s for complex processing
     capabilities:
       - events.*
       - world.*
@@ -401,6 +423,37 @@ On `LuaHost.DeliverEvent()`:
 3. Call `on_event(event)` function
 4. Collect return value (emit events table or nil)
 5. Close state
+
+```mermaid
+sequenceDiagram
+    participant EB as EventBus
+    participant LH as LuaHost
+    participant SF as StateFactory
+    participant LS as LuaState
+    participant HF as HostFunctions
+
+    Note over LH: Plugin loaded at startup<br/>(bytecode compiled once)
+
+    EB->>LH: DeliverEvent(pluginName, event)
+    LH->>SF: NewState(ctx, pluginName)
+    SF->>LS: Create fresh state
+    SF->>LS: Load safe libraries
+    SF->>HF: Register host functions
+    SF-->>LH: state
+
+    LH->>LS: Load pre-compiled bytecode
+    LH->>LS: Call on_event(event)
+
+    alt Plugin calls host function
+        LS->>HF: holomush.query_location(id)
+        HF->>HF: Check capability
+        HF-->>LS: location data
+    end
+
+    LS-->>LH: emit events table (or nil)
+    LH->>LS: Close state
+    LH-->>EB: []EmitEvent
+```
 
 **Lua Event Table Structure:**
 
@@ -615,6 +668,11 @@ Plugin-to-plugin events use `plugin:<plugin-name>` streams:
 This pattern enables loose coupling—plugins communicate through events without direct
 dependencies. The requesting plugin includes a `request_id` for correlation.
 
+> **Authorization model:** Target plugins opt-in to cross-plugin calls by subscribing
+> to `plugin_request` events. A plugin that doesn't subscribe simply won't receive
+> requests—no explicit allowlist of callers is required. This keeps configuration simple
+> while providing implicit authorization through subscription.
+
 ### Example: User Prompt
 
 ```lua
@@ -661,6 +719,31 @@ returns the deserialized Lua table. String values are stored as-is.
 ## go-plugin Integration
 
 Heavy plugins use HashiCorp go-plugin for process isolation with gRPC communication.
+
+```mermaid
+sequenceDiagram
+    participant EB as EventBus
+    participant GPH as GoPluginHost
+    participant Sub as Subprocess
+    participant Plugin as Plugin (gRPC)
+    participant HF as HostFunctions (gRPC)
+
+    Note over GPH,Sub: Plugin loaded at startup<br/>(subprocess spawned, gRPC connected)
+
+    EB->>GPH: DeliverEvent(pluginName, event)
+    GPH->>Plugin: HandleEvent(request)
+
+    alt Plugin calls host function
+        Plugin->>HF: QueryLocation(id)
+        HF->>HF: Check capability
+        HF-->>Plugin: location data
+    end
+
+    Plugin-->>GPH: HandleEventResponse
+    GPH-->>EB: []EmitEvent
+
+    Note over Sub: Subprocess persists<br/>between events
+```
 
 ### gRPC Service Definitions
 
