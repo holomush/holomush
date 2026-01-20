@@ -64,13 +64,17 @@ func (m *mockPluginClient) Kill() {
 
 // mockGRPCPluginClient implements pluginv1.PluginClient for testing.
 type mockGRPCPluginClient struct {
-	response *pluginv1.HandleEventResponse
-	err      error
+	response    *pluginv1.HandleEventResponse
+	err         error
+	returnNil   bool // If true, return nil response (simulates edge case)
 }
 
 func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.HandleEventRequest, _ ...grpc.CallOption) (*pluginv1.HandleEventResponse, error) {
 	if m.err != nil {
 		return nil, m.err
+	}
+	if m.returnNil {
+		return nil, nil
 	}
 	if m.response != nil {
 		return m.response, nil
@@ -341,6 +345,85 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "HandleEvent failed") {
 		t.Errorf("expected error to mention 'HandleEvent failed', got: %v", err)
+	}
+}
+
+func TestDeliverEvent_NilResponse(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		returnNil: true, // Simulates nil response without error (edge case)
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	enforcer := capability.NewEnforcer()
+	host := NewHostWithFactory(enforcer, factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	manifest := &plugin.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	if err := host.Load(ctx, manifest, tmpDir); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	// DeliverEvent should handle nil response gracefully (proto getters are nil-safe)
+	emits, err := host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	if err != nil {
+		t.Errorf("unexpected error with nil response: %v", err)
+	}
+	if len(emits) != 0 {
+		t.Errorf("expected empty emits for nil response, got %d", len(emits))
+	}
+}
+
+func TestDeliverEvent_Timeout(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		err: context.DeadlineExceeded, // Simulates timeout
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	enforcer := capability.NewEnforcer()
+	host := NewHostWithFactory(enforcer, factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	manifest := &plugin.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	if err := host.Load(ctx, manifest, tmpDir); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	_, err := host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	if err == nil {
+		t.Error("expected error on timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected context.DeadlineExceeded, got: %v", err)
 	}
 }
 
