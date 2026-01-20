@@ -6,7 +6,7 @@ syntax = "proto3";
 
 package holomush.plugin.v1;
 
-option go_package = "github.com/holomush/holomush/internal/proto/holomush/plugin/v1;pluginv1";
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
 // Plugin service is called by the go-plugin host to send events to binary plugins.
 // This service is implemented by the plugin (the gRPC server runs in the plugin process).

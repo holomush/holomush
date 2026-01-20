@@ -14,7 +14,7 @@ import (
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
-	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 	"google.golang.org/grpc"
 )

@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/holomush/holomush/internal/control"
-	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
+	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	"github.com/holomush/holomush/internal/xdg"
 )
 

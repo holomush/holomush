@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
+	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	"github.com/holomush/holomush/internal/tls"
 )
 

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // TestPluginServiceInterface verifies the Plugin gRPC service interface exists.

@@ -6,7 +6,7 @@ syntax = "proto3";
 
 package holomush.plugin.v1;
 
-option go_package = "github.com/holomush/holomush/internal/proto/holomush/plugin/v1;pluginv1";
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
 import "holomush/plugin/v1/plugin.proto";
 

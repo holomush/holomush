@@ -8,17 +8,17 @@ import (
 	"errors"
 
 	goplugin "github.com/hashicorp/go-plugin"
-	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
-	"github.com/holomush/holomush/pkg/pluginsdk"
+	"github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
 
 // Compile-time check that GRPCPlugin implements goplugin.GRPCPlugin.
 var _ goplugin.GRPCPlugin = (*GRPCPlugin)(nil)
 
-// HandshakeConfig is imported from pluginsdk to ensure host and plugins
+// HandshakeConfig is imported from pkg/plugin to ensure host and plugins
 // use identical configuration. Do not define locally to prevent drift.
-var HandshakeConfig = pluginsdk.HandshakeConfig
+var HandshakeConfig = plugin.HandshakeConfig
 
 // PluginMap is the map of plugins we can dispense.
 var PluginMap = map[string]goplugin.Plugin{
@@ -26,13 +26,13 @@ var PluginMap = map[string]goplugin.Plugin{
 }
 
 // GRPCPlugin implements go-plugin's Plugin interface for gRPC.
-// This is the host-side implementation; plugins use pluginsdk.Serve() instead.
+// This is the host-side implementation; plugins use plugin.Serve() instead.
 type GRPCPlugin struct {
 	goplugin.NetRPCUnsupportedPlugin
 }
 
 // GRPCServer is required by go-plugin's GRPCPlugin interface but is never
-// called on the host side. Plugins use pluginsdk.Serve() which provides its
+// called on the host side. Plugins use plugin.Serve() which provides its
 // own GRPCServer implementation.
 func (p *GRPCPlugin) GRPCServer(_ *goplugin.GRPCBroker, _ *grpc.Server) error {
 	return errors.New("goplugin: GRPCServer not implemented on host side")

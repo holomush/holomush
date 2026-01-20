@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package pluginsdk_test
+package plugin_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/holomush/holomush/pkg/pluginsdk"
+	"github.com/holomush/holomush/pkg/plugin"
 )
 
 func TestHandler_Interface(_ *testing.T) {
 	// Verify Handler interface is properly defined
-	var _ pluginsdk.Handler = (*testHandler)(nil)
+	var _ plugin.Handler = (*testHandler)(nil)
 }
 
 type testHandler struct{}
 
-func (h *testHandler) HandleEvent(_ context.Context, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
-	return []pluginsdk.EmitEvent{
+func (h *testHandler) HandleEvent(_ context.Context, event plugin.Event) ([]plugin.EmitEvent, error) {
+	return []plugin.EmitEvent{
 		{
 			Stream:  event.Stream,
 			Type:    event.Type,
@@ -34,7 +34,7 @@ func TestServeConfig_HandlerRequired(t *testing.T) {
 		}
 	}()
 
-	pluginsdk.Serve(&pluginsdk.ServeConfig{Handler: nil})
+	plugin.Serve(&plugin.ServeConfig{Handler: nil})
 }
 
 func TestServeConfig_ConfigRequired(t *testing.T) {
@@ -44,17 +44,17 @@ func TestServeConfig_ConfigRequired(t *testing.T) {
 		}
 	}()
 
-	pluginsdk.Serve(nil)
+	plugin.Serve(nil)
 }
 
 func TestHandshakeConfig(t *testing.T) {
-	if pluginsdk.HandshakeConfig.ProtocolVersion != 1 {
+	if plugin.HandshakeConfig.ProtocolVersion != 1 {
 		t.Error("HandshakeConfig protocol version should be 1")
 	}
-	if pluginsdk.HandshakeConfig.MagicCookieKey != "HOLOMUSH_PLUGIN" {
+	if plugin.HandshakeConfig.MagicCookieKey != "HOLOMUSH_PLUGIN" {
 		t.Error("HandshakeConfig magic cookie key mismatch")
 	}
-	if pluginsdk.HandshakeConfig.MagicCookieValue != "holomush-v1" {
+	if plugin.HandshakeConfig.MagicCookieValue != "holomush-v1" {
 		t.Error("HandshakeConfig magic cookie value mismatch")
 	}
 }

@@ -4,11 +4,11 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/holomush/holomush/internal/proto
+      value: github.com/holomush/holomush/pkg/proto
 plugins:
   - remote: buf.build/protocolbuffers/go
-    out: internal/proto
+    out: pkg/proto
     opt: paths=source_relative
   - remote: buf.build/grpc/go
-    out: internal/proto
+    out: pkg/proto
     opt: paths=source_relative

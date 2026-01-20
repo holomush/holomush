@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package pluginsdk
+package plugin
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
 
@@ -22,13 +22,13 @@ func TestGRPCPlugin_GRPCServer_NilHandler(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when handler is nil")
 	}
-	if err.Error() != "pluginsdk: handler is nil" {
+	if err.Error() != "plugin: handler is nil" {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
 func TestGRPCPlugin_GRPCServer_RegistersService(t *testing.T) {
-	handler := &testHandler{}
+	handler := &adapterTestHandler{}
 	p := &grpcPlugin{handler: handler}
 	s := grpc.NewServer()
 	defer s.Stop()
@@ -57,17 +57,17 @@ func TestGRPCPlugin_GRPCClient_ReturnsError(t *testing.T) {
 	if client != nil {
 		t.Error("expected nil client when error is returned")
 	}
-	if err.Error() != "pluginsdk: GRPCClient not implemented on plugin side" {
+	if err.Error() != "plugin: GRPCClient not implemented on plugin side" {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
-type testHandler struct {
+type adapterTestHandler struct {
 	response []EmitEvent
 	err      error
 }
 
-func (h *testHandler) HandleEvent(_ context.Context, _ Event) ([]EmitEvent, error) {
+func (h *adapterTestHandler) HandleEvent(_ context.Context, _ Event) ([]EmitEvent, error) {
 	if h.err != nil {
 		return nil, h.err
 	}
@@ -75,7 +75,7 @@ func (h *testHandler) HandleEvent(_ context.Context, _ Event) ([]EmitEvent, erro
 }
 
 func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
-	handler := &testHandler{
+	handler := &adapterTestHandler{
 		response: []EmitEvent{
 			{Stream: "room:123", Type: "say", Payload: `{"text":"hello"}`},
 		},
@@ -116,7 +116,7 @@ func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
 }
 
 func TestPluginServerAdapter_HandleEvent_HandlerError(t *testing.T) {
-	handler := &testHandler{
+	handler := &adapterTestHandler{
 		err: errors.New("handler failed"),
 	}
 	adapter := &pluginServerAdapter{handler: handler}
@@ -137,7 +137,7 @@ func TestPluginServerAdapter_HandleEvent_HandlerError(t *testing.T) {
 }
 
 func TestPluginServerAdapter_HandleEvent_EmptyEmits(t *testing.T) {
-	handler := &testHandler{
+	handler := &adapterTestHandler{
 		response: []EmitEvent{},
 	}
 	adapter := &pluginServerAdapter{handler: handler}
@@ -159,7 +159,7 @@ func TestPluginServerAdapter_HandleEvent_EmptyEmits(t *testing.T) {
 }
 
 func TestPluginServerAdapter_HandleEvent_MultipleEmits(t *testing.T) {
-	handler := &testHandler{
+	handler := &adapterTestHandler{
 		response: []EmitEvent{
 			{Stream: "room:1", Type: "say", Payload: `{"n":1}`},
 			{Stream: "room:2", Type: "pose", Payload: `{"n":2}`},
@@ -192,7 +192,7 @@ func TestPluginServerAdapter_HandleEvent_MultipleEmits(t *testing.T) {
 }
 
 func TestPluginServerAdapter_HandleEvent_NilEvent(t *testing.T) {
-	handler := &testHandler{response: nil}
+	handler := &adapterTestHandler{response: nil}
 	adapter := &pluginServerAdapter{handler: handler}
 
 	req := &pluginv1.HandleEventRequest{
@@ -213,7 +213,7 @@ func TestPluginServerAdapter_HandleEvent_NilEvent(t *testing.T) {
 func TestPluginServerAdapter_HandleEvent_EventConversion(t *testing.T) {
 	var capturedEvent Event
 	// Create a wrapper to capture the event
-	captureHandler := &captureTestHandler{captured: &capturedEvent}
+	captureHandler := &captureAdapterTestHandler{captured: &capturedEvent}
 	adapter := &pluginServerAdapter{handler: captureHandler}
 
 	req := &pluginv1.HandleEventRequest{
@@ -246,8 +246,8 @@ func TestPluginServerAdapter_HandleEvent_EventConversion(t *testing.T) {
 	if capturedEvent.Timestamp != 9876543210 {
 		t.Errorf("Event.Timestamp = %d, want %d", capturedEvent.Timestamp, 9876543210)
 	}
-	if capturedEvent.ActorKind != "system" {
-		t.Errorf("Event.ActorKind = %q, want %q", capturedEvent.ActorKind, "system")
+	if capturedEvent.ActorKind != ActorSystem {
+		t.Errorf("Event.ActorKind = %v, want %v", capturedEvent.ActorKind, ActorSystem)
 	}
 	if capturedEvent.ActorID != "sys-001" {
 		t.Errorf("Event.ActorID = %q, want %q", capturedEvent.ActorID, "sys-001")
@@ -257,11 +257,11 @@ func TestPluginServerAdapter_HandleEvent_EventConversion(t *testing.T) {
 	}
 }
 
-type captureTestHandler struct {
+type captureAdapterTestHandler struct {
 	captured *Event
 }
 
-func (h *captureTestHandler) HandleEvent(_ context.Context, event Event) ([]EmitEvent, error) {
+func (h *captureAdapterTestHandler) HandleEvent(_ context.Context, event Event) ([]EmitEvent, error) {
 	*h.captured = event
 	return nil, nil
 }

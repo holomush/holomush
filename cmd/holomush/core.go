@@ -22,7 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
-	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"

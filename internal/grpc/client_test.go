@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	holomushtls "github.com/holomush/holomush/internal/tls"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

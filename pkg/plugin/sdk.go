@@ -1,40 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package pluginsdk provides the SDK for building HoloMUSH binary plugins.
-//
-// Binary plugins communicate with the HoloMUSH host via gRPC using the
-// HashiCorp go-plugin framework. This package provides helpers to simplify
-// plugin development.
-//
-// Example usage:
-//
-//	package main
-//
-//	import (
-//		"context"
-//		"github.com/holomush/holomush/pkg/pluginsdk"
-//	)
-//
-//	type EchoPlugin struct{}
-//
-//	func (p *EchoPlugin) HandleEvent(ctx context.Context, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
-//		// Echo the event back to the same stream
-//		return []pluginsdk.EmitEvent{
-//			{
-//				Stream:  event.Stream,
-//				Type:    event.Type,
-//				Payload: event.Payload,
-//			},
-//		}, nil
-//	}
-//
-//	func main() {
-//		pluginsdk.Serve(&pluginsdk.ServeConfig{
-//			Handler: &EchoPlugin{},
-//		})
-//	}
-package pluginsdk
+package plugin
 
 import (
 	"context"
@@ -42,37 +9,9 @@ import (
 	"fmt"
 
 	hashiplug "github.com/hashicorp/go-plugin"
-	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
-
-// Event represents a game event delivered to plugins.
-type Event struct {
-	// ID is the unique event identifier (ULID string).
-	ID string
-	// Stream the event belongs to (e.g., "room:room_abc123").
-	Stream string
-	// Type is the event type (e.g., "say", "pose", "arrive", "leave", "system").
-	Type string
-	// Timestamp in Unix milliseconds.
-	Timestamp int64
-	// ActorKind identifies the actor type ("character", "system", "plugin").
-	ActorKind string
-	// ActorID is the actor identifier.
-	ActorID string
-	// Payload is the JSON-encoded event data.
-	Payload string
-}
-
-// EmitEvent represents an event that a plugin wants to emit.
-type EmitEvent struct {
-	// Stream is the target stream for the event.
-	Stream string
-	// Type is the event type.
-	Type string
-	// Payload is the JSON-encoded event data.
-	Payload string
-}
 
 // Handler is the interface that binary plugins must implement.
 type Handler interface {
@@ -97,12 +36,39 @@ type ServeConfig struct {
 
 // Serve starts the plugin server. This should be called from main().
 // It blocks and never returns under normal operation.
+//
+// Example usage:
+//
+//	package main
+//
+//	import (
+//		"context"
+//		"github.com/holomush/holomush/pkg/plugin"
+//	)
+//
+//	type EchoPlugin struct{}
+//
+//	func (p *EchoPlugin) HandleEvent(ctx context.Context, event plugin.Event) ([]plugin.EmitEvent, error) {
+//		return []plugin.EmitEvent{
+//			{
+//				Stream:  event.Stream,
+//				Type:    event.Type,
+//				Payload: event.Payload,
+//			},
+//		}, nil
+//	}
+//
+//	func main() {
+//		plugin.Serve(&plugin.ServeConfig{
+//			Handler: &EchoPlugin{},
+//		})
+//	}
 func Serve(config *ServeConfig) {
 	if config == nil {
-		panic("pluginsdk: config cannot be nil")
+		panic("plugin: config cannot be nil")
 	}
 	if config.Handler == nil {
-		panic("pluginsdk: config.Handler cannot be nil")
+		panic("plugin: config.Handler cannot be nil")
 	}
 	hashiplug.Serve(&hashiplug.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
@@ -122,7 +88,7 @@ type grpcPlugin struct {
 // GRPCServer registers the plugin server (called by plugin process).
 func (p *grpcPlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
 	if p.handler == nil {
-		return errors.New("pluginsdk: handler is nil")
+		return errors.New("plugin: handler is nil")
 	}
 	pluginv1.RegisterPluginServer(s, &pluginServerAdapter{handler: p.handler})
 	return nil
@@ -131,7 +97,7 @@ func (p *grpcPlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
 // GRPCClient is required by go-plugin's GRPCPlugin interface but is never
 // called on the plugin side. The host has its own GRPCClient implementation.
 func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *grpc.ClientConn) (interface{}, error) {
-	return nil, errors.New("pluginsdk: GRPCClient not implemented on plugin side")
+	return nil, errors.New("plugin: GRPCClient not implemented on plugin side")
 }
 
 // pluginServerAdapter adapts Handler to pluginv1.PluginServer.
@@ -150,9 +116,9 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 	event := Event{
 		ID:        protoEvent.GetId(),
 		Stream:    protoEvent.GetStream(),
-		Type:      protoEvent.GetType(),
+		Type:      EventType(protoEvent.GetType()),
 		Timestamp: protoEvent.GetTimestamp(),
-		ActorKind: protoEvent.GetActorKind(),
+		ActorKind: protoActorKindToActorKind(protoEvent.GetActorKind()),
 		ActorID:   protoEvent.GetActorId(),
 		Payload:   protoEvent.GetPayload(),
 	}
@@ -168,10 +134,24 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 	for i, e := range emits {
 		protoEmits[i] = &pluginv1.EmitEvent{
 			Stream:  e.Stream,
-			Type:    e.Type,
+			Type:    string(e.Type),
 			Payload: e.Payload,
 		}
 	}
 
 	return &pluginv1.HandleEventResponse{EmitEvents: protoEmits}, nil
+}
+
+// protoActorKindToActorKind converts proto ActorKind to pkg/plugin ActorKind.
+func protoActorKindToActorKind(kind string) ActorKind {
+	switch kind {
+	case "character":
+		return ActorCharacter
+	case "system":
+		return ActorSystem
+	case "plugin":
+		return ActorPlugin
+	default:
+		return ActorCharacter
+	}
 }

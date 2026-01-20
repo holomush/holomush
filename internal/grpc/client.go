@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
