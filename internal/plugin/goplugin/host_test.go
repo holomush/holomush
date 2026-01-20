@@ -20,7 +20,7 @@ import (
 
 // createTempExecutable creates a dummy file with execute permissions.
 func createTempExecutable(path string) error {
-	//nolint:wrapcheck // test helper, no need to wrap
+	//nolint:wrapcheck,gosec // test helper, no wrap; G306 - needs execute permission for testing
 	return os.WriteFile(path, []byte("dummy"), 0o755)
 }
 
@@ -473,6 +473,62 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	// Verify error is wrapped (contains underlying os error)
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("expected error to wrap os.ErrNotExist, got: %v", err)
+	}
+}
+
+func TestLoad_ExecutableStatError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping test when running as root (permissions ignored)")
+	}
+
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+	ctx := context.Background()
+
+	// Create a directory structure where the parent directory has no read permission
+	tmpDir := t.TempDir()
+	restrictedDir := tmpDir + "/restricted"
+	//nolint:gosec // G301 - needs execute permission to enter directory initially
+	if err := os.Mkdir(restrictedDir, 0o755); err != nil {
+		t.Fatalf("failed to create restricted dir: %v", err)
+	}
+
+	execPath := restrictedDir + "/plugin"
+	//nolint:gosec // G306 - needs execute permission for valid plugin executable
+	if err := os.WriteFile(execPath, []byte("dummy"), 0o755); err != nil {
+		t.Fatalf("failed to create executable: %v", err)
+	}
+
+	// Remove all permissions from the directory - this will cause os.Stat to fail
+	// with permission denied, NOT file not found
+	if err := os.Chmod(restrictedDir, 0o000); err != nil {
+		t.Fatalf("failed to chmod directory: %v", err)
+	}
+	// Restore permissions on cleanup so t.TempDir() can clean up
+	t.Cleanup(func() {
+		//nolint:gosec // G302 - restore permissions for cleanup
+		_ = os.Chmod(restrictedDir, 0o755)
+	})
+
+	manifest := &plugin.Manifest{
+		Name:    "permission-denied",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "plugin",
+		},
+	}
+
+	err := host.Load(ctx, manifest, restrictedDir)
+	if err == nil {
+		t.Fatal("expected error when stat fails with permission denied")
+	}
+	if !strings.Contains(err.Error(), "cannot access") {
+		t.Errorf("expected error to mention 'cannot access', got: %v", err)
+	}
+	// Verify it's NOT the "not found" error
+	if strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'cannot access' error, not 'not found', got: %v", err)
 	}
 }
 
