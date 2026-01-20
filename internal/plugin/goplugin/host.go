@@ -7,6 +7,7 @@ package goplugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,6 +25,14 @@ import (
 
 // DefaultEventTimeout is the default timeout for plugin event handling.
 const DefaultEventTimeout = 5 * time.Second
+
+// Sentinel errors for programmatic error checking.
+var (
+	// ErrHostClosed is returned when operations are attempted on a closed host.
+	ErrHostClosed = errors.New("host is closed")
+	// ErrPluginNotLoaded is returned when operating on a plugin that isn't loaded.
+	ErrPluginNotLoaded = errors.New("plugin not loaded")
+)
 
 // Compile-time interface check.
 var _ plugin.Host = (*Host)(nil)
@@ -95,7 +104,7 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 	defer h.mu.Unlock()
 
 	if h.closed {
-		return fmt.Errorf("host is closed")
+		return ErrHostClosed
 	}
 
 	if _, ok := h.plugins[manifest.Name]; ok {
@@ -155,7 +164,7 @@ func (h *Host) Unload(_ context.Context, name string) error {
 
 	p, ok := h.plugins[name]
 	if !ok {
-		return fmt.Errorf("plugin %s not loaded", name)
+		return fmt.Errorf("%w: %s", ErrPluginNotLoaded, name)
 	}
 
 	if p.client != nil {
@@ -180,13 +189,13 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	h.mu.RLock()
 	if h.closed {
 		h.mu.RUnlock()
-		return nil, fmt.Errorf("host is closed")
+		return nil, ErrHostClosed
 	}
 	p, ok := h.plugins[name]
 	h.mu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("plugin %s not loaded", name)
+		return nil, fmt.Errorf("%w: %s", ErrPluginNotLoaded, name)
 	}
 
 	protoEvent := &pluginv1.Event{

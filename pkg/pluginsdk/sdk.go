@@ -128,9 +128,10 @@ func (p *grpcPlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
 	return nil
 }
 
-// GRPCClient returns a plugin client (called by host process).
-func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return pluginv1.NewPluginClient(c), nil
+// GRPCClient is required by go-plugin's GRPCPlugin interface but is never
+// called on the plugin side. The host has its own GRPCClient implementation.
+func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *grpc.ClientConn) (interface{}, error) {
+	return nil, errors.New("pluginsdk: GRPCClient not implemented on plugin side")
 }
 
 // pluginServerAdapter adapts Handler to pluginv1.PluginServer.
@@ -141,6 +142,8 @@ type pluginServerAdapter struct {
 
 // HandleEvent implements pluginv1.PluginServer.
 func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequest) (*pluginv1.HandleEventResponse, error) {
+	// protoEvent may be nil; proto getters return zero values for nil receivers,
+	// making this safe without explicit nil checks.
 	protoEvent := req.GetEvent()
 
 	// Convert proto Event to SDK Event

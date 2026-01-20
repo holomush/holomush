@@ -164,8 +164,8 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when loading after close")
 	}
-	if !strings.Contains(err.Error(), "closed") {
-		t.Errorf("expected error to mention 'closed', got: %v", err)
+	if !errors.Is(err, ErrHostClosed) {
+		t.Errorf("expected ErrHostClosed, got: %v", err)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestUnload_NotLoaded(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when unloading nonexistent plugin")
 	}
-	if !strings.Contains(err.Error(), "not loaded") {
-		t.Errorf("expected error to mention 'not loaded', got: %v", err)
+	if !errors.Is(err, ErrPluginNotLoaded) {
+		t.Errorf("expected ErrPluginNotLoaded, got: %v", err)
 	}
 }
 
@@ -190,8 +190,8 @@ func TestDeliverEvent_NotLoaded(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when delivering to nonexistent plugin")
 	}
-	if !strings.Contains(err.Error(), "not loaded") {
-		t.Errorf("expected error to mention 'not loaded', got: %v", err)
+	if !errors.Is(err, ErrPluginNotLoaded) {
+		t.Errorf("expected ErrPluginNotLoaded, got: %v", err)
 	}
 }
 
@@ -207,8 +207,8 @@ func TestDeliverEvent_HostClosed(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when delivering after close")
 	}
-	if !strings.Contains(err.Error(), "closed") {
-		t.Errorf("expected error to mention 'closed', got: %v", err)
+	if !errors.Is(err, ErrHostClosed) {
+		t.Errorf("expected ErrHostClosed, got: %v", err)
 	}
 }
 

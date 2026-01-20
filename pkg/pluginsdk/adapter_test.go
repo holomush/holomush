@@ -45,20 +45,20 @@ func TestGRPCPlugin_GRPCServer_RegistersService(t *testing.T) {
 	}
 }
 
-func TestGRPCPlugin_GRPCClient_ReturnsPluginClient(t *testing.T) {
+func TestGRPCPlugin_GRPCClient_ReturnsError(t *testing.T) {
 	p := &grpcPlugin{handler: nil}
 
-	// We can't create a real grpc.ClientConn in tests without a server,
-	// but we can verify the method doesn't panic with nil connection
-	// The actual implementation calls pluginv1.NewPluginClient which handles nil.
+	// GRPCClient is not implemented on the plugin side (only host calls it).
+	// Verify it returns an error as expected.
 	client, err := p.GRPCClient(context.Background(), nil, nil)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Error("expected error from GRPCClient on plugin side")
 	}
-	// The client will be non-nil even with nil connection because
-	// NewPluginClient just wraps the connection
-	if client == nil {
-		t.Error("expected non-nil client")
+	if client != nil {
+		t.Error("expected nil client when error is returned")
+	}
+	if err.Error() != "pluginsdk: GRPCClient not implemented on plugin side" {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
