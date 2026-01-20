@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package plugin defines the API for WASM plugins.
+// Package plugin defines the shared API types for all plugin hosts (Lua, binary).
 package plugin
 
 // EventType identifies the kind of event.
@@ -43,7 +43,7 @@ func (k ActorKind) String() string {
 
 // Event is the event structure passed to plugins.
 // This is a simplified version of the internal Event type,
-// serialized as JSON for WASM boundary crossing.
+// serialized as JSON for plugin boundary crossing.
 type Event struct {
 	ID        string    `json:"id"`
 	Stream    string    `json:"stream"`
