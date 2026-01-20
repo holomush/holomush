@@ -18,10 +18,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-// createTempExecutable creates a dummy file that passes os.Stat checks.
+// createTempExecutable creates a dummy file with execute permissions.
 func createTempExecutable(path string) error {
 	//nolint:wrapcheck // test helper, no need to wrap
-	return os.WriteFile(path, []byte("dummy"), 0o600)
+	return os.WriteFile(path, []byte("dummy"), 0o755)
 }
 
 // mockClientProtocol implements hashiplug.ClientProtocol for testing.
@@ -473,6 +473,36 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	// Verify error is wrapped (contains underlying os error)
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("expected error to wrap os.ErrNotExist, got: %v", err)
+	}
+}
+
+func TestLoad_ExecutableNotExecutable(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	execPath := tmpDir + "/non-executable-plugin"
+	// Create file without execute permission (0o600 = rw-------)
+	if err := os.WriteFile(execPath, []byte("not executable"), 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	manifest := &plugin.Manifest{
+		Name:    "non-executable",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "non-executable-plugin",
+		},
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Fatal("expected error when loading non-executable file")
+	}
+	if !strings.Contains(err.Error(), "not executable") {
+		t.Errorf("expected error to mention 'not executable', got: %v", err)
 	}
 }
 

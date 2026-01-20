@@ -85,14 +85,7 @@ type loadedPlugin struct {
 // NewHost creates a new binary plugin host.
 // Panics if enforcer is nil.
 func NewHost(enforcer *capability.Enforcer) *Host {
-	if enforcer == nil {
-		panic("goplugin: enforcer cannot be nil")
-	}
-	return &Host{
-		enforcer:      enforcer,
-		clientFactory: &DefaultClientFactory{},
-		plugins:       make(map[string]*loadedPlugin),
-	}
+	return NewHostWithFactory(enforcer, &DefaultClientFactory{})
 }
 
 // NewHostWithFactory creates a host with a custom client factory (for testing).
@@ -129,11 +122,16 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 	}
 
 	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
-	if _, err := os.Stat(execPath); err != nil {
+	info, err := os.Stat(execPath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("plugin executable not found: %s: %w", execPath, err)
 		}
 		return fmt.Errorf("cannot access plugin executable %s: %w", execPath, err)
+	}
+	// Check execute permission (user, group, or other)
+	if info.Mode()&0o111 == 0 {
+		return fmt.Errorf("plugin executable not executable: %s", execPath)
 	}
 
 	client := h.clientFactory.NewClient(execPath)
