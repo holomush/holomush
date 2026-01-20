@@ -989,6 +989,21 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 	}
 }
 
+func TestLoad_NilManifest(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+
+	err := host.Load(ctx, nil, tmpDir)
+	if err == nil {
+		t.Fatal("expected error when manifest is nil")
+	}
+	if !strings.Contains(err.Error(), "manifest cannot be nil") {
+		t.Errorf("expected error to mention 'manifest cannot be nil', got: %v", err)
+	}
+}
+
 func TestLoad_InvalidPluginClient(t *testing.T) {
 	// Return a non-PluginClient from Dispense to trigger type assertion failure
 	mockClient := &mockPluginClient{

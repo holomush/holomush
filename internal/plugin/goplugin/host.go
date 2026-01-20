@@ -112,6 +112,10 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 		return fmt.Errorf("load cancelled: %w", err)
 	}
 
+	if manifest == nil {
+		return errors.New("manifest cannot be nil")
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -146,19 +150,17 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 		return fmt.Errorf("plugin executable path escapes plugin directory: %s", manifest.BinaryPlugin.Executable)
 	}
 
-	info, err := os.Stat(execPath)
+	// Use realExec (resolved symlink) for stat and client to prevent TOCTOU attacks
+	info, err := os.Stat(realExec)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("plugin executable not found: %s: %w", execPath, err)
-		}
-		return fmt.Errorf("cannot access plugin executable %s: %w", execPath, err)
+		return fmt.Errorf("cannot access plugin executable %s: %w", realExec, err)
 	}
 	// Check execute permission (user, group, or other)
 	if info.Mode()&0o111 == 0 {
-		return fmt.Errorf("plugin executable not executable: %s", execPath)
+		return fmt.Errorf("plugin executable not executable: %s", realExec)
 	}
 
-	client := h.clientFactory.NewClient(execPath)
+	client := h.clientFactory.NewClient(realExec)
 
 	rpcClient, err := client.Client()
 	if err != nil {
