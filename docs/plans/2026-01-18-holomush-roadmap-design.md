@@ -644,11 +644,11 @@ This is a stretch goal. The PWA (Epic 8) may suffice for mobile needs.
 
 ## Appendix: Extism Spike Reference
 
-The Phase 1.6 Extism work is preserved in:
+The Phase 1.6 Extism work was archived/removed as part of Epic 2:
 
-- `internal/wasm/` - Working Extism host implementation
-- `plugins/echo-python/` - Python plugin example
-- `docs/plans/2026-01-18-extism-plugin-framework-design.md` - Original design
+- `internal/wasm/` - **Deleted** (see holomush-1hq.21)
+- `plugins/echo-python/` - Python plugin example (archived)
+- `docs/plans/archive/2026-01-18-extism-plugin-framework-design.md` - Original design
 
 Key learnings applied to Epic 2:
 

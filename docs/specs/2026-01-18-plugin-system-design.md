@@ -1003,13 +1003,11 @@ internal/plugin/testdata/
 
 ## Migration from WASM
 
-The `internal/wasm/` package contains the Phase 1.6 Extism spike. Once the new plugin
-system is complete, this package will be **deleted entirely**.
+The `internal/wasm/` package contained the Phase 1.6 Extism spike and has been **deleted**
+(see holomush-1hq.21). Relevant patterns (OTel tracing) were referenced during
+implementation of the new system.
 
-Before deletion, relevant patterns (OTel tracing from `ExtismHost`) should be referenced
-during implementation of the new system.
-
-New code lives in `internal/plugin/`. Do not add dependencies on `internal/wasm/`.
+New code lives in `internal/plugin/`.
 
 ## Implementation Considerations
 
