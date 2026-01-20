@@ -102,6 +102,10 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 		return fmt.Errorf("plugin %s already loaded", manifest.Name)
 	}
 
+	if manifest.BinaryPlugin == nil {
+		return fmt.Errorf("plugin %s is not a binary plugin", manifest.Name)
+	}
+
 	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
 	if _, err := os.Stat(execPath); os.IsNotExist(err) {
 		return fmt.Errorf("plugin executable not found: %s", execPath)

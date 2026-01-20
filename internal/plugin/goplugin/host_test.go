@@ -594,3 +594,25 @@ func TestDefaultEventTimeout(t *testing.T) {
 		t.Errorf("expected DefaultEventTimeout to be 5 seconds, got %v", DefaultEventTimeout)
 	}
 }
+
+func TestLoad_NilBinaryPlugin(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	manifest := &plugin.Manifest{
+		Name:         "wasm-plugin",
+		Version:      "1.0.0",
+		Type:         "wasm",  // Wrong type for goplugin host
+		BinaryPlugin: nil,     // No BinaryPlugin config
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Fatal("expected error when BinaryPlugin is nil")
+	}
+	if !strings.Contains(err.Error(), "not a binary plugin") {
+		t.Errorf("expected error to mention 'not a binary plugin', got: %v", err)
+	}
+}

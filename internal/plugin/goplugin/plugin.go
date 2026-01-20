@@ -9,16 +9,13 @@ import (
 
 	goplugin "github.com/hashicorp/go-plugin"
 	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
+	"github.com/holomush/holomush/pkg/pluginsdk"
 	"google.golang.org/grpc"
 )
 
-// HandshakeConfig is the handshake configuration for go-plugin.
-// Both host and plugins must use the same values.
-var HandshakeConfig = goplugin.HandshakeConfig{
-	ProtocolVersion:  1,
-	MagicCookieKey:   "HOLOMUSH_PLUGIN",
-	MagicCookieValue: "holomush-v1",
-}
+// HandshakeConfig is imported from pluginsdk to ensure host and plugins
+// use identical configuration. Do not define locally to prevent drift.
+var HandshakeConfig = pluginsdk.HandshakeConfig
 
 // PluginMap is the map of plugins we can dispense.
 var PluginMap = map[string]goplugin.Plugin{
