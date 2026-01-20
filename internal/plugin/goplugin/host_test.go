@@ -403,12 +403,6 @@ func TestLoad_DuplicateName(t *testing.T) {
 	}
 }
 
-func TestGRPCPlugin_Exists(_ *testing.T) {
-	// Verify GRPCPlugin type exists and has the right methods
-	p := &GRPCPlugin{}
-	_ = p
-}
-
 func TestHandshakeConfig(t *testing.T) {
 	if HandshakeConfig.ProtocolVersion != 1 {
 		t.Errorf("expected protocol version 1, got %d", HandshakeConfig.ProtocolVersion)
@@ -439,6 +433,10 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected error to mention 'not found', got: %v", err)
+	}
+	// Verify error is wrapped (contains underlying os error)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected error to wrap os.ErrNotExist, got: %v", err)
 	}
 }
 

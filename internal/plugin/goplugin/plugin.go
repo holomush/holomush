@@ -13,6 +13,9 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Compile-time check that GRPCPlugin implements goplugin.GRPCPlugin.
+var _ goplugin.GRPCPlugin = (*GRPCPlugin)(nil)
+
 // HandshakeConfig is imported from pluginsdk to ensure host and plugins
 // use identical configuration. Do not define locally to prevent drift.
 var HandshakeConfig = pluginsdk.HandshakeConfig
@@ -23,20 +26,16 @@ var PluginMap = map[string]goplugin.Plugin{
 }
 
 // GRPCPlugin implements go-plugin's Plugin interface for gRPC.
-// It enables the host to communicate with binary plugins via gRPC.
+// This is the host-side implementation; plugins use pluginsdk.Serve() instead.
 type GRPCPlugin struct {
 	goplugin.NetRPCUnsupportedPlugin
-	// Impl is used by the plugin-side (not used by host).
-	Impl pluginv1.PluginServer
 }
 
-// GRPCServer registers the plugin server (called by plugin process).
-func (p *GRPCPlugin) GRPCServer(_ *goplugin.GRPCBroker, s *grpc.Server) error {
-	if p.Impl == nil {
-		return errors.New("goplugin: plugin implementation is nil")
-	}
-	pluginv1.RegisterPluginServer(s, p.Impl)
-	return nil
+// GRPCServer is required by go-plugin's GRPCPlugin interface but is never
+// called on the host side. Plugins use pluginsdk.Serve() which provides its
+// own GRPCServer implementation.
+func (p *GRPCPlugin) GRPCServer(_ *goplugin.GRPCBroker, _ *grpc.Server) error {
+	return errors.New("goplugin: GRPCServer not implemented on host side")
 }
 
 // GRPCClient returns a plugin client (called by host process).

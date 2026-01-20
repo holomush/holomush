@@ -107,8 +107,11 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 	}
 
 	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
-	if _, err := os.Stat(execPath); os.IsNotExist(err) {
-		return fmt.Errorf("plugin executable not found: %s", execPath)
+	if _, err := os.Stat(execPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("plugin executable not found: %s: %w", execPath, err)
+		}
+		return fmt.Errorf("cannot access plugin executable %s: %w", execPath, err)
 	}
 
 	client := h.clientFactory.NewClient(execPath)
@@ -159,6 +162,9 @@ func (h *Host) Unload(_ context.Context, name string) error {
 		p.client.Kill()
 	}
 
+	// RemoveGrants only fails if plugin name is empty, which cannot happen here
+	// since we retrieved 'name' from h.plugins map (validated at Load time).
+	// Warn-and-continue is safe; grants are cleaned up, unload proceeds.
 	if err := h.enforcer.RemoveGrants(name); err != nil {
 		slog.Warn("failed to remove capabilities during unload",
 			"plugin", name,
@@ -252,6 +258,8 @@ func (h *Host) Close(_ context.Context) error {
 		if p.client != nil {
 			p.client.Kill()
 		}
+		// RemoveGrants only fails if plugin name is empty, which cannot happen
+		// here since 'name' comes from h.plugins map keys (validated at Load).
 		if err := h.enforcer.RemoveGrants(name); err != nil {
 			slog.Warn("failed to remove capabilities during close",
 				"plugin", name,
