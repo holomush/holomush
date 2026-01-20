@@ -1,8 +1,15 @@
-# THIS PACKAGE IS DEPRECATED
+# pkg/plugin
 
-## You MUST NOT
+This package defines the plugin API types used by both WASM and binary plugins.
 
-- Use this package in new code.
-- Rely on this package for any functionality.
-- Consider this package as an example of good design or implementation.
-- Review or maintain this package.
+## Status
+
+The types in this package (Event, ActorKind, EmitEvent) are stable and used by:
+- internal/plugin hosts (wasm, lua, goplugin)
+- pkg/pluginsdk for binary plugin development
+
+## Guidelines
+
+- **MAY** use existing types (Event, ActorKind, EmitEvent, EventType)
+- **SHOULD NOT** add new types without coordination with internal/plugin interfaces
+- **MUST** maintain backward compatibility with existing plugins
