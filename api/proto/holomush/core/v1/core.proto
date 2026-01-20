@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package holomush.core.v1;
 
-option go_package = "github.com/holomush/holomush/internal/proto/holomush/core/v1;corev1";
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
 
 import "google/protobuf/timestamp.proto";
 

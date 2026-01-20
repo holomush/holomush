@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	controlv1 "github.com/holomush/holomush/internal/proto/holomush/control/v1"
+	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 )
 
 // ShutdownFunc is called when a shutdown is requested via the control interface.

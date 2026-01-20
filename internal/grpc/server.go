@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
-	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // AuthResult contains the result of a successful authentication.

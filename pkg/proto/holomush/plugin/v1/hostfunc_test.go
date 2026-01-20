@@ -6,7 +6,7 @@ package pluginv1_test
 import (
 	"testing"
 
-	pluginv1 "github.com/holomush/holomush/internal/proto/holomush/plugin/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // TestEmitEventRPC verifies the EmitEvent RPC request/response types.

@@ -287,5 +287,5 @@ api/proto/holomush/core/v1/core.proto
 Generated Go code is in:
 
 ```text
-internal/proto/holomush/core/v1/
+pkg/proto/holomush/core/v1/
 ```

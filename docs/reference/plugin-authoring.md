@@ -1,5 +1,14 @@
 # Plugin Authoring Guide
 
+> ⚠️ **DEPRECATED**: This guide documents the Phase 1.6 Extism WASM plugin system which
+> has been removed. The new plugin system uses:
+>
+> - **Lua plugins** via `internal/plugin/lua` - lightweight scripting
+> - **Binary plugins** via `pkg/plugin` - Go plugins over gRPC
+>
+> For binary plugins, import `github.com/holomush/holomush/pkg/plugin` and implement
+> the `plugin.Handler` interface. See `plugins/echo/` for an example Lua plugin.
+
 This guide covers writing HoloMUSH plugins using the Extism Plugin Development Kit (PDK).
 
 ## Overview
@@ -297,15 +306,8 @@ Test your plugin logic with standard Python tests before compiling to WASM.
 
 ### Integration Testing
 
-Run the HoloMUSH integration tests with your plugin:
-
-```bash
-# Copy your plugin to testdata
-cp my-plugin.wasm internal/wasm/testdata/
-
-# Run integration tests
-go test -v -tags=integration ./internal/wasm/...
-```
+> **Note:** The WASM integration test infrastructure has been removed. See the Lua plugin
+> examples in `plugins/echo/` for the current testing approach.
 
 ## Example: Echo Plugin
 

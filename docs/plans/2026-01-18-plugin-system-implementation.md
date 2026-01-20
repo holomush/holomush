@@ -1,5 +1,8 @@
 # Plugin System Implementation Plan
 
+> **Note:** This plan references `internal/proto` and `pkg/pluginsdk` which have been
+> refactored. Current paths are: `internal/proto` → `pkg/proto`, `pkg/pluginsdk` → `pkg/plugin`
+>
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Implement a two-tier plugin system with Lua for simple scripts and go-plugin for complex extensions.

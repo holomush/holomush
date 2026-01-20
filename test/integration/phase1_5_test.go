@@ -23,7 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
-	corev1 "github.com/holomush/holomush/internal/proto/holomush/core/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/tls"
 )
