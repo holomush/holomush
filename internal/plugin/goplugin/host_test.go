@@ -28,12 +28,16 @@ func createTempExecutable(path string) error {
 type mockClientProtocol struct {
 	pluginClient pluginv1.PluginClient
 	dispenseErr  error
+	rawDispense  interface{} // If set, return this instead of pluginClient
 }
 
 func (m *mockClientProtocol) Close() error { return nil }
 func (m *mockClientProtocol) Dispense(_ string) (interface{}, error) {
 	if m.dispenseErr != nil {
 		return nil, m.dispenseErr
+	}
+	if m.rawDispense != nil {
+		return m.rawDispense, nil
 	}
 	return m.pluginClient, nil
 }
@@ -101,11 +105,6 @@ func TestNewHost(t *testing.T) {
 	if host == nil {
 		t.Fatal("NewHost returned nil")
 	}
-}
-
-func TestHostImplementsInterface(_ *testing.T) {
-	// Compile-time interface check
-	var _ plugin.Host = (*Host)(nil)
 }
 
 func TestPlugins_Empty(t *testing.T) {
@@ -612,5 +611,43 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not a binary plugin") {
 		t.Errorf("expected error to mention 'not a binary plugin', got: %v", err)
+	}
+}
+
+func TestLoad_InvalidPluginClient(t *testing.T) {
+	// Return a non-PluginClient from Dispense to trigger type assertion failure
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{
+			rawDispense: "not a PluginClient", // Return wrong type
+		},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	enforcer := capability.NewEnforcer()
+	host := NewHostWithFactory(enforcer, factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	manifest := &plugin.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Fatal("expected error when plugin does not implement PluginClient")
+	}
+	if !strings.Contains(err.Error(), "does not implement PluginClient") {
+		t.Errorf("expected error to mention 'does not implement PluginClient', got: %v", err)
+	}
+	if !mockClient.killed {
+		t.Error("expected client to be killed after type assertion failure")
 	}
 }
