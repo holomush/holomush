@@ -42,12 +42,17 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
+	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.4 // indirect
+	github.com/hashicorp/go-hclog v1.6.3 // indirect
+	github.com/hashicorp/go-plugin v1.7.0 // indirect
+	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20240805132620-81f5be970eca // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
@@ -58,6 +63,8 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/mattn/go-colorable v0.1.12 // indirect
+	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
@@ -67,6 +74,7 @@ require (
 	github.com/moby/term v0.5.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/oklog/run v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
