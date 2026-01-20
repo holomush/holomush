@@ -26,6 +26,9 @@ jobs:
         with:
           version: 3.x
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Install golangci-lint v2
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
