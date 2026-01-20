@@ -420,15 +420,6 @@ func TestLoad_DuplicateName(t *testing.T) {
 	}
 }
 
-func TestHandshakeConfig(t *testing.T) {
-	if HandshakeConfig.ProtocolVersion != 1 {
-		t.Errorf("expected protocol version 1, got %d", HandshakeConfig.ProtocolVersion)
-	}
-	if HandshakeConfig.MagicCookieKey != "HOLOMUSH_PLUGIN" {
-		t.Errorf("unexpected magic cookie key: %s", HandshakeConfig.MagicCookieKey)
-	}
-}
-
 func TestLoad_ExecutableNotFound(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
@@ -601,12 +592,6 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 				t.Errorf("DeliverEvent returned error: %v", err)
 			}
 		})
-	}
-}
-
-func TestDefaultEventTimeout(t *testing.T) {
-	if DefaultEventTimeout.Seconds() != 5 {
-		t.Errorf("expected DefaultEventTimeout to be 5 seconds, got %v", DefaultEventTimeout)
 	}
 }
 

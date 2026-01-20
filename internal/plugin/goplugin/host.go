@@ -253,6 +253,8 @@ func actorKindToString(kind pluginpkg.ActorKind) string {
 	case pluginpkg.ActorPlugin:
 		return "plugin"
 	default:
+		slog.Warn("unrecognized actor kind, using 'unknown'",
+			"kind", int(kind))
 		return "unknown"
 	}
 }
