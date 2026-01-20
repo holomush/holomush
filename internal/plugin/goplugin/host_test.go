@@ -197,6 +197,36 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 	}
 }
 
+func TestLoad_ContextCancelled(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tmpDir := t.TempDir()
+	manifest := &plugin.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Error("expected error when loading with cancelled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "load cancelled") {
+		t.Errorf("expected error to mention 'load cancelled', got: %v", err)
+	}
+}
+
 func TestUnload_NotLoaded(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
@@ -477,6 +507,52 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	}
 }
 
+func TestLoad_SetGrantsFailure(t *testing.T) {
+	// Create mock plugin client that succeeds
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	enforcer := capability.NewEnforcer()
+	host := NewHostWithFactory(enforcer, factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	// Create manifest with invalid capability pattern (empty string)
+	manifest := &plugin.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "test-plugin",
+		},
+		Capabilities: []string{"valid.capability", ""}, // Empty pattern will cause SetGrants to fail
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Fatal("expected error when SetGrants fails")
+	}
+	if !strings.Contains(err.Error(), "failed to set capabilities") {
+		t.Errorf("expected error to mention 'failed to set capabilities', got: %v", err)
+	}
+
+	// Verify plugin was not added to the host
+	if len(host.Plugins()) != 0 {
+		t.Error("plugin should not be loaded after SetGrants failure")
+	}
+
+	// Verify client was killed (cleanup on error)
+	if !mockClient.killed {
+		t.Error("client should be killed on SetGrants failure")
+	}
+}
+
 func TestLoad_ExecutableStatError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("skipping test when running as root (permissions ignored)")
@@ -524,12 +600,13 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when stat fails with permission denied")
 	}
-	if !strings.Contains(err.Error(), "cannot access") {
-		t.Errorf("expected error to mention 'cannot access', got: %v", err)
+	// Should get a resolution or access error, not "not found"
+	if !strings.Contains(err.Error(), "cannot resolve") && !strings.Contains(err.Error(), "cannot access") {
+		t.Errorf("expected error to mention 'cannot resolve' or 'cannot access', got: %v", err)
 	}
 	// Verify it's NOT the "not found" error
 	if strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected 'cannot access' error, not 'not found', got: %v", err)
+		t.Errorf("expected resolution/access error, not 'not found', got: %v", err)
 	}
 }
 
@@ -590,6 +667,53 @@ func TestLoad_ExecutablePathTraversal(t *testing.T) {
 	err := host.Load(ctx, manifest, tmpDir)
 	if err == nil {
 		t.Fatal("expected error when executable path escapes plugin directory")
+	}
+	if !strings.Contains(err.Error(), "escapes plugin directory") {
+		t.Errorf("expected error to mention 'escapes plugin directory', got: %v", err)
+	}
+}
+
+func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping test when running as root")
+	}
+
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+	ctx := context.Background()
+
+	// Create a temp directory structure
+	tmpDir := t.TempDir()
+	pluginDir := filepath.Join(tmpDir, "plugin")
+	//nolint:gosec // G301 - needs execute permission to enter directory
+	if err := os.Mkdir(pluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+
+	// Create an executable outside the plugin directory
+	outsideExec := filepath.Join(tmpDir, "outside-exec")
+	if err := createTempExecutable(outsideExec); err != nil {
+		t.Fatalf("failed to create outside executable: %v", err)
+	}
+
+	// Create a symlink inside the plugin directory pointing outside
+	symlinkPath := filepath.Join(pluginDir, "evil-link")
+	if err := os.Symlink(outsideExec, symlinkPath); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+
+	manifest := &plugin.Manifest{
+		Name:    "symlink-escape",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "evil-link", // Symlink that points outside
+		},
+	}
+
+	err := host.Load(ctx, manifest, pluginDir)
+	if err == nil {
+		t.Fatal("expected error when executable symlink escapes plugin directory")
 	}
 	if !strings.Contains(err.Error(), "escapes plugin directory") {
 		t.Errorf("expected error to mention 'escapes plugin directory', got: %v", err)

@@ -106,7 +106,12 @@ func NewHostWithFactory(enforcer *capability.Enforcer, factory ClientFactory) *H
 }
 
 // Load initializes a plugin from its manifest.
-func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) error {
+func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) error {
+	// Check context before expensive operations
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("load cancelled: %w", err)
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -125,9 +130,19 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
 
 	// Verify resolved path is within the plugin directory (prevent path traversal)
-	cleanDir := filepath.Clean(dir)
-	cleanExec := filepath.Clean(execPath)
-	if !strings.HasPrefix(cleanExec, cleanDir+string(os.PathSeparator)) {
+	// Use EvalSymlinks to resolve symlinks and prevent symlink-based escapes
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("cannot resolve plugin directory %s: %w", dir, err)
+	}
+	realExec, err := filepath.EvalSymlinks(execPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("plugin executable not found: %s: %w", execPath, err)
+		}
+		return fmt.Errorf("cannot resolve executable path %s: %w", execPath, err)
+	}
+	if !strings.HasPrefix(realExec, realDir+string(os.PathSeparator)) {
 		return fmt.Errorf("plugin executable path escapes plugin directory: %s", manifest.BinaryPlugin.Executable)
 	}
 
