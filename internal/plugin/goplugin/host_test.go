@@ -1004,6 +1004,32 @@ func TestLoad_NilManifest(t *testing.T) {
 	}
 }
 
+func TestLoad_EmptyPluginName(t *testing.T) {
+	host, _ := newMockHost(t)
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	if err := createTempExecutable(filepath.Join(tmpDir, "test-plugin")); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	manifest := &plugin.Manifest{
+		Name:    "", // Empty name
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Fatal("expected error for empty plugin name")
+	}
+	if !strings.Contains(err.Error(), "plugin name cannot be empty") {
+		t.Errorf("expected error to mention 'plugin name cannot be empty', got: %v", err)
+	}
+}
+
 func TestLoad_InvalidPluginClient(t *testing.T) {
 	// Return a non-PluginClient from Dispense to trigger type assertion failure
 	mockClient := &mockPluginClient{

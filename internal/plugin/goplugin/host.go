@@ -146,7 +146,9 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 		}
 		return fmt.Errorf("cannot resolve executable path %s: %w", execPath, err)
 	}
-	if !strings.HasPrefix(realExec, realDir+string(os.PathSeparator)) {
+	// Use filepath.Rel for robust cross-platform path containment check
+	rel, err := filepath.Rel(realDir, realExec)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
 		return fmt.Errorf("plugin executable path escapes plugin directory: %s", manifest.BinaryPlugin.Executable)
 	}
 
@@ -310,6 +312,10 @@ func (h *Host) Plugins() []string {
 func (h *Host) Close(_ context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.closed {
+		return nil
+	}
 
 	for name, p := range h.plugins {
 		if p.client != nil {
