@@ -197,6 +197,23 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 	}
 }
 
+func TestClose_Idempotent(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+
+	// First close should succeed
+	err1 := host.Close(context.Background())
+	if err1 != nil {
+		t.Fatalf("first Close returned error: %v", err1)
+	}
+
+	// Second close should also succeed (idempotent)
+	err2 := host.Close(context.Background())
+	if err2 != nil {
+		t.Errorf("second Close returned error: %v", err2)
+	}
+}
+
 func TestLoad_ContextCancelled(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
