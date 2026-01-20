@@ -107,6 +107,24 @@ func TestNewHost(t *testing.T) {
 	}
 }
 
+func TestNewHost_NilEnforcer(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic when enforcer is nil")
+		}
+	}()
+	NewHost(nil)
+}
+
+func TestNewHostWithFactory_NilEnforcer(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic when enforcer is nil")
+		}
+	}()
+	NewHostWithFactory(nil, &DefaultClientFactory{})
+}
+
 func TestPlugins_Empty(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
@@ -397,8 +415,8 @@ func TestLoad_DuplicateName(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when loading duplicate plugin name")
 	}
-	if !strings.Contains(err.Error(), "already loaded") {
-		t.Errorf("expected error to mention 'already loaded', got: %v", err)
+	if !errors.Is(err, ErrPluginAlreadyLoaded) {
+		t.Errorf("expected ErrPluginAlreadyLoaded, got: %v", err)
 	}
 }
 

@@ -32,6 +32,8 @@ var (
 	ErrHostClosed = errors.New("host is closed")
 	// ErrPluginNotLoaded is returned when operating on a plugin that isn't loaded.
 	ErrPluginNotLoaded = errors.New("plugin not loaded")
+	// ErrPluginAlreadyLoaded is returned when loading a plugin that's already loaded.
+	ErrPluginAlreadyLoaded = errors.New("plugin already loaded")
 )
 
 // Compile-time interface check.
@@ -81,7 +83,11 @@ type loadedPlugin struct {
 }
 
 // NewHost creates a new binary plugin host.
+// Panics if enforcer is nil.
 func NewHost(enforcer *capability.Enforcer) *Host {
+	if enforcer == nil {
+		panic("goplugin: enforcer cannot be nil")
+	}
 	return &Host{
 		enforcer:      enforcer,
 		clientFactory: &DefaultClientFactory{},
@@ -90,7 +96,11 @@ func NewHost(enforcer *capability.Enforcer) *Host {
 }
 
 // NewHostWithFactory creates a host with a custom client factory (for testing).
+// Panics if enforcer is nil.
 func NewHostWithFactory(enforcer *capability.Enforcer, factory ClientFactory) *Host {
+	if enforcer == nil {
+		panic("goplugin: enforcer cannot be nil")
+	}
 	return &Host{
 		enforcer:      enforcer,
 		clientFactory: factory,
@@ -108,7 +118,7 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 	}
 
 	if _, ok := h.plugins[manifest.Name]; ok {
-		return fmt.Errorf("plugin %s already loaded", manifest.Name)
+		return fmt.Errorf("%w: %s", ErrPluginAlreadyLoaded, manifest.Name)
 	}
 
 	if manifest.BinaryPlugin == nil {
@@ -185,6 +195,11 @@ func (h *Host) Unload(_ context.Context, name string) error {
 }
 
 // DeliverEvent sends an event to a plugin and returns response events.
+//
+// Note: The RLock is released before making the gRPC call to avoid serializing
+// all plugin calls. If Close() or Unload() is called concurrently, the gRPC
+// call will fail gracefully when the plugin process is killed. This is the
+// standard trade-off in go-plugin based systems.
 func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
 	h.mu.RLock()
 	if h.closed {
