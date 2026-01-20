@@ -209,6 +209,24 @@ func TestUnload_NotLoaded(t *testing.T) {
 	}
 }
 
+func TestUnload_AfterClose(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+
+	err := host.Close(context.Background())
+	if err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	err = host.Unload(context.Background(), "any-plugin")
+	if err == nil {
+		t.Error("expected error when unloading after close")
+	}
+	if !errors.Is(err, ErrHostClosed) {
+		t.Errorf("expected ErrHostClosed, got: %v", err)
+	}
+}
+
 func TestDeliverEvent_NotLoaded(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)

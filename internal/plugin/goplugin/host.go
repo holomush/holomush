@@ -175,6 +175,10 @@ func (h *Host) Unload(_ context.Context, name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.closed {
+		return ErrHostClosed
+	}
+
 	p, ok := h.plugins[name]
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrPluginNotLoaded, name)
@@ -297,6 +301,6 @@ func (h *Host) Close(_ context.Context) error {
 	}
 
 	h.closed = true
-	h.plugins = nil
+	clear(h.plugins)
 	return nil
 }
