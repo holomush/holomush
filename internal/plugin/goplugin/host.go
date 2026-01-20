@@ -96,10 +96,13 @@ func NewHost(enforcer *capability.Enforcer) *Host {
 }
 
 // NewHostWithFactory creates a host with a custom client factory (for testing).
-// Panics if enforcer is nil.
+// Panics if enforcer or factory is nil.
 func NewHostWithFactory(enforcer *capability.Enforcer, factory ClientFactory) *Host {
 	if enforcer == nil {
 		panic("goplugin: enforcer cannot be nil")
+	}
+	if factory == nil {
+		panic("goplugin: factory cannot be nil")
 	}
 	return &Host{
 		enforcer:      enforcer,

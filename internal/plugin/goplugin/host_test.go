@@ -125,6 +125,16 @@ func TestNewHostWithFactory_NilEnforcer(t *testing.T) {
 	NewHostWithFactory(nil, &DefaultClientFactory{})
 }
 
+func TestNewHostWithFactory_NilFactory(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic when factory is nil")
+		}
+	}()
+	enforcer := capability.NewEnforcer()
+	NewHostWithFactory(enforcer, nil)
+}
+
 func TestPlugins_Empty(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
