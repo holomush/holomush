@@ -26,9 +26,6 @@ jobs:
         with:
           version: 3.x
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
       - name: Install golangci-lint v2
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
@@ -40,13 +37,6 @@ jobs:
           npm install -g markdownlint-cli2
           curl -fsSL https://dprint.dev/install.sh | sh
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
-          curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Build plugins and test fixtures
-        run: |
-          task plugin:build
-          task test:fixtures:build
 
       - name: Verify schema is current
         run: |
@@ -95,16 +85,6 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: 3.x
-
-      - name: Install extism-py
-        run: |
-          curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Build test fixtures
-        run: |
-          task plugin:build
-          task test:fixtures:build
 
       - name: Run tests
         run: task test:coverage
