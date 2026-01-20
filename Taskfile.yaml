@@ -69,15 +69,11 @@ tasks:
   # Testing
   test:
     desc: Run all tests
-    deps:
-      - plugin:build
     cmds:
       - go test -race -v ./...
 
   test:coverage:
     desc: Run tests with coverage
-    deps:
-      - plugin:build
     cmds:
       - go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - go tool cover -html=coverage.out -o coverage.html
@@ -89,8 +85,6 @@ tasks:
 
   test:integration:
     desc: Run integration tests (requires Docker)
-    deps:
-      - plugin:build
     cmds:
       - go test -race -v -tags=integration ./...
 
@@ -219,54 +213,7 @@ tasks:
       - go get -u ./...
       - go mod tidy
 
-  # Plugins
-  plugin:build:
-    desc: Build all WASM plugins (production only)
-    cmds:
-      - task: plugin:build:echo-python
-
-  plugin:build:echo-python:
-    desc: Build Python echo plugin to WASM
-    dir: plugins/echo-python
-    cmds:
-      - extism-py plugin.py -o echo.wasm
-      - cp echo.wasm ../../internal/wasm/testdata/echo.wasm
-    sources:
-      - plugin.py
-    generates:
-      - echo.wasm
-      - ../../internal/wasm/testdata/echo.wasm
-
-  # Test fixtures (not for production use)
-  test:fixtures:build:
-    desc: Build test fixture plugins (for testing error handling)
-    cmds:
-      - task: test:fixtures:build:malformed-json
-      - task: test:fixtures:build:empty-stream
-
-  test:fixtures:build:malformed-json:
-    desc: Build malformed JSON test fixture
-    dir: test/fixtures/plugins/malformed-json
-    cmds:
-      - extism-py plugin.py -o malformed.wasm
-      - cp malformed.wasm ../../../../internal/wasm/testdata/malformed.wasm
-    sources:
-      - plugin.py
-    generates:
-      - malformed.wasm
-      - ../../../../internal/wasm/testdata/malformed.wasm
-
-  test:fixtures:build:empty-stream:
-    desc: Build empty-stream test fixture
-    dir: test/fixtures/plugins/empty-stream
-    cmds:
-      - extism-py plugin.py -o empty-stream.wasm
-      - cp empty-stream.wasm ../../../../internal/wasm/testdata/empty-stream.wasm
-    sources:
-      - plugin.py
-    generates:
-      - empty-stream.wasm
-      - ../../../../internal/wasm/testdata/empty-stream.wasm
+  # Plugins (WASM plugin build tasks removed - see holomush-1hq.21)
 
   # Documentation
   spec:
@@ -325,22 +272,6 @@ tasks:
       - rm -rf dist/
       - rm -f {{.BINARY_NAME}}
       - rm -f coverage.out coverage.html
-      - task: plugin:clean
-
-  plugin:clean:
-    desc: Clean plugin build artifacts
-    cmds:
-      - rm -f plugins/echo-python/echo.wasm
-      - rm -f internal/wasm/testdata/echo.wasm
-      - task: test:fixtures:clean
-
-  test:fixtures:clean:
-    desc: Clean test fixture build artifacts
-    cmds:
-      - rm -f test/fixtures/plugins/malformed-json/malformed.wasm
-      - rm -f test/fixtures/plugins/empty-stream/empty-stream.wasm
-      - rm -f internal/wasm/testdata/malformed.wasm
-      - rm -f internal/wasm/testdata/empty-stream.wasm
 
   # Install tools (prefer brew, use uvx for Python)
   tools:
