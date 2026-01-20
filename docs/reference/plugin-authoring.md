@@ -3,11 +3,11 @@
 > ⚠️ **DEPRECATED**: This guide documents the Phase 1.6 Extism WASM plugin system which
 > has been removed. The new plugin system uses:
 >
-> - **Lua plugins** via `internal/plugin/luahost` - lightweight scripting
-> - **Binary plugins** via `internal/plugin/goplugin` - Go plugins over gRPC
+> - **Lua plugins** via `internal/plugin/lua` - lightweight scripting
+> - **Binary plugins** via `pkg/plugin` - Go plugins over gRPC
 >
-> A new plugin authoring guide will be created. See `plugins/echo/` for an example Lua
-> plugin.
+> For binary plugins, import `github.com/holomush/holomush/pkg/plugin` and implement
+> the `plugin.Handler` interface. See `plugins/echo/` for an example Lua plugin.
 
 This guide covers writing HoloMUSH plugins using the Extism Plugin Development Kit (PDK).
 

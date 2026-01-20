@@ -85,8 +85,12 @@ api/proto/
     plugin.proto     # Plugin service definition
     hostfunc.proto   # Host functions service definition
 
-pkg/pluginsdk/
-  sdk.go             # SDK for go-plugin authors
+pkg/plugin/
+  event.go           # Shared event types
+  sdk.go             # SDK for binary plugin authors
+
+pkg/proto/
+  holomush/plugin/v1/  # Generated proto code (public for external plugins)
 
 schemas/
   plugin.schema.json # JSON Schema for plugin.yaml
@@ -876,33 +880,45 @@ func (h *GoPluginHost) Load(ctx context.Context, manifest Manifest, dir string) 
 ### Plugin SDK
 
 ```go
-// pkg/pluginsdk/sdk.go
-package pluginsdk
+// pkg/plugin/sdk.go
+package plugin
 
-type Plugin interface {
+// Handler is the interface that binary plugins must implement.
+type Handler interface {
     HandleEvent(ctx context.Context, event Event) ([]EmitEvent, error)
 }
 
-type Host interface {
-    EmitEvent(ctx context.Context, stream, eventType string, payload any) error
-    QueryLocation(ctx context.Context, id string) (*Location, error)
-    QueryCharacter(ctx context.Context, id string) (*Character, error)
-    QueryObject(ctx context.Context, id string) (*Object, error)
-    KVGet(ctx context.Context, key string) ([]byte, error)
-    KVSet(ctx context.Context, key string, value []byte) error
-    KVDelete(ctx context.Context, key string) error
-    NewRequestID(ctx context.Context) (string, error)
-    Log(ctx context.Context, level, message string) error
+// ServeConfig configures the plugin server.
+type ServeConfig struct {
+    Handler Handler
 }
 
-func Serve(p Plugin) {
-    plugin.Serve(&plugin.ServeConfig{
-        HandshakeConfig: handshake,
-        Plugins: map[string]plugin.Plugin{
-            "plugin": &pluginGRPC{impl: p},
-        },
-        GRPCServer: plugin.DefaultGRPCServer,
-    })
+// Serve starts the plugin server. This should be called from main().
+func Serve(config *ServeConfig) {
+    // Starts go-plugin gRPC server with the handler
+}
+```
+
+Example binary plugin:
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/holomush/holomush/pkg/plugin"
+)
+
+type EchoPlugin struct{}
+
+func (p *EchoPlugin) HandleEvent(ctx context.Context, event plugin.Event) ([]plugin.EmitEvent, error) {
+    return []plugin.EmitEvent{
+        {Stream: event.Stream, Type: event.Type, Payload: event.Payload},
+    }, nil
+}
+
+func main() {
+    plugin.Serve(&plugin.ServeConfig{Handler: &EchoPlugin{}})
 }
 ```
 
