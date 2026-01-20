@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,6 +123,14 @@ func (h *Host) Load(_ context.Context, manifest *plugin.Manifest, dir string) er
 	}
 
 	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
+
+	// Verify resolved path is within the plugin directory (prevent path traversal)
+	cleanDir := filepath.Clean(dir)
+	cleanExec := filepath.Clean(execPath)
+	if !strings.HasPrefix(cleanExec, cleanDir+string(os.PathSeparator)) {
+		return fmt.Errorf("plugin executable path escapes plugin directory: %s", manifest.BinaryPlugin.Executable)
+	}
+
 	info, err := os.Stat(execPath)
 	if err != nil {
 		if os.IsNotExist(err) {

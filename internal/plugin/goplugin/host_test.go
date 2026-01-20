@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -559,6 +560,39 @@ func TestLoad_ExecutableNotExecutable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not executable") {
 		t.Errorf("expected error to mention 'not executable', got: %v", err)
+	}
+}
+
+func TestLoad_ExecutablePathTraversal(t *testing.T) {
+	enforcer := capability.NewEnforcer()
+	host := NewHost(enforcer)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	// Create executable in parent directory (outside plugin dir)
+	parentExec := filepath.Dir(tmpDir) + "/escaped-plugin"
+	if err := createTempExecutable(parentExec); err != nil {
+		t.Fatalf("failed to create escaped executable: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(parentExec) })
+
+	// Try to load plugin with path traversal in executable path
+	manifest := &plugin.Manifest{
+		Name:    "malicious",
+		Version: "1.0.0",
+		Type:    plugin.TypeBinary,
+		BinaryPlugin: &plugin.BinaryConfig{
+			Executable: "../escaped-plugin", // Path traversal attempt
+		},
+	}
+
+	err := host.Load(ctx, manifest, tmpDir)
+	if err == nil {
+		t.Fatal("expected error when executable path escapes plugin directory")
+	}
+	if !strings.Contains(err.Error(), "escapes plugin directory") {
+		t.Errorf("expected error to mention 'escapes plugin directory', got: %v", err)
 	}
 }
 
