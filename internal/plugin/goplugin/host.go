@@ -116,6 +116,10 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 		return errors.New("manifest cannot be nil")
 	}
 
+	if manifest.Name == "" {
+		return errors.New("plugin name cannot be empty")
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -246,12 +250,19 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 		return nil, fmt.Errorf("%w: %s", ErrPluginNotLoaded, name)
 	}
 
+	// Log warning for unrecognized actor kinds (useful for debugging)
+	actorKind := event.ActorKind.String()
+	if actorKind == "unknown" {
+		slog.Warn("unrecognized actor kind, using 'unknown'",
+			"kind", int(event.ActorKind))
+	}
+
 	protoEvent := &pluginv1.Event{
 		Id:        event.ID,
 		Stream:    event.Stream,
 		Type:      string(event.Type),
 		Timestamp: event.Timestamp,
-		ActorKind: actorKindToString(event.ActorKind),
+		ActorKind: actorKind,
 		ActorId:   event.ActorID,
 		Payload:   event.Payload,
 	}
@@ -276,21 +287,6 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	return emits, nil
 }
 
-// actorKindToString converts ActorKind to string.
-func actorKindToString(kind pluginpkg.ActorKind) string {
-	switch kind {
-	case pluginpkg.ActorCharacter:
-		return "character"
-	case pluginpkg.ActorSystem:
-		return "system"
-	case pluginpkg.ActorPlugin:
-		return "plugin"
-	default:
-		slog.Warn("unrecognized actor kind, using 'unknown'",
-			"kind", int(kind))
-		return "unknown"
-	}
-}
 
 // Plugins returns names of all loaded plugins.
 func (h *Host) Plugins() []string {

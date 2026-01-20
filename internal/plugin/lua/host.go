@@ -182,24 +182,12 @@ func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LT
 	state.SetField(t, "stream", lua.LString(event.Stream))
 	state.SetField(t, "type", lua.LString(string(event.Type)))
 	state.SetField(t, "timestamp", lua.LNumber(event.Timestamp))
-	state.SetField(t, "actor_kind", lua.LString(actorKindToString(event.ActorKind)))
+	state.SetField(t, "actor_kind", lua.LString(event.ActorKind.String()))
 	state.SetField(t, "actor_id", lua.LString(event.ActorID))
 	state.SetField(t, "payload", lua.LString(event.Payload))
 	return t
 }
 
-func actorKindToString(kind pluginpkg.ActorKind) string {
-	switch kind {
-	case pluginpkg.ActorCharacter:
-		return "character"
-	case pluginpkg.ActorSystem:
-		return "system"
-	case pluginpkg.ActorPlugin:
-		return "plugin"
-	default:
-		return "unknown"
-	}
-}
 
 func (h *Host) parseEmitEvents(ret lua.LValue) []pluginpkg.EmitEvent {
 	if ret.Type() == lua.LTNil {

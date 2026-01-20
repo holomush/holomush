@@ -26,6 +26,21 @@ const (
 	ActorPlugin
 )
 
+// String returns the string representation of an ActorKind.
+// Unrecognized kinds return "unknown".
+func (k ActorKind) String() string {
+	switch k {
+	case ActorCharacter:
+		return "character"
+	case ActorSystem:
+		return "system"
+	case ActorPlugin:
+		return "plugin"
+	default:
+		return "unknown"
+	}
+}
+
 // Event is the event structure passed to plugins.
 // This is a simplified version of the internal Event type,
 // serialized as JSON for WASM boundary crossing.
