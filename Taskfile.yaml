@@ -88,6 +88,16 @@ tasks:
     cmds:
       - go test -race -v -tags=integration ./...
 
+  test:ginkgo:
+    desc: Run ginkgo integration tests with parallelism
+    cmds:
+      - ginkgo -r -p --randomize-all ./test/integration/...
+
+  mocks:generate:
+    desc: Generate mocks with mockery
+    cmds:
+      - mockery
+
   # Linting
   # License headers
   license:check:
