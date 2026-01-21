@@ -11,11 +11,14 @@ import (
 	"testing"
 	"time"
 
-	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	holomushtls "github.com/holomush/holomush/internal/tls"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	holomushtls "github.com/holomush/holomush/internal/tls"
 )
 
 // closeWithCheck is a helper that closes an io.Closer and logs any error.
@@ -82,17 +85,13 @@ func (m *mockCoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectR
 func TestNewClient_MissingAddress(t *testing.T) {
 	ctx := context.Background()
 	_, err := NewClient(ctx, ClientConfig{})
-	if err == nil {
-		t.Error("NewClient() should return error for missing address")
-	}
+	assert.Error(t, err, "NewClient() should return error for missing address")
 }
 
 func TestNewClient_ConnectsToServer(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -110,9 +109,7 @@ func TestNewClient_ConnectsToServer(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Verify client is connected by making a call
@@ -124,20 +121,14 @@ func TestNewClient_ConnectsToServer(t *testing.T) {
 		Username: "testuser",
 		Password: "testpass",
 	})
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
-	if !resp.GetSuccess() {
-		t.Error("Authenticate() success = false, want true")
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.GetSuccess(), "Authenticate() success = false, want true")
 }
 
 func TestClient_Authenticate(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	mockServer := &mockCoreServer{
@@ -171,9 +162,7 @@ func TestClient_Authenticate(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	tests := []struct {
@@ -203,12 +192,8 @@ func TestClient_Authenticate(t *testing.T) {
 				Username: tt.username,
 				Password: "password",
 			})
-			if err != nil {
-				t.Fatalf("Authenticate() error = %v", err)
-			}
-			if resp.GetSuccess() != tt.wantSuccess {
-				t.Errorf("Authenticate() success = %v, want %v", resp.GetSuccess(), tt.wantSuccess)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSuccess, resp.GetSuccess())
 		})
 	}
 }
@@ -216,9 +201,7 @@ func TestClient_Authenticate(t *testing.T) {
 func TestClient_HandleCommand(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -236,9 +219,7 @@ func TestClient_HandleCommand(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	resp, err := client.HandleCommand(ctx, &corev1.CommandRequest{
@@ -249,23 +230,15 @@ func TestClient_HandleCommand(t *testing.T) {
 		SessionId: "session-123",
 		Command:   "look",
 	})
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
-	if !resp.GetSuccess() {
-		t.Error("HandleCommand() success = false, want true")
-	}
-	if resp.GetOutput() != "Command executed: look" {
-		t.Errorf("HandleCommand() output = %q, want 'Command executed: look'", resp.GetOutput())
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
+	assert.Equal(t, "Command executed: look", resp.GetOutput())
 }
 
 func TestClient_Disconnect(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -283,9 +256,7 @@ func TestClient_Disconnect(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	resp, err := client.Disconnect(ctx, &corev1.DisconnectRequest{
@@ -295,12 +266,8 @@ func TestClient_Disconnect(t *testing.T) {
 		},
 		SessionId: "session-123",
 	})
-	if err != nil {
-		t.Fatalf("Disconnect() error = %v", err)
-	}
-	if !resp.GetSuccess() {
-		t.Error("Disconnect() success = false, want true")
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.GetSuccess(), "Disconnect() success = false, want true")
 }
 
 func TestClient_WithTLS(t *testing.T) {
@@ -309,41 +276,29 @@ func TestClient_WithTLS(t *testing.T) {
 
 	// Generate CA
 	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
+	require.NoError(t, err, "GenerateCA() error")
 
 	// Generate server cert
 	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("GenerateServerCert() error = %v", err)
-	}
+	require.NoError(t, err, "GenerateServerCert() error")
 
 	// Generate client cert
 	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		t.Fatalf("GenerateClientCert() error = %v", err)
-	}
+	require.NoError(t, err, "GenerateClientCert() error")
 
 	// Save certificates
-	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("SaveCertificates() error = %v", err)
-	}
-	if err := holomushtls.SaveClientCert(tmpDir, clientCert); err != nil {
-		t.Fatalf("SaveClientCert() error = %v", err)
-	}
+	err = holomushtls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "SaveCertificates() error")
+	err = holomushtls.SaveClientCert(tmpDir, clientCert)
+	require.NoError(t, err, "SaveClientCert() error")
 
 	// Load server TLS config
 	serverTLSConfig, err := holomushtls.LoadServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("LoadServerTLS() error = %v", err)
-	}
+	require.NoError(t, err, "LoadServerTLS() error")
 
 	// Start TLS server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLSConfig)))
@@ -356,9 +311,7 @@ func TestClient_WithTLS(t *testing.T) {
 
 	// Load client TLS config
 	clientTLSConfig, err := holomushtls.LoadClientTLS(tmpDir, "gateway", gameID)
-	if err != nil {
-		t.Fatalf("LoadClientTLS() error = %v", err)
-	}
+	require.NoError(t, err, "LoadClientTLS() error")
 
 	// Create client with TLS
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -368,9 +321,7 @@ func TestClient_WithTLS(t *testing.T) {
 		Address:   lis.Addr().String(),
 		TLSConfig: clientTLSConfig,
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Verify mTLS connection works
@@ -382,20 +333,14 @@ func TestClient_WithTLS(t *testing.T) {
 		Username: "testuser",
 		Password: "testpass",
 	})
-	if err != nil {
-		t.Fatalf("Authenticate() with TLS error = %v", err)
-	}
-	if !resp.GetSuccess() {
-		t.Error("Authenticate() with TLS success = false, want true")
-	}
+	require.NoError(t, err, "Authenticate() with TLS error")
+	assert.True(t, resp.GetSuccess(), "Authenticate() with TLS success = false, want true")
 }
 
 func TestClient_KeepaliveConfig(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -415,9 +360,7 @@ func TestClient_KeepaliveConfig(t *testing.T) {
 		KeepaliveTime:    20 * time.Second,
 		KeepaliveTimeout: 10 * time.Second,
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Verify client works (keepalive is internal, just verify connection works)
@@ -429,20 +372,14 @@ func TestClient_KeepaliveConfig(t *testing.T) {
 		Username: "testuser",
 		Password: "testpass",
 	})
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
-	if !resp.GetSuccess() {
-		t.Error("Authenticate() success = false, want true")
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.GetSuccess(), "Authenticate() success = false, want true")
 }
 
 func TestClient_CoreClient(t *testing.T) {
 	// Start a mock server
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -460,16 +397,12 @@ func TestClient_CoreClient(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Verify CoreClient() returns underlying client
 	coreClient := client.CoreClient()
-	if coreClient == nil {
-		t.Error("CoreClient() returned nil")
-	}
+	require.NotNil(t, coreClient, "CoreClient() returned nil")
 
 	// Use the underlying client directly
 	resp, err := coreClient.Authenticate(ctx, &corev1.AuthRequest{
@@ -480,20 +413,14 @@ func TestClient_CoreClient(t *testing.T) {
 		Username: "testuser",
 		Password: "testpass",
 	})
-	if err != nil {
-		t.Fatalf("CoreClient().Authenticate() error = %v", err)
-	}
-	if !resp.GetSuccess() {
-		t.Error("CoreClient().Authenticate() success = false, want true")
-	}
+	require.NoError(t, err, "CoreClient().Authenticate() error")
+	assert.True(t, resp.GetSuccess(), "CoreClient().Authenticate() success = false, want true")
 }
 
 func TestClient_Subscribe(t *testing.T) {
 	// Start a mock server with Subscribe implementation
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -511,9 +438,7 @@ func TestClient_Subscribe(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Call Subscribe
@@ -525,18 +450,12 @@ func TestClient_Subscribe(t *testing.T) {
 		SessionId: "test-session",
 		Streams:   []string{"location:test"},
 	})
-	if err != nil {
-		t.Fatalf("Subscribe() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Read one event from the stream
 	event, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("stream.Recv() error = %v", err)
-	}
-	if event.GetId() == "" {
-		t.Error("Received event has empty ID")
-	}
+	require.NoError(t, err, "stream.Recv() error")
+	assert.NotEmpty(t, event.GetId(), "Received event has empty ID")
 }
 
 // mockCoreServerWithSubscribe includes Subscribe implementation.
@@ -568,17 +487,13 @@ func TestClient_Close_NilConn(t *testing.T) {
 	}
 
 	err := client.Close()
-	if err != nil {
-		t.Errorf("Close() with nil conn should not error, got: %v", err)
-	}
+	assert.NoError(t, err, "Close() with nil conn should not error")
 }
 
 func TestClient_Authenticate_RPCError(t *testing.T) {
 	// Start a mock server that returns an error
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	mockServer := &mockCoreServer{
@@ -602,9 +517,7 @@ func TestClient_Authenticate_RPCError(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Call Authenticate - should get error
@@ -616,17 +529,13 @@ func TestClient_Authenticate_RPCError(t *testing.T) {
 		Username: "testuser",
 		Password: "testpass",
 	})
-	if err == nil {
-		t.Error("Authenticate() should return error when RPC fails")
-	}
+	assert.Error(t, err, "Authenticate() should return error when RPC fails")
 }
 
 func TestClient_HandleCommand_RPCError(t *testing.T) {
 	// Start a mock server that returns an error
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	mockServer := &mockCoreServer{
@@ -650,9 +559,7 @@ func TestClient_HandleCommand_RPCError(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Call HandleCommand - should get error
@@ -664,17 +571,13 @@ func TestClient_HandleCommand_RPCError(t *testing.T) {
 		SessionId: "test-session",
 		Command:   "say hello",
 	})
-	if err == nil {
-		t.Error("HandleCommand() should return error when RPC fails")
-	}
+	assert.Error(t, err, "HandleCommand() should return error when RPC fails")
 }
 
 func TestClient_Disconnect_RPCError(t *testing.T) {
 	// Start a mock server that returns an error
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	mockServer := &mockCoreServer{
@@ -698,9 +601,7 @@ func TestClient_Disconnect_RPCError(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Call Disconnect - should get error
@@ -711,17 +612,13 @@ func TestClient_Disconnect_RPCError(t *testing.T) {
 		},
 		SessionId: "test-session",
 	})
-	if err == nil {
-		t.Error("Disconnect() should return error when RPC fails")
-	}
+	assert.Error(t, err, "Disconnect() should return error when RPC fails")
 }
 
 func TestClient_Subscribe_StreamError(t *testing.T) {
 	// Start a mock server that returns an error during streaming
 	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
 	server := grpc.NewServer()
@@ -739,9 +636,7 @@ func TestClient_Subscribe_StreamError(t *testing.T) {
 	client, err := NewClient(ctx, ClientConfig{
 		Address: lis.Addr().String(),
 	})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	require.NoError(t, err)
 	defer closeWithCheck(t, client)
 
 	// Call Subscribe - connection is established
@@ -753,15 +648,11 @@ func TestClient_Subscribe_StreamError(t *testing.T) {
 		SessionId: "invalid-session",
 		Streams:   []string{"location:test"},
 	})
-	if err != nil {
-		t.Fatalf("Subscribe() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// The error comes when we try to receive - server returns EOF
 	_, err = stream.Recv()
-	if err == nil {
-		t.Error("stream.Recv() should return error when server returns EOF")
-	}
+	assert.Error(t, err, "stream.Recv() should return error when server returns EOF")
 }
 
 // mockCoreServerWithSubscribeError returns error for Subscribe.
