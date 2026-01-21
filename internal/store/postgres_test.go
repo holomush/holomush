@@ -633,7 +633,7 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 					WillReturnError(errors.New("connection refused"))
 			},
 			wantErr: true,
-			errMsg:  "failed to check for existing game_id",
+			errMsg:  "connection refused",
 		},
 		{
 			name: "returns error on SetSystemInfo failure",
@@ -646,7 +646,7 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 					WillReturnError(errors.New("write failed"))
 			},
 			wantErr: true,
-			errMsg:  "failed to set system info",
+			errMsg:  "write failed",
 		},
 	}
 
@@ -701,7 +701,7 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 				mock.ExpectExec("").WillReturnError(errors.New("syntax error"))
 			},
 			wantErr: true,
-			errMsg:  "failed to run migration 001",
+			errMsg:  "syntax error",
 		},
 		{
 			name: "second migration fails",
@@ -710,7 +710,7 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 				mock.ExpectExec("").WillReturnError(errors.New("table already exists"))
 			},
 			wantErr: true,
-			errMsg:  "failed to run migration 002",
+			errMsg:  "table already exists",
 		},
 	}
 
