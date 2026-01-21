@@ -94,9 +94,11 @@ func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
 	assert.Equal(t, `{"text":"hello"}`, emit.GetPayload())
 }
 
+var errHandlerFailed = errors.New("handler failed")
+
 func TestPluginServerAdapter_HandleEvent_HandlerError(t *testing.T) {
 	handler := &adapterTestHandler{
-		err: errors.New("handler failed"),
+		err: errHandlerFailed,
 	}
 	adapter := &pluginServerAdapter{handler: handler}
 
@@ -108,7 +110,7 @@ func TestPluginServerAdapter_HandleEvent_HandlerError(t *testing.T) {
 
 	_, err := adapter.HandleEvent(context.Background(), req)
 	require.Error(t, err, "expected error when handler fails")
-	assert.Equal(t, "handler error: handler failed", err.Error())
+	assert.ErrorIs(t, err, errHandlerFailed, "should wrap handler error")
 }
 
 func TestPluginServerAdapter_HandleEvent_EmptyEmits(t *testing.T) {

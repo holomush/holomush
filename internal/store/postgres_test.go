@@ -73,7 +73,7 @@ func TestPostgresEventStore_Append(t *testing.T) {
 					WillReturnError(errors.New("connection refused"))
 			},
 			wantErr: true,
-			errMsg:  "failed to append event",
+			errMsg:  "connection refused",
 		},
 		{
 			name:  "append pose event",
@@ -210,7 +210,7 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 					WillReturnError(errors.New("database error"))
 			},
 			wantErr: true,
-			errMsg:  "failed to query events",
+			errMsg:  "database error",
 		},
 		{
 			name:    "scan error - invalid ULID",
@@ -225,7 +225,7 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			wantErr: true,
-			errMsg:  "corrupt event ID",
+			errMsg:  "bad data size",
 		},
 		{
 			name:    "replay with limit",
@@ -317,7 +317,7 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			wantErr: true,
-			errMsg:  "failed to scan event row",
+			errMsg:  "not supported for value kind",
 		},
 	}
 
@@ -394,7 +394,7 @@ func TestPostgresEventStore_LastEventID(t *testing.T) {
 					WillReturnError(errors.New("connection lost"))
 			},
 			wantID: ulid.ULID{},
-			errMsg: "failed to query last event ID",
+			errMsg: "connection lost",
 		},
 		{
 			name:   "corrupt ULID in database",
@@ -406,7 +406,7 @@ func TestPostgresEventStore_LastEventID(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			wantID: ulid.ULID{},
-			errMsg: "corrupt event ID",
+			errMsg: "bad data size",
 		},
 	}
 
@@ -479,7 +479,7 @@ func TestPostgresEventStore_GetSystemInfo(t *testing.T) {
 					WillReturnError(errors.New("connection timeout"))
 			},
 			wantErr: true,
-			errMsg:  "failed to get system info",
+			errMsg:  "connection timeout",
 		},
 	}
 
@@ -553,7 +553,7 @@ func TestPostgresEventStore_SetSystemInfo(t *testing.T) {
 					WillReturnError(errors.New("disk full"))
 			},
 			wantErr: true,
-			errMsg:  "failed to set system info",
+			errMsg:  "disk full",
 		},
 	}
 

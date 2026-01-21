@@ -6,7 +6,6 @@ package observability
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/samber/oops"
 )
 
 // ReadinessChecker returns whether the service is ready to accept connections.
@@ -97,13 +97,13 @@ func (s *Server) Metrics() *Metrics {
 // Callers should monitor this channel to detect server failures.
 func (s *Server) Start() (<-chan error, error) {
 	if !s.running.CompareAndSwap(false, true) {
-		return nil, fmt.Errorf("observability server already running")
+		return nil, oops.Errorf("observability server already running")
 	}
 
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		s.running.Store(false)
-		return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		return nil, oops.With("addr", s.addr).Wrap(err)
 	}
 	s.listener = listener
 
@@ -153,7 +153,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		if err := s.httpServer.Shutdown(ctx); err != nil {
 			// Restore running state on failure so the server can be stopped again
 			s.running.Store(true)
-			return fmt.Errorf("failed to shutdown observability server: %w", err)
+			return oops.With("operation", "shutdown_observability_server").Wrap(err)
 		}
 	}
 

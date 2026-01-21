@@ -219,7 +219,7 @@ func TestEngine_HandleSay_StoreError(t *testing.T) {
 
 	err := engine.HandleSay(ctx, charID, locationID, "Hello")
 	require.Error(t, err, "Expected error from failing store")
-	assert.Equal(t, "failed to append say event: store failure", err.Error())
+	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
 
 func TestEngine_HandlePose_StoreError(t *testing.T) {
@@ -233,7 +233,7 @@ func TestEngine_HandlePose_StoreError(t *testing.T) {
 
 	err := engine.HandlePose(ctx, charID, locationID, "waves")
 	require.Error(t, err, "Expected error from failing store")
-	assert.Equal(t, "failed to append pose event: store failure", err.Error())
+	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
 
 func TestEngine_ReplayEvents_StoreError(t *testing.T) {
@@ -246,5 +246,5 @@ func TestEngine_ReplayEvents_StoreError(t *testing.T) {
 
 	_, err := engine.ReplayEvents(ctx, charID, "location:test", 10)
 	require.Error(t, err, "Expected error from failing store")
-	assert.Equal(t, "failed to replay events: store failure", err.Error())
+	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }

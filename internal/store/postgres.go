@@ -8,12 +8,12 @@ import (
 	"context"
 	_ "embed"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
 )
@@ -45,7 +45,7 @@ type PostgresEventStore struct {
 func NewPostgresEventStore(ctx context.Context, dsn string) (*PostgresEventStore, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, oops.With("operation", "connect to database").Wrap(err)
 	}
 	return &PostgresEventStore{pool: pool}, nil
 }
@@ -60,7 +60,7 @@ func (s *PostgresEventStore) Migrate(ctx context.Context) error {
 	migrations := []string{migration001SQL, migration002SQL}
 	for i, sql := range migrations {
 		if _, err := s.pool.Exec(ctx, sql); err != nil {
-			return fmt.Errorf("failed to run migration %03d: %w", i+1, err)
+			return oops.With("operation", "run migration").With("migration_number", i+1).Wrap(err)
 		}
 	}
 	return nil
@@ -80,7 +80,7 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 		event.Timestamp,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to append event (id=%s, stream=%s): %w", event.ID.String(), event.Stream, err)
+		return oops.With("operation", "append event").With("event_id", event.ID.String()).With("stream", event.Stream).Wrap(err)
 	}
 	return nil
 }
@@ -102,7 +102,7 @@ func (s *PostgresEventStore) Replay(ctx context.Context, stream string, afterID 
 			stream, afterID.String(), limit)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to query events (stream=%s): %w", stream, err)
+		return nil, oops.With("operation", "query events").With("stream", stream).Wrap(err)
 	}
 	defer rows.Close()
 
@@ -112,17 +112,17 @@ func (s *PostgresEventStore) Replay(ctx context.Context, stream string, afterID 
 		var idStr string
 		var typeStr string
 		if scanErr := rows.Scan(&idStr, &e.Stream, &typeStr, &e.Actor.Kind, &e.Actor.ID, &e.Payload, &e.Timestamp); scanErr != nil {
-			return nil, fmt.Errorf("failed to scan event row: %w", scanErr)
+			return nil, oops.With("operation", "scan event row").With("stream", stream).Wrap(scanErr)
 		}
 		e.ID, err = ulid.Parse(idStr)
 		if err != nil {
-			return nil, fmt.Errorf("corrupt event ID in database (stream=%s, id=%s): %w", stream, idStr, err)
+			return nil, oops.With("operation", "parse event ID").With("stream", stream).With("raw_id", idStr).Wrap(err)
 		}
 		e.Type = core.EventType(typeStr)
 		events = append(events, e)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating events: %w", err)
+		return nil, oops.With("operation", "iterate events").With("stream", stream).Wrap(err)
 	}
 	return events, nil
 }
@@ -137,11 +137,11 @@ func (s *PostgresEventStore) LastEventID(ctx context.Context, stream string) (ul
 		return ulid.ULID{}, core.ErrStreamEmpty
 	}
 	if err != nil {
-		return ulid.ULID{}, fmt.Errorf("failed to query last event ID (stream=%s): %w", stream, err)
+		return ulid.ULID{}, oops.With("operation", "query last event ID").With("stream", stream).Wrap(err)
 	}
 	id, err := ulid.Parse(idStr)
 	if err != nil {
-		return ulid.ULID{}, fmt.Errorf("corrupt event ID in stream %s: %w", stream, err)
+		return ulid.ULID{}, oops.With("operation", "parse last event ID").With("stream", stream).With("raw_id", idStr).Wrap(err)
 	}
 	return id, nil
 }
@@ -153,10 +153,10 @@ func (s *PostgresEventStore) GetSystemInfo(ctx context.Context, key string) (str
 		`SELECT value FROM holomush_system_info WHERE key = $1`,
 		key).Scan(&value)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", fmt.Errorf("%w: %s", ErrSystemInfoNotFound, key)
+		return "", oops.With("key", key).Wrap(ErrSystemInfoNotFound)
 	}
 	if err != nil {
-		return "", fmt.Errorf("failed to get system info %q: %w", key, err)
+		return "", oops.With("operation", "get system info").With("key", key).Wrap(err)
 	}
 	return value, nil
 }
@@ -168,7 +168,7 @@ func (s *PostgresEventStore) SetSystemInfo(ctx context.Context, key, value strin
 		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
 		key, value)
 	if err != nil {
-		return fmt.Errorf("failed to set system info %q: %w", key, err)
+		return oops.With("operation", "set system info").With("key", key).Wrap(err)
 	}
 	return nil
 }
@@ -181,7 +181,7 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 	}
 	// Only generate new ID if key genuinely doesn't exist
 	if !errors.Is(err, ErrSystemInfoNotFound) {
-		return "", fmt.Errorf("failed to check for existing game_id: %w", err)
+		return "", oops.With("operation", "check existing game_id").Wrap(err)
 	}
 
 	// Generate new game_id

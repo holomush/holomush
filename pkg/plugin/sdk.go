@@ -6,10 +6,10 @@ package plugin
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	"github.com/samber/oops"
 	"google.golang.org/grpc"
 )
 
@@ -126,7 +126,7 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 	// Call the user's handler
 	emits, err := a.handler.HandleEvent(ctx, event)
 	if err != nil {
-		return nil, fmt.Errorf("handler error: %w", err)
+		return nil, oops.With("event_id", event.ID).Wrap(err)
 	}
 
 	// Convert SDK EmitEvent to proto EmitEvent

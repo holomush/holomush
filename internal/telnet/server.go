@@ -6,12 +6,12 @@ package telnet
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
 	"sync"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/samber/oops"
 )
 
 // Server is a telnet server.
@@ -48,7 +48,7 @@ func (s *Server) Addr() string {
 func (s *Server) Run(ctx context.Context) error {
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
-		return fmt.Errorf("failed to listen: %w", err)
+		return oops.With("addr", s.addr).Wrap(err)
 	}
 
 	s.mu.Lock()

@@ -271,8 +271,8 @@ func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
 	_, err = LoadControlServerTLS(tmpDir, "core")
 	require.Error(t, err, "LoadControlServerTLS should fail with invalid certificate content")
 
-	// Error should mention certificate loading failure
-	assert.Contains(t, err.Error(), "failed to load server certificate")
+	// Error should be about certificate loading failure (oops wraps underlying error)
+	assert.Contains(t, err.Error(), "PEM")
 }
 
 func TestLoadControlServerTLS_FailsWithMalformedCAPEM(t *testing.T) {
@@ -355,8 +355,8 @@ func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
 	_, err = LoadControlServerTLS(tmpDir, "core")
 	require.Error(t, err, "LoadControlServerTLS should fail with missing CA file")
 
-	// Error should mention CA read failure
-	assert.Contains(t, err.Error(), "failed to read CA certificate")
+	// Error should be about CA read failure (oops wraps underlying error)
+	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
 func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {

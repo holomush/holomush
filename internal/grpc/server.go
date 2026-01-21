@@ -7,12 +7,12 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -244,7 +244,7 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 func (s *CoreServer) executeCommand(ctx context.Context, info *SessionInfo, command string) (string, error) {
 	parts := strings.SplitN(command, " ", 2)
 	if len(parts) == 0 {
-		return "", fmt.Errorf("empty command")
+		return "", oops.Code("EMPTY_COMMAND").Errorf("empty command")
 	}
 
 	cmd := strings.ToLower(parts[0])
@@ -256,18 +256,18 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *SessionInfo, comm
 	switch cmd {
 	case "say":
 		if err := s.engine.HandleSay(ctx, info.CharacterID, info.LocationID, arg); err != nil {
-			return "", fmt.Errorf("say failed: %w", err)
+			return "", oops.Code("COMMAND_FAILED").With("command", "say").Wrap(err)
 		}
 		return "You say: " + arg, nil
 
 	case "pose", ":":
 		if err := s.engine.HandlePose(ctx, info.CharacterID, info.LocationID, arg); err != nil {
-			return "", fmt.Errorf("pose failed: %w", err)
+			return "", oops.Code("COMMAND_FAILED").With("command", "pose").Wrap(err)
 		}
 		return "", nil
 
 	default:
-		return "", fmt.Errorf("unknown command: %s", cmd)
+		return "", oops.Code("UNKNOWN_COMMAND").With("command", cmd).Errorf("unknown command: %s", cmd)
 	}
 }
 
@@ -288,7 +288,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// Look up session
 	info, ok := s.sessionStore.Get(req.SessionId)
 	if !ok {
-		return fmt.Errorf("session not found: %s", req.SessionId)
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
 	// Subscribe to requested streams
@@ -311,7 +311,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				"session_id", req.SessionId,
 				"reason", ctx.Err(),
 			)
-			return fmt.Errorf("subscription cancelled: %w", ctx.Err())
+			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", req.SessionId).Wrap(ctx.Err())
 
 		case event, ok := <-merged:
 			if !ok {
@@ -339,7 +339,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 					"event_id", event.ID.String(),
 					"error", err,
 				)
-				return fmt.Errorf("failed to send event: %w", err)
+				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).With("event_id", event.ID.String()).Wrap(err)
 			}
 		}
 	}

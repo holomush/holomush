@@ -6,10 +6,10 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // SayPayload is the JSON payload for say events.
@@ -42,7 +42,7 @@ func NewEngine(store EventStore, sessions *SessionManager, broadcaster *Broadcas
 func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, message string) error {
 	payload, err := json.Marshal(SayPayload{Message: message})
 	if err != nil {
-		return fmt.Errorf("failed to marshal say payload: %w", err)
+		return oops.With("operation", "marshal_say_payload").Wrap(err)
 	}
 
 	event := Event{
@@ -55,7 +55,7 @@ func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, me
 	}
 
 	if err := e.store.Append(ctx, event); err != nil {
-		return fmt.Errorf("failed to append say event: %w", err)
+		return oops.With("operation", "append_say_event").Wrap(err)
 	}
 
 	// Broadcast to subscribers (nil-safe)
@@ -70,7 +70,7 @@ func (e *Engine) HandleSay(ctx context.Context, charID, locationID ulid.ULID, me
 func (e *Engine) HandlePose(ctx context.Context, charID, locationID ulid.ULID, action string) error {
 	payload, err := json.Marshal(PosePayload{Action: action})
 	if err != nil {
-		return fmt.Errorf("failed to marshal pose payload: %w", err)
+		return oops.With("operation", "marshal_pose_payload").Wrap(err)
 	}
 
 	event := Event{
@@ -83,7 +83,7 @@ func (e *Engine) HandlePose(ctx context.Context, charID, locationID ulid.ULID, a
 	}
 
 	if err := e.store.Append(ctx, event); err != nil {
-		return fmt.Errorf("failed to append pose event: %w", err)
+		return oops.With("operation", "append_pose_event").Wrap(err)
 	}
 
 	// Broadcast to subscribers (nil-safe)
@@ -103,7 +103,7 @@ func (e *Engine) ReplayEvents(ctx context.Context, charID ulid.ULID, stream stri
 	}
 	events, err := e.store.Replay(ctx, stream, afterID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to replay events: %w", err)
+		return nil, oops.With("operation", "replay_events").With("stream", stream).Wrap(err)
 	}
 	return events, nil
 }
