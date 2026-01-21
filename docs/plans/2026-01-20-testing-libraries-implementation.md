@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Migrate 41 test files (~1296 assertion sites, 24 mocks) to testify and ginkgo.
+**Goal:** Migrate 41 test files (~1387 assertion sites, 24 mocks) to testify and ginkgo.
 
 **Architecture:** Use testify assert/require for unit test assertions, mockery for mock generation, and ginkgo/gomega for integration tests with BDD structure.
 
@@ -10,7 +10,7 @@
 
 **Scope:**
 
-- 41 test files with ~1296 assertion sites
+- 41 test files with ~1387 assertion sites
 - 24 hand-rolled mock structs to replace
 - 3 integration test files to convert to ginkgo
 
@@ -87,11 +87,10 @@ packages:
   github.com/holomush/holomush/internal/core:
     interfaces:
       EventStore:
-      SessionStore:
-      Broadcaster:
   github.com/holomush/holomush/internal/grpc:
     interfaces:
       Authenticator:
+      SessionStore:
 ```
 
 **Step 2: Generate initial mocks**

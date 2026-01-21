@@ -8,7 +8,7 @@
 
 **Tech Stack:** github.com/samber/oops v1.16+
 
-**Scope:** 208 error sites across 18 non-test files.
+**Scope:** 208 error sites across 21 non-test files.
 
 **Dependency:** Task 2 (pkg/errutil) requires testify. Complete Task 1 of testing-libraries-implementation first.
 
@@ -67,6 +67,7 @@ package errutil_test
 import (
     "bytes"
     "encoding/json"
+    "errors"
     "log/slog"
     "testing"
 
