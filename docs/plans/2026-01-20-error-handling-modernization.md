@@ -25,8 +25,14 @@ return oops.Errorf("plugin not found").With("name", name)
 
 // Wrapping existing error
 return oops.Wrap(err).With("plugin", name).With("operation", "load")
+```
 
-// At package boundaries, add code for categorization
+### API Boundaries
+
+At public API boundaries (gRPC handlers, CLI commands), add error codes for programmatic handling:
+
+```go
+// In a gRPC handler or CLI command
 return oops.Errorf("authentication failed").
     Code("AUTH_FAILED").
     With("user", userID)
@@ -88,10 +94,10 @@ return g.Wait()
 
 ### Helper Package
 
-Create `pkg/errors/log.go`:
+Create `pkg/errutil/log.go`:
 
 ```go
-package errors
+package errutil
 
 import (
     "log/slog"
@@ -123,10 +129,10 @@ func LogError(logger *slog.Logger, msg string, err error) {
 
 ### Test Helpers
 
-Create `pkg/errors/testing.go`:
+Create `pkg/errutil/testing.go`:
 
 ```go
-package errors
+package errutil
 
 import (
     "testing"
@@ -155,7 +161,7 @@ func AssertErrorCode(t *testing.T, err error, code string) {
 - [ ] Key identifiers added via `.With()` (plugin names, stream IDs, etc.)
 - [ ] Error codes added at gRPC and CLI boundaries
 - [ ] `sync.WaitGroup` replaced with `errgroup` in grpc/server.go
-- [ ] `pkg/errors` helper package created with `LogError` and test utilities
+- [ ] `pkg/errutil` helper package created with `LogError` and test utilities
 - [ ] All existing tests pass
 - [ ] No new linter warnings
 
