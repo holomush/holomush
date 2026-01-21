@@ -11,6 +11,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
@@ -56,16 +59,12 @@ func (h *mockHost) Close(_ context.Context) error {
 // Helper functions for creating test fixtures with secure permissions.
 func mkdirAll(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(path, 0o750); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(path, 0o750))
 }
 
 func writeFile(t *testing.T, path string, content []byte) {
 	t.Helper()
-	if err := os.WriteFile(path, content, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, content, 0o600))
 }
 
 func TestManager_Discover(t *testing.T) {
@@ -89,20 +88,11 @@ lua-plugin:
 
 	mgr := plugin.NewManager(filepath.Join(dir, "plugins"))
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(manifests) != 1 {
-		t.Fatalf("len(manifests) = %d, want 1", len(manifests))
-	}
-
-	if manifests[0].Manifest.Name != "echo-bot" {
-		t.Errorf("Name = %q, want %q", manifests[0].Manifest.Name, "echo-bot")
-	}
-	if manifests[0].Dir != echoDir {
-		t.Errorf("Dir = %q, want %q", manifests[0].Dir, echoDir)
-	}
+	require.Len(t, manifests, 1)
+	assert.Equal(t, "echo-bot", manifests[0].Manifest.Name)
+	assert.Equal(t, echoDir, manifests[0].Dir)
 }
 
 func TestManager_Discover_SkipsInvalidPlugins(t *testing.T) {
@@ -128,13 +118,8 @@ lua-plugin:
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	// Should succeed but only return valid plugin
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	if len(manifests) != 1 {
-		t.Errorf("len(manifests) = %d, want 1 (valid only)", len(manifests))
-	}
+	require.NoError(t, err)
+	assert.Len(t, manifests, 1, "len(manifests) should be 1 (valid only)")
 }
 
 func TestManager_Discover_EmptyDirectory(t *testing.T) {
@@ -144,13 +129,8 @@ func TestManager_Discover_EmptyDirectory(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	if len(manifests) != 0 {
-		t.Errorf("len(manifests) = %d, want 0 for empty directory", len(manifests))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, manifests, "len(manifests) should be 0 for empty directory")
 }
 
 func TestManager_Discover_NonExistentDirectory(t *testing.T) {
@@ -159,13 +139,8 @@ func TestManager_Discover_NonExistentDirectory(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v (should handle non-existent dir gracefully)", err)
-	}
-
-	if len(manifests) != 0 {
-		t.Errorf("len(manifests) = %d, want 0 for non-existent directory", len(manifests))
-	}
+	require.NoError(t, err, "Discover() should handle non-existent dir gracefully")
+	assert.Empty(t, manifests, "len(manifests) should be 0 for non-existent directory")
 }
 
 func TestManager_Discover_SkipsFilesNotDirectories(t *testing.T) {
@@ -189,13 +164,8 @@ lua-plugin:
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	if len(manifests) != 1 {
-		t.Errorf("len(manifests) = %d, want 1 (files should be skipped)", len(manifests))
-	}
+	require.NoError(t, err)
+	assert.Len(t, manifests, 1, "len(manifests) should be 1 (files should be skipped)")
 }
 
 func TestManager_Discover_SkipsDirWithoutManifest(t *testing.T) {
@@ -210,13 +180,8 @@ func TestManager_Discover_SkipsDirWithoutManifest(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	if len(manifests) != 0 {
-		t.Errorf("len(manifests) = %d, want 0 (dir without manifest should be skipped)", len(manifests))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, manifests, "len(manifests) should be 0 (dir without manifest should be skipped)")
 }
 
 func TestManager_Discover_MultiplePlugins(t *testing.T) {
@@ -242,13 +207,8 @@ func TestManager_Discover_MultiplePlugins(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	if len(manifests) != 3 {
-		t.Fatalf("len(manifests) = %d, want 3", len(manifests))
-	}
+	require.NoError(t, err)
+	require.Len(t, manifests, 3)
 
 	// Sort by name for deterministic comparison
 	names := make([]string, 0, len(manifests))
@@ -258,11 +218,7 @@ func TestManager_Discover_MultiplePlugins(t *testing.T) {
 	sort.Strings(names)
 
 	expected := []string{"alpha-plugin", "beta-plugin", "gamma-plugin"}
-	for i, name := range names {
-		if name != expected[i] {
-			t.Errorf("names[%d] = %q, want %q", i, name, expected[i])
-		}
-	}
+	assert.Equal(t, expected, names)
 }
 
 func TestManager_Discover_BinaryPlugin(t *testing.T) {
@@ -281,17 +237,9 @@ binary-plugin:
 
 	mgr := plugin.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
-	}
-
-	if len(manifests) != 1 {
-		t.Fatalf("len(manifests) = %d, want 1", len(manifests))
-	}
-
-	if manifests[0].Manifest.Type != plugin.TypeBinary {
-		t.Errorf("Type = %v, want %v", manifests[0].Manifest.Type, plugin.TypeBinary)
-	}
+	require.NoError(t, err)
+	require.Len(t, manifests, 1)
+	assert.Equal(t, plugin.TypeBinary, manifests[0].Manifest.Type)
 }
 
 func TestManager_ListPlugins_NoPluginsLoaded(t *testing.T) {
@@ -301,10 +249,7 @@ func TestManager_ListPlugins_NoPluginsLoaded(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir)
 	plugins := mgr.ListPlugins()
-
-	if len(plugins) != 0 {
-		t.Errorf("ListPlugins() = %v, want empty slice before any plugins loaded", plugins)
-	}
+	assert.Empty(t, plugins, "ListPlugins() should return empty slice before any plugins loaded")
 }
 
 func TestManager_LoadAll_LuaPlugins(t *testing.T) {
@@ -327,17 +272,11 @@ lua-plugin:
 
 	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
-	if err != nil {
-		t.Fatalf("LoadAll() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	plugins := mgr.ListPlugins()
-	if len(plugins) != 1 {
-		t.Fatalf("ListPlugins() returned %d plugins, want 1", len(plugins))
-	}
-	if plugins[0] != "echo-bot" {
-		t.Errorf("ListPlugins()[0] = %q, want %q", plugins[0], "echo-bot")
-	}
+	require.Len(t, plugins, 1, "ListPlugins() returned wrong number of plugins")
+	assert.Equal(t, "echo-bot", plugins[0])
 }
 
 func TestManager_LoadAll_SkipsInvalidManifests(t *testing.T) {
@@ -360,14 +299,10 @@ func TestManager_LoadAll_SkipsInvalidManifests(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
-	if err != nil {
-		t.Fatalf("LoadAll() error = %v (should skip invalid plugins)", err)
-	}
+	require.NoError(t, err, "LoadAll() should skip invalid plugins")
 
 	plugins := mgr.ListPlugins()
-	if len(plugins) != 1 {
-		t.Errorf("ListPlugins() returned %d plugins, want 1 (invalid should be skipped)", len(plugins))
-	}
+	assert.Len(t, plugins, 1, "ListPlugins() should return 1 (invalid should be skipped)")
 }
 
 func TestManager_LoadAll_SkipsLuaPluginsWithoutHost(t *testing.T) {
@@ -383,15 +318,11 @@ func TestManager_LoadAll_SkipsLuaPluginsWithoutHost(t *testing.T) {
 	// Create manager without LuaHost - Lua plugins should be skipped
 	mgr := plugin.NewManager(pluginsDir)
 	err := mgr.LoadAll(context.Background())
-	if err != nil {
-		t.Fatalf("LoadAll() error = %v (should skip Lua plugins without host)", err)
-	}
+	require.NoError(t, err, "LoadAll() should skip Lua plugins without host")
 
 	// No plugins should be loaded since there's no LuaHost
 	plugins := mgr.ListPlugins()
-	if len(plugins) != 0 {
-		t.Errorf("ListPlugins() = %v, want empty (no LuaHost)", plugins)
-	}
+	assert.Empty(t, plugins, "ListPlugins() should be empty (no LuaHost)")
 }
 
 func TestManager_LoadAll_SkipsBinaryPlugins(t *testing.T) {
@@ -405,15 +336,11 @@ func TestManager_LoadAll_SkipsBinaryPlugins(t *testing.T) {
 
 	mgr := plugin.NewManager(pluginsDir)
 	err := mgr.LoadAll(context.Background())
-	if err != nil {
-		t.Fatalf("LoadAll() error = %v (should skip binary plugins)", err)
-	}
+	require.NoError(t, err, "LoadAll() should skip binary plugins")
 
 	// Binary plugins are not yet supported
 	plugins := mgr.ListPlugins()
-	if len(plugins) != 0 {
-		t.Errorf("ListPlugins() = %v, want empty (binary not supported)", plugins)
-	}
+	assert.Empty(t, plugins, "ListPlugins() should be empty (binary not supported)")
 }
 
 func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
@@ -432,14 +359,10 @@ func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
 	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
 	// LoadAll should succeed but log a warning and skip the bad plugin
-	if err != nil {
-		t.Fatalf("LoadAll() error = %v (should skip plugins with load errors)", err)
-	}
+	require.NoError(t, err, "LoadAll() should skip plugins with load errors")
 
 	plugins := mgr.ListPlugins()
-	if len(plugins) != 0 {
-		t.Errorf("ListPlugins() = %v, want empty (bad Lua syntax)", plugins)
-	}
+	assert.Empty(t, plugins, "ListPlugins() should be empty (bad Lua syntax)")
 }
 
 func TestManager_Close_WithoutLuaHost(t *testing.T) {
@@ -450,9 +373,7 @@ func TestManager_Close_WithoutLuaHost(t *testing.T) {
 	mgr := plugin.NewManager(pluginsDir)
 
 	// Close should succeed even without LuaHost
-	if err := mgr.Close(context.Background()); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
+	assert.NoError(t, mgr.Close(context.Background()))
 }
 
 func TestManager_Close(t *testing.T) {
@@ -467,24 +388,16 @@ func TestManager_Close(t *testing.T) {
 
 	luaHost := pluginlua.NewHost()
 	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
-	if err := mgr.LoadAll(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Verify plugin is loaded
-	if len(mgr.ListPlugins()) != 1 {
-		t.Fatal("expected 1 plugin to be loaded")
-	}
+	require.Len(t, mgr.ListPlugins(), 1, "expected 1 plugin to be loaded")
 
 	// Close manager
-	if err := mgr.Close(context.Background()); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
+	require.NoError(t, mgr.Close(context.Background()))
 
 	// After close, ListPlugins should return empty
-	if len(mgr.ListPlugins()) != 0 {
-		t.Errorf("ListPlugins() after Close() = %v, want empty", mgr.ListPlugins())
-	}
+	assert.Empty(t, mgr.ListPlugins(), "ListPlugins() after Close() should be empty")
 }
 
 func TestManager_Close_PropagatesHostError(t *testing.T) {
@@ -500,26 +413,16 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 	hostErr := errors.New("cleanup failed")
 	mock := &mockHost{closeErr: hostErr}
 	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(mock))
-	if err := mgr.LoadAll(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Verify plugin is loaded
-	if len(mgr.ListPlugins()) != 1 {
-		t.Fatal("expected 1 plugin to be loaded")
-	}
+	require.Len(t, mgr.ListPlugins(), 1, "expected 1 plugin to be loaded")
 
 	// Close should return the error
 	err := mgr.Close(context.Background())
-	if err == nil {
-		t.Fatal("Close() should return error from host")
-	}
-	if !errors.Is(err, hostErr) {
-		t.Errorf("Close() error = %v, want error wrapping %v", err, hostErr)
-	}
+	require.Error(t, err, "Close() should return error from host")
+	assert.ErrorIs(t, err, hostErr)
 
 	// Even on error, loaded map should be cleared
-	if len(mgr.ListPlugins()) != 0 {
-		t.Errorf("ListPlugins() after failed Close() = %v, want empty", mgr.ListPlugins())
-	}
+	assert.Empty(t, mgr.ListPlugins(), "ListPlugins() after failed Close() should be empty")
 }

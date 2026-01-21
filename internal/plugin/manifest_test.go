@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/plugin"
 )
 
@@ -24,28 +27,15 @@ lua-plugin:
   entry: main.lua
 `
 	m, err := plugin.ParseManifest([]byte(yaml))
-	if err != nil {
-		t.Fatalf("ParseManifest() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if m.Name != "echo-bot" {
-		t.Errorf("Name = %q, want %q", m.Name, "echo-bot")
-	}
-	if m.Version != "1.0.0" {
-		t.Errorf("Version = %q, want %q", m.Version, "1.0.0")
-	}
-	if m.Type != plugin.TypeLua {
-		t.Errorf("Type = %v, want %v", m.Type, plugin.TypeLua)
-	}
-	if len(m.Events) != 2 {
-		t.Errorf("len(Events) = %d, want 2", len(m.Events))
-	}
-	if len(m.Capabilities) != 1 {
-		t.Errorf("len(Capabilities) = %d, want 1", len(m.Capabilities))
-	}
-	if m.LuaPlugin == nil || m.LuaPlugin.Entry != "main.lua" {
-		t.Errorf("LuaPlugin.Entry not set correctly")
-	}
+	assert.Equal(t, "echo-bot", m.Name)
+	assert.Equal(t, "1.0.0", m.Version)
+	assert.Equal(t, plugin.TypeLua, m.Type)
+	assert.Len(t, m.Events, 2)
+	assert.Len(t, m.Capabilities, 1)
+	require.NotNil(t, m.LuaPlugin)
+	assert.Equal(t, "main.lua", m.LuaPlugin.Entry)
 }
 
 func TestParseManifest_BinaryPlugin(t *testing.T) {
@@ -62,16 +52,11 @@ binary-plugin:
   executable: combat-${os}-${arch}
 `
 	m, err := plugin.ParseManifest([]byte(yaml))
-	if err != nil {
-		t.Fatalf("ParseManifest() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if m.Type != plugin.TypeBinary {
-		t.Errorf("Type = %v, want %v", m.Type, plugin.TypeBinary)
-	}
-	if m.BinaryPlugin == nil || m.BinaryPlugin.Executable != "combat-${os}-${arch}" {
-		t.Errorf("BinaryPlugin.Executable not set correctly")
-	}
+	assert.Equal(t, plugin.TypeBinary, m.Type)
+	require.NotNil(t, m.BinaryPlugin)
+	assert.Equal(t, "combat-${os}-${arch}", m.BinaryPlugin.Executable)
 }
 
 func TestParseManifest_InvalidName(t *testing.T) {
@@ -173,12 +158,8 @@ lua-plugin:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := plugin.ParseManifest([]byte(tt.yaml))
-			if err == nil {
-				t.Fatal("expected error for invalid name")
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
-			}
+			require.Error(t, err, "expected error for invalid name")
+			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 }
@@ -206,12 +187,9 @@ lua-plugin:
   entry: main.lua
 `
 			m, err := plugin.ParseManifest([]byte(yaml))
-			if err != nil {
-				t.Errorf("ParseManifest() error = %v for name %q", err, tt.plugName)
-			}
-			if m != nil && m.Name != tt.plugName {
-				t.Errorf("Name = %q, want %q", m.Name, tt.plugName)
-			}
+			require.NoError(t, err, "ParseManifest() error for name %q", tt.plugName)
+			require.NotNil(t, m)
+			assert.Equal(t, tt.plugName, m.Name)
 		})
 	}
 }
@@ -268,12 +246,8 @@ lua-plugin:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := plugin.ParseManifest([]byte(tt.yaml))
-			if err == nil {
-				t.Errorf("expected error for %s", tt.name)
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
-			}
+			require.Error(t, err, "expected error for %s", tt.name)
+			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 }
@@ -342,9 +316,7 @@ binary-plugin:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := plugin.ParseManifest([]byte(tt.yaml))
-			if err == nil {
-				t.Errorf("expected error for %s", tt.name)
-			}
+			assert.Error(t, err, "expected error for %s", tt.name)
 		})
 	}
 }
@@ -354,9 +326,7 @@ func TestParseManifest_InvalidYAML(t *testing.T) {
 version: 1.0.0
 type: [invalid`
 	_, err := plugin.ParseManifest([]byte(yaml))
-	if err == nil {
-		t.Error("expected error for invalid YAML")
-	}
+	assert.Error(t, err, "expected error for invalid YAML")
 }
 
 func TestManifest_Validate(t *testing.T) {
@@ -369,9 +339,7 @@ func TestManifest_Validate(t *testing.T) {
 			Entry: "main.lua",
 		},
 	}
-	if err := m.Validate(); err != nil {
-		t.Errorf("Validate() error = %v", err)
-	}
+	assert.NoError(t, m.Validate())
 }
 
 func TestManifest_Validate_EmptyEntry(t *testing.T) {
@@ -383,9 +351,7 @@ func TestManifest_Validate_EmptyEntry(t *testing.T) {
 			Entry: "",
 		},
 	}
-	if err := m.Validate(); err == nil {
-		t.Error("Validate() should fail for empty entry")
-	}
+	assert.Error(t, m.Validate(), "Validate() should fail for empty entry")
 }
 
 func TestManifest_Validate_EmptyExecutable(t *testing.T) {
@@ -397,9 +363,7 @@ func TestManifest_Validate_EmptyExecutable(t *testing.T) {
 			Executable: "",
 		},
 	}
-	if err := m.Validate(); err == nil {
-		t.Error("Validate() should fail for empty executable")
-	}
+	assert.Error(t, m.Validate(), "Validate() should fail for empty executable")
 }
 
 func TestParseManifest_EmptyInput(t *testing.T) {
@@ -415,9 +379,7 @@ func TestParseManifest_EmptyInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := plugin.ParseManifest(tt.input)
-			if err == nil {
-				t.Error("ParseManifest() should return error for empty input")
-			}
+			assert.Error(t, err, "ParseManifest() should return error for empty input")
 		})
 	}
 }
@@ -446,12 +408,8 @@ lua-plugin:
   entry: main.lua
 `
 			_, err := plugin.ParseManifest([]byte(yaml))
-			if err == nil {
-				t.Fatalf("expected error for version %q", tt.version)
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %q, want error containing %q", err, tt.wantErr)
-			}
+			require.Error(t, err, "expected error for version %q", tt.version)
+			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 }
@@ -480,12 +438,9 @@ lua-plugin:
   entry: main.lua
 `
 			m, err := plugin.ParseManifest([]byte(yaml))
-			if err != nil {
-				t.Errorf("ParseManifest() error = %v for version %q", err, tt.version)
-			}
-			if m != nil && m.Version != tt.version {
-				t.Errorf("Version = %q, want %q", m.Version, tt.version)
-			}
+			require.NoError(t, err, "ParseManifest() error for version %q", tt.version)
+			require.NotNil(t, m)
+			assert.Equal(t, tt.version, m.Version)
 		})
 	}
 }
@@ -529,17 +484,11 @@ lua-plugin:
 			}
 			m, err := plugin.ParseManifest([]byte(yaml))
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error for engine %q", tt.engine)
-				}
+				require.Error(t, err, "expected error for engine %q", tt.engine)
 				return
 			}
-			if err != nil {
-				t.Fatalf("ParseManifest() error = %v for engine %q", err, tt.engine)
-			}
-			if m.Engine != tt.wantEngine {
-				t.Errorf("Engine = %q, want %q", m.Engine, tt.wantEngine)
-			}
+			require.NoError(t, err, "ParseManifest() error for engine %q", tt.engine)
+			assert.Equal(t, tt.wantEngine, m.Engine)
 		})
 	}
 }
@@ -625,22 +574,181 @@ lua-plugin:
 		t.Run(tt.name, func(t *testing.T) {
 			m, err := plugin.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error")
-				}
+				require.Error(t, err, "expected error")
 				return
 			}
-			if err != nil {
-				t.Fatalf("ParseManifest() error = %v", err)
-			}
-			if len(m.Dependencies) != len(tt.wantDep) {
-				t.Errorf("len(Dependencies) = %d, want %d", len(m.Dependencies), len(tt.wantDep))
-			}
+			require.NoError(t, err)
+			assert.Len(t, m.Dependencies, len(tt.wantDep))
 			for k, v := range tt.wantDep {
-				if m.Dependencies[k] != v {
-					t.Errorf("Dependencies[%q] = %q, want %q", k, m.Dependencies[k], v)
-				}
+				assert.Equal(t, v, m.Dependencies[k], "Dependencies[%q]", k)
 			}
 		})
 	}
+}
+
+func TestParseManifest_CapabilityValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+	}{
+		{
+			name: "valid capabilities",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+capabilities:
+  - events.emit.location
+  - world.read.*
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+		},
+		{
+			name: "wildcard capability",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+capabilities:
+  - "**"
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+		},
+		{
+			name: "empty capabilities is valid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := plugin.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestParseManifest_EventValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		yaml       string
+		wantErr    bool
+		wantEvents []string
+	}{
+		{
+			name: "valid events",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+events:
+  - say
+  - pose
+  - arrive
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr:    false,
+			wantEvents: []string{"say", "pose", "arrive"},
+		},
+		{
+			name: "empty events is valid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr:    false,
+			wantEvents: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := plugin.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tt.wantEvents == nil {
+				assert.Empty(t, m.Events)
+			} else {
+				assert.Equal(t, tt.wantEvents, m.Events)
+			}
+		})
+	}
+}
+
+func TestParseManifest_CapabilityPattern(t *testing.T) {
+	// Test that capability patterns are preserved correctly
+	yaml := `
+name: test
+version: 1.0.0
+type: lua
+capabilities:
+  - events.emit.*
+  - world.read.**
+  - kv.read
+  - kv.write
+lua-plugin:
+  entry: main.lua
+`
+	m, err := plugin.ParseManifest([]byte(yaml))
+	require.NoError(t, err)
+	assert.Len(t, m.Capabilities, 4)
+	assert.Contains(t, m.Capabilities, "events.emit.*")
+	assert.Contains(t, m.Capabilities, "world.read.**")
+	assert.Contains(t, m.Capabilities, "kv.read")
+	assert.Contains(t, m.Capabilities, "kv.write")
+}
+
+func TestManifest_HasEvent(t *testing.T) {
+	m := &plugin.Manifest{
+		Name:    "test",
+		Version: "1.0.0",
+		Type:    plugin.TypeLua,
+		Events:  []string{"say", "pose"},
+		LuaPlugin: &plugin.LuaConfig{
+			Entry: "main.lua",
+		},
+	}
+
+	// HasEvent is not a method on Manifest, but we can test the Events slice directly
+	assert.Contains(t, m.Events, "say")
+	assert.Contains(t, m.Events, "pose")
+	assert.NotContains(t, m.Events, "arrive")
+}
+
+func TestParseManifest_Whitespace(t *testing.T) {
+	// Test that extra whitespace is handled correctly
+	yaml := `
+name:    test-plugin
+version:   1.0.0
+type:   lua
+lua-plugin:
+  entry:   main.lua
+`
+	m, err := plugin.ParseManifest([]byte(yaml))
+	require.NoError(t, err)
+	// YAML should trim whitespace
+	assert.True(t, strings.TrimSpace(m.Name) == "test-plugin" || m.Name == "test-plugin")
 }

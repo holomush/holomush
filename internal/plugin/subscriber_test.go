@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/holomush/holomush/internal/plugin"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 )
@@ -82,9 +84,7 @@ func TestSubscriber_DeliversEvents(t *testing.T) {
 	// Wait for delivery
 	time.Sleep(50 * time.Millisecond)
 
-	if got := host.deliveredCount(); got != 1 {
-		t.Errorf("delivered = %d, want 1", got)
-	}
+	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 }
 
 func TestSubscriber_FiltersEventTypes(t *testing.T) {
@@ -105,9 +105,7 @@ func TestSubscriber_FiltersEventTypes(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	if got := host.deliveredCount(); got != 1 {
-		t.Errorf("delivered = %d, want 1 (pose should be filtered)", got)
-	}
+	assert.Equal(t, 1, host.deliveredCount(), "delivered count (pose should be filtered)")
 }
 
 func TestSubscriber_FiltersStreams(t *testing.T) {
@@ -128,9 +126,7 @@ func TestSubscriber_FiltersStreams(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	if got := host.deliveredCount(); got != 1 {
-		t.Errorf("delivered = %d, want 1 (different stream should be filtered)", got)
-	}
+	assert.Equal(t, 1, host.deliveredCount(), "delivered count (different stream should be filtered)")
 }
 
 func TestSubscriber_SubscribeAllEventTypes(t *testing.T) {
@@ -152,9 +148,7 @@ func TestSubscriber_SubscribeAllEventTypes(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	if got := host.deliveredCount(); got != 3 {
-		t.Errorf("delivered = %d, want 3 (all types should be delivered)", got)
-	}
+	assert.Equal(t, 3, host.deliveredCount(), "delivered count (all types should be delivered)")
 }
 
 func TestSubscriber_EmitsResponseEvents(t *testing.T) {
@@ -178,9 +172,7 @@ func TestSubscriber_EmitsResponseEvents(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	if got := emitter.emittedCount(); got != 1 {
-		t.Errorf("emitted = %d, want 1", got)
-	}
+	assert.Equal(t, 1, emitter.emittedCount(), "emitted count")
 }
 
 func TestSubscriber_HandlesHostError(t *testing.T) {
@@ -204,13 +196,9 @@ func TestSubscriber_HandlesHostError(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Host was called
-	if got := host.deliveredCount(); got != 1 {
-		t.Errorf("delivered = %d, want 1", got)
-	}
+	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 	// But no events emitted due to error
-	if got := emitter.emittedCount(); got != 0 {
-		t.Errorf("emitted = %d, want 0 (error should prevent emit)", got)
-	}
+	assert.Equal(t, 0, emitter.emittedCount(), "emitted count (error should prevent emit)")
 }
 
 func TestSubscriber_MultiplePlugins(t *testing.T) {
@@ -232,9 +220,7 @@ func TestSubscriber_MultiplePlugins(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Both plugins should receive the event
-	if got := host.deliveredCount(); got != 2 {
-		t.Errorf("delivered = %d, want 2 (both plugins should receive)", got)
-	}
+	assert.Equal(t, 2, host.deliveredCount(), "delivered count (both plugins should receive)")
 }
 
 func TestSubscriber_StopWaitsForCompletion(t *testing.T) {
@@ -320,13 +306,9 @@ func TestSubscriber_HandlesEmitterError(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Host was called and delivered
-	if got := host.deliveredCount(); got != 1 {
-		t.Errorf("delivered = %d, want 1", got)
-	}
+	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 	// Emitter was called (even though it errors)
-	if got := emitter.emittedCount(); got != 1 {
-		t.Errorf("emitted = %d, want 1 (emitter should still be called)", got)
-	}
+	assert.Equal(t, 1, emitter.emittedCount(), "emitted count (emitter should still be called)")
 }
 
 func TestSubscriber_EmptyEventTypesSliceReceivesAll(t *testing.T) {
@@ -348,9 +330,7 @@ func TestSubscriber_EmptyEventTypesSliceReceivesAll(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	if got := host.deliveredCount(); got != 3 {
-		t.Errorf("delivered = %d, want 3 (empty slice should deliver all)", got)
-	}
+	assert.Equal(t, 3, host.deliveredCount(), "delivered count (empty slice should deliver all)")
 }
 
 func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
@@ -405,9 +385,7 @@ func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
 	}
 
 	// Verify delivery happened
-	if got := host.deliveredCount(); got != 1 {
-		t.Errorf("delivered = %d, want 1", got)
-	}
+	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 }
 
 // slowSubscriberHost blocks DeliverEvent until blockCh is closed.

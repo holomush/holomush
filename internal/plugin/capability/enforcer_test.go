@@ -9,6 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/plugin/capability"
 )
 
@@ -200,80 +203,59 @@ func TestCapabilityEnforcer_Check(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := capability.NewEnforcer()
-			if err := e.SetGrants("test-plugin", tt.grants); err != nil {
-				t.Fatalf("SetGrants() failed: %v", err)
-			}
+			err := e.SetGrants("test-plugin", tt.grants)
+			require.NoError(t, err, "SetGrants() failed")
 
 			got := e.Check("test-plugin", tt.capability)
-			if got != tt.want {
-				t.Errorf("Check() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "Check() mismatch")
 		})
 	}
 }
 
 func TestCapabilityEnforcer_Check_UnknownPlugin(t *testing.T) {
 	e := capability.NewEnforcer()
-	if e.Check("unknown", "any.capability") {
-		t.Error("Check() should return false for unknown plugin")
-	}
+	assert.False(t, e.Check("unknown", "any.capability"), "Check() should return false for unknown plugin")
 }
 
 func TestCapabilityEnforcer_SetGrants_Overwrite(t *testing.T) {
 	e := capability.NewEnforcer()
 
 	// Set initial grants
-	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if !e.Check("plugin", "world.read.location") {
-		t.Error("initial grant should work")
-	}
+	err := e.SetGrants("plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	assert.True(t, e.Check("plugin", "world.read.location"), "initial grant should work")
 
 	// Overwrite with different grants
-	if err := e.SetGrants("plugin", []string{"events.emit.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if e.Check("plugin", "world.read.location") {
-		t.Error("old grant should no longer work after overwrite")
-	}
-	if !e.Check("plugin", "events.emit.location") {
-		t.Error("new grant should work after overwrite")
-	}
+	err = e.SetGrants("plugin", []string{"events.emit.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	assert.False(t, e.Check("plugin", "world.read.location"), "old grant should no longer work after overwrite")
+	assert.True(t, e.Check("plugin", "events.emit.location"), "new grant should work after overwrite")
 }
 
 func TestCapabilityEnforcer_SetGrants_DefensiveCopy(t *testing.T) {
 	e := capability.NewEnforcer()
 
 	grants := []string{"world.read.*"}
-	if err := e.SetGrants("plugin", grants); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin", grants)
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Mutate the original slice
 	grants[0] = "events.emit.*"
 
 	// The enforcer should not be affected
-	if !e.Check("plugin", "world.read.location") {
-		t.Error("enforcer should have copied the slice, not aliased it")
-	}
+	assert.True(t, e.Check("plugin", "world.read.location"), "enforcer should have copied the slice, not aliased it")
 }
 
 func TestCapabilityEnforcer_ZeroValue(t *testing.T) {
 	var e capability.Enforcer
 
 	// Zero value should not panic and should return false
-	if e.Check("plugin", "any.capability") {
-		t.Error("zero value Check() should return false")
-	}
+	assert.False(t, e.Check("plugin", "any.capability"), "zero value Check() should return false")
 
 	// SetGrants on zero value should work
-	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if !e.Check("plugin", "world.read.location") {
-		t.Error("Check() should work after SetGrants on zero value")
-	}
+	err := e.SetGrants("plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	assert.True(t, e.Check("plugin", "world.read.location"), "Check() should work after SetGrants on zero value")
 }
 
 func TestCapabilityEnforcer_ConcurrentAccess(t *testing.T) {
@@ -319,81 +301,57 @@ func TestCapabilityEnforcer_ConcurrentAccess(t *testing.T) {
 	}
 
 	// At least some checks should have succeeded (race means not all)
-	if successCount == 0 {
-		t.Error("expected at least some successful checks")
-	}
+	assert.NotZero(t, successCount, "expected at least some successful checks")
 }
 
 func TestCapabilityEnforcer_SetGrants_RejectsEmptyPluginName(t *testing.T) {
 	e := capability.NewEnforcer()
 	err := e.SetGrants("", []string{"world.read.*"})
-	if err == nil {
-		t.Error("SetGrants() should reject empty plugin name")
-	}
+	assert.Error(t, err, "SetGrants() should reject empty plugin name")
 }
 
 func TestCapabilityEnforcer_IsRegistered(t *testing.T) {
 	e := capability.NewEnforcer()
 
 	// Unknown plugin should not be registered
-	if e.IsRegistered("unknown") {
-		t.Error("IsRegistered() should return false for unknown plugin")
-	}
+	assert.False(t, e.IsRegistered("unknown"), "IsRegistered() should return false for unknown plugin")
 
 	// After SetGrants, plugin should be registered
-	if err := e.SetGrants("my-plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if !e.IsRegistered("my-plugin") {
-		t.Error("IsRegistered() should return true after SetGrants")
-	}
+	err := e.SetGrants("my-plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	assert.True(t, e.IsRegistered("my-plugin"), "IsRegistered() should return true after SetGrants")
 
 	// Other plugins should still not be registered
-	if e.IsRegistered("other-plugin") {
-		t.Error("IsRegistered() should return false for other plugins")
-	}
+	assert.False(t, e.IsRegistered("other-plugin"), "IsRegistered() should return false for other plugins")
 }
 
 func TestCapabilityEnforcer_IsRegistered_ZeroValue(t *testing.T) {
 	var e capability.Enforcer
-	if e.IsRegistered("any") {
-		t.Error("zero value IsRegistered() should return false")
-	}
+	assert.False(t, e.IsRegistered("any"), "zero value IsRegistered() should return false")
 }
 
 func TestCapabilityEnforcer_PluginIsolation(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("plugin-a", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if err := e.SetGrants("plugin-b", []string{"events.emit.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin-a", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	err = e.SetGrants("plugin-b", []string{"events.emit.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
-	if e.Check("plugin-a", "events.emit.foo") {
-		t.Error("plugin-a should not have plugin-b's grants")
-	}
-	if e.Check("plugin-b", "world.read.foo") {
-		t.Error("plugin-b should not have plugin-a's grants")
-	}
+	assert.False(t, e.Check("plugin-a", "events.emit.foo"), "plugin-a should not have plugin-b's grants")
+	assert.False(t, e.Check("plugin-b", "world.read.foo"), "plugin-b should not have plugin-a's grants")
 }
 
 func TestCapabilityEnforcer_Check_SimilarPrefixBoundary(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// world.read.* should NOT match world.readonly.location
 	// This tests that prefix matching respects segment boundaries
-	if e.Check("plugin", "world.readonly.location") {
-		t.Error("world.read.* should not match world.readonly.location")
-	}
+	assert.False(t, e.Check("plugin", "world.readonly.location"), "world.read.* should not match world.readonly.location")
 
 	// But should match world.read.location
-	if !e.Check("plugin", "world.read.location") {
-		t.Error("world.read.* should match world.read.location")
-	}
+	assert.True(t, e.Check("plugin", "world.read.location"), "world.read.* should match world.read.location")
 }
 
 func TestCapabilityEnforcer_SetGrants_PatternValidation(t *testing.T) {
@@ -425,8 +383,10 @@ func TestCapabilityEnforcer_SetGrants_PatternValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e := capability.NewEnforcer()
 			err := e.SetGrants("plugin", []string{tt.pattern})
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SetGrants() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "SetGrants() should fail for pattern %q", tt.pattern)
+			} else {
+				assert.NoError(t, err, "SetGrants() should succeed for pattern %q", tt.pattern)
 			}
 		})
 	}
@@ -436,171 +396,125 @@ func TestCapabilityEnforcer_SetGrants_MultiplePatterns_OneInvalid(t *testing.T) 
 	e := capability.NewEnforcer()
 	// If one pattern is invalid, the whole call should fail
 	err := e.SetGrants("plugin", []string{"world.read.*", "", "events.emit.*"})
-	if err == nil {
-		t.Error("SetGrants() should fail if any pattern is invalid")
-	}
+	assert.Error(t, err, "SetGrants() should fail if any pattern is invalid")
 
 	// Plugin should not be registered after failed SetGrants
-	if e.IsRegistered("plugin") {
-		t.Error("plugin should not be registered after failed SetGrants")
-	}
+	assert.False(t, e.IsRegistered("plugin"), "plugin should not be registered after failed SetGrants")
 }
 
 func TestCapabilityEnforcer_IsRegistered_EmptyPluginName(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("valid-plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("valid-plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Empty plugin name should return false
-	if e.IsRegistered("") {
-		t.Error("IsRegistered() should return false for empty plugin name")
-	}
+	assert.False(t, e.IsRegistered(""), "IsRegistered() should return false for empty plugin name")
 }
 
 func TestCapabilityEnforcer_Check_EmptyPluginName(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("real-plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("real-plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Empty plugin name should return false (deny by default)
-	if e.Check("", "world.read.location") {
-		t.Error("Check() should return false for empty plugin name")
-	}
+	assert.False(t, e.Check("", "world.read.location"), "Check() should return false for empty plugin name")
 }
 
 func TestCapabilityEnforcer_RemoveGrants(t *testing.T) {
 	e := capability.NewEnforcer()
 
 	// Setup: register a plugin
-	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if !e.IsRegistered("plugin") {
-		t.Fatal("plugin should be registered before removal")
-	}
-	if !e.Check("plugin", "world.read.location") {
-		t.Fatal("plugin should have grant before removal")
-	}
+	err := e.SetGrants("plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	require.True(t, e.IsRegistered("plugin"), "plugin should be registered before removal")
+	require.True(t, e.Check("plugin", "world.read.location"), "plugin should have grant before removal")
 
 	// Remove grants
-	if err := e.RemoveGrants("plugin"); err != nil {
-		t.Fatalf("RemoveGrants() failed: %v", err)
-	}
+	err = e.RemoveGrants("plugin")
+	require.NoError(t, err, "RemoveGrants() failed")
 
 	// Verify plugin is no longer registered
-	if e.IsRegistered("plugin") {
-		t.Error("plugin should not be registered after RemoveGrants")
-	}
-	if e.Check("plugin", "world.read.location") {
-		t.Error("plugin should not have grants after RemoveGrants")
-	}
+	assert.False(t, e.IsRegistered("plugin"), "plugin should not be registered after RemoveGrants")
+	assert.False(t, e.Check("plugin", "world.read.location"), "plugin should not have grants after RemoveGrants")
 }
 
 func TestCapabilityEnforcer_RemoveGrants_UnknownPlugin(t *testing.T) {
 	e := capability.NewEnforcer()
 	// Should not panic or error for unknown plugin
-	if err := e.RemoveGrants("unknown"); err != nil {
-		t.Errorf("RemoveGrants() for unknown plugin should not error: %v", err)
-	}
+	err := e.RemoveGrants("unknown")
+	assert.NoError(t, err, "RemoveGrants() for unknown plugin should not error")
 	// Verify enforcer still works after removing unknown plugin
-	if e.IsRegistered("unknown") {
-		t.Error("unknown plugin should not be registered")
-	}
+	assert.False(t, e.IsRegistered("unknown"), "unknown plugin should not be registered")
 }
 
 func TestCapabilityEnforcer_RemoveGrants_ZeroValue(t *testing.T) {
 	var e capability.Enforcer
 	// Should not panic or error on zero value
-	if err := e.RemoveGrants("any"); err != nil {
-		t.Errorf("RemoveGrants() on zero value should not error: %v", err)
-	}
+	err := e.RemoveGrants("any")
+	assert.NoError(t, err, "RemoveGrants() on zero value should not error")
 	// Verify enforcer still works after operation on zero value
-	if e.IsRegistered("any") {
-		t.Error("plugin should not be registered on zero value")
-	}
+	assert.False(t, e.IsRegistered("any"), "plugin should not be registered on zero value")
 }
 
 func TestCapabilityEnforcer_GetGrants(t *testing.T) {
 	e := capability.NewEnforcer()
 	grants := []string{"world.read.*", "events.emit.*"}
-	if err := e.SetGrants("plugin", grants); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin", grants)
+	require.NoError(t, err, "SetGrants() failed")
 
 	got := e.GetGrants("plugin")
-	if len(got) != len(grants) {
-		t.Errorf("GetGrants() returned %d grants, want %d", len(got), len(grants))
-	}
+	require.Len(t, got, len(grants), "GetGrants() returned wrong number of grants")
 	for i, want := range grants {
-		if got[i] != want {
-			t.Errorf("GetGrants()[%d] = %q, want %q", i, got[i], want)
-		}
+		assert.Equal(t, want, got[i], "GetGrants()[%d] mismatch", i)
 	}
 }
 
 func TestCapabilityEnforcer_GetGrants_UnknownPlugin(t *testing.T) {
 	e := capability.NewEnforcer()
 	got := e.GetGrants("unknown")
-	if got != nil {
-		t.Errorf("GetGrants() for unknown plugin = %v, want nil", got)
-	}
+	assert.Nil(t, got, "GetGrants() for unknown plugin should return nil")
 }
 
 func TestCapabilityEnforcer_GetGrants_ZeroValue(t *testing.T) {
 	var e capability.Enforcer
 	got := e.GetGrants("any")
-	if got != nil {
-		t.Errorf("GetGrants() on zero value = %v, want nil", got)
-	}
+	assert.Nil(t, got, "GetGrants() on zero value should return nil")
 }
 
 func TestCapabilityEnforcer_GetGrants_DefensiveCopy(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Get grants and mutate the returned slice
 	got := e.GetGrants("plugin")
 	got[0] = "mutated"
 
 	// Enforcer should not be affected
-	if !e.Check("plugin", "world.read.location") {
-		t.Error("GetGrants() should return a defensive copy")
-	}
+	assert.True(t, e.Check("plugin", "world.read.location"), "GetGrants() should return a defensive copy")
 }
 
 func TestCapabilityEnforcer_RemoveGrants_EmptyPluginName(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("valid-plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("valid-plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Removing empty plugin name should return error for consistency with SetGrants
-	err := e.RemoveGrants("")
-	if err == nil {
-		t.Error("RemoveGrants(\"\") should return error")
-	}
+	err = e.RemoveGrants("")
+	assert.Error(t, err, "RemoveGrants(\"\") should return error")
 
 	// Valid plugin should still be registered
-	if !e.IsRegistered("valid-plugin") {
-		t.Error("valid-plugin should still be registered after removing empty string")
-	}
+	assert.True(t, e.IsRegistered("valid-plugin"), "valid-plugin should still be registered after removing empty string")
 }
 
 func TestCapabilityEnforcer_GetGrants_EmptyPluginName(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("valid-plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("valid-plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Getting grants for empty plugin name should return nil
 	got := e.GetGrants("")
-	if got != nil {
-		t.Errorf("GetGrants(\"\") = %v, want nil", got)
-	}
+	assert.Nil(t, got, "GetGrants(\"\") should return nil")
 }
 
 func TestCapabilityEnforcer_ConcurrentAccess_AllMethods(t *testing.T) {
@@ -610,9 +524,8 @@ func TestCapabilityEnforcer_ConcurrentAccess_AllMethods(t *testing.T) {
 	// Pre-register some plugins
 	for i := range 5 {
 		plugin := fmt.Sprintf("plugin-%d", i)
-		if err := e.SetGrants(plugin, []string{"world.read.*"}); err != nil {
-			t.Fatalf("SetGrants() failed: %v", err)
-		}
+		err := e.SetGrants(plugin, []string{"world.read.*"})
+		require.NoError(t, err, "SetGrants() failed")
 	}
 
 	// Concurrent SetGrants
@@ -696,9 +609,7 @@ func FuzzCapabilityEnforcer_GetGrants(f *testing.F) {
 
 		// GetGrants on unknown plugin should return nil, never panic
 		got := e.GetGrants(pluginName)
-		if got != nil {
-			t.Errorf("GetGrants(%q) on empty enforcer = %v, want nil", pluginName, got)
-		}
+		assert.Nil(t, got, "GetGrants(%q) on empty enforcer should return nil", pluginName)
 
 		// If plugin name is valid for SetGrants, test round-trip
 		if pluginName != "" {
@@ -710,9 +621,8 @@ func FuzzCapabilityEnforcer_GetGrants(f *testing.F) {
 			}
 
 			got = e.GetGrants(pluginName)
-			if len(got) != 1 || got[0] != "world.read.*" {
-				t.Errorf("GetGrants(%q) = %v, want %v", pluginName, got, grants)
-			}
+			require.Len(t, got, 1, "GetGrants(%q) returned wrong length", pluginName)
+			assert.Equal(t, "world.read.*", got[0], "GetGrants(%q) returned wrong value", pluginName)
 		}
 	})
 }
@@ -730,36 +640,23 @@ func FuzzCapabilityEnforcer_RemoveGrants(f *testing.F) {
 		// RemoveGrants should never panic; returns error only for empty plugin name
 		err := e.RemoveGrants(pluginName)
 		if pluginName == "" {
-			if err == nil {
-				t.Error("RemoveGrants(\"\") should return error")
-			}
+			assert.Error(t, err, "RemoveGrants(\"\") should return error")
 			return // Empty plugin name is not valid, skip remaining tests
 		}
-		if err != nil {
-			t.Errorf("RemoveGrants(%q) failed unexpectedly: %v", pluginName, err)
-		}
+		assert.NoError(t, err, "RemoveGrants(%q) failed unexpectedly", pluginName)
 
 		// After removal, plugin should not be registered
-		if e.IsRegistered(pluginName) {
-			t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
-		}
+		assert.False(t, e.IsRegistered(pluginName), "IsRegistered(%q) after RemoveGrants should be false", pluginName)
 
 		// Test removal of registered plugin
-		if err := e.SetGrants(pluginName, []string{"world.read.*"}); err != nil {
-			t.Errorf("SetGrants(%q) failed: %v", pluginName, err)
-			return
-		}
-		if !e.IsRegistered(pluginName) {
-			t.Errorf("IsRegistered(%q) after SetGrants = false, want true", pluginName)
-		}
+		err = e.SetGrants(pluginName, []string{"world.read.*"})
+		require.NoError(t, err, "SetGrants(%q) failed", pluginName)
+		assert.True(t, e.IsRegistered(pluginName), "IsRegistered(%q) after SetGrants should be true", pluginName)
 
-		if err := e.RemoveGrants(pluginName); err != nil {
-			t.Errorf("RemoveGrants(%q) failed: %v", pluginName, err)
-		}
+		err = e.RemoveGrants(pluginName)
+		require.NoError(t, err, "RemoveGrants(%q) failed", pluginName)
 
-		if e.IsRegistered(pluginName) {
-			t.Errorf("IsRegistered(%q) after RemoveGrants = true, want false", pluginName)
-		}
+		assert.False(t, e.IsRegistered(pluginName), "IsRegistered(%q) after RemoveGrants should be false", pluginName)
 	})
 }
 
@@ -780,16 +677,12 @@ func FuzzCapabilityEnforcer_Check(f *testing.F) {
 
 		// Empty plugin or capability should always return false
 		if pluginName == "" || capabilityName == "" {
-			if got {
-				t.Errorf("Check(%q, %q) = true, want false for empty input", pluginName, capabilityName)
-			}
+			assert.False(t, got, "Check(%q, %q) should be false for empty input", pluginName, capabilityName)
 			return
 		}
 
 		// Unknown plugin should return false
-		if got {
-			t.Errorf("Check(%q, %q) = true for unknown plugin, want false", pluginName, capabilityName)
-		}
+		assert.False(t, got, "Check(%q, %q) should be false for unknown plugin", pluginName, capabilityName)
 
 		// Register plugin with super wildcard and verify Check returns true
 		if err := e.SetGrants(pluginName, []string{"**"}); err != nil {
@@ -799,9 +692,7 @@ func FuzzCapabilityEnforcer_Check(f *testing.F) {
 
 		// With ** grant, any non-empty capability should return true
 		got = e.Check(pluginName, capabilityName)
-		if !got {
-			t.Errorf("Check(%q, %q) = false with ** grant, want true", pluginName, capabilityName)
-		}
+		assert.True(t, got, "Check(%q, %q) should be true with ** grant", pluginName, capabilityName)
 	})
 }
 
@@ -810,73 +701,50 @@ func TestCapabilityEnforcer_ListPlugins(t *testing.T) {
 
 	// Empty enforcer should return empty slice
 	got := e.ListPlugins()
-	if len(got) != 0 {
-		t.Errorf("ListPlugins() on empty enforcer = %v, want empty slice", got)
-	}
+	assert.Empty(t, got, "ListPlugins() on empty enforcer should return empty slice")
 
 	// Register some plugins
-	if err := e.SetGrants("plugin-a", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if err := e.SetGrants("plugin-b", []string{"events.emit.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin-a", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	err = e.SetGrants("plugin-b", []string{"events.emit.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	got = e.ListPlugins()
-	if len(got) != 2 {
-		t.Errorf("ListPlugins() returned %d plugins, want 2", len(got))
-	}
+	assert.Len(t, got, 2, "ListPlugins() returned wrong number of plugins")
 
 	// Check both plugins are present (order not guaranteed)
-	found := make(map[string]bool)
-	for _, p := range got {
-		found[p] = true
-	}
-	if !found["plugin-a"] || !found["plugin-b"] {
-		t.Errorf("ListPlugins() = %v, want [plugin-a, plugin-b]", got)
-	}
+	assert.Contains(t, got, "plugin-a", "ListPlugins() should contain plugin-a")
+	assert.Contains(t, got, "plugin-b", "ListPlugins() should contain plugin-b")
 }
 
 func TestCapabilityEnforcer_ListPlugins_ZeroValue(t *testing.T) {
 	var e capability.Enforcer
 	got := e.ListPlugins()
-	if got == nil {
-		t.Error("ListPlugins() on zero value should return empty slice, not nil")
-	}
-	if len(got) != 0 {
-		t.Errorf("ListPlugins() on zero value = %v, want empty slice", got)
-	}
+	assert.NotNil(t, got, "ListPlugins() on zero value should return empty slice, not nil")
+	assert.Empty(t, got, "ListPlugins() on zero value should return empty slice")
 }
 
 func TestCapabilityEnforcer_ListPlugins_AfterRemove(t *testing.T) {
 	e := capability.NewEnforcer()
 
-	if err := e.SetGrants("plugin-a", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
-	if err := e.SetGrants("plugin-b", []string{"events.emit.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin-a", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
+	err = e.SetGrants("plugin-b", []string{"events.emit.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Remove one plugin
-	if err := e.RemoveGrants("plugin-a"); err != nil {
-		t.Fatalf("RemoveGrants() failed: %v", err)
-	}
+	err = e.RemoveGrants("plugin-a")
+	require.NoError(t, err, "RemoveGrants() failed")
 
 	got := e.ListPlugins()
-	if len(got) != 1 {
-		t.Errorf("ListPlugins() after removal = %v, want 1 plugin", got)
-	}
-	if len(got) == 1 && got[0] != "plugin-b" {
-		t.Errorf("ListPlugins() = %v, want [plugin-b]", got)
-	}
+	assert.Len(t, got, 1, "ListPlugins() after removal should have 1 plugin")
+	assert.Equal(t, "plugin-b", got[0], "ListPlugins() should contain plugin-b after removing plugin-a")
 }
 
 func TestCapabilityEnforcer_ListPlugins_DefensiveCopy(t *testing.T) {
 	e := capability.NewEnforcer()
-	if err := e.SetGrants("plugin", []string{"world.read.*"}); err != nil {
-		t.Fatalf("SetGrants() failed: %v", err)
-	}
+	err := e.SetGrants("plugin", []string{"world.read.*"})
+	require.NoError(t, err, "SetGrants() failed")
 
 	// Get list and mutate it
 	got := e.ListPlugins()
@@ -885,7 +753,5 @@ func TestCapabilityEnforcer_ListPlugins_DefensiveCopy(t *testing.T) {
 	}
 
 	// Enforcer should not be affected
-	if !e.IsRegistered("plugin") {
-		t.Error("ListPlugins() should return a defensive copy")
-	}
+	assert.True(t, e.IsRegistered("plugin"), "ListPlugins() should return a defensive copy")
 }
