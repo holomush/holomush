@@ -3,7 +3,11 @@
 
 package plugin
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestActorKind_String(t *testing.T) {
 	tests := []struct {
@@ -18,9 +22,7 @@ func TestActorKind_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			if got := tt.kind.String(); got != tt.expected {
-				t.Errorf("ActorKind(%d).String() = %q, want %q", tt.kind, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, tt.kind.String())
 		})
 	}
 }

@@ -6,6 +6,9 @@ package pluginv1_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -18,16 +21,12 @@ func TestEmitEventRPC(t *testing.T) {
 			Payload: `{"text":"Hello"}`,
 		},
 	}
-	if req.Event == nil {
-		t.Error("expected EmitEventRequest to have Event field")
-	}
+	require.NotNil(t, req.Event, "expected EmitEventRequest to have Event field")
 
 	resp := &pluginv1.EmitEventResponse{
 		Success: true,
 	}
-	if !resp.Success {
-		t.Error("expected EmitEventResponse to have Success field")
-	}
+	assert.True(t, resp.Success, "expected EmitEventResponse to have Success field")
 }
 
 // TestLogRPC verifies the Log RPC request/response types.
@@ -40,15 +39,9 @@ func TestLogRPC(t *testing.T) {
 			"version":   "1.0.0",
 		},
 	}
-	if req.Message == "" {
-		t.Error("expected LogRequest to have Message field")
-	}
-	if req.Level != pluginv1.LogLevel_LOG_LEVEL_INFO {
-		t.Error("expected LogRequest to have Level field")
-	}
-	if len(req.Fields) != 2 {
-		t.Errorf("expected 2 fields, got %d", len(req.Fields))
-	}
+	assert.NotEmpty(t, req.Message, "expected LogRequest to have Message field")
+	assert.Equal(t, pluginv1.LogLevel_LOG_LEVEL_INFO, req.Level, "expected LogRequest to have Level field")
+	assert.Len(t, req.Fields, 2, "expected 2 fields")
 
 	resp := &pluginv1.LogResponse{}
 	_ = resp // Empty response is valid
@@ -69,9 +62,7 @@ func TestLogLevelEnum(t *testing.T) {
 
 	for _, tt := range levels {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.level.String() != tt.name {
-				t.Errorf("expected %s, got %s", tt.name, tt.level.String())
-			}
+			assert.Equal(t, tt.name, tt.level.String())
 		})
 	}
 }
@@ -81,20 +72,14 @@ func TestKVGetRPC(t *testing.T) {
 	req := &pluginv1.KVGetRequest{
 		Key: "plugin:echo-bot:config",
 	}
-	if req.Key == "" {
-		t.Error("expected KVGetRequest to have Key field")
-	}
+	assert.NotEmpty(t, req.Key, "expected KVGetRequest to have Key field")
 
 	resp := &pluginv1.KVGetResponse{
 		Value: []byte(`{"enabled":true}`),
 		Found: true,
 	}
-	if !resp.Found {
-		t.Error("expected KVGetResponse to have Found field")
-	}
-	if len(resp.Value) == 0 {
-		t.Error("expected KVGetResponse to have Value field")
-	}
+	assert.True(t, resp.Found, "expected KVGetResponse to have Found field")
+	assert.NotEmpty(t, resp.Value, "expected KVGetResponse to have Value field")
 }
 
 // TestKVSetRPC verifies the KVSet RPC request/response types.
@@ -103,19 +88,13 @@ func TestKVSetRPC(t *testing.T) {
 		Key:   "plugin:echo-bot:state",
 		Value: []byte(`{"last_event":"01HQG..."}`),
 	}
-	if req.Key == "" {
-		t.Error("expected KVSetRequest to have Key field")
-	}
-	if len(req.Value) == 0 {
-		t.Error("expected KVSetRequest to have Value field")
-	}
+	assert.NotEmpty(t, req.Key, "expected KVSetRequest to have Key field")
+	assert.NotEmpty(t, req.Value, "expected KVSetRequest to have Value field")
 
 	resp := &pluginv1.KVSetResponse{
 		Success: true,
 	}
-	if !resp.Success {
-		t.Error("expected KVSetResponse to have Success field")
-	}
+	assert.True(t, resp.Success, "expected KVSetResponse to have Success field")
 }
 
 // TestKVDeleteRPC verifies the KVDelete RPC request/response types.
@@ -123,16 +102,12 @@ func TestKVDeleteRPC(t *testing.T) {
 	req := &pluginv1.KVDeleteRequest{
 		Key: "plugin:echo-bot:temp",
 	}
-	if req.Key == "" {
-		t.Error("expected KVDeleteRequest to have Key field")
-	}
+	assert.NotEmpty(t, req.Key, "expected KVDeleteRequest to have Key field")
 
 	resp := &pluginv1.KVDeleteResponse{
 		Deleted: true,
 	}
-	if !resp.Deleted {
-		t.Error("expected KVDeleteResponse to have Deleted field")
-	}
+	assert.True(t, resp.Deleted, "expected KVDeleteResponse to have Deleted field")
 }
 
 // TestQueryRoomRPC verifies the QueryRoom RPC request/response types.
@@ -140,9 +115,7 @@ func TestQueryRoomRPC(t *testing.T) {
 	req := &pluginv1.QueryRoomRequest{
 		RoomId: "room_abc123",
 	}
-	if req.RoomId == "" {
-		t.Error("expected QueryRoomRequest to have RoomId field")
-	}
+	assert.NotEmpty(t, req.RoomId, "expected QueryRoomRequest to have RoomId field")
 
 	resp := &pluginv1.QueryRoomResponse{
 		Room: &pluginv1.RoomInfo{
@@ -151,12 +124,8 @@ func TestQueryRoomRPC(t *testing.T) {
 			Description: "A bustling central plaza.",
 		},
 	}
-	if resp.Room == nil {
-		t.Error("expected QueryRoomResponse to have Room field")
-	}
-	if resp.Room.Name == "" {
-		t.Error("expected RoomInfo to have Name field")
-	}
+	require.NotNil(t, resp.Room, "expected QueryRoomResponse to have Room field")
+	assert.NotEmpty(t, resp.Room.Name, "expected RoomInfo to have Name field")
 }
 
 // TestQueryCharacterRPC verifies the QueryCharacter RPC request/response types.
@@ -164,9 +133,7 @@ func TestQueryCharacterRPC(t *testing.T) {
 	req := &pluginv1.QueryCharacterRequest{
 		CharacterId: "char_123",
 	}
-	if req.CharacterId == "" {
-		t.Error("expected QueryCharacterRequest to have CharacterId field")
-	}
+	assert.NotEmpty(t, req.CharacterId, "expected QueryCharacterRequest to have CharacterId field")
 
 	resp := &pluginv1.QueryCharacterResponse{
 		Character: &pluginv1.CharacterInfo{
@@ -174,12 +141,8 @@ func TestQueryCharacterRPC(t *testing.T) {
 			Name: "Alice",
 		},
 	}
-	if resp.Character == nil {
-		t.Error("expected QueryCharacterResponse to have Character field")
-	}
-	if resp.Character.Name == "" {
-		t.Error("expected CharacterInfo to have Name field")
-	}
+	require.NotNil(t, resp.Character, "expected QueryCharacterResponse to have Character field")
+	assert.NotEmpty(t, resp.Character.Name, "expected CharacterInfo to have Name field")
 }
 
 // TestQueryRoomCharactersRPC verifies the QueryRoomCharacters RPC.
@@ -187,9 +150,7 @@ func TestQueryRoomCharactersRPC(t *testing.T) {
 	req := &pluginv1.QueryRoomCharactersRequest{
 		RoomId: "room_abc123",
 	}
-	if req.RoomId == "" {
-		t.Error("expected QueryRoomCharactersRequest to have RoomId field")
-	}
+	assert.NotEmpty(t, req.RoomId, "expected QueryRoomCharactersRequest to have RoomId field")
 
 	resp := &pluginv1.QueryRoomCharactersResponse{
 		Characters: []*pluginv1.CharacterInfo{
@@ -197,7 +158,5 @@ func TestQueryRoomCharactersRPC(t *testing.T) {
 			{Id: "char_2", Name: "Bob"},
 		},
 	}
-	if len(resp.Characters) != 2 {
-		t.Errorf("expected 2 characters, got %d", len(resp.Characters))
-	}
+	assert.Len(t, resp.Characters, 2, "expected 2 characters")
 }
