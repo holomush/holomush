@@ -73,6 +73,22 @@ store.On("Append", mock.Anything, expectedEvent).Return(nil)
 store.AssertExpectations(t)
 ```
 
+### Mock Generation with mockery
+
+Use [mockery](https://github.com/vektra/mockery) to auto-generate testify mocks from interfaces:
+
+```bash
+# Install
+go install github.com/vektra/mockery/v2@latest
+
+# Generate mock for a specific interface
+mockery --name=EventStore --dir=internal/core --output=internal/core/mocks
+
+# Or configure in .mockery.yaml for project-wide generation
+```
+
+This eliminates hand-writing mock structs entirely.
+
 ## Integration Tests with Ginkgo
 
 ### Structure
