@@ -301,7 +301,7 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected event store error")
-	assert.Contains(t, err.Error(), "database")
+	assert.Contains(t, err.Error(), "connection refused")
 }
 
 // TestRunCoreWithDeps_InitGameIDError tests game ID initialization failure.
@@ -468,7 +468,7 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected control server error")
-	assert.Contains(t, err.Error(), "control gRPC server")
+	assert.Contains(t, err.Error(), "failed to create control server")
 }
 
 // TestRunCoreWithDeps_ControlServerStartError tests control server start error.
@@ -511,7 +511,7 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected control server start error")
-	assert.Contains(t, err.Error(), "start control gRPC server")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunCoreWithDeps_ObservabilityServerStartError tests observability server start error.
@@ -563,7 +563,7 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected observability server start error")
-	assert.Contains(t, err.Error(), "observability server")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunGatewayWithDeps_HappyPath tests the gateway process with all mocked dependencies.
@@ -761,7 +761,7 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected gRPC client error")
-	assert.Contains(t, err.Error(), "gRPC client")
+	assert.Contains(t, err.Error(), "connection refused")
 }
 
 // TestRunGatewayWithDeps_ControlTLSLoadError tests control TLS loading error.
@@ -836,7 +836,7 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected control server error")
-	assert.Contains(t, err.Error(), "control gRPC server")
+	assert.Contains(t, err.Error(), "failed to create control server")
 }
 
 // TestRunGatewayWithDeps_ControlServerStartError tests control server start error.
@@ -879,7 +879,7 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected control server start error")
-	assert.Contains(t, err.Error(), "start control gRPC server")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunGatewayWithDeps_ListenerFactoryError tests telnet listener creation error.
@@ -926,7 +926,7 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected listener error")
-	assert.Contains(t, err.Error(), "listen on")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunGatewayWithDeps_ObservabilityServerStartError tests observability server start error.
@@ -983,7 +983,7 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected observability server start error")
-	assert.Contains(t, err.Error(), "observability server")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunCoreWithDeps_WithObservability tests the happy path with observability server enabled.

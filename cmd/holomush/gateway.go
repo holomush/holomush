@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 
 	"github.com/holomush/holomush/internal/control"
@@ -34,16 +35,16 @@ type gatewayConfig struct {
 // Validate checks that the configuration is valid.
 func (cfg *gatewayConfig) Validate() error {
 	if cfg.telnetAddr == "" {
-		return fmt.Errorf("telnet-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-addr is required")
 	}
 	if cfg.coreAddr == "" {
-		return fmt.Errorf("core-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("core-addr is required")
 	}
 	if cfg.controlAddr == "" {
-		return fmt.Errorf("control-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("control-addr is required")
 	}
 	if cfg.logFormat != "json" && cfg.logFormat != "text" {
-		return fmt.Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
+		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
 	}
 	return nil
 }
@@ -120,11 +121,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
 	if err := setupLogging(cfg.logFormat); err != nil {
-		return fmt.Errorf("failed to set up logging: %w", err)
+		return oops.Code("LOGGING_SETUP_FAILED").With("operation", "set up logging").Wrap(err)
 	}
 
 	slog.Info("starting gateway process",
@@ -135,19 +136,19 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
-		return fmt.Errorf("failed to get certs directory: %w", err)
+		return oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err)
 	}
 
 	// Extract game_id from CA certificate for proper ServerName verification
 	gameID, err := deps.GameIDExtractor(certsDir)
 	if err != nil {
-		return fmt.Errorf("failed to extract game_id from CA: %w", err)
+		return oops.Code("GAME_ID_EXTRACT_FAILED").With("operation", "extract game_id from CA").With("certs_dir", certsDir).Wrap(err)
 	}
 
 	// Load TLS client certificates for mTLS connection to core
 	tlsConfig, err := deps.ClientTLSLoader(certsDir, "gateway", gameID)
 	if err != nil {
-		return fmt.Errorf("failed to load TLS certificates: %w", err)
+		return oops.Code("TLS_LOAD_FAILED").With("operation", "load TLS certificates").With("component", "gateway").Wrap(err)
 	}
 
 	slog.Info("TLS certificates loaded", "certs_dir", certsDir)
@@ -158,7 +159,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		TLSConfig: tlsConfig,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create gRPC client: %w", err)
+		return oops.Code("GRPC_CLIENT_CREATE_FAILED").With("operation", "create gRPC client").With("core_addr", cfg.coreAddr).Wrap(err)
 	}
 	defer func() {
 		if closeErr := grpcClient.Close(); closeErr != nil {
@@ -174,16 +175,16 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	// Start control gRPC server (always enabled)
 	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "gateway")
 	if tlsErr != nil {
-		return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
+		return oops.Code("CONTROL_TLS_FAILED").With("operation", "load control TLS config").With("component", "gateway").Wrap(tlsErr)
 	}
 
 	controlGRPCServer, err := deps.ControlServerFactory("gateway", func() { cancel() })
 	if err != nil {
-		return fmt.Errorf("failed to create control gRPC server: %w", err)
+		return oops.Code("CONTROL_SERVER_CREATE_FAILED").With("operation", "create control gRPC server").Wrap(err)
 	}
 	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
 	if err != nil {
-		return fmt.Errorf("failed to start control gRPC server: %w", err)
+		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.controlAddr).Wrap(err)
 	}
 	// Monitor control server errors in background - triggers shutdown on error
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
@@ -201,7 +202,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
 			slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
 		}
-		return fmt.Errorf("failed to listen on %s: %w", cfg.telnetAddr, err)
+		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.telnetAddr).Wrap(err)
 	}
 
 	slog.Info("telnet server listening", "addr", telnetListener.Addr())
@@ -221,7 +222,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
 				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
 			}
-			return fmt.Errorf("failed to start observability server: %w", err)
+			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.metricsAddr).Wrap(err)
 		}
 		// Monitor observability server errors in background - triggers shutdown on error
 		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")

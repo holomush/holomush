@@ -239,7 +239,8 @@ func TestQueryProcessStatusGRPC_InvalidCA(t *testing.T) {
 
 	assert.False(t, status.Running, "status.Running should be false when CA is invalid")
 	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
-	assert.Contains(t, status.Error, "game_id", "error should mention game_id extraction, got: %s", status.Error)
+	// Error comes from extracting game_id which fails when CA PEM can't be decoded
+	assert.Contains(t, status.Error, "decode", "error should mention decode failure, got: %s", status.Error)
 }
 
 func TestQueryProcessStatusGRPC_ValidCANoClientCert(t *testing.T) {
@@ -261,7 +262,8 @@ func TestQueryProcessStatusGRPC_ValidCANoClientCert(t *testing.T) {
 
 	assert.False(t, status.Running, "status.Running should be false when client cert is missing")
 	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
-	assert.Contains(t, status.Error, "TLS", "error should mention TLS, got: %s", status.Error)
+	// Error mentions failed to load client certificate (file not found)
+	assert.Contains(t, status.Error, "certificate", "error should mention certificate, got: %s", status.Error)
 }
 
 func TestQueryProcessStatusGRPC_ConnectionFailure(t *testing.T) {

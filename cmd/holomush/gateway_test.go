@@ -421,10 +421,11 @@ Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error when CA has wrong CN prefix")
 
-	// Error should mention game_id or CN
+	// Error should mention certificate parsing issue (the underlying error)
 	assert.True(t, assert.Condition(t, func() bool {
-		return strings.Contains(err.Error(), "game_id") || strings.Contains(err.Error(), "prefix")
-	}), "Error should mention game_id/prefix issue, got: %v", err)
+		errMsg := err.Error()
+		return strings.Contains(errMsg, "certificate") || strings.Contains(errMsg, "CA")
+	}), "Error should mention certificate/CA issue, got: %v", err)
 }
 
 // TestGatewayConfig_Validate tests validation of gatewayConfig.
