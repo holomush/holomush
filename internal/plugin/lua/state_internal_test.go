@@ -5,7 +5,6 @@ package lua
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,8 +28,9 @@ func TestNewState_LibraryLoadError(t *testing.T) {
 
 	_, err := factory.NewState(context.Background())
 	require.Error(t, err, "expected error when library fails to load")
-	assert.True(t, strings.Contains(err.Error(), "failed to open library failing-lib"),
-		"error = %q, want error containing 'failed to open library failing-lib'", err)
+	// oops.Error() returns the underlying Lua error message
+	assert.Contains(t, err.Error(), "simulated library load failure",
+		"error should contain underlying Lua error message")
 }
 
 // TestDefaultSafeLibraries verifies the default library list.

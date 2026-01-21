@@ -5,10 +5,10 @@
 package plugin
 
 import (
-	"fmt"
 	"regexp"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/samber/oops"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,12 +55,12 @@ var namePattern = regexp.MustCompile(`^[a-z](-?[a-z0-9])*$`)
 // ParseManifest parses and validates a plugin.yaml file.
 func ParseManifest(data []byte) (*Manifest, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("manifest data is empty")
+		return nil, oops.In("manifest").New("manifest data is empty")
 	}
 
 	var m Manifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("invalid YAML: %w", err)
+		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
 	}
 
 	if err := m.Validate(); err != nil {
@@ -73,50 +73,50 @@ func ParseManifest(data []byte) (*Manifest, error) {
 // Validate checks manifest constraints.
 func (m *Manifest) Validate() error {
 	if m.Name == "" || !namePattern.MatchString(m.Name) {
-		return fmt.Errorf("name %q must start with a-z, contain only a-z, 0-9, single hyphens, and not end with a hyphen", m.Name)
+		return oops.In("manifest").With("name", m.Name).New("name must start with a-z, contain only a-z, 0-9, single hyphens, and not end with a hyphen")
 	}
 	if len(m.Name) > maxNameLength {
-		return fmt.Errorf("name must be %d characters or less, got %d", maxNameLength, len(m.Name))
+		return oops.In("manifest").With("name", m.Name).With("max_length", maxNameLength).With("actual_length", len(m.Name)).New("name exceeds maximum length")
 	}
 
 	if m.Version == "" {
-		return fmt.Errorf("version is required")
+		return oops.In("manifest").With("name", m.Name).New("version is required")
 	}
 	if _, err := semver.StrictNewVersion(m.Version); err != nil {
-		return fmt.Errorf("version %q must be valid semver (e.g., 1.0.0): %w", m.Version, err)
+		return oops.In("manifest").With("name", m.Name).With("version", m.Version).Hint("version must be valid semver (e.g., 1.0.0)").Wrap(err)
 	}
 
 	// Validate engine constraint if specified
 	if m.Engine != "" {
 		if _, err := semver.NewConstraint(m.Engine); err != nil {
-			return fmt.Errorf("engine %q must be a valid version constraint: %w", m.Engine, err)
+			return oops.In("manifest").With("name", m.Name).With("engine", m.Engine).Hint("engine must be a valid version constraint").Wrap(err)
 		}
 	}
 
 	// Validate dependency constraints
 	for name, constraint := range m.Dependencies {
 		if _, err := semver.NewConstraint(constraint); err != nil {
-			return fmt.Errorf("dependency %q constraint %q is invalid: %w", name, constraint, err)
+			return oops.In("manifest").With("plugin", m.Name).With("dependency", name).With("constraint", constraint).Hint("invalid dependency constraint").Wrap(err)
 		}
 	}
 
 	switch m.Type {
 	case TypeLua:
 		if m.LuaPlugin == nil {
-			return fmt.Errorf("lua-plugin is required when type is lua")
+			return oops.In("manifest").With("name", m.Name).New("lua-plugin is required when type is lua")
 		}
 		if m.LuaPlugin.Entry == "" {
-			return fmt.Errorf("lua-plugin.entry is required")
+			return oops.In("manifest").With("name", m.Name).New("lua-plugin.entry is required")
 		}
 	case TypeBinary:
 		if m.BinaryPlugin == nil {
-			return fmt.Errorf("binary-plugin is required when type is binary")
+			return oops.In("manifest").With("name", m.Name).New("binary-plugin is required when type is binary")
 		}
 		if m.BinaryPlugin.Executable == "" {
-			return fmt.Errorf("binary-plugin.executable is required")
+			return oops.In("manifest").With("name", m.Name).New("binary-plugin.executable is required")
 		}
 	default:
-		return fmt.Errorf("type must be 'lua' or 'binary', got %q", m.Type)
+		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua' or 'binary'")
 	}
 
 	return nil

@@ -5,12 +5,12 @@ package plugin
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/invopop/jsonschema"
 	jschema "github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/samber/oops"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,7 +38,7 @@ func GenerateSchema() ([]byte, error) {
 
 	data, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal schema: %w", err)
+		return nil, oops.In("schema").Hint("failed to marshal schema").Wrap(err)
 	}
 	// Append trailing newline for POSIX compliance
 	data = append(data, '\n')
@@ -48,13 +48,13 @@ func GenerateSchema() ([]byte, error) {
 // ValidateSchema validates YAML data against the plugin manifest JSON Schema.
 func ValidateSchema(data []byte) error {
 	if len(data) == 0 {
-		return fmt.Errorf("manifest data is empty")
+		return oops.In("schema").New("manifest data is empty")
 	}
 
 	// Parse YAML to generic interface for validation
 	var yamlData any
 	if err := yaml.Unmarshal(data, &yamlData); err != nil {
-		return fmt.Errorf("invalid YAML: %w", err)
+		return oops.In("schema").Hint("invalid YAML").Wrap(err)
 	}
 
 	// Convert YAML to JSON-compatible types (yaml.Unmarshal uses map[string]any)
@@ -63,12 +63,12 @@ func ValidateSchema(data []byte) error {
 	// Get or compile schema
 	sch, err := getCompiledSchema()
 	if err != nil {
-		return fmt.Errorf("failed to compile schema: %w", err)
+		return oops.In("schema").Hint("failed to compile schema").Wrap(err)
 	}
 
 	// Validate
 	if err := sch.Validate(jsonData); err != nil {
-		return fmt.Errorf("schema validation failed: %w", err)
+		return oops.In("schema").Hint("schema validation failed").Wrap(err)
 	}
 
 	return nil
@@ -93,18 +93,18 @@ func compileSchema() (*jschema.Schema, error) {
 	// Parse schema JSON
 	var schemaData any
 	if err := json.Unmarshal(schemaBytes, &schemaData); err != nil {
-		return nil, fmt.Errorf("failed to parse schema JSON: %w", err)
+		return nil, oops.In("schema").Hint("failed to parse schema JSON").Wrap(err)
 	}
 
 	// Compile schema
 	c := jschema.NewCompiler()
 	if err := c.AddResource("schema.json", schemaData); err != nil {
-		return nil, fmt.Errorf("failed to add schema resource: %w", err)
+		return nil, oops.In("schema").Hint("failed to add schema resource").Wrap(err)
 	}
 
 	sch, err := c.Compile("schema.json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to compile schema: %w", err)
+		return nil, oops.In("schema").Hint("failed to compile schema").Wrap(err)
 	}
 
 	return sch, nil

@@ -5,12 +5,13 @@ package plugin
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+
+	"github.com/samber/oops"
 )
 
 // Manager discovers and manages plugin lifecycle.
@@ -57,7 +58,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 		if os.IsNotExist(err) {
 			return nil, nil // No plugins directory
 		}
-		return nil, fmt.Errorf("failed to read plugins directory: %w", err)
+		return nil, oops.In("manager").With("dir", m.pluginsDir).Hint("failed to read plugins directory").Wrap(err)
 	}
 
 	plugins := make([]*DiscoveredPlugin, 0, len(entries))
@@ -134,7 +135,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 			return nil
 		}
 		if err := m.luaHost.Load(ctx, dp.Manifest, dp.Dir); err != nil {
-			return fmt.Errorf("load plugin %s: %w", dp.Manifest.Name, err)
+			return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
 		}
 	case TypeBinary:
 		// Binary plugins require go-plugin host (not yet implemented)
@@ -186,7 +187,7 @@ func (m *Manager) Close(ctx context.Context) error {
 
 	if m.luaHost != nil {
 		if err := m.luaHost.Close(ctx); err != nil {
-			return fmt.Errorf("close lua host: %w", err)
+			return oops.In("manager").With("operation", "close").Hint("failed to close lua host").Wrap(err)
 		}
 	}
 

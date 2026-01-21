@@ -32,92 +32,103 @@ linters:
     - gocritic
     - nolintlint
 
-  # Exclusions for paths that use incompatible patterns
   exclusions:
-    # TinyGo WASM plugins use patterns incompatible with standard linting:
-    # - //export directives make functions appear unused
-    # - unsafe memory access is required for WASM host communication
-    # - integer conversions are necessary for 32-bit WASM ABI
+    # Default exclusion presets
+    presets:
+      - common-false-positives
+
+    # Path exclusions
     paths:
+      # TinyGo WASM plugins use patterns incompatible with standard linting:
+      # - //export directives make functions appear unused
+      # - unsafe memory access is required for WASM host communication
+      # - integer conversions are necessary for 32-bit WASM ABI
       - plugins/
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment # Optimization hint, not a bug - can be addressed later
-
-  revive:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-      - name: unreachable-code
-      - name: redefines-builtin-id
+      # Test files can have longer functions and more complexity
+      - path: '_test\.go'
+        linters:
+          - gocritic
+          - wrapcheck
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - hugeParam # Event struct (120 bytes) is passed by value by design
+      # Main package doesn't need to wrap errors
+      - path: cmd/
+        linters:
+          - wrapcheck
 
-  gosec:
-    excludes:
-      - G104 # Audit errors not checked (handled by errcheck)
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
 
-  wrapcheck:
-    ignoreSigs:
-      - .Errorf(
-      - errors.New(
-      - errors.Unwrap(
-      - errors.Join(
-      - .Wrap(
-      - .Wrapf(
-      - .WithMessage(
-      - .WithMessagef(
-      - .WithStack(
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # Optimization hint, not a bug - can be addressed later
 
-  nolintlint:
-    require-explanation: true
-    require-specific: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam # Event struct (120 bytes) is passed by value by design
+
+    gosec:
+      excludes:
+        - G104 # Audit errors not checked (handled by errcheck)
+
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+      ignore-sig-regexps:
+        # oops error library - builder pattern methods create structured errors
+        - 'github\.com/samber/oops\.OopsErrorBuilder\)\.New\('
+        - 'github\.com/samber/oops\.OopsErrorBuilder\)\.Wrap\('
+      ignore-package-globs:
+        # oops error library creates structured errors, not wrapping issues
+        - github.com/samber/oops
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
 
 issues:
-  exclude-rules:
-    # Test files can have longer functions and more complexity
-    - path: _test\.go
-      linters:
-        - gocritic
-        - wrapcheck
-
-    # Main package doesn't need to wrap errors
-    - path: cmd/
-      linters:
-        - wrapcheck
-
   max-issues-per-linter: 0
   max-same-issues: 0

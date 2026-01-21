@@ -269,9 +269,8 @@ end
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
 	_, err = host.DeliverEvent(context.Background(), "error-plugin", event)
 	require.Error(t, err, "expected error when plugin throws runtime error")
-	// Error should include plugin name for debugging
-	assert.Contains(t, err.Error(), "error-plugin", "error should contain plugin name")
-	assert.Contains(t, err.Error(), "on_event failed", "error should contain 'on_event failed'")
+	// oops.Error() returns the underlying Lua error message
+	assert.Contains(t, err.Error(), "intentional failure", "error should contain Lua error message")
 }
 
 func TestLuaHost_DeliverEvent_ActorKinds(t *testing.T) {

@@ -6,8 +6,8 @@ package lua
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -65,7 +65,7 @@ func (f *StateFactory) NewState(_ context.Context) (*lua.LState, error) {
 			Protect: true,
 		}, lua.LString(lib.name)); err != nil {
 			L.Close()
-			return nil, fmt.Errorf("failed to open library %s: %w", lib.name, err)
+			return nil, oops.In("lua").With("library", lib.name).Hint("failed to open library").Wrap(err)
 		}
 	}
 

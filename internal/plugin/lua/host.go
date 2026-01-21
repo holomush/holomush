@@ -5,15 +5,16 @@ package lua
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/samber/oops"
+	lua "github.com/yuin/gopher-lua"
+
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Compile-time interface check.
@@ -62,24 +63,24 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	defer h.mu.Unlock()
 
 	if h.closed {
-		return fmt.Errorf("host is closed")
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").New("host is closed")
 	}
 
 	entryPath := filepath.Join(dir, manifest.LuaPlugin.Entry)
 	code, err := os.ReadFile(entryPath) //nolint:gosec // entryPath is from trusted manifest
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", entryPath, err)
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", entryPath).Hint("failed to read entry file").Wrap(err)
 	}
 
 	// Validate syntax by compiling in a throwaway state
 	L, err := h.factory.NewState(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create validation state: %w", err)
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").Hint("failed to create validation state").Wrap(err)
 	}
 	defer L.Close()
 
 	if err := L.DoString(string(code)); err != nil {
-		return fmt.Errorf("syntax error in %s: %w", manifest.LuaPlugin.Entry, err)
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("entry", manifest.LuaPlugin.Entry).Hint("syntax error").Wrap(err)
 	}
 
 	h.plugins[manifest.Name] = &luaPlugin{
@@ -96,7 +97,7 @@ func (h *Host) Unload(_ context.Context, name string) error {
 	defer h.mu.Unlock()
 
 	if _, ok := h.plugins[name]; !ok {
-		return fmt.Errorf("plugin %s not loaded", name)
+		return oops.In("lua").With("plugin", name).With("operation", "unload").New("plugin not loaded")
 	}
 	delete(h.plugins, name)
 	return nil
@@ -108,7 +109,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	p, ok := h.plugins[name]
 	if !ok {
 		h.mu.RUnlock()
-		return nil, fmt.Errorf("plugin %s not loaded", name)
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").New("plugin not loaded")
 	}
 	code := p.code
 	h.mu.RUnlock()
@@ -116,7 +117,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	// Create fresh state for this event
 	L, err := h.factory.NewState(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("plugin %s: failed to create state: %w", name, err)
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").Hint("failed to create state").Wrap(err)
 	}
 	defer L.Close()
 
@@ -127,7 +128,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 
 	// Load plugin code
 	if err := L.DoString(code); err != nil {
-		return nil, fmt.Errorf("plugin %s: failed to load code: %w", name, err)
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").Hint("failed to load code").Wrap(err)
 	}
 
 	// Check if on_event exists
@@ -145,7 +146,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 		NRet:    1,
 		Protect: true,
 	}, eventTable); err != nil {
-		return nil, fmt.Errorf("plugin %s: on_event failed: %w", name, err)
+		return nil, oops.In("lua").With("plugin", name).With("operation", "on_event").Wrap(err)
 	}
 
 	// Get return value
@@ -187,7 +188,6 @@ func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LT
 	state.SetField(t, "payload", lua.LString(event.Payload))
 	return t
 }
-
 
 func (h *Host) parseEmitEvents(ret lua.LValue) []pluginpkg.EmitEvent {
 	if ret.Type() == lua.LTNil {

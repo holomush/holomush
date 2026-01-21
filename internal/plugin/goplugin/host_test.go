@@ -8,7 +8,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -220,7 +219,8 @@ func TestLoad_ContextCancelled(t *testing.T) {
 	err := host.Load(ctx, manifest, tmpDir)
 	require.Error(t, err, "expected error when loading with cancelled context")
 	assert.ErrorIs(t, err, context.Canceled, "expected context.Canceled")
-	assert.Contains(t, err.Error(), "load cancelled", "expected error to mention 'load cancelled'")
+	// oops.Error() returns underlying error message
+	assert.Contains(t, err.Error(), "context canceled", "expected error to contain 'context canceled'")
 }
 
 func TestUnload_NotLoaded(t *testing.T) {
@@ -295,7 +295,8 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 
 	_, err = host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
 	require.Error(t, err, "expected error when HandleEvent fails")
-	assert.Contains(t, err.Error(), "HandleEvent failed", "expected error to mention 'HandleEvent failed'")
+	// oops.Error() returns underlying error message from mock
+	assert.Contains(t, err.Error(), "plugin crashed", "expected error to contain mock error message")
 }
 
 func TestDeliverEvent_NilResponse(t *testing.T) {
@@ -389,7 +390,8 @@ func TestLoad_ClientError(t *testing.T) {
 
 	err = host.Load(ctx, manifest, tmpDir)
 	require.Error(t, err, "expected error when client connection fails")
-	assert.Contains(t, err.Error(), "failed to connect", "expected error to mention 'failed to connect'")
+	// oops.Error() returns underlying error message from mock
+	assert.Contains(t, err.Error(), "connection failed", "expected error to contain mock error message")
 	assert.True(t, mockClient.killed, "expected client to be killed after connection failure")
 }
 
@@ -419,7 +421,8 @@ func TestLoad_DispenseError(t *testing.T) {
 
 	err = host.Load(ctx, manifest, tmpDir)
 	require.Error(t, err, "expected error when dispense fails")
-	assert.Contains(t, err.Error(), "failed to dispense", "expected error to mention 'failed to dispense'")
+	// oops.Error() returns underlying error message from mock
+	assert.Contains(t, err.Error(), "dispense failed", "expected error to contain mock error message")
 	assert.True(t, mockClient.killed, "expected client to be killed after dispense failure")
 }
 
@@ -500,7 +503,8 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 
 	err := host.Load(ctx, manifest, tmpDir)
 	require.Error(t, err, "expected error when loading nonexistent executable")
-	assert.Contains(t, err.Error(), "not found", "expected error to mention 'not found'")
+	// oops.Error() returns underlying error message which contains file path
+	assert.Contains(t, err.Error(), "no such file or directory", "expected error to contain OS error message")
 	// Verify error is wrapped (contains underlying os error)
 	assert.ErrorIs(t, err, os.ErrNotExist, "expected error to wrap os.ErrNotExist")
 }
@@ -533,7 +537,8 @@ func TestLoad_SetGrantsFailure(t *testing.T) {
 
 	err = host.Load(ctx, manifest, tmpDir)
 	require.Error(t, err, "expected error when SetGrants fails")
-	assert.Contains(t, err.Error(), "failed to set capabilities", "expected error to mention 'failed to set capabilities'")
+	// oops.Error() returns underlying error message from enforcer
+	assert.Contains(t, err.Error(), "empty capability pattern", "expected error to contain enforcer error message")
 
 	// Verify plugin was not added to the host
 	assert.Empty(t, host.Plugins(), "plugin should not be loaded after SetGrants failure")
@@ -584,11 +589,11 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 
 	err = host.Load(ctx, manifest, restrictedDir)
 	require.Error(t, err, "expected error when stat fails with permission denied")
-	// Should get a resolution or access error, not "not found"
-	assert.True(t, strings.Contains(err.Error(), "cannot resolve") || strings.Contains(err.Error(), "cannot access"),
-		"expected error to mention 'cannot resolve' or 'cannot access', got: %v", err)
+	// oops.Error() returns underlying OS error which is "permission denied"
+	assert.Contains(t, err.Error(), "permission denied",
+		"expected error to contain 'permission denied', got: %v", err)
 	// Verify it's NOT the "not found" error
-	assert.NotContains(t, err.Error(), "not found", "expected resolution/access error, not 'not found'")
+	assert.NotContains(t, err.Error(), "not found", "expected permission error, not 'not found'")
 }
 
 func TestLoad_ExecutableNotExecutable(t *testing.T) {

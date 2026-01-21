@@ -388,14 +388,14 @@ func TestParseManifest_InvalidVersion(t *testing.T) {
 	tests := []struct {
 		name    string
 		version string
-		wantErr string
+		wantErr string // substring expected in underlying semver error
 	}{
-		{name: "not semver - plain text", version: "latest", wantErr: "version"},
-		{name: "not semver - single number", version: "1", wantErr: "version"},
-		{name: "not semver - two numbers", version: "1.0", wantErr: "version"},
-		{name: "not semver - leading v", version: "v1.0.0", wantErr: "version"},
-		{name: "not semver - spaces", version: "1.0.0 beta", wantErr: "version"},
-		{name: "not semver - invalid prerelease", version: "1.0.0-", wantErr: "version"},
+		{name: "not semver - plain text", version: "latest", wantErr: "invalid semantic version"},
+		{name: "not semver - single number", version: "1", wantErr: "invalid semantic version"},
+		{name: "not semver - two numbers", version: "1.0", wantErr: "invalid semantic version"},
+		{name: "not semver - leading v", version: "v1.0.0", wantErr: "invalid characters"},
+		{name: "not semver - spaces", version: "1.0.0 beta", wantErr: "invalid characters"},
+		{name: "not semver - invalid prerelease", version: "1.0.0-", wantErr: "invalid prerelease"},
 	}
 
 	for _, tt := range tests {

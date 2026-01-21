@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -812,7 +813,7 @@ func TestLoadCA_InvalidCertificateData(t *testing.T) {
 
 	_, err = LoadCA(tmpDir)
 	assert.Error(t, err, "LoadCA() should return error for invalid certificate data")
-	assert.Contains(t, err.Error(), "parse CA certificate")
+	errutil.AssertErrorContext(t, err, "operation", "parse CA certificate")
 }
 
 func TestLoadCA_InvalidKeyData(t *testing.T) {
@@ -838,7 +839,7 @@ func TestLoadCA_InvalidKeyData(t *testing.T) {
 
 	_, err = LoadCA(tmpDir)
 	assert.Error(t, err, "LoadCA() should return error for invalid key data")
-	assert.Contains(t, err.Error(), "parse CA key")
+	errutil.AssertErrorContext(t, err, "operation", "parse CA key")
 }
 
 func TestLoadServerTLS_InvalidCAPEM(t *testing.T) {
@@ -914,7 +915,7 @@ func TestLoadServerTLS_MissingCAFile(t *testing.T) {
 
 	_, err = LoadServerTLS(tmpDir, "core")
 	assert.Error(t, err, "LoadServerTLS() should return error for missing CA file")
-	assert.Contains(t, err.Error(), "read CA certificate")
+	errutil.AssertErrorContext(t, err, "operation", "read CA certificate")
 }
 
 func TestLoadClientTLS_MissingCAFile(t *testing.T) {
@@ -936,7 +937,7 @@ func TestLoadClientTLS_MissingCAFile(t *testing.T) {
 
 	_, err = LoadClientTLS(tmpDir, "gateway", gameID)
 	assert.Error(t, err, "LoadClientTLS() should return error for missing CA file")
-	assert.Contains(t, err.Error(), "read CA certificate")
+	errutil.AssertErrorContext(t, err, "operation", "read CA certificate")
 }
 
 func TestValidateCertificateChain_NilCert(t *testing.T) {
