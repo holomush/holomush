@@ -12,49 +12,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	"github.com/holomush/holomush/internal/plugin/mocks"
 )
-
-// mockHost is a test Host implementation for error testing.
-type mockHost struct {
-	loadErr  error
-	closeErr error
-	plugins  []string
-}
-
-func (h *mockHost) Load(_ context.Context, m *plugin.Manifest, _ string) error {
-	if h.loadErr != nil {
-		return h.loadErr
-	}
-	h.plugins = append(h.plugins, m.Name)
-	return nil
-}
-
-func (h *mockHost) Unload(_ context.Context, name string) error {
-	for i, p := range h.plugins {
-		if p == name {
-			h.plugins = append(h.plugins[:i], h.plugins[i+1:]...)
-			return nil
-		}
-	}
-	return nil
-}
-
-func (h *mockHost) DeliverEvent(_ context.Context, _ string, _ pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
-	return nil, nil
-}
-
-func (h *mockHost) Plugins() []string {
-	return h.plugins
-}
-
-func (h *mockHost) Close(_ context.Context) error {
-	return h.closeErr
-}
 
 // Helper functions for creating test fixtures with secure permissions.
 func mkdirAll(t *testing.T, path string) {
@@ -411,11 +375,16 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
 
 	hostErr := errors.New("cleanup failed")
-	mock := &mockHost{closeErr: hostErr}
-	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(mock))
+	mockHost := mocks.NewMockHost(t)
+
+	// Manager calls Load on the host, then tracks plugins internally
+	mockHost.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockHost.EXPECT().Close(mock.Anything).Return(hostErr)
+
+	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(mockHost))
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
-	// Verify plugin is loaded
+	// Verify plugin is loaded (Manager tracks this internally, not via Host.Plugins())
 	require.Len(t, mgr.ListPlugins(), 1, "expected 1 plugin to be loaded")
 
 	// Close should return the error
