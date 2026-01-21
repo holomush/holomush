@@ -10,74 +10,52 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	"github.com/holomush/holomush/internal/tls"
+	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 )
 
 func TestGRPCServer_NewGRPCServer(t *testing.T) {
 	s, err := NewGRPCServer("core", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !s.running.Load() {
-		t.Error("server should be running after creation")
-	}
-
-	if s.component != "core" {
-		t.Errorf("component = %q, want %q", s.component, "core")
-	}
+	assert.True(t, s.running.Load(), "server should be running after creation")
+	assert.Equal(t, "core", s.component)
 }
 
 // TestGRPCServer_NewGRPCServer_EmptyComponent tests that NewGRPCServer returns
 // an error when component is empty.
 func TestGRPCServer_NewGRPCServer_EmptyComponent(t *testing.T) {
 	_, err := NewGRPCServer("", nil)
-	if err == nil {
-		t.Error("NewGRPCServer() should fail with empty component")
-	}
+	assert.Error(t, err, "NewGRPCServer() should fail with empty component")
 }
 
 func TestGRPCServer_Status_ReturnsCorrectInfo(t *testing.T) {
 	s, err := NewGRPCServer("test-component", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 	// Wait a bit to ensure uptime > 0
 	time.Sleep(10 * time.Millisecond)
 
 	resp, err := s.Status(context.Background(), &controlv1.StatusRequest{})
-	if err != nil {
-		t.Fatalf("Status() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Running {
-		t.Error("running should be true")
-	}
+	assert.True(t, resp.Running, "running should be true")
 
 	//nolint:gosec // G115: PID values never exceed int32 range
 	expectedPID := int32(os.Getpid())
-	if resp.Pid != expectedPID {
-		t.Errorf("pid = %d, want %d", resp.Pid, expectedPID)
-	}
-
-	if resp.UptimeSeconds < 0 {
-		t.Errorf("uptime_seconds = %d, should be non-negative", resp.UptimeSeconds)
-	}
-
-	if resp.Component != "test-component" {
-		t.Errorf("component = %q, want %q", resp.Component, "test-component")
-	}
+	assert.Equal(t, expectedPID, resp.Pid)
+	assert.GreaterOrEqual(t, resp.UptimeSeconds, int64(0), "uptime_seconds should be non-negative")
+	assert.Equal(t, "test-component", resp.Component)
 }
 
 func TestGRPCServer_Shutdown_TriggersCallback(t *testing.T) {
@@ -86,61 +64,40 @@ func TestGRPCServer_Shutdown_TriggersCallback(t *testing.T) {
 	s, err := NewGRPCServer("core", func() {
 		shutdownCalled.Store(true)
 	})
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	resp, err := s.Shutdown(context.Background(), &controlv1.ShutdownRequest{Graceful: true})
-	if err != nil {
-		t.Fatalf("Shutdown() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Message != "shutdown initiated" {
-		t.Errorf("message = %q, want %q", resp.Message, "shutdown initiated")
-	}
+	assert.Equal(t, "shutdown initiated", resp.Message)
 
 	// Wait for async shutdown callback
 	time.Sleep(50 * time.Millisecond)
 
-	if !shutdownCalled.Load() {
-		t.Error("shutdown callback was not called")
-	}
+	assert.True(t, shutdownCalled.Load(), "shutdown callback was not called")
 }
 
 func TestGRPCServer_Shutdown_NilCallback(t *testing.T) {
 	s, err := NewGRPCServer("core", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should not panic with nil callback
 	resp, err := s.Shutdown(context.Background(), &controlv1.ShutdownRequest{Graceful: true})
-	if err != nil {
-		t.Fatalf("Shutdown() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Message != "shutdown initiated" {
-		t.Errorf("message = %q, want %q", resp.Message, "shutdown initiated")
-	}
+	assert.Equal(t, "shutdown initiated", resp.Message)
 }
 
 func TestGRPCServer_Stop_SetsRunningFalse(t *testing.T) {
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !s.running.Load() {
-		t.Error("server should be running after creation")
-	}
+	assert.True(t, s.running.Load(), "server should be running after creation")
 
-	if err := s.Stop(context.Background()); err != nil {
-		t.Errorf("Stop() error = %v", err)
-	}
+	err = s.Stop(context.Background())
+	assert.NoError(t, err)
 
-	if s.running.Load() {
-		t.Error("server should not be running after Stop()")
-	}
+	assert.False(t, s.running.Load(), "server should not be running after Stop()")
 }
 
 // TestGRPCServer_IntegrationWithInsecure tests the gRPC server with an insecure
@@ -148,9 +105,7 @@ func TestGRPCServer_Stop_SetsRunningFalse(t *testing.T) {
 func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
@@ -158,15 +113,11 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	s, err := NewGRPCServer("integration-test", func() {
 		shutdownCalled.Store(true)
 	})
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Start server without TLS for testing
 	serverListener, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 
 	s.listener = serverListener
 	s.grpcServer = grpc.NewServer()
@@ -187,87 +138,56 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 
 	// Create client
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("failed to create gRPC client: %v", err)
-	}
+	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
 	client := controlv1.NewControlClient(conn)
 
 	t.Run("Status", func(t *testing.T) {
 		resp, err := client.Status(context.Background(), &controlv1.StatusRequest{})
-		if err != nil {
-			t.Fatalf("Status() error = %v", err)
-		}
+		require.NoError(t, err)
 
-		if !resp.Running {
-			t.Error("running should be true")
-		}
-
-		if resp.Component != "integration-test" {
-			t.Errorf("component = %q, want %q", resp.Component, "integration-test")
-		}
-
-		if resp.Pid <= 0 {
-			t.Errorf("pid = %d, should be positive", resp.Pid)
-		}
-
-		if resp.UptimeSeconds < 0 {
-			t.Errorf("uptime_seconds = %d, should be non-negative", resp.UptimeSeconds)
-		}
+		assert.True(t, resp.Running, "running should be true")
+		assert.Equal(t, "integration-test", resp.Component)
+		assert.Greater(t, resp.Pid, int32(0), "pid should be positive")
+		assert.GreaterOrEqual(t, resp.UptimeSeconds, int64(0), "uptime_seconds should be non-negative")
 	})
 
 	t.Run("Shutdown", func(t *testing.T) {
 		resp, err := client.Shutdown(context.Background(), &controlv1.ShutdownRequest{Graceful: true})
-		if err != nil {
-			t.Fatalf("Shutdown() error = %v", err)
-		}
+		require.NoError(t, err)
 
-		if resp.Message != "shutdown initiated" {
-			t.Errorf("message = %q, want %q", resp.Message, "shutdown initiated")
-		}
+		assert.Equal(t, "shutdown initiated", resp.Message)
 
 		// Wait for async shutdown callback
 		time.Sleep(50 * time.Millisecond)
 
-		if !shutdownCalled.Load() {
-			t.Error("shutdown callback was not called")
-		}
+		assert.True(t, shutdownCalled.Load(), "shutdown callback was not called")
 	})
 }
 
 func TestGRPCServer_Stop_HandlesNilServer(t *testing.T) {
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 	// grpcServer and listener are nil
 
 	err = s.Stop(context.Background())
-	if err != nil {
-		t.Errorf("Stop should succeed with nil server components, got: %v", err)
-	}
+	assert.NoError(t, err, "Stop should succeed with nil server components")
 }
 
 func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	s, err := NewGRPCServer("concurrent-test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Start server without TLS for testing
 	serverListener, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	require.NoError(t, err, "failed to listen")
 
 	s.listener = serverListener
 	s.grpcServer = grpc.NewServer()
@@ -288,9 +208,7 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 
 	// Create client
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("failed to create gRPC client: %v", err)
-	}
+	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
 	client := controlv1.NewControlClient(conn)
@@ -324,18 +242,14 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 		}
 	}
 
-	if len(errors) > 0 {
-		t.Errorf("concurrent requests failed: %v", errors)
-	}
+	assert.Empty(t, errors, "concurrent requests failed")
 }
 
 func TestLoadControlServerTLS_FailsWithMissingCerts(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	_, err := LoadControlServerTLS(tmpDir, "core")
-	if err == nil {
-		t.Fatal("LoadControlServerTLS should fail with missing certificates")
-	}
+	require.Error(t, err, "LoadControlServerTLS should fail with missing certificates")
 }
 
 func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
@@ -347,25 +261,18 @@ func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
 	caPath := filepath.Join(tmpDir, "root-ca.crt")
 
 	// Write corrupted/invalid certificate data
-	if err := os.WriteFile(certPath, []byte("not a valid certificate"), 0o600); err != nil {
-		t.Fatalf("failed to write cert file: %v", err)
-	}
-	if err := os.WriteFile(keyPath, []byte("not a valid key"), 0o600); err != nil {
-		t.Fatalf("failed to write key file: %v", err)
-	}
-	if err := os.WriteFile(caPath, []byte("not a valid CA"), 0o600); err != nil {
-		t.Fatalf("failed to write CA file: %v", err)
-	}
+	err := os.WriteFile(certPath, []byte("not a valid certificate"), 0o600)
+	require.NoError(t, err, "failed to write cert file")
+	err = os.WriteFile(keyPath, []byte("not a valid key"), 0o600)
+	require.NoError(t, err, "failed to write key file")
+	err = os.WriteFile(caPath, []byte("not a valid CA"), 0o600)
+	require.NoError(t, err, "failed to write CA file")
 
-	_, err := LoadControlServerTLS(tmpDir, "core")
-	if err == nil {
-		t.Fatal("LoadControlServerTLS should fail with invalid certificate content")
-	}
+	_, err = LoadControlServerTLS(tmpDir, "core")
+	require.Error(t, err, "LoadControlServerTLS should fail with invalid certificate content")
 
 	// Error should mention certificate loading failure
-	if !strings.Contains(err.Error(), "failed to load server certificate") {
-		t.Errorf("error = %q, expected to contain 'failed to load server certificate'", err.Error())
-	}
+	assert.Contains(t, err.Error(), "failed to load server certificate")
 }
 
 func TestLoadControlServerTLS_FailsWithMalformedCAPEM(t *testing.T) {
@@ -374,38 +281,28 @@ func TestLoadControlServerTLS_FailsWithMalformedCAPEM(t *testing.T) {
 	// Generate valid server certificate first
 	gameID := "test-malformed-ca"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	// Save valid server certificates
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	// Overwrite CA with malformed PEM data that looks like PEM but isn't valid
 	caPath := filepath.Join(tmpDir, "root-ca.crt")
 	malformedPEM := `-----BEGIN CERTIFICATE-----
 not-valid-base64-data-here!!!
 -----END CERTIFICATE-----`
-	if err := os.WriteFile(caPath, []byte(malformedPEM), 0o600); err != nil {
-		t.Fatalf("failed to write malformed CA: %v", err)
-	}
+	err = os.WriteFile(caPath, []byte(malformedPEM), 0o600)
+	require.NoError(t, err, "failed to write malformed CA")
 
 	_, err = LoadControlServerTLS(tmpDir, "core")
-	if err == nil {
-		t.Fatal("LoadControlServerTLS should fail with malformed CA PEM")
-	}
+	require.Error(t, err, "LoadControlServerTLS should fail with malformed CA PEM")
 
 	// Error should mention CA pool failure
-	if !strings.Contains(err.Error(), "failed to add CA certificate to pool") {
-		t.Errorf("error = %q, expected to contain 'failed to add CA certificate to pool'", err.Error())
-	}
+	assert.Contains(t, err.Error(), "failed to add CA certificate to pool")
 }
 
 func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
@@ -414,35 +311,25 @@ func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
 	// Generate valid server certificate first
 	gameID := "test-empty-ca"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	// Save valid server certificates
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	// Overwrite CA with empty content (causes AppendCertsFromPEM to return false)
 	caPath := filepath.Join(tmpDir, "root-ca.crt")
-	if err := os.WriteFile(caPath, []byte(""), 0o600); err != nil {
-		t.Fatalf("failed to write empty CA: %v", err)
-	}
+	err = os.WriteFile(caPath, []byte(""), 0o600)
+	require.NoError(t, err, "failed to write empty CA")
 
 	_, err = LoadControlServerTLS(tmpDir, "core")
-	if err == nil {
-		t.Fatal("LoadControlServerTLS should fail with empty CA file")
-	}
+	require.Error(t, err, "LoadControlServerTLS should fail with empty CA file")
 
 	// Error should mention CA pool failure
-	if !strings.Contains(err.Error(), "failed to add CA certificate to pool") {
-		t.Errorf("error = %q, expected to contain 'failed to add CA certificate to pool'", err.Error())
-	}
+	assert.Contains(t, err.Error(), "failed to add CA certificate to pool")
 }
 
 func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
@@ -451,53 +338,39 @@ func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
 	// Generate valid server certificate
 	gameID := "test-missing-ca"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	// Save server certificates using the tls package, then remove the CA
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	// Remove the CA file
 	caPath := filepath.Join(tmpDir, "root-ca.crt")
-	if err := os.Remove(caPath); err != nil {
-		t.Fatalf("failed to remove CA file: %v", err)
-	}
+	err = os.Remove(caPath)
+	require.NoError(t, err, "failed to remove CA file")
 
 	_, err = LoadControlServerTLS(tmpDir, "core")
-	if err == nil {
-		t.Fatal("LoadControlServerTLS should fail with missing CA file")
-	}
+	require.Error(t, err, "LoadControlServerTLS should fail with missing CA file")
 
 	// Error should mention CA read failure
-	if !strings.Contains(err.Error(), "failed to read CA certificate") {
-		t.Errorf("error = %q, expected to contain 'failed to read CA certificate'", err.Error())
-	}
+	assert.Contains(t, err.Error(), "failed to read CA certificate")
 }
 
 func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	_, err := LoadControlClientTLS(tmpDir, "core", "test-game")
-	if err == nil {
-		t.Fatal("LoadControlClientTLS should fail with missing certificates")
-	}
+	require.Error(t, err, "LoadControlClientTLS should fail with missing certificates")
 }
 
 func TestExtractGameIDFromCA_FailsWithMissingCA(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	_, err := ExtractGameIDFromCA(tmpDir)
-	if err == nil {
-		t.Fatal("ExtractGameIDFromCA should fail with missing CA certificate")
-	}
+	require.Error(t, err, "ExtractGameIDFromCA should fail with missing CA certificate")
 }
 
 func TestExtractGameIDFromCA_FailsWithInvalidPEM(t *testing.T) {
@@ -505,14 +378,11 @@ func TestExtractGameIDFromCA_FailsWithInvalidPEM(t *testing.T) {
 
 	// Write invalid PEM data
 	caPath := tmpDir + "/root-ca.crt"
-	if err := os.WriteFile(caPath, []byte("not valid PEM data"), 0o600); err != nil {
-		t.Fatalf("failed to write test file: %v", err)
-	}
+	err := os.WriteFile(caPath, []byte("not valid PEM data"), 0o600)
+	require.NoError(t, err, "failed to write test file")
 
-	_, err := ExtractGameIDFromCA(tmpDir)
-	if err == nil {
-		t.Fatal("ExtractGameIDFromCA should fail with invalid PEM")
-	}
+	_, err = ExtractGameIDFromCA(tmpDir)
+	require.Error(t, err, "ExtractGameIDFromCA should fail with invalid PEM")
 }
 
 func TestExtractGameIDFromCA_FailsWithWrongCNPrefix(t *testing.T) {
@@ -532,19 +402,14 @@ A1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFC+WzLPcVjgMRBKQmFjCCRh5jPvE
 MAoGCCqGSM49BAMCA0gAMEUCIFJdkxsZ0I1p5tSyPgMqsyLTQI+bfK0hv0GJm7Yf
 Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
 -----END CERTIFICATE-----`
-	if err := os.WriteFile(caPath, []byte(pemData), 0o600); err != nil {
-		t.Fatalf("failed to write test file: %v", err)
-	}
+	err := os.WriteFile(caPath, []byte(pemData), 0o600)
+	require.NoError(t, err, "failed to write test file")
 
-	_, err := ExtractGameIDFromCA(tmpDir)
-	if err == nil {
-		t.Fatal("ExtractGameIDFromCA should fail with wrong CN prefix")
-	}
+	_, err = ExtractGameIDFromCA(tmpDir)
+	require.Error(t, err, "ExtractGameIDFromCA should fail with wrong CN prefix")
 
-	// Check error message mentions prefix
-	if err.Error() == "" {
-		t.Error("error should have a message")
-	}
+	// Check error message is not empty
+	assert.NotEmpty(t, err.Error(), "error should have a message")
 }
 
 func TestExtractGameIDFromCA_ExtractsCorrectGameID(t *testing.T) {
@@ -553,24 +418,17 @@ func TestExtractGameIDFromCA_ExtractsCorrectGameID(t *testing.T) {
 	// Generate a proper CA using the tls package
 	expectedGameID := "test-game-abc123"
 	ca, err := tls.GenerateCA(expectedGameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	// Save the CA to the temp directory
-	if err := tls.SaveCertificates(tmpDir, ca, nil); err != nil {
-		t.Fatalf("failed to save CA: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, nil)
+	require.NoError(t, err, "failed to save CA")
 
 	// Extract the game ID
 	gotGameID, err := ExtractGameIDFromCA(tmpDir)
-	if err != nil {
-		t.Fatalf("ExtractGameIDFromCA() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if gotGameID != expectedGameID {
-		t.Errorf("ExtractGameIDFromCA() = %q, want %q", gotGameID, expectedGameID)
-	}
+	assert.Equal(t, expectedGameID, gotGameID)
 }
 
 func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
@@ -579,50 +437,34 @@ func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
 	// Generate CA and client certificate
 	gameID := "test-game-xyz"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	// Generate server cert (core) - client will verify against this
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	// Generate client cert (gateway)
 	clientCert, err := tls.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		t.Fatalf("failed to generate client cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate client cert")
 
 	// Save all certs
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save server certs: %v", err)
-	}
-	if err := tls.SaveClientCert(tmpDir, clientCert); err != nil {
-		t.Fatalf("failed to save client cert: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save server certs")
+	err = tls.SaveClientCert(tmpDir, clientCert)
+	require.NoError(t, err, "failed to save client cert")
 
 	// Load client TLS config
 	config, err := LoadControlClientTLS(tmpDir, "gateway", gameID)
-	if err != nil {
-		t.Fatalf("LoadControlClientTLS() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if config == nil {
-		t.Fatal("LoadControlClientTLS() returned nil config")
-	}
+	require.NotNil(t, config, "LoadControlClientTLS() returned nil config")
 
 	// Verify ServerName is set correctly
 	expectedServerName := "holomush-" + gameID
-	if config.ServerName != expectedServerName {
-		t.Errorf("ServerName = %q, want %q", config.ServerName, expectedServerName)
-	}
+	assert.Equal(t, expectedServerName, config.ServerName)
 
 	// Verify TLS 1.3 minimum
-	if config.MinVersion != 0x0304 { // TLS 1.3
-		t.Errorf("MinVersion = %x, want 0x0304 (TLS 1.3)", config.MinVersion)
-	}
+	assert.Equal(t, uint16(0x0304), config.MinVersion, "MinVersion should be TLS 1.3")
 }
 
 // TestGRPCServer_Start_FailsOnInvalidAddress tests that Start() returns an error
@@ -633,41 +475,30 @@ func TestGRPCServer_Start_FailsOnInvalidAddress(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-listen-fail"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Try to start on an invalid address
 	errCh, err := s.Start("invalid-address:99999999", tlsConfig)
 	if err == nil {
-		t.Error("Start() should fail with invalid address")
 		// Clean up if it somehow succeeded
 		if errCh != nil {
 			_ = s.Stop(context.Background())
 		}
 	}
-	if errCh != nil {
-		t.Error("Start() should return nil error channel on failure")
-	}
+	assert.Error(t, err, "Start() should fail with invalid address")
+	assert.Nil(t, errCh, "Start() should return nil error channel on failure")
 }
 
 // TestGRPCServer_Start_ReturnsErrorChannel tests that Start() returns an error channel
@@ -678,45 +509,30 @@ func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-errch"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Start should return an error channel
 	errCh, err := s.Start(addr, tlsConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	if errCh == nil {
-		t.Fatal("Start() should return a non-nil error channel")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, errCh, "Start() should return a non-nil error channel")
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -728,9 +544,7 @@ func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
 	select {
 	case err := <-errCh:
 		// This means server stopped immediately - could be an error
-		if err != nil {
-			t.Fatalf("unexpected immediate error: %v", err)
-		}
+		require.NoError(t, err, "unexpected immediate error")
 	case <-time.After(100 * time.Millisecond):
 		// Good - server is running
 	}
@@ -744,41 +558,28 @@ func TestGRPCServer_Start_PropagatesServerError(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-prop-err"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	errCh, err := s.Start(addr, tlsConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
@@ -807,44 +608,30 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 	// Generate CA and certificates
 	gameID := "mtls-integration-test"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	clientCert, err := tls.GenerateClientCert(ca, "gateway")
-	if err != nil {
-		t.Fatalf("failed to generate client cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate client cert")
 
 	// Save certificates
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save server certs: %v", err)
-	}
-	if err := tls.SaveClientCert(tmpDir, clientCert); err != nil {
-		t.Fatalf("failed to save client cert: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save server certs")
+	err = tls.SaveClientCert(tmpDir, clientCert)
+	require.NoError(t, err, "failed to save client cert")
 
 	// Load TLS configs
 	serverTLSConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load server TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load server TLS config")
 
 	clientTLSConfig, err := LoadControlClientTLS(tmpDir, "gateway", gameID)
-	if err != nil {
-		t.Fatalf("failed to load client TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load client TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
@@ -853,14 +640,10 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 	s, err := NewGRPCServer("core", func() {
 		shutdownCalled.Store(true)
 	})
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	errCh, err := s.Start(addr, serverTLSConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -876,9 +659,7 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 	// Connect client with mTLS
 	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(credentials.NewTLS(clientTLSConfig)))
-	if err != nil {
-		t.Fatalf("failed to create gRPC client: %v", err)
-	}
+	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
 	client := controlv1.NewControlClient(conn)
@@ -888,21 +669,11 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 		defer cancel()
 
 		resp, err := client.Status(ctx, &controlv1.StatusRequest{})
-		if err != nil {
-			t.Fatalf("Status() error = %v", err)
-		}
+		require.NoError(t, err)
 
-		if !resp.Running {
-			t.Error("running should be true")
-		}
-
-		if resp.Component != "core" {
-			t.Errorf("component = %q, want %q", resp.Component, "core")
-		}
-
-		if resp.Pid <= 0 {
-			t.Errorf("pid = %d, should be positive", resp.Pid)
-		}
+		assert.True(t, resp.Running, "running should be true")
+		assert.Equal(t, "core", resp.Component)
+		assert.Greater(t, resp.Pid, int32(0), "pid should be positive")
 	})
 
 	t.Run("Shutdown_via_mTLS", func(t *testing.T) {
@@ -910,20 +681,14 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 		defer cancel()
 
 		resp, err := client.Shutdown(ctx, &controlv1.ShutdownRequest{Graceful: true})
-		if err != nil {
-			t.Fatalf("Shutdown() error = %v", err)
-		}
+		require.NoError(t, err)
 
-		if resp.Message != "shutdown initiated" {
-			t.Errorf("message = %q, want %q", resp.Message, "shutdown initiated")
-		}
+		assert.Equal(t, "shutdown initiated", resp.Message)
 
 		// Wait for async shutdown callback
 		time.Sleep(50 * time.Millisecond)
 
-		if !shutdownCalled.Load() {
-			t.Error("shutdown callback was not called")
-		}
+		assert.True(t, shutdownCalled.Load(), "shutdown callback was not called")
 	})
 }
 
@@ -935,44 +700,31 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 	// Generate CA and server certificate
 	gameID := "mtls-reject-test"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	// Save certificates (no client cert saved)
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save server certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save server certs")
 
 	// Load server TLS config
 	serverTLSConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load server TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load server TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	// Start server with mTLS
 	s, err := NewGRPCServer("core", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	errCh, err := s.Start(addr, serverTLSConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -989,13 +741,9 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 	// Create a TLS config that trusts the CA but has no client cert
 	//nolint:gosec // G304: tmpDir is from t.TempDir(), safe in tests
 	caCertPEM, err := os.ReadFile(filepath.Join(tmpDir, "root-ca.crt"))
-	if err != nil {
-		t.Fatalf("failed to read CA cert: %v", err)
-	}
+	require.NoError(t, err, "failed to read CA cert")
 	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM(caCertPEM) {
-		t.Fatal("failed to add CA to pool")
-	}
+	require.True(t, caPool.AppendCertsFromPEM(caCertPEM), "failed to add CA to pool")
 
 	noClientCertTLS := &cryptotls.Config{
 		RootCAs:    caPool,
@@ -1006,9 +754,7 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 
 	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(credentials.NewTLS(noClientCertTLS)))
-	if err != nil {
-		t.Fatalf("failed to create gRPC client: %v", err)
-	}
+	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
 	client := controlv1.NewControlClient(conn)
@@ -1018,11 +764,8 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 
 	// This should fail because no client certificate was provided
 	_, err = client.Status(ctx, &controlv1.StatusRequest{})
-	if err == nil {
-		t.Error("expected error when connecting without client certificate, got nil")
-	} else {
-		t.Logf("correctly rejected: %v", err)
-	}
+	assert.Error(t, err, "expected error when connecting without client certificate")
+	t.Logf("correctly rejected: %v", err)
 }
 
 // TestGRPCServer_Start_ErrorChannelOnGracefulStop tests that the error channel
@@ -1033,41 +776,28 @@ func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-stop-ch"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	errCh, err := s.Start(addr, tlsConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
@@ -1075,17 +805,14 @@ func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
 	// Gracefully stop the server
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("Stop() error = %v", err)
-	}
+	err = s.Stop(ctx)
+	require.NoError(t, err)
 
 	// Error channel should receive nil on graceful stop
 	select {
 	case err := <-errCh:
 		// GracefulStop causes Serve to return nil
-		if err != nil {
-			t.Errorf("expected nil error on graceful stop, got: %v", err)
-		}
+		assert.NoError(t, err, "expected nil error on graceful stop")
 	case <-time.After(2 * time.Second):
 		t.Error("expected to receive from error channel after Stop()")
 	}
@@ -1099,49 +826,34 @@ func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-double-start"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Find two available ports
 	listener1, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr1 := listener1.Addr().String()
 	_ = listener1.Close()
 
 	listener2, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr2 := listener2.Addr().String()
 	_ = listener2.Close()
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// First start should succeed
 	errCh, err := s.Start(addr1, tlsConfig)
-	if err != nil {
-		t.Fatalf("First Start() error = %v", err)
-	}
+	require.NoError(t, err, "First Start() should succeed")
 
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1155,16 +867,12 @@ func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
 
 	// Second start should fail
 	errCh2, err := s.Start(addr2, tlsConfig)
-	if err == nil {
-		t.Error("Second Start() should fail when server is already running")
-		if errCh2 != nil {
-			// Clean up if it somehow succeeded
-			_ = s.Stop(context.Background())
-		}
+	if err == nil && errCh2 != nil {
+		// Clean up if it somehow succeeded
+		_ = s.Stop(context.Background())
 	}
-	if errCh2 != nil {
-		t.Error("Second Start() should return nil error channel on failure")
-	}
+	assert.Error(t, err, "Second Start() should fail when server is already running")
+	assert.Nil(t, errCh2, "Second Start() should return nil error channel on failure")
 }
 
 // TestGRPCServer_Stop_ConcurrentCalls tests that calling Stop() concurrently
@@ -1175,41 +883,28 @@ func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-concurrent-stop"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	errCh, err := s.Start(addr, tlsConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
@@ -1231,9 +926,7 @@ func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
 	wg.Wait()
 
 	// After all Stop calls complete, running should be false
-	if s.running.Load() {
-		t.Error("server should not be running after concurrent Stop() calls")
-	}
+	assert.False(t, s.running.Load(), "server should not be running after concurrent Stop() calls")
 
 	// Drain error channel
 	select {
@@ -1251,39 +944,28 @@ func TestGRPCServer_Stop_DuringStart(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-stop-during-start"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Run multiple iterations to increase chance of hitting race windows
 	const iterations = 100
 	for i := 0; i < iterations; i++ {
 		// Find available port for each iteration
 		listener, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			t.Fatalf("iteration %d: failed to find available port: %v", i, err)
-		}
+		require.NoError(t, err, "iteration %d: failed to find available port", i)
 		addr := listener.Addr().String()
 		_ = listener.Close()
 
 		s, err := NewGRPCServer("test", nil)
-		if err != nil {
-			t.Fatalf("iteration %d: NewGRPCServer() error = %v", i, err)
-		}
+		require.NoError(t, err, "iteration %d: NewGRPCServer() failed", i)
 
 		// Start server and immediately try to stop it
 		var wg sync.WaitGroup
@@ -1320,9 +1002,7 @@ func TestGRPCServer_Stop_DuringStart(t *testing.T) {
 		}
 
 		// After both operations complete, server should not be running
-		if s.running.Load() {
-			t.Errorf("iteration %d: server should not be running after Stop()", i)
-		}
+		assert.False(t, s.running.Load(), "iteration %d: server should not be running after Stop()", i)
 	}
 }
 
@@ -1334,61 +1014,43 @@ func TestGRPCServer_Stop_RunningStateAfterGracefulStop(t *testing.T) {
 	// Generate valid certificates
 	gameID := "test-stop-timing"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
-	if err := tls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
+	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("failed to load TLS config: %v", err)
-	}
+	require.NoError(t, err, "failed to load TLS config")
 
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
 	s, err := NewGRPCServer("test", nil)
-	if err != nil {
-		t.Fatalf("NewGRPCServer() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	errCh, err := s.Start(addr, tlsConfig)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify server is running
-	if !s.running.Load() {
-		t.Fatal("server should be running before Stop()")
-	}
+	require.True(t, s.running.Load(), "server should be running before Stop()")
 
 	// Stop the server
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("Stop() error = %v", err)
-	}
+	err = s.Stop(ctx)
+	require.NoError(t, err)
 
 	// After Stop returns, running should be false
-	if s.running.Load() {
-		t.Error("server should not be running after Stop() returns")
-	}
+	assert.False(t, s.running.Load(), "server should not be running after Stop() returns")
 
 	// Drain error channel
 	select {

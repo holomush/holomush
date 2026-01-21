@@ -8,6 +8,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRootCommand_HasExpectedSubcommands(t *testing.T) {
@@ -16,16 +19,12 @@ func TestRootCommand_HasExpectedSubcommands(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--help"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 	subcommands := []string{"gateway", "core", "migrate", "status"}
 	for _, sub := range subcommands {
-		if !strings.Contains(output, sub) {
-			t.Errorf("Help missing %q command", sub)
-		}
+		assert.Contains(t, output, sub, "Help missing %q command", sub)
 	}
 }
 
@@ -57,13 +56,8 @@ func TestRootCommand_ConfigFlag(t *testing.T) {
 			cmd.SetOut(buf)
 			cmd.SetArgs(tt.args)
 
-			if err := cmd.Execute(); err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-
-			if configFile != tt.wantFlag {
-				t.Errorf("configFile = %q, want %q", configFile, tt.wantFlag)
-			}
+			require.NoError(t, cmd.Execute())
+			assert.Equal(t, tt.wantFlag, configFile)
 		})
 	}
 }
@@ -71,17 +65,9 @@ func TestRootCommand_ConfigFlag(t *testing.T) {
 func TestRootCommand_LongDescription(t *testing.T) {
 	cmd := NewRootCmd()
 
-	if cmd.Use != "holomush" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "holomush")
-	}
-
-	if !strings.Contains(cmd.Long, "event sourcing") {
-		t.Error("Long description should mention event sourcing")
-	}
-
-	if !strings.Contains(cmd.Long, "WebAssembly") {
-		t.Error("Long description should mention WebAssembly")
-	}
+	assert.Equal(t, "holomush", cmd.Use)
+	assert.Contains(t, cmd.Long, "event sourcing", "Long description should mention event sourcing")
+	assert.Contains(t, cmd.Long, "WebAssembly", "Long description should mention WebAssembly")
 }
 
 func TestRootCommand_VersionFlag(t *testing.T) {
@@ -91,14 +77,10 @@ func TestRootCommand_VersionFlag(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--version"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
-	if !strings.Contains(output, "test-version") {
-		t.Errorf("Version output missing version info: %s", output)
-	}
+	assert.Contains(t, output, "test-version", "Version output missing version info: %s", output)
 }
 
 func TestRootCommand_NoArgs(t *testing.T) {
@@ -108,9 +90,7 @@ func TestRootCommand_NoArgs(t *testing.T) {
 	cmd.SetArgs([]string{})
 
 	// Root command with no args should show help (no error)
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 }
 
 // Gateway command tests are now in gateway_test.go
@@ -123,30 +103,18 @@ func TestMigrateCommand_Help(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
-	if !strings.Contains(output, "--config") {
-		t.Error("Migrate missing --config flag")
-	}
+	assert.Contains(t, output, "--config", "Migrate missing --config flag")
 }
 
 func TestMigrateCommand_Properties(t *testing.T) {
 	cmd := NewMigrateCmd()
 
-	if cmd.Use != "migrate" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "migrate")
-	}
-
-	if !strings.Contains(cmd.Short, "migration") {
-		t.Error("Short description should mention migration")
-	}
-
-	if !strings.Contains(cmd.Long, "PostgreSQL") {
-		t.Error("Long description should mention PostgreSQL")
-	}
+	assert.Equal(t, "migrate", cmd.Use)
+	assert.Contains(t, cmd.Short, "migration", "Short description should mention migration")
+	assert.Contains(t, cmd.Long, "PostgreSQL", "Long description should mention PostgreSQL")
 }
 
 func TestMigrateCommand_NoDatabaseURL(t *testing.T) {
@@ -161,13 +129,8 @@ func TestMigrateCommand_NoDatabaseURL(t *testing.T) {
 	cmd.SetArgs([]string{"migrate"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error when DATABASE_URL is not set")
-	}
-
-	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("Error should mention DATABASE_URL, got: %v", err)
-	}
+	require.Error(t, err, "Expected error when DATABASE_URL is not set")
+	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
 
 func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
@@ -182,13 +145,11 @@ func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
 	cmd.SetArgs([]string{"migrate"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error with invalid DATABASE_URL")
-	}
+	require.Error(t, err, "Expected error with invalid DATABASE_URL")
 
-	if !strings.Contains(err.Error(), "connect") && !strings.Contains(err.Error(), "database") {
-		t.Errorf("Error should mention connection/database issue, got: %v", err)
-	}
+	errMsg := err.Error()
+	assert.True(t, strings.Contains(errMsg, "connect") || strings.Contains(errMsg, "database"),
+		"Error should mention connection/database issue, got: %v", err)
 }
 
 // Status command tests are now in status_test.go
@@ -202,9 +163,7 @@ func TestUnknownCommand(t *testing.T) {
 	cmd.SetArgs([]string{"nonexistent"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error for unknown command")
-	}
+	require.Error(t, err, "Expected error for unknown command")
 }
 
 func TestInvalidFlag(t *testing.T) {
@@ -216,9 +175,7 @@ func TestInvalidFlag(t *testing.T) {
 	cmd.SetArgs([]string{"--invalid-flag"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error for invalid flag")
-	}
+	require.Error(t, err, "Expected error for invalid flag")
 }
 
 func TestFormatVersion(t *testing.T) {
@@ -255,9 +212,7 @@ func TestFormatVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := formatVersion(tt.version, tt.commit, tt.date)
-			if result != tt.expected {
-				t.Errorf("formatVersion() = %q, want %q", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -271,9 +226,7 @@ func TestRun_Success(t *testing.T) {
 	os.Args = []string{"holomush", "--help"}
 
 	exitCode := run()
-	if exitCode != 0 {
-		t.Errorf("run() = %d, want 0", exitCode)
-	}
+	assert.Equal(t, 0, exitCode)
 }
 
 func TestRun_Error(t *testing.T) {
@@ -285,7 +238,5 @@ func TestRun_Error(t *testing.T) {
 	os.Args = []string{"holomush", "nonexistent-command"}
 
 	exitCode := run()
-	if exitCode != 1 {
-		t.Errorf("run() = %d, want 1", exitCode)
-	}
+	assert.Equal(t, 1, exitCode)
 }
