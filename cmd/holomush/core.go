@@ -371,7 +371,8 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	}
 
 	// Save certificates
-	if err := tls.SaveCertificates(certsDir, ca, serverCert); err != nil {
+	err = tls.SaveCertificates(certsDir, ca, serverCert)
+	if err != nil {
 		return nil, oops.Code("CERTS_SAVE_FAILED").With("operation", "save certificates").With("certs_dir", certsDir).Wrap(err)
 	}
 
@@ -381,7 +382,8 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 		return nil, oops.Code("CLIENT_CERT_GENERATE_FAILED").With("operation", "generate gateway certificate").With("component", "gateway").Wrap(err)
 	}
 
-	if err := tls.SaveClientCert(certsDir, gatewayCert); err != nil {
+	err = tls.SaveClientCert(certsDir, gatewayCert)
+	if err != nil {
 		return nil, oops.Code("CLIENT_CERT_SAVE_FAILED").With("operation", "save gateway certificate").With("component", "gateway").Wrap(err)
 	}
 

@@ -299,7 +299,8 @@ func handleTelnetConnection(conn net.Conn) {
 	}
 	// Error intentionally ignored: connection closes immediately after, so logging
 	// a write failure here would be noise (client may have already disconnected).
-	_, _ = fmt.Fprintln(conn, "Disconnecting...")
+	//nolint:errcheck // write error ignored on connection close
+	fmt.Fprintln(conn, "Disconnecting...")
 }
 
 // acceptBackoff manages exponential backoff for the accept loop.

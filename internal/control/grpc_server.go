@@ -149,7 +149,7 @@ func (s *GRPCServer) Status(_ context.Context, _ *controlv1.StatusRequest) (*con
 
 // LoadControlServerTLS loads TLS config for the control gRPC server with mTLS.
 // Uses the same certificates as the main server (identified by serverName).
-func LoadControlServerTLS(certsDir string, serverName string) (*cryptotls.Config, error) {
+func LoadControlServerTLS(certsDir, serverName string) (*cryptotls.Config, error) {
 	certPath := filepath.Clean(filepath.Join(certsDir, serverName+".crt"))
 	keyPath := filepath.Clean(filepath.Join(certsDir, serverName+".key"))
 	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
@@ -182,7 +182,7 @@ func LoadControlServerTLS(certsDir string, serverName string) (*cryptotls.Config
 // LoadControlClientTLS loads TLS config for the control gRPC client with mTLS.
 // clientName identifies the client certificate to use (e.g., "core" or "gateway").
 // gameID is used for ServerName verification against the server's SAN (holomush-<gameID>).
-func LoadControlClientTLS(certsDir string, clientName string, gameID string) (*cryptotls.Config, error) {
+func LoadControlClientTLS(certsDir, clientName, gameID string) (*cryptotls.Config, error) {
 	certPath := filepath.Clean(filepath.Join(certsDir, clientName+".crt"))
 	keyPath := filepath.Clean(filepath.Join(certsDir, clientName+".key"))
 	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))

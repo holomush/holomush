@@ -234,8 +234,8 @@ func TestEnsureTLSCerts(t *testing.T) {
 	}
 	for _, file := range expectedFiles {
 		path := tmpDir + "/" + file
-		_, err := os.Stat(path)
-		assert.False(t, os.IsNotExist(err), "Expected file %s was not created", file)
+		_, statErr := os.Stat(path)
+		assert.False(t, os.IsNotExist(statErr), "Expected file %s was not created", file)
 	}
 
 	// Second call should load existing certs

@@ -92,13 +92,15 @@ func compileSchema() (*jschema.Schema, error) {
 
 	// Parse schema JSON
 	var schemaData any
-	if err := json.Unmarshal(schemaBytes, &schemaData); err != nil {
+	err = json.Unmarshal(schemaBytes, &schemaData)
+	if err != nil {
 		return nil, oops.In("schema").Hint("failed to parse schema JSON").Wrap(err)
 	}
 
 	// Compile schema
 	c := jschema.NewCompiler()
-	if err := c.AddResource("schema.json", schemaData); err != nil {
+	err = c.AddResource("schema.json", schemaData)
+	if err != nil {
 		return nil, oops.In("schema").Hint("failed to add schema resource").Wrap(err)
 	}
 

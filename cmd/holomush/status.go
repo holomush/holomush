@@ -201,27 +201,32 @@ func formatStatusTable(statuses map[string]ProcessStatus) string {
 	var buf []byte
 	w := tabwriter.NewWriter((*byteWriter)(&buf), 0, 0, 2, ' ', 0)
 
-	// Header
-	_, _ = fmt.Fprintln(w, "PROCESS\tSTATUS\tHEALTH\tPID\tUPTIME")
-	_, _ = fmt.Fprintln(w, "-------\t------\t------\t---\t------")
+	// Header - tabwriter writes to []byte buffer, errors impossible
+	//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+	fmt.Fprintln(w, "PROCESS\tSTATUS\tHEALTH\tPID\tUPTIME")
+	//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+	fmt.Fprintln(w, "-------\t------\t------\t---\t------")
 
 	// Process rows in consistent order
 	for _, component := range []string{"core", "gateway"} {
 		status := statuses[component]
 		if status.Running {
 			uptime := formatUptime(status.UptimeSeconds)
-			_, _ = fmt.Fprintf(w, "%s\trunning\t%s\t%d\t%s\n",
+			//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+			fmt.Fprintf(w, "%s\trunning\t%s\t%d\t%s\n",
 				component, status.Health, status.PID, uptime)
 		} else {
 			reason := "not running"
 			if status.Error != "" {
 				reason = status.Error
 			}
-			_, _ = fmt.Fprintf(w, "%s\tstopped\t-\t-\t%s\n", component, reason)
+			//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+			fmt.Fprintf(w, "%s\tstopped\t-\t-\t%s\n", component, reason)
 		}
 	}
 
-	_ = w.Flush()
+	//nolint:errcheck // tabwriter Flush to in-memory buffer cannot fail
+	w.Flush()
 	return string(buf)
 }
 

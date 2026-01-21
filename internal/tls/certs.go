@@ -212,7 +212,8 @@ func saveCert(path string, cert *x509.Certificate) error {
 	}
 
 	if err := pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); err != nil {
-		_ = f.Close()
+		//nolint:errcheck // f.Close() error ignored; we're already returning pem.Encode error
+		f.Close()
 		return oops.With("operation", "encode certificate", "path", path).Wrap(err)
 	}
 
@@ -236,7 +237,8 @@ func saveKey(path string, key *ecdsa.PrivateKey) error {
 	}
 
 	if err := pem.Encode(f, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}); err != nil {
-		_ = f.Close()
+		//nolint:errcheck // f.Close() error ignored; we're already returning pem.Encode error
+		f.Close()
 		return oops.With("operation", "encode key", "path", path).Wrap(err)
 	}
 
@@ -306,7 +308,7 @@ func SaveClientCert(certsDir string, clientCert *ClientCert) error {
 
 // LoadServerTLS loads TLS config for the Core gRPC server with mTLS.
 // Requires server cert and CA for client verification.
-func LoadServerTLS(certsDir string, serverName string) (*cryptotls.Config, error) {
+func LoadServerTLS(certsDir, serverName string) (*cryptotls.Config, error) {
 	cert, err := cryptotls.LoadX509KeyPair(
 		filepath.Join(certsDir, serverName+".crt"),
 		filepath.Join(certsDir, serverName+".key"),
@@ -336,7 +338,7 @@ func LoadServerTLS(certsDir string, serverName string) (*cryptotls.Config, error
 // LoadClientTLS loads TLS config for the Gateway gRPC client with mTLS.
 // Requires client cert and CA for server verification.
 // The expectedGameID is used to set ServerName for cert validation against the server's SAN.
-func LoadClientTLS(certsDir string, clientName string, expectedGameID string) (*cryptotls.Config, error) {
+func LoadClientTLS(certsDir, clientName, expectedGameID string) (*cryptotls.Config, error) {
 	cert, err := cryptotls.LoadX509KeyPair(
 		filepath.Join(certsDir, clientName+".crt"),
 		filepath.Join(certsDir, clientName+".key"),
@@ -408,7 +410,7 @@ func CheckCertificateExpiration(cert *x509.Certificate, warningThreshold time.Du
 }
 
 // ValidateCertificateChain validates that a certificate was signed by the given CA.
-func ValidateCertificateChain(cert *x509.Certificate, ca *x509.Certificate) error {
+func ValidateCertificateChain(cert, ca *x509.Certificate) error {
 	if cert == nil {
 		return oops.Errorf("certificate is nil")
 	}

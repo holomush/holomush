@@ -67,7 +67,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	}
 
 	entryPath := filepath.Join(dir, manifest.LuaPlugin.Entry)
-	code, err := os.ReadFile(entryPath) //nolint:gosec // entryPath is from trusted manifest
+	code, err := os.ReadFile(filepath.Clean(entryPath))
 	if err != nil {
 		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", entryPath).Hint("failed to read entry file").Wrap(err)
 	}

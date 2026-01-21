@@ -70,7 +70,7 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 		pluginDir := filepath.Join(m.pluginsDir, entry.Name())
 		manifestPath := filepath.Join(pluginDir, "plugin.yaml")
 
-		data, err := os.ReadFile(manifestPath) //nolint:gosec // manifestPath is constructed from ReadDir entries
+		data, err := os.ReadFile(filepath.Clean(manifestPath))
 		if err != nil {
 			slog.Warn("skipping plugin without manifest",
 				"dir", entry.Name(),

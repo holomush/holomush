@@ -175,7 +175,8 @@ func (s *Server) Addr() string {
 func (s *Server) handleLiveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("ok\n"))
+	//nolint:errcheck // health check write error is acceptable, client may disconnect
+	w.Write([]byte("ok\n"))
 }
 
 // handleReadiness returns 200 if the service is ready to accept connections,
@@ -185,10 +186,12 @@ func (s *Server) handleReadiness(w http.ResponseWriter, _ *http.Request) {
 
 	if s.isReady == nil || s.isReady() {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok\n"))
+		//nolint:errcheck // health check write error is acceptable, client may disconnect
+		w.Write([]byte("ok\n"))
 		return
 	}
 
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = w.Write([]byte("not ready\n"))
+	//nolint:errcheck // health check write error is acceptable, client may disconnect
+	w.Write([]byte("not ready\n"))
 }

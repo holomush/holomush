@@ -739,7 +739,6 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 
 	// Try to connect without client certificate - should fail
 	// Create a TLS config that trusts the CA but has no client cert
-	//nolint:gosec // G304: tmpDir is from t.TempDir(), safe in tests
 	caCertPEM, err := os.ReadFile(filepath.Join(tmpDir, "root-ca.crt"))
 	require.NoError(t, err, "failed to read CA cert")
 	caPool := x509.NewCertPool()

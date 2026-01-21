@@ -23,7 +23,7 @@ import (
 
 // createTempExecutable creates a dummy file with execute permissions.
 func createTempExecutable(path string) error {
-	//nolint:wrapcheck,gosec // test helper, no wrap; G306 - needs execute permission for testing
+	//nolint:gosec // G306 - needs execute permission for testing
 	return os.WriteFile(path, []byte("dummy"), 0o755)
 }
 

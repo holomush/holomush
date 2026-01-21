@@ -47,10 +47,12 @@ linters:
 
     rules:
       # Test files can have longer functions and more complexity
+      # Also exclude errcheck blank identifier checks for test cleanup code
       - path: '_test\.go'
         linters:
           - gocritic
           - wrapcheck
+          - errcheck
 
       # Main package doesn't need to wrap errors
       - path: cmd/

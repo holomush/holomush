@@ -292,10 +292,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 
 	// Subscribe to requested streams
+	// Note: defers in loop are intentional - all subscriptions should be cleaned up when
+	// the function exits, not at end of each iteration. The loop runs a fixed number of
+	// times (len(req.Streams)) and all deferred Unsubscribes run on function return.
 	channels := make([]chan core.Event, 0, len(req.Streams))
 	for _, streamName := range req.Streams {
 		ch := s.broadcaster.Subscribe(streamName)
 		channels = append(channels, ch)
+		//nolint:gocritic // deferInLoop: intentional; cleanup all subscriptions on function exit
 		defer s.broadcaster.Unsubscribe(streamName, ch)
 	}
 

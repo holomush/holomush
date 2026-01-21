@@ -722,14 +722,10 @@ lua-plugin:
 }
 
 func TestManifest_HasEvent(t *testing.T) {
+	// Test that Events slice correctly stores event subscriptions
+	events := []string{"say", "pose"}
 	m := &plugin.Manifest{
-		Name:    "test",
-		Version: "1.0.0",
-		Type:    plugin.TypeLua,
-		Events:  []string{"say", "pose"},
-		LuaPlugin: &plugin.LuaConfig{
-			Entry: "main.lua",
-		},
+		Events: events,
 	}
 
 	// HasEvent is not a method on Manifest, but we can test the Events slice directly
