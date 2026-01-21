@@ -262,8 +262,8 @@ func TestQueryProcessStatusGRPC_ValidCANoClientCert(t *testing.T) {
 
 	assert.False(t, status.Running, "status.Running should be false when client cert is missing")
 	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
-	// Error mentions failed to load client certificate (file not found)
-	assert.Contains(t, status.Error, "certificate", "error should mention certificate, got: %s", status.Error)
+	// Error mentions file not found (cert file missing)
+	assert.Contains(t, status.Error, "no such file or directory", "error should mention file not found, got: %s", status.Error)
 }
 
 func TestQueryProcessStatusGRPC_ConnectionFailure(t *testing.T) {
