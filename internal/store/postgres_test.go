@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/oklog/ulid/v2"
 	"github.com/pashagolub/pgxmock/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
 )
@@ -114,9 +116,7 @@ func TestPostgresEventStore_Append(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -125,20 +125,15 @@ func TestPostgresEventStore_Append(t *testing.T) {
 			err = store.Append(context.Background(), tt.event)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				require.NoError(t, err)
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
@@ -276,9 +271,7 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 					core.EventTypeSystem,
 				}
 				for i, et := range expectedTypes {
-					if events[i].Type != et {
-						t.Errorf("event %d: expected type %q, got %q", i, et, events[i].Type)
-					}
+					assert.Equal(t, et, events[i].Type, "event %d type mismatch", i)
 				}
 			},
 		},
@@ -306,9 +299,7 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 					core.ActorPlugin,
 				}
 				for i, ak := range expectedKinds {
-					if events[i].Actor.Kind != ak {
-						t.Errorf("event %d: expected actor kind %d, got %d", i, ak, events[i].Actor.Kind)
-					}
+					assert.Equal(t, ak, events[i].Actor.Kind, "event %d actor kind mismatch", i)
 				}
 			},
 		},
@@ -333,9 +324,7 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -344,26 +333,19 @@ func TestPostgresEventStore_Replay(t *testing.T) {
 			events, err := store.Replay(context.Background(), tt.stream, tt.afterID, tt.limit)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if len(events) != tt.wantCount {
-					t.Errorf("expected %d events, got %d", tt.wantCount, len(events))
-				}
+				require.NoError(t, err)
+				assert.Len(t, events, tt.wantCount)
 				if tt.checkEvent != nil {
 					tt.checkEvent(t, events)
 				}
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
@@ -431,9 +413,7 @@ func TestPostgresEventStore_LastEventID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -443,27 +423,16 @@ func TestPostgresEventStore_LastEventID(t *testing.T) {
 
 			switch {
 			case tt.wantErr != nil:
-				if !errors.Is(err, tt.wantErr) {
-					t.Errorf("expected error %v, got %v", tt.wantErr, err)
-				}
+				assert.ErrorIs(t, err, tt.wantErr)
 			case tt.errMsg != "":
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
-				}
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
 			default:
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if id != tt.wantID {
-					t.Errorf("expected ID %v, got %v", tt.wantID, id)
-				}
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantID, id)
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
@@ -517,9 +486,7 @@ func TestPostgresEventStore_GetSystemInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -527,28 +494,20 @@ func TestPostgresEventStore_GetSystemInfo(t *testing.T) {
 			store := &PostgresEventStore{pool: mock}
 			value, err := store.GetSystemInfo(context.Background(), tt.key)
 
-			switch {
-			case tt.wantErr:
-				switch {
-				case err == nil:
-					t.Error("expected error, got nil")
-				case tt.errIs != nil && !errors.Is(err, tt.errIs):
-					t.Errorf("expected error to wrap %v, got %v", tt.errIs, err)
-				case tt.errMsg != "" && !containsString(err.Error(), tt.errMsg):
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errIs != nil {
+					assert.ErrorIs(t, err, tt.errIs)
 				}
-			default:
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
-				if value != tt.wantValue {
-					t.Errorf("expected value %q, got %q", tt.wantValue, value)
-				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantValue, value)
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
@@ -601,9 +560,7 @@ func TestPostgresEventStore_SetSystemInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -612,20 +569,15 @@ func TestPostgresEventStore_SetSystemInfo(t *testing.T) {
 			err = store.SetSystemInfo(context.Background(), tt.key, tt.value)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				require.NoError(t, err)
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
@@ -651,9 +603,7 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 			wantErr: false,
 			checkID: func(t *testing.T, id string) {
 				t.Helper()
-				if id != existingID {
-					t.Errorf("expected existing ID %q, got %q", existingID, id)
-				}
+				assert.Equal(t, existingID, id)
 			},
 		},
 		{
@@ -671,12 +621,8 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 			wantErr: false,
 			checkID: func(t *testing.T, id string) {
 				t.Helper()
-				if id == "" {
-					t.Error("expected non-empty ID")
-				}
-				if len(id) != 26 {
-					t.Errorf("expected ULID length 26, got %d", len(id))
-				}
+				assert.NotEmpty(t, id)
+				assert.Len(t, id, 26, "ULID should be 26 characters")
 			},
 		},
 		{
@@ -707,9 +653,7 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -718,23 +662,18 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 			id, err := store.InitGameID(context.Background())
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				require.NoError(t, err)
 				if tt.checkID != nil {
 					tt.checkID(t, id)
 				}
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
@@ -778,9 +717,7 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock, err := pgxmock.NewPool()
-			if err != nil {
-				t.Fatalf("failed to create mock: %v", err)
-			}
+			require.NoError(t, err, "failed to create mock")
 			defer mock.Close()
 
 			tt.setupMock(mock)
@@ -789,29 +726,22 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 			err = store.Migrate(context.Background())
 
 			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error, got nil")
-				} else if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err.Error(), tt.errMsg)
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+				require.NoError(t, err)
 			}
 
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Errorf("unfulfilled expectations: %v", err)
-			}
+			assert.NoError(t, mock.ExpectationsWereMet(), "unfulfilled expectations")
 		})
 	}
 }
 
 func TestPostgresEventStore_Close(t *testing.T) {
 	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatalf("failed to create mock: %v", err)
-	}
+	require.NoError(t, err, "failed to create mock")
 
 	store := &PostgresEventStore{pool: mock}
 	store.Close()
@@ -821,22 +751,5 @@ func TestPostgresEventStore_Close(t *testing.T) {
 }
 
 func TestErrSystemInfoNotFound(t *testing.T) {
-	if ErrSystemInfoNotFound.Error() != "system info key not found" {
-		t.Errorf("unexpected error message: %s", ErrSystemInfoNotFound.Error())
-	}
-}
-
-// containsString checks if s contains substr.
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	assert.Equal(t, "system info key not found", ErrSystemInfoNotFound.Error())
 }
