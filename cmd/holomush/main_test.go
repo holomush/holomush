@@ -6,7 +6,6 @@ package main
 import (
 	"bytes"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,9 +146,8 @@ func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error with invalid DATABASE_URL")
 
-	errMsg := err.Error()
-	assert.True(t, strings.Contains(errMsg, "connect") || strings.Contains(errMsg, "database"),
-		"Error should mention connection/database issue, got: %v", err)
+	// Error from pgx parsing - "cannot parse" the URL
+	assert.Contains(t, err.Error(), "parse", "Error should mention parse issue, got: %v", err)
 }
 
 // Status command tests are now in status_test.go

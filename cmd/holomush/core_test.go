@@ -113,9 +113,8 @@ func TestCoreCommand_InvalidDatabaseURL(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error with invalid DATABASE_URL")
-	assert.True(t, assert.Condition(t, func() bool {
-		return assert.Contains(t, err.Error(), "connect") || assert.Contains(t, err.Error(), "database")
-	}), "Error should mention connection/database issue, got: %v", err)
+	// Error from pgx parsing - "cannot parse" the URL
+	assert.Contains(t, err.Error(), "parse", "Error should mention parse issue, got: %v", err)
 }
 
 func TestCoreCommand_FlagParsing(t *testing.T) {
