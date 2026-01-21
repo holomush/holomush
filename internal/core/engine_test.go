@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEngine_HandleSay(t *testing.T) {
@@ -22,22 +24,14 @@ func TestEngine_HandleSay(t *testing.T) {
 
 	// Emit say event
 	err := engine.HandleSay(ctx, charID, locationID, "Hello, world!")
-	if err != nil {
-		t.Fatalf("HandleSay failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify event was stored
 	stream := "location:" + locationID.String()
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if len(events) != 1 {
-		t.Errorf("Expected 1 event, got %d", len(events))
-	}
-	if events[0].Type != EventTypeSay {
-		t.Errorf("Expected say event, got %v", events[0].Type)
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, EventTypeSay, events[0].Type)
 }
 
 func TestEngine_HandlePose(t *testing.T) {
@@ -51,22 +45,14 @@ func TestEngine_HandlePose(t *testing.T) {
 
 	// Emit pose event
 	err := engine.HandlePose(ctx, charID, locationID, "waves hello")
-	if err != nil {
-		t.Fatalf("HandlePose failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify event was stored
 	stream := "location:" + locationID.String()
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if len(events) != 1 {
-		t.Errorf("Expected 1 event, got %d", len(events))
-	}
-	if events[0].Type != EventTypePose {
-		t.Errorf("Expected pose event, got %v", events[0].Type)
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, EventTypePose, events[0].Type)
 }
 
 func TestEngine_HandleSay_BroadcastsEvent(t *testing.T) {
@@ -86,19 +72,13 @@ func TestEngine_HandleSay_BroadcastsEvent(t *testing.T) {
 
 	// Emit say event
 	err := engine.HandleSay(ctx, charID, locationID, "Hello, world!")
-	if err != nil {
-		t.Fatalf("HandleSay failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify event was broadcast
 	select {
 	case event := <-ch:
-		if event.Type != EventTypeSay {
-			t.Errorf("Expected say event, got %v", event.Type)
-		}
-		if event.Stream != stream {
-			t.Errorf("Expected stream %s, got %s", stream, event.Stream)
-		}
+		assert.Equal(t, EventTypeSay, event.Type)
+		assert.Equal(t, stream, event.Stream)
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Timeout waiting for broadcast event")
 	}
@@ -121,19 +101,13 @@ func TestEngine_HandlePose_BroadcastsEvent(t *testing.T) {
 
 	// Emit pose event
 	err := engine.HandlePose(ctx, charID, locationID, "waves")
-	if err != nil {
-		t.Fatalf("HandlePose failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify event was broadcast
 	select {
 	case event := <-ch:
-		if event.Type != EventTypePose {
-			t.Errorf("Expected pose event, got %v", event.Type)
-		}
-		if event.Stream != stream {
-			t.Errorf("Expected stream %s, got %s", stream, event.Stream)
-		}
+		assert.Equal(t, EventTypePose, event.Type)
+		assert.Equal(t, stream, event.Stream)
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Timeout waiting for broadcast event")
 	}
@@ -151,14 +125,10 @@ func TestEngine_NilBroadcaster_DoesNotPanic(t *testing.T) {
 
 	// These should not panic even with nil broadcaster
 	err := engine.HandleSay(ctx, charID, locationID, "Hello")
-	if err != nil {
-		t.Fatalf("HandleSay failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	err = engine.HandlePose(ctx, charID, locationID, "waves")
-	if err != nil {
-		t.Fatalf("HandlePose failed: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestEngine_ReplayEvents(t *testing.T) {
@@ -174,19 +144,13 @@ func TestEngine_ReplayEvents(t *testing.T) {
 	// Create some events
 	for i := 0; i < 5; i++ {
 		err := engine.HandleSay(ctx, charID, locationID, "message")
-		if err != nil {
-			t.Fatalf("HandleSay failed: %v", err)
-		}
+		require.NoError(t, err)
 	}
 
 	// Replay without session (no cursor)
 	events, err := engine.ReplayEvents(ctx, charID, stream, 10)
-	if err != nil {
-		t.Fatalf("ReplayEvents failed: %v", err)
-	}
-	if len(events) != 5 {
-		t.Errorf("Expected 5 events, got %d", len(events))
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 5)
 }
 
 func TestEngine_ReplayEvents_WithCursor(t *testing.T) {
@@ -206,9 +170,7 @@ func TestEngine_ReplayEvents_WithCursor(t *testing.T) {
 	// Create some events
 	for i := 0; i < 5; i++ {
 		err := engine.HandleSay(ctx, charID, locationID, "message")
-		if err != nil {
-			t.Fatalf("HandleSay failed: %v", err)
-		}
+		require.NoError(t, err)
 	}
 
 	// Get events and set cursor to third event
@@ -217,12 +179,8 @@ func TestEngine_ReplayEvents_WithCursor(t *testing.T) {
 
 	// Replay should return only events after cursor
 	events, err := engine.ReplayEvents(ctx, charID, stream, 10)
-	if err != nil {
-		t.Fatalf("ReplayEvents failed: %v", err)
-	}
-	if len(events) != 2 {
-		t.Errorf("Expected 2 events after cursor, got %d", len(events))
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 2, "Expected 2 events after cursor")
 }
 
 // failingEventStore is a mock that returns errors for testing error paths.
@@ -260,12 +218,8 @@ func TestEngine_HandleSay_StoreError(t *testing.T) {
 	locationID := NewULID()
 
 	err := engine.HandleSay(ctx, charID, locationID, "Hello")
-	if err == nil {
-		t.Fatal("Expected error from failing store")
-	}
-	if err.Error() != "failed to append say event: store failure" {
-		t.Errorf("Unexpected error message: %v", err)
-	}
+	require.Error(t, err, "Expected error from failing store")
+	assert.Equal(t, "failed to append say event: store failure", err.Error())
 }
 
 func TestEngine_HandlePose_StoreError(t *testing.T) {
@@ -278,12 +232,8 @@ func TestEngine_HandlePose_StoreError(t *testing.T) {
 	locationID := NewULID()
 
 	err := engine.HandlePose(ctx, charID, locationID, "waves")
-	if err == nil {
-		t.Fatal("Expected error from failing store")
-	}
-	if err.Error() != "failed to append pose event: store failure" {
-		t.Errorf("Unexpected error message: %v", err)
-	}
+	require.Error(t, err, "Expected error from failing store")
+	assert.Equal(t, "failed to append pose event: store failure", err.Error())
 }
 
 func TestEngine_ReplayEvents_StoreError(t *testing.T) {
@@ -295,10 +245,6 @@ func TestEngine_ReplayEvents_StoreError(t *testing.T) {
 	charID := NewULID()
 
 	_, err := engine.ReplayEvents(ctx, charID, "location:test", 10)
-	if err == nil {
-		t.Fatal("Expected error from failing store")
-	}
-	if err.Error() != "failed to replay events: store failure" {
-		t.Errorf("Unexpected error message: %v", err)
-	}
+	require.Error(t, err, "Expected error from failing store")
+	assert.Equal(t, "failed to replay events: store failure", err.Error())
 }

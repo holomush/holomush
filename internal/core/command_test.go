@@ -3,7 +3,11 @@
 
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestParseCommand(t *testing.T) {
 	tests := []struct {
@@ -24,12 +28,8 @@ func TestParseCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd, arg := ParseCommand(tt.input)
-			if cmd != tt.wantCmd {
-				t.Errorf("cmd = %q, want %q", cmd, tt.wantCmd)
-			}
-			if arg != tt.wantArg {
-				t.Errorf("arg = %q, want %q", arg, tt.wantArg)
-			}
+			assert.Equal(t, tt.wantCmd, cmd)
+			assert.Equal(t, tt.wantArg, arg)
 		})
 	}
 }

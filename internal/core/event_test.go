@@ -3,7 +3,11 @@
 
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestEventType_String(t *testing.T) {
 	tests := []struct {
@@ -20,9 +24,7 @@ func TestEventType_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := string(tt.input); got != tt.expected {
-				t.Errorf("got %q, want %q", got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, string(tt.input))
 		})
 	}
 }
@@ -47,9 +49,7 @@ func TestDocumentedEventTypes(t *testing.T) {
 	}
 
 	for _, docType := range documentedTypes {
-		if !validTypes[docType] {
-			t.Errorf("documented event type %q is not a valid EventType constant", docType)
-		}
+		assert.True(t, validTypes[docType], "documented event type %q is not a valid EventType constant", docType)
 	}
 }
 
@@ -67,9 +67,7 @@ func TestActorKind_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.input.String(); got != tt.expected {
-				t.Errorf("got %q, want %q", got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, tt.input.String())
 		})
 	}
 }

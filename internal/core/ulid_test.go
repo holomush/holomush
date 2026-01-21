@@ -3,40 +3,31 @@
 
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestNewULID(t *testing.T) {
 	id1 := NewULID()
 	id2 := NewULID()
 
-	if id1.String() == "" {
-		t.Error("ULID should not be empty")
-	}
-
-	if id1.String() == id2.String() {
-		t.Error("Two ULIDs should be different")
-	}
-
+	assert.NotEmpty(t, id1.String(), "ULID should not be empty")
+	assert.NotEqual(t, id1.String(), id2.String(), "Two ULIDs should be different")
 	// ULIDs should be lexicographically sortable by time
-	if id1.String() > id2.String() {
-		t.Error("Later ULID should sort after earlier ULID")
-	}
+	assert.LessOrEqual(t, id1.String(), id2.String(), "Later ULID should sort after earlier ULID")
 }
 
 func TestParseULID(t *testing.T) {
 	original := NewULID()
 	parsed, err := ParseULID(original.String())
-	if err != nil {
-		t.Fatalf("ParseULID failed: %v", err)
-	}
-	if parsed != original {
-		t.Errorf("Parsed ULID %v != original %v", parsed, original)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, original, parsed)
 }
 
 func TestParseULID_Invalid(t *testing.T) {
 	_, err := ParseULID("invalid")
-	if err == nil {
-		t.Error("ParseULID should fail on invalid input")
-	}
+	assert.Error(t, err, "ParseULID should fail on invalid input")
 }
