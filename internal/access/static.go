@@ -113,11 +113,23 @@ func (s *StaticAccessControl) Check(ctx context.Context, subject, action, resour
 // checkPlugin delegates to capability.Enforcer.
 func (s *StaticAccessControl) checkPlugin(pluginID, action, resource string) bool {
 	if s.enforcer == nil {
+		// Log at warn level - nil enforcer is a configuration error that means
+		// all plugin permissions will be denied
+		slog.Warn("plugin permission check with nil enforcer",
+			"plugin", pluginID,
+			"action", action,
+			"resource", resource)
 		return false
 	}
 	// Convert action:resource to capability format: action.resource
 	capStr := action + "." + resource
-	return s.enforcer.Check(pluginID, capStr)
+	allowed := s.enforcer.Check(pluginID, capStr)
+	if !allowed {
+		slog.Debug("plugin permission denied by enforcer",
+			"plugin", pluginID,
+			"capability", capStr)
+	}
+	return allowed
 }
 
 // checkRole checks if subject's role allows the action on resource.

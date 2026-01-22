@@ -6,12 +6,15 @@ package access
 import "context"
 
 // LocationResolver provides dynamic location information for access control.
-// Used to resolve tokens like $room_members at evaluation time.
+// Used to resolve $here and $here:* tokens at evaluation time.
 type LocationResolver interface {
 	// CurrentLocation returns the location ID for a character.
+	// Used to resolve the $here token.
 	CurrentLocation(ctx context.Context, charID string) (string, error)
 
 	// CharactersAt returns character IDs present at a location.
+	// Used to resolve $here:* token (future scope - not yet implemented).
+	// Defined in interface per spec to ensure implementers provide it.
 	CharactersAt(ctx context.Context, locationID string) ([]string, error)
 }
 
