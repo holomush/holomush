@@ -68,3 +68,31 @@ func TestBroadcaster_MultipleSubscribers(t *testing.T) {
 		t.Error("ch2: Timeout")
 	}
 }
+
+// TestBroadcaster_WithAccessControl documents expected behavior for Phase 3.4.
+// This test will fail until Broadcaster integration is complete.
+// See: docs/specs/2026-01-21-access-control-design.md (Event System Integration)
+//
+// Expected API changes:
+//   - NewBroadcasterWithAccessControl(ac AccessControl) *Broadcaster
+//   - SubscribeWithSubject(stream, subject string) <-chan Event
+//   - Broadcast(ctx context.Context, event Event) - checks read permission
+func TestBroadcaster_WithAccessControl(t *testing.T) {
+	t.Skip("Pending: Broadcaster access control integration (Phase 3.4)")
+
+	// When implemented, this test should verify:
+	// 1. Broadcaster accepts optional AccessControl
+	// 2. Subscribers with subject can be added via SubscribeWithSubject
+	// 3. Events are filtered at delivery based on read permission
+	// 4. Unauthorized subscribers are silently skipped
+	// 5. Backward compatible (existing Subscribe API still works)
+	//
+	// Example test logic:
+	//   ac := access.NewStaticAccessControl(nil, nil)
+	//   ac.AssignRole("char:allowed", "admin")  // admin can read everything
+	//   b := NewBroadcasterWithAccessControl(ac)
+	//   allowedCh := b.SubscribeWithSubject("room:1", "char:allowed")
+	//   deniedCh := b.SubscribeWithSubject("room:1", "char:denied")
+	//   b.Broadcast(ctx, event)
+	//   // allowedCh receives event, deniedCh does not
+}
