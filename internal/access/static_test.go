@@ -242,6 +242,64 @@ func TestStaticAccessControl_RevokeRoleValidation(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestStaticAccessControl_InvalidRolePattern(t *testing.T) {
+	// Test that invalid glob patterns in roles cause NewStaticAccessControlWithRoles
+	// to return an error rather than silently skipping the pattern.
+	invalidRoles := map[string][]string{
+		"player": {"read:[invalid"}, // Invalid glob pattern (unclosed bracket)
+	}
+
+	_, err := access.NewStaticAccessControlWithRoles(invalidRoles, nil, nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_PERMISSION_PATTERN")
+	errutil.AssertErrorContext(t, err, "role", "player")
+	errutil.AssertErrorContext(t, err, "pattern", "read:[invalid")
+}
+
+func TestStaticAccessControl_MalformedSubjectID(t *testing.T) {
+	// Subject IDs with glob metacharacters could break pattern compilation
+	// when $self is resolved. Verify this is handled safely (denied, not crash).
+	ac := access.NewStaticAccessControl(nil, nil)
+	ctx := context.Background()
+
+	// Subject with invalid glob chars - should not cause crash or allow bypass
+	err := ac.AssignRole("char:[invalid", "player")
+	require.NoError(t, err)
+
+	// Permission check should deny (pattern fails to compile after $self resolution)
+	// The permission "read:character:$self" becomes "read:character:[invalid"
+	// which is an invalid glob pattern and should be safely denied.
+	assert.False(t, ac.Check(ctx, "char:[invalid", "read", "character:[invalid"))
+
+	// Non-$self permissions should still work
+	assert.True(t, ac.Check(ctx, "char:[invalid", "execute", "command:say"))
+}
+
+func TestStaticAccessControl_MalformedLocationID(t *testing.T) {
+	// Location IDs with glob metacharacters returned by LocationResolver
+	// could break pattern compilation when $here is resolved.
+	// Verify this is handled safely (denied, not crash).
+	resolver := &testLocationResolver{
+		locations: map[string]string{
+			"testchar": "[invalid-room", // Invalid glob pattern in location ID
+		},
+	}
+	ac := access.NewStaticAccessControl(resolver, nil)
+	ctx := context.Background()
+
+	err := ac.AssignRole("char:testchar", "player")
+	require.NoError(t, err)
+
+	// Permission check should deny (pattern fails to compile after $here resolution)
+	// The permission "read:location:$here" becomes "read:location:[invalid-room"
+	// which is an invalid glob pattern and should be safely denied.
+	assert.False(t, ac.Check(ctx, "char:testchar", "read", "location:[invalid-room"))
+
+	// Non-$here permissions should still work
+	assert.True(t, ac.Check(ctx, "char:testchar", "execute", "command:say"))
+	assert.True(t, ac.Check(ctx, "char:testchar", "read", "character:testchar"))
+}
+
 func TestStaticAccessControl_SelfToken(t *testing.T) {
 	ac := access.NewStaticAccessControl(nil, nil)
 	ctx := context.Background()

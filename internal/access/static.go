@@ -10,18 +10,22 @@ import (
 	"sync"
 
 	"github.com/gobwas/glob"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/plugin/capability"
 )
 
 // StaticAccessControl implements AccessControl with static role definitions.
 // This is the MVP implementation before full ABAC.
+//
+// Thread-safety: roles is immutable after construction and requires no synchronization.
+// Only subjects is mutable and protected by mu.
 type StaticAccessControl struct {
-	roles    map[string][]compiledPermission // roleName → compiled permission patterns
-	subjects map[string]string               // subjectID → roleName
+	roles    map[string][]compiledPermission // roleName → compiled permission patterns (immutable)
+	subjects map[string]string               // subjectID → roleName (mutable, protected by mu)
 	resolver LocationResolver
 	enforcer *capability.Enforcer
-	mu       sync.RWMutex
+	mu       sync.RWMutex // protects subjects only
 }
 
 // compiledPermission holds a permission pattern and its compiled glob.
@@ -30,29 +34,44 @@ type compiledPermission struct {
 	glob    glob.Glob
 }
 
-// NewStaticAccessControl creates a new static access controller.
+// NewStaticAccessControl creates a new static access controller with default roles.
 // If resolver is nil, NullResolver is used.
 // If enforcer is nil, plugin checks always return false.
+//
+// Panics if default roles contain invalid permission patterns (configuration bug).
 func NewStaticAccessControl(resolver LocationResolver, enforcer *capability.Enforcer) *StaticAccessControl {
+	ac, err := NewStaticAccessControlWithRoles(DefaultRoles(), resolver, enforcer)
+	if err != nil {
+		// DefaultRoles() patterns are hardcoded and should always be valid.
+		// If they fail to compile, it's a code bug that should fail fast.
+		panic("invalid permission pattern in DefaultRoles: " + err.Error())
+	}
+	return ac
+}
+
+// NewStaticAccessControlWithRoles creates a new static access controller with custom roles.
+// If resolver is nil, NullResolver is used.
+// If enforcer is nil, plugin checks always return false.
+//
+// Returns error if any permission pattern fails to compile (invalid glob syntax).
+func NewStaticAccessControlWithRoles(roles map[string][]string, resolver LocationResolver, enforcer *capability.Enforcer) (*StaticAccessControl, error) {
 	if resolver == nil {
 		resolver = NullResolver{}
 	}
 
-	// Compile default roles
-	defaultRoles := DefaultRoles()
-	compiledRoles := make(map[string][]compiledPermission, len(defaultRoles))
-	for role, perms := range defaultRoles {
+	// Compile roles
+	compiledRoles := make(map[string][]compiledPermission, len(roles))
+	for role, perms := range roles {
 		compiled := make([]compiledPermission, 0, len(perms))
 		for _, p := range perms {
 			// Use ':' as separator for permission patterns
 			g, err := glob.Compile(p, ':')
 			if err != nil {
-				// Log configuration error - indicates invalid permission pattern in code
-				slog.Error("failed to compile permission pattern",
-					"role", role,
-					"pattern", p,
-					"error", err)
-				continue
+				return nil, oops.In("access").
+					Code("INVALID_PERMISSION_PATTERN").
+					With("role", role).
+					With("pattern", p).
+					Wrap(err)
 			}
 			compiled = append(compiled, compiledPermission{pattern: p, glob: g})
 		}
@@ -64,7 +83,7 @@ func NewStaticAccessControl(resolver LocationResolver, enforcer *capability.Enfo
 		subjects: make(map[string]string),
 		resolver: resolver,
 		enforcer: enforcer,
-	}
+	}, nil
 }
 
 // Check implements AccessControl.

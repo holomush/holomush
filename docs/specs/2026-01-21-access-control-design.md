@@ -68,6 +68,16 @@ internal/access/accesstest/
 
 ## Core Interface
 
+### Security Requirements
+
+| Requirement               | Description                                                                |
+| ------------------------- | -------------------------------------------------------------------------- |
+| Default Deny              | Unknown subjects or missing permissions MUST return false                  |
+| System Subject            | The `system` subject MUST always be allowed (bypass all permission checks) |
+| Plugin Delegation         | Plugin subjects (`plugin:*`) MUST delegate to `capability.Enforcer`        |
+| Fail-Closed Resolution    | LocationResolver errors MUST result in token resolution failure (deny)     |
+| Valid Permission Patterns | All permission patterns MUST compile successfully at startup               |
+
 ```go
 // AccessControl checks permissions for all subjects in HoloMUSH.
 // This is the single entry point for all authorization.
@@ -421,13 +431,13 @@ func TestStaticAccessControl_PluginDelegation(t *testing.T) {
 
 ## Acceptance Criteria
 
-- [ ] AccessControl interface defined with `Check(ctx, subject, action, resource) bool`
-- [ ] Permission model documented with clear subject/action/resource taxonomy
-- [ ] Static role definitions: admin, builder, player with composition
-- [ ] Dynamic tokens (`$self`, `$here`) designed for contextual access
-- [ ] Plugin capability integration via delegation to Enforcer
-- [ ] Event permission flow documented (filter at delivery, check at emission)
-- [ ] Design reviewed and approved
+- [x] AccessControl interface defined with `Check(ctx, subject, action, resource) bool`
+- [x] Permission model documented with clear subject/action/resource taxonomy
+- [x] Static role definitions: admin, builder, player with composition
+- [x] Dynamic tokens (`$self`, `$here`) designed for contextual access
+- [x] Plugin capability integration via delegation to Enforcer
+- [x] Event permission flow documented (filter at delivery, check at emission)
+- [x] Design reviewed and approved
 
 ## Future Evolution (ABAC)
 
