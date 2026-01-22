@@ -241,3 +241,37 @@ func TestStaticAccessControl_RevokeRoleValidation(t *testing.T) {
 	err = ac.RevokeRole("char:nonexistent")
 	assert.NoError(t, err)
 }
+
+func TestStaticAccessControl_SelfToken(t *testing.T) {
+	ac := access.NewStaticAccessControl(nil, nil)
+	ctx := context.Background()
+
+	// Assign player role (has read:character:$self)
+	err := ac.AssignRole("char:01ABC", "player")
+	require.NoError(t, err)
+
+	// Can read own character ($self resolves to 01ABC)
+	assert.True(t, ac.Check(ctx, "char:01ABC", "read", "character:01ABC"))
+
+	// Cannot read other character
+	assert.False(t, ac.Check(ctx, "char:01ABC", "read", "character:01XYZ"))
+
+	// Can write own character
+	assert.True(t, ac.Check(ctx, "char:01ABC", "write", "character:01ABC"))
+}
+
+func TestStaticAccessControl_SelfTokenMultipleSubjects(t *testing.T) {
+	ac := access.NewStaticAccessControl(nil, nil)
+	ctx := context.Background()
+
+	// Assign player role to multiple characters
+	require.NoError(t, ac.AssignRole("char:ALICE", "player"))
+	require.NoError(t, ac.AssignRole("char:BOB", "player"))
+
+	// Each can only access their own character
+	assert.True(t, ac.Check(ctx, "char:ALICE", "read", "character:ALICE"))
+	assert.False(t, ac.Check(ctx, "char:ALICE", "read", "character:BOB"))
+
+	assert.True(t, ac.Check(ctx, "char:BOB", "read", "character:BOB"))
+	assert.False(t, ac.Check(ctx, "char:BOB", "read", "character:ALICE"))
+}

@@ -5,6 +5,7 @@ package access
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/gobwas/glob"
@@ -112,14 +113,34 @@ func (s *StaticAccessControl) checkRole(_ context.Context, subject, action, reso
 
 	requested := action + ":" + resource
 
+	// Extract subject ID for token resolution
+	_, subjectID := ParseSubject(subject)
+
 	// Match against role permissions
 	for _, perm := range permissions {
-		if perm.glob.Match(requested) {
+		// Resolve $self token in the permission pattern
+		resolvedPattern := s.resolveSelfToken(perm.pattern, subjectID)
+
+		// If pattern changed, recompile and match
+		if resolvedPattern != perm.pattern {
+			g, err := glob.Compile(resolvedPattern, ':')
+			if err != nil {
+				continue
+			}
+			if g.Match(requested) {
+				return true
+			}
+		} else if perm.glob.Match(requested) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// resolveSelfToken replaces $self with the subject's ID.
+func (s *StaticAccessControl) resolveSelfToken(pattern, subjectID string) string {
+	return strings.ReplaceAll(pattern, "$self", subjectID)
 }
 
 // AssignRole sets the role for a subject.
