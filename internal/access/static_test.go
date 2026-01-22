@@ -275,3 +275,78 @@ func TestStaticAccessControl_SelfTokenMultipleSubjects(t *testing.T) {
 	assert.True(t, ac.Check(ctx, "char:BOB", "read", "character:BOB"))
 	assert.False(t, ac.Check(ctx, "char:BOB", "read", "character:ALICE"))
 }
+
+// testLocationResolver is a mock for LocationResolver.
+type testLocationResolver struct {
+	locations  map[string]string   // charID → locationID
+	characters map[string][]string // locationID → charIDs
+}
+
+func (r *testLocationResolver) CurrentLocation(_ context.Context, charID string) (string, error) {
+	if loc, ok := r.locations[charID]; ok {
+		return loc, nil
+	}
+	return "", nil
+}
+
+func (r *testLocationResolver) CharactersAt(_ context.Context, locationID string) ([]string, error) {
+	return r.characters[locationID], nil
+}
+
+func TestStaticAccessControl_HereToken(t *testing.T) {
+	resolver := &testLocationResolver{
+		locations: map[string]string{
+			"01ABC": "room1",
+		},
+	}
+	ac := access.NewStaticAccessControl(resolver, nil)
+	ctx := context.Background()
+
+	// Assign player role (has read:location:$here)
+	err := ac.AssignRole("char:01ABC", "player")
+	require.NoError(t, err)
+
+	// Can read current location
+	assert.True(t, ac.Check(ctx, "char:01ABC", "read", "location:room1"))
+
+	// Cannot read other location
+	assert.False(t, ac.Check(ctx, "char:01ABC", "read", "location:room2"))
+
+	// Can emit to current location stream
+	assert.True(t, ac.Check(ctx, "char:01ABC", "emit", "stream:location:room1"))
+}
+
+func TestStaticAccessControl_HereTokenNullResolver(t *testing.T) {
+	// With NullResolver, $here never matches (no location returned)
+	ac := access.NewStaticAccessControl(nil, nil)
+	ctx := context.Background()
+
+	err := ac.AssignRole("char:01ABC", "player")
+	require.NoError(t, err)
+
+	// Cannot read any location (no $here resolution)
+	assert.False(t, ac.Check(ctx, "char:01ABC", "read", "location:room1"))
+	assert.False(t, ac.Check(ctx, "char:01ABC", "read", "location:room2"))
+}
+
+func TestStaticAccessControl_HereTokenMultipleCharacters(t *testing.T) {
+	resolver := &testLocationResolver{
+		locations: map[string]string{
+			"ALICE": "room1",
+			"BOB":   "room2",
+		},
+	}
+	ac := access.NewStaticAccessControl(resolver, nil)
+	ctx := context.Background()
+
+	require.NoError(t, ac.AssignRole("char:ALICE", "player"))
+	require.NoError(t, ac.AssignRole("char:BOB", "player"))
+
+	// Alice can read her room, not Bob's
+	assert.True(t, ac.Check(ctx, "char:ALICE", "read", "location:room1"))
+	assert.False(t, ac.Check(ctx, "char:ALICE", "read", "location:room2"))
+
+	// Bob can read his room, not Alice's
+	assert.True(t, ac.Check(ctx, "char:BOB", "read", "location:room2"))
+	assert.False(t, ac.Check(ctx, "char:BOB", "read", "location:room1"))
+}

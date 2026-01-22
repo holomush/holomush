@@ -97,7 +97,7 @@ func (s *StaticAccessControl) checkPlugin(pluginID, action, resource string) boo
 }
 
 // checkRole checks if subject's role allows the action on resource.
-func (s *StaticAccessControl) checkRole(_ context.Context, subject, action, resource string) bool {
+func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, resource string) bool {
 	s.mu.RLock()
 	role := s.subjects[subject]
 	s.mu.RUnlock()
@@ -115,11 +115,12 @@ func (s *StaticAccessControl) checkRole(_ context.Context, subject, action, reso
 
 	// Extract subject ID for token resolution
 	_, subjectID := ParseSubject(subject)
+	currentLocation := s.resolveCurrentLocation(ctx, subjectID)
 
 	// Match against role permissions
 	for _, perm := range permissions {
-		// Resolve $self token in the permission pattern
-		resolvedPattern := s.resolveSelfToken(perm.pattern, subjectID)
+		// Resolve tokens in the permission pattern
+		resolvedPattern := s.resolveTokens(perm.pattern, subjectID, currentLocation)
 
 		// If pattern changed, recompile and match
 		if resolvedPattern != perm.pattern {
@@ -138,9 +139,25 @@ func (s *StaticAccessControl) checkRole(_ context.Context, subject, action, reso
 	return false
 }
 
-// resolveSelfToken replaces $self with the subject's ID.
-func (s *StaticAccessControl) resolveSelfToken(pattern, subjectID string) string {
-	return strings.ReplaceAll(pattern, "$self", subjectID)
+// resolveTokens replaces $self and $here with actual values.
+func (s *StaticAccessControl) resolveTokens(pattern, subjectID, locationID string) string {
+	result := strings.ReplaceAll(pattern, "$self", subjectID)
+	if locationID != "" {
+		result = strings.ReplaceAll(result, "$here", locationID)
+	}
+	return result
+}
+
+// resolveCurrentLocation gets the character's current location.
+func (s *StaticAccessControl) resolveCurrentLocation(ctx context.Context, charID string) string {
+	if s.resolver == nil {
+		return ""
+	}
+	loc, err := s.resolver.CurrentLocation(ctx, charID)
+	if err != nil {
+		return ""
+	}
+	return loc
 }
 
 // AssignRole sets the role for a subject.
