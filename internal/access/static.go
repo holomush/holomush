@@ -5,6 +5,7 @@ package access
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -46,7 +47,11 @@ func NewStaticAccessControl(resolver LocationResolver, enforcer *capability.Enfo
 			// Use ':' as separator for permission patterns
 			g, err := glob.Compile(p, ':')
 			if err != nil {
-				// Skip invalid patterns (shouldn't happen with defaults)
+				// Log configuration error - indicates invalid permission pattern in code
+				slog.Error("failed to compile permission pattern",
+					"role", role,
+					"pattern", p,
+					"error", err)
 				continue
 			}
 			compiled = append(compiled, compiledPermission{pattern: p, glob: g})
@@ -126,6 +131,12 @@ func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, re
 		if resolvedPattern != perm.pattern {
 			g, err := glob.Compile(resolvedPattern, ':')
 			if err != nil {
+				// Log at debug level - could happen with unusual subject/location IDs
+				slog.Debug("failed to compile resolved permission pattern",
+					"subject", subject,
+					"pattern", perm.pattern,
+					"resolved", resolvedPattern,
+					"error", err)
 				continue
 			}
 			if g.Match(requested) {
@@ -149,12 +160,17 @@ func (s *StaticAccessControl) resolveTokens(pattern, subjectID, locationID strin
 }
 
 // resolveCurrentLocation gets the character's current location.
+// Returns empty string on error (fail-closed security posture).
 func (s *StaticAccessControl) resolveCurrentLocation(ctx context.Context, charID string) string {
 	if s.resolver == nil {
 		return ""
 	}
 	loc, err := s.resolver.CurrentLocation(ctx, charID)
 	if err != nil {
+		// Log at warn level - infrastructure issue affecting permission checks
+		slog.Warn("failed to resolve current location for access check",
+			"charID", charID,
+			"error", err)
 		return ""
 	}
 	return loc

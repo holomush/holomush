@@ -350,3 +350,36 @@ func TestStaticAccessControl_HereTokenMultipleCharacters(t *testing.T) {
 	assert.True(t, ac.Check(ctx, "char:BOB", "read", "location:room2"))
 	assert.False(t, ac.Check(ctx, "char:BOB", "read", "location:room1"))
 }
+
+// errorLocationResolver returns an error from CurrentLocation.
+type errorLocationResolver struct {
+	err error
+}
+
+func (r *errorLocationResolver) CurrentLocation(_ context.Context, _ string) (string, error) {
+	return "", r.err
+}
+
+func (r *errorLocationResolver) CharactersAt(_ context.Context, _ string) ([]string, error) {
+	return nil, r.err
+}
+
+func TestStaticAccessControl_HereTokenResolverError(t *testing.T) {
+	// When LocationResolver returns an error, $here tokens should not resolve,
+	// resulting in location-based permissions being denied (fail-safe behavior).
+	// This documents the intentional fail-closed security posture.
+	resolver := &errorLocationResolver{err: context.DeadlineExceeded}
+	ac := access.NewStaticAccessControl(resolver, nil)
+	ctx := context.Background()
+
+	err := ac.AssignRole("char:01ABC", "player")
+	require.NoError(t, err)
+
+	// Location-based permissions denied when resolver fails
+	// (player role has read:location:$here which can't resolve)
+	assert.False(t, ac.Check(ctx, "char:01ABC", "read", "location:room1"))
+
+	// Non-location permissions still work
+	assert.True(t, ac.Check(ctx, "char:01ABC", "execute", "command:say"))
+	assert.True(t, ac.Check(ctx, "char:01ABC", "read", "character:01ABC")) // $self works
+}
