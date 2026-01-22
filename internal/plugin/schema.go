@@ -9,8 +9,8 @@ import (
 	"sync"
 
 	"github.com/invopop/jsonschema"
-	jschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/samber/oops"
+	jschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
