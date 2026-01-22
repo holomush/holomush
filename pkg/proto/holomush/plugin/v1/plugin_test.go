@@ -6,6 +6,9 @@ package pluginv1_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -22,27 +25,13 @@ func TestEventMessageFields(t *testing.T) {
 		Payload:   `{"text":"Hello, world!"}`,
 	}
 
-	if event.Id == "" {
-		t.Error("expected event ID to be set")
-	}
-	if event.Stream == "" {
-		t.Error("expected event stream to be set")
-	}
-	if event.Type == "" {
-		t.Error("expected event type to be set")
-	}
-	if event.Timestamp == 0 {
-		t.Error("expected event timestamp to be set")
-	}
-	if event.ActorKind == "" {
-		t.Error("expected actor_kind to be string type")
-	}
-	if event.ActorId == "" {
-		t.Error("expected actor_id to be set")
-	}
-	if event.Payload == "" {
-		t.Error("expected payload to be set")
-	}
+	assert.NotEmpty(t, event.Id, "expected event ID to be set")
+	assert.NotEmpty(t, event.Stream, "expected event stream to be set")
+	assert.NotEmpty(t, event.Type, "expected event type to be set")
+	assert.NotZero(t, event.Timestamp, "expected event timestamp to be set")
+	assert.NotEmpty(t, event.ActorKind, "expected actor_kind to be string type")
+	assert.NotEmpty(t, event.ActorId, "expected actor_id to be set")
+	assert.NotEmpty(t, event.Payload, "expected payload to be set")
 }
 
 // TestHandleEventRequestResponse verifies Plugin service RPC types.
@@ -55,9 +44,7 @@ func TestHandleEventRequestResponse(t *testing.T) {
 			Type:   "say",
 		},
 	}
-	if req.Event == nil {
-		t.Error("expected HandleEventRequest to have Event field")
-	}
+	require.NotNil(t, req.Event, "expected HandleEventRequest to have Event field")
 
 	// Verify HandleEventResponse exists and has EmitEvents field
 	resp := &pluginv1.HandleEventResponse{
@@ -69,9 +56,7 @@ func TestHandleEventRequestResponse(t *testing.T) {
 			},
 		},
 	}
-	if len(resp.EmitEvents) != 1 {
-		t.Errorf("expected 1 emit event, got %d", len(resp.EmitEvents))
-	}
+	assert.Len(t, resp.EmitEvents, 1, "expected 1 emit event")
 }
 
 // TestEmitEventFields verifies the EmitEvent message.
@@ -82,13 +67,7 @@ func TestEmitEventFields(t *testing.T) {
 		Payload: `{"message":"Plugin loaded"}`,
 	}
 
-	if emit.Stream == "" {
-		t.Error("expected stream to be set")
-	}
-	if emit.Type == "" {
-		t.Error("expected type to be set")
-	}
-	if emit.Payload == "" {
-		t.Error("expected payload to be set")
-	}
+	assert.NotEmpty(t, emit.Stream, "expected stream to be set")
+	assert.NotEmpty(t, emit.Type, "expected type to be set")
+	assert.NotEmpty(t, emit.Payload, "expected payload to be set")
 }

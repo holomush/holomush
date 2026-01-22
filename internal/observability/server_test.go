@@ -12,15 +12,17 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServer_Metrics(t *testing.T) {
 	// Create server with always-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -28,44 +30,28 @@ func TestServer_Metrics(t *testing.T) {
 	}()
 
 	addr := server.Addr()
-	if addr == "" {
-		t.Fatal("server address is empty")
-	}
+	require.NotEmpty(t, addr, "server address is empty")
 
 	// Make request to /metrics
 	resp, err := http.Get("http://" + addr + "/metrics")
-	if err != nil {
-		t.Fatalf("failed to GET /metrics: %v", err)
-	}
+	require.NoError(t, err, "failed to GET /metrics")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	require.NoError(t, err, "failed to read response body")
 
 	// Check for Prometheus format indicators
 	bodyStr := string(body)
-	if !strings.Contains(bodyStr, "# HELP") {
-		t.Error("expected Prometheus format with HELP comments")
-	}
-	if !strings.Contains(bodyStr, "# TYPE") {
-		t.Error("expected Prometheus format with TYPE comments")
-	}
+	assert.Contains(t, bodyStr, "# HELP", "expected Prometheus format with HELP comments")
+	assert.Contains(t, bodyStr, "# TYPE", "expected Prometheus format with TYPE comments")
 
 	// Check for standard Go metrics
-	if !strings.Contains(bodyStr, "go_") {
-		t.Error("expected go_* metrics")
-	}
+	assert.Contains(t, bodyStr, "go_", "expected go_* metrics")
 
 	// Check for process metrics
-	if !strings.Contains(bodyStr, "process_") {
-		t.Error("expected process_* metrics")
-	}
+	assert.Contains(t, bodyStr, "process_", "expected process_* metrics")
 
 	// Increment custom metrics so they appear in output
 	metrics := server.Metrics()
@@ -74,32 +60,23 @@ func TestServer_Metrics(t *testing.T) {
 
 	// Make another request to see the custom metrics
 	resp2, err := http.Get("http://" + addr + "/metrics")
-	if err != nil {
-		t.Fatalf("failed to GET /metrics (second request): %v", err)
-	}
+	require.NoError(t, err, "failed to GET /metrics (second request)")
 	defer func() { _ = resp2.Body.Close() }()
 
 	body2, err := io.ReadAll(resp2.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	require.NoError(t, err, "failed to read response body")
 	bodyStr2 := string(body2)
 
 	// Check for custom metrics (they appear after being used)
-	if !strings.Contains(bodyStr2, "holomush_connections_total") {
-		t.Error("expected holomush_connections_total metric")
-	}
-	if !strings.Contains(bodyStr2, "holomush_requests_total") {
-		t.Error("expected holomush_requests_total metric")
-	}
+	assert.Contains(t, bodyStr2, "holomush_connections_total", "expected holomush_connections_total metric")
+	assert.Contains(t, bodyStr2, "holomush_requests_total", "expected holomush_requests_total metric")
 }
 
 func TestServer_LivenessReturns200(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -107,32 +84,23 @@ func TestServer_LivenessReturns200(t *testing.T) {
 	}()
 
 	resp, err := http.Get("http://" + server.Addr() + "/healthz/liveness")
-	if err != nil {
-		t.Fatalf("failed to GET /healthz/liveness: %v", err)
-	}
+	require.NoError(t, err, "failed to GET /healthz/liveness")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	require.NoError(t, err, "failed to read response body")
 
-	if strings.TrimSpace(string(body)) != "ok" {
-		t.Errorf("expected body 'ok', got %q", string(body))
-	}
+	assert.Equal(t, "ok", strings.TrimSpace(string(body)), "expected body 'ok'")
 }
 
 func TestServer_ReadinessWhenReady(t *testing.T) {
 	// Create server with always-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -140,32 +108,23 @@ func TestServer_ReadinessWhenReady(t *testing.T) {
 	}()
 
 	resp, err := http.Get("http://" + server.Addr() + "/healthz/readiness")
-	if err != nil {
-		t.Fatalf("failed to GET /healthz/readiness: %v", err)
-	}
+	require.NoError(t, err, "failed to GET /healthz/readiness")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	require.NoError(t, err, "failed to read response body")
 
-	if strings.TrimSpace(string(body)) != "ok" {
-		t.Errorf("expected body 'ok', got %q", string(body))
-	}
+	assert.Equal(t, "ok", strings.TrimSpace(string(body)), "expected body 'ok'")
 }
 
 func TestServer_ReadinessWhenNotReady(t *testing.T) {
 	// Create server with never-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return false })
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -173,32 +132,23 @@ func TestServer_ReadinessWhenNotReady(t *testing.T) {
 	}()
 
 	resp, err := http.Get("http://" + server.Addr() + "/healthz/readiness")
-	if err != nil {
-		t.Fatalf("failed to GET /healthz/readiness: %v", err)
-	}
+	require.NoError(t, err, "failed to GET /healthz/readiness")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("expected status 503, got %d", resp.StatusCode)
-	}
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode, "expected status 503")
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	require.NoError(t, err, "failed to read response body")
 
-	if strings.TrimSpace(string(body)) != "not ready" {
-		t.Errorf("expected body 'not ready', got %q", string(body))
-	}
+	assert.Equal(t, "not ready", strings.TrimSpace(string(body)), "expected body 'not ready'")
 }
 
 func TestServer_ReadinessWithNilChecker(t *testing.T) {
 	// Create server with nil readiness checker (should default to ready)
 	server := NewServer("127.0.0.1:0", nil)
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -206,22 +156,17 @@ func TestServer_ReadinessWithNilChecker(t *testing.T) {
 	}()
 
 	resp, err := http.Get("http://" + server.Addr() + "/healthz/readiness")
-	if err != nil {
-		t.Fatalf("failed to GET /healthz/readiness: %v", err)
-	}
+	require.NoError(t, err, "failed to GET /healthz/readiness")
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200 with nil checker, got %d", resp.StatusCode)
-	}
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200 with nil checker")
 }
 
 func TestServer_DoubleStartFails(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -229,9 +174,8 @@ func TestServer_DoubleStartFails(t *testing.T) {
 	}()
 
 	// Second start should fail
-	if _, err := server.Start(); err == nil {
-		t.Error("expected error on double start, got nil")
-	}
+	_, err = server.Start()
+	assert.Error(t, err, "expected error on double start")
 }
 
 func TestServer_StopIdempotent(t *testing.T) {
@@ -240,9 +184,8 @@ func TestServer_StopIdempotent(t *testing.T) {
 	// Stop without start should not error
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := server.Stop(ctx); err != nil {
-		t.Errorf("stop without start should not error: %v", err)
-	}
+	err := server.Stop(ctx)
+	assert.NoError(t, err, "stop without start should not error")
 }
 
 func TestServer_ErrorChannelReportsServeErrors(t *testing.T) {
@@ -252,15 +195,11 @@ func TestServer_ErrorChannelReportsServeErrors(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	errCh, err := server.Start()
-	if err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	require.NoError(t, err, "failed to start server")
 
 	// Get the listener address before we close it
 	addr := server.Addr()
-	if addr == "" {
-		t.Fatal("server address is empty")
-	}
+	require.NotEmpty(t, addr, "server address is empty")
 
 	// Force close the underlying listener to trigger an error in Serve()
 	// This simulates a real-world scenario where the listener fails unexpectedly
@@ -272,11 +211,9 @@ func TestServer_ErrorChannelReportsServeErrors(t *testing.T) {
 	select {
 	case serveErr := <-errCh:
 		// We expect an error because we closed the listener
-		if serveErr == nil {
-			t.Error("expected an error from the error channel after closing listener")
-		}
+		assert.Error(t, serveErr, "expected an error from the error channel after closing listener")
 	case <-time.After(2 * time.Second):
-		t.Error("timeout waiting for error on error channel - bug: server errors are not propagated")
+		assert.Fail(t, "timeout waiting for error on error channel - bug: server errors are not propagated")
 	}
 
 	// Clean up
@@ -290,26 +227,23 @@ func TestServer_ErrorChannelClosesOnNormalShutdown(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	errCh, err := server.Start()
-	if err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	require.NoError(t, err, "failed to start server")
 
 	// Normal shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := server.Stop(ctx); err != nil {
-		t.Fatalf("failed to stop server: %v", err)
-	}
+	err = server.Stop(ctx)
+	require.NoError(t, err, "failed to stop server")
 
 	// The error channel should be closed (receive nil or closed)
 	select {
-	case err, ok := <-errCh:
-		if ok && err != nil {
-			t.Errorf("unexpected error on normal shutdown: %v", err)
+	case recvErr, ok := <-errCh:
+		if ok {
+			assert.NoError(t, recvErr, "unexpected error on normal shutdown")
 		}
 		// ok=false (closed) or ok=true with err=nil are both acceptable
 	case <-time.After(2 * time.Second):
-		t.Error("timeout waiting for error channel to close")
+		assert.Fail(t, "timeout waiting for error channel to close")
 	}
 }
 
@@ -320,9 +254,7 @@ func TestServer_ConcurrentStopCalls(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	errCh, err := server.Start()
-	if err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	require.NoError(t, err, "failed to start server")
 
 	// Drain error channel in background
 	go func() {
@@ -341,9 +273,8 @@ func TestServer_ConcurrentStopCalls(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			// All Stop calls should complete without error
-			if err := server.Stop(ctx); err != nil {
-				t.Errorf("Stop should not error: %v", err)
-			}
+			stopErr := server.Stop(ctx)
+			assert.NoError(t, stopErr, "Stop should not error")
 		}()
 	}
 
@@ -351,9 +282,7 @@ func TestServer_ConcurrentStopCalls(t *testing.T) {
 
 	// After all stops, server should not be running - Start() should succeed
 	errCh2, err := server.Start()
-	if err != nil {
-		t.Fatalf("Start after Stop should succeed: %v", err)
-	}
+	require.NoError(t, err, "Start after Stop should succeed")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -366,9 +295,7 @@ func TestServer_ConcurrentStopCalls(t *testing.T) {
 		}
 	}()
 
-	if server.Addr() == "" {
-		t.Error("server should be running after Start")
-	}
+	assert.NotEmpty(t, server.Addr(), "server should be running after Start")
 }
 
 func TestServer_StopContextTimeout(t *testing.T) {
@@ -377,9 +304,7 @@ func TestServer_StopContextTimeout(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	errCh, err := server.Start()
-	if err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	require.NoError(t, err, "failed to start server")
 
 	// Drain error channel in background
 	go func() {
@@ -388,24 +313,18 @@ func TestServer_StopContextTimeout(t *testing.T) {
 	}()
 
 	addr := server.Addr()
-	if addr == "" {
-		t.Fatal("server should be running")
-	}
+	require.NotEmpty(t, addr, "server should be running")
 
 	// Create a connection that will hold open during shutdown.
 	// We use a slow handler response to keep the connection active.
 	// Open a connection and make it hang by not completing the request.
 	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
+	require.NoError(t, err, "failed to connect")
 	defer func() { _ = conn.Close() }()
 
 	// Send a partial HTTP request (connection stays open waiting for more data)
 	_, err = conn.Write([]byte("GET /healthz/liveness HTTP/1.1\r\n"))
-	if err != nil {
-		t.Fatalf("failed to write: %v", err)
-	}
+	require.NoError(t, err, "failed to write")
 
 	// Use a very short timeout that will expire before the connection drains
 	shortCtx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
@@ -416,9 +335,7 @@ func TestServer_StopContextTimeout(t *testing.T) {
 
 	// Stop with expired context should fail because connection is still active
 	err = server.Stop(shortCtx)
-	if err == nil {
-		t.Error("expected error when stopping with expired context and active connection")
-	}
+	assert.Error(t, err, "expected error when stopping with expired context and active connection")
 
 	// The running state should be restored (server still running)
 	// Close the hanging connection first
@@ -428,15 +345,12 @@ func TestServer_StopContextTimeout(t *testing.T) {
 	validCtx, validCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer validCancel()
 
-	if err := server.Stop(validCtx); err != nil {
-		t.Fatalf("Stop with valid context should succeed: %v", err)
-	}
+	err = server.Stop(validCtx)
+	require.NoError(t, err, "Stop with valid context should succeed")
 
 	// Server should now be stopped - Start should work
 	errCh2, err := server.Start()
-	if err != nil {
-		t.Fatalf("Start after successful Stop should work: %v", err)
-	}
+	require.NoError(t, err, "Start after successful Stop should work")
 
 	// Clean up
 	go func() {
@@ -455,9 +369,7 @@ func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	errCh, err := server.Start()
-	if err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	require.NoError(t, err, "failed to start server")
 
 	// Drain error channel in background
 	go func() {
@@ -466,22 +378,18 @@ func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
 	}()
 
 	addr := server.Addr()
-	if addr == "" {
-		t.Fatal("server should be running")
-	}
+	require.NotEmpty(t, addr, "server should be running")
 
 	// Create a connection that will block in a handler during shutdown.
 	// We make a partial request that keeps the connection in read state.
 	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
+	require.NoError(t, err, "failed to connect")
 
 	// Send partial HTTP request to keep connection active
-	_, err = conn.Write([]byte("GET /healthz/liveness HTTP/1.1\r\n"))
-	if err != nil {
+	_, writeErr := conn.Write([]byte("GET /healthz/liveness HTTP/1.1\r\n"))
+	if writeErr != nil {
 		_ = conn.Close()
-		t.Fatalf("failed to write: %v", err)
+		require.NoError(t, writeErr, "failed to write")
 	}
 
 	// Use a very short timeout - this should fail
@@ -493,7 +401,7 @@ func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
 	err = server.Stop(shortCtx)
 	if err == nil {
 		_ = conn.Close()
-		t.Fatal("expected error when stopping with expired context and active connection")
+		require.Fail(t, "expected error when stopping with expired context and active connection")
 	}
 
 	// Key assertion: after failed Stop(), we should be able to call Stop() again.
@@ -507,15 +415,12 @@ func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
 	validCtx, validCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer validCancel()
 
-	if err := server.Stop(validCtx); err != nil {
-		t.Fatalf("second Stop with valid context should succeed: %v", err)
-	}
+	err = server.Stop(validCtx)
+	require.NoError(t, err, "second Stop with valid context should succeed")
 
 	// Verify shutdown actually happened by confirming Start() works
 	errCh2, err := server.Start()
-	if err != nil {
-		t.Fatalf("Start after successful Stop should work: %v", err)
-	}
+	require.NoError(t, err, "Start after successful Stop should work")
 
 	// Clean up
 	go func() {
@@ -530,9 +435,8 @@ func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
 func TestServer_MetricsIncrement(t *testing.T) {
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
-	if _, err := server.Start(); err != nil {
-		t.Fatalf("failed to start server: %v", err)
-	}
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -547,25 +451,17 @@ func TestServer_MetricsIncrement(t *testing.T) {
 
 	// Check metrics endpoint includes our incremented values
 	resp, err := http.Get("http://" + server.Addr() + "/metrics")
-	if err != nil {
-		t.Fatalf("failed to GET /metrics: %v", err)
-	}
+	require.NoError(t, err, "failed to GET /metrics")
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("failed to read response body: %v", err)
-	}
+	require.NoError(t, err, "failed to read response body")
 
 	bodyStr := string(body)
 
 	// Check telnet connections were counted
-	if !strings.Contains(bodyStr, `holomush_connections_total{type="telnet"} 2`) {
-		t.Error("expected telnet connections counter to be 2")
-	}
+	assert.Contains(t, bodyStr, `holomush_connections_total{type="telnet"} 2`, "expected telnet connections counter to be 2")
 
 	// Check request was counted
-	if !strings.Contains(bodyStr, `holomush_requests_total{status="success",type="command"} 1`) {
-		t.Error("expected command request counter to be 1")
-	}
+	assert.Contains(t, bodyStr, `holomush_requests_total{status="success",type="command"} 1`, "expected command request counter to be 1")
 }

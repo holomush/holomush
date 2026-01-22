@@ -13,260 +13,19 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/stretchr/testify/mock"
 
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 )
-
-// TestEchoBot_Integration tests the echo-bot plugin end-to-end.
-// This test verifies:
-// 1. Plugin discovery works for echo-bot
-// 2. Plugin loads successfully with LuaHost
-// 3. Echo bot receives say events and emits echo responses
-// 4. Echo bot ignores events from plugins (prevents loops)
-// 5. Capability enforcement works (events.emit.location)
-func TestEchoBot_Integration(t *testing.T) {
-	fixture := setupEchoBotTest(t)
-	defer fixture.Cleanup()
-
-	ctx := context.Background()
-	luaHost := fixture.LuaHost
-	echoBotPlugin := fixture.Plugin
-
-	// Verify manifest
-	if echoBotPlugin.Manifest.Type != plugin.TypeLua {
-		t.Errorf("Manifest.Type = %v, want %v", echoBotPlugin.Manifest.Type, plugin.TypeLua)
-	}
-	if echoBotPlugin.Manifest.Version != "1.0.0" {
-		t.Errorf("Manifest.Version = %v, want 1.0.0", echoBotPlugin.Manifest.Version)
-	}
-
-	// Verify events subscription
-	if !slices.Contains(echoBotPlugin.Manifest.Events, "say") {
-		t.Error("echo-bot manifest should have 'say' in events")
-	}
-
-	// Verify capabilities
-	if !slices.Contains(echoBotPlugin.Manifest.Capabilities, "events.emit.location") {
-		t.Error("echo-bot manifest should have 'events.emit.location' capability")
-	}
-
-	// Test: echo bot responds to say events from characters
-	t.Run("responds to say events from characters", func(t *testing.T) {
-		event := pluginpkg.Event{
-			ID:        "01ABC",
-			Stream:    "location:123",
-			Type:      pluginpkg.EventTypeSay,
-			Timestamp: time.Now().UnixMilli(),
-			ActorKind: pluginpkg.ActorCharacter,
-			ActorID:   "char_1",
-			Payload:   `{"message":"Hello, world!"}`,
-		}
-
-		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
-		if err != nil {
-			t.Fatalf("DeliverEvent() error = %v", err)
-		}
-
-		if len(emits) != 1 {
-			t.Fatalf("len(emits) = %d, want 1", len(emits))
-		}
-
-		// Verify emitted event
-		if emits[0].Stream != "location:123" {
-			t.Errorf("emit.Stream = %q, want %q", emits[0].Stream, "location:123")
-		}
-		if emits[0].Type != pluginpkg.EventTypeSay {
-			t.Errorf("emit.Type = %q, want %q", emits[0].Type, pluginpkg.EventTypeSay)
-		}
-
-		// Parse payload and verify echo message
-		var payload map[string]string
-		if err := json.Unmarshal([]byte(emits[0].Payload), &payload); err != nil {
-			t.Fatalf("Failed to parse payload: %v", err)
-		}
-
-		if !strings.HasPrefix(payload["message"], "Echo:") {
-			t.Errorf("payload.message = %q, want to start with 'Echo:'", payload["message"])
-		}
-		if !strings.Contains(payload["message"], "Hello, world!") {
-			t.Errorf("payload.message = %q, want to contain 'Hello, world!'", payload["message"])
-		}
-	})
-
-	// Test: echo bot ignores events from plugins (prevents loops)
-	t.Run("ignores events from plugins", func(t *testing.T) {
-		event := pluginpkg.Event{
-			ID:        "01DEF",
-			Stream:    "location:123",
-			Type:      pluginpkg.EventTypeSay,
-			Timestamp: time.Now().UnixMilli(),
-			ActorKind: pluginpkg.ActorPlugin, // From a plugin!
-			ActorID:   "some-plugin",
-			Payload:   `{"message":"Echo: something"}`,
-		}
-
-		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
-		if err != nil {
-			t.Fatalf("DeliverEvent() error = %v", err)
-		}
-
-		// Should not emit anything for plugin-originated events
-		if len(emits) != 0 {
-			t.Errorf("len(emits) = %d, want 0 (should ignore plugin events)", len(emits))
-		}
-	})
-
-	// Test: echo bot ignores non-say events
-	t.Run("ignores non-say events", func(t *testing.T) {
-		event := pluginpkg.Event{
-			ID:        "01GHI",
-			Stream:    "location:123",
-			Type:      pluginpkg.EventTypePose, // Not a say event
-			Timestamp: time.Now().UnixMilli(),
-			ActorKind: pluginpkg.ActorCharacter,
-			ActorID:   "char_1",
-			Payload:   `{"message":"waves hello"}`,
-		}
-
-		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
-		if err != nil {
-			t.Fatalf("DeliverEvent() error = %v", err)
-		}
-
-		if len(emits) != 0 {
-			t.Errorf("len(emits) = %d, want 0 (should ignore non-say events)", len(emits))
-		}
-	})
-
-	// Test: echo bot ignores empty messages
-	t.Run("ignores empty messages", func(t *testing.T) {
-		event := pluginpkg.Event{
-			ID:        "01JKL",
-			Stream:    "location:123",
-			Type:      pluginpkg.EventTypeSay,
-			Timestamp: time.Now().UnixMilli(),
-			ActorKind: pluginpkg.ActorCharacter,
-			ActorID:   "char_1",
-			Payload:   `{"message":""}`, // Empty message
-		}
-
-		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
-		if err != nil {
-			t.Fatalf("DeliverEvent() error = %v", err)
-		}
-
-		if len(emits) != 0 {
-			t.Errorf("len(emits) = %d, want 0 (should ignore empty messages)", len(emits))
-		}
-	})
-
-	// Test: echo bot handles payload without message key
-	t.Run("handles payload without message key", func(t *testing.T) {
-		event := pluginpkg.Event{
-			ID:        "01MNO",
-			Stream:    "location:123",
-			Type:      pluginpkg.EventTypeSay,
-			Timestamp: time.Now().UnixMilli(),
-			ActorKind: pluginpkg.ActorCharacter,
-			ActorID:   "char_1",
-			Payload:   `{"text":"wrong key"}`, // No "message" key
-		}
-
-		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
-		if err != nil {
-			t.Fatalf("DeliverEvent() error = %v", err)
-		}
-
-		if len(emits) != 0 {
-			t.Errorf("len(emits) = %d, want 0 (should ignore payload without message key)", len(emits))
-		}
-	})
-
-	// Test: echo bot handles empty payload
-	t.Run("handles empty payload", func(t *testing.T) {
-		event := pluginpkg.Event{
-			ID:        "01PQR",
-			Stream:    "location:123",
-			Type:      pluginpkg.EventTypeSay,
-			Timestamp: time.Now().UnixMilli(),
-			ActorKind: pluginpkg.ActorCharacter,
-			ActorID:   "char_1",
-			Payload:   "", // Empty payload
-		}
-
-		emits, err := luaHost.DeliverEvent(ctx, "echo-bot", event)
-		if err != nil {
-			t.Fatalf("DeliverEvent() error = %v", err)
-		}
-
-		if len(emits) != 0 {
-			t.Errorf("len(emits) = %d, want 0 (should handle empty payload gracefully)", len(emits))
-		}
-	})
-}
-
-// TestEchoBot_Subscriber tests the full event flow with Subscriber.
-func TestEchoBot_Subscriber(t *testing.T) {
-	fixture := setupEchoBotTest(t)
-	defer fixture.Cleanup()
-
-	// Create mock emitter to capture emitted events
-	emitter := &mockEmitter{}
-
-	// Create subscriber
-	subscriber := plugin.NewSubscriber(fixture.LuaHost, emitter)
-	subscriber.Subscribe("echo-bot", "location:123", fixture.Plugin.Manifest.Events)
-
-	// Start subscriber with event channel
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	events := make(chan pluginpkg.Event, 10)
-	subscriber.Start(ctx, events)
-
-	// Send a say event
-	events <- pluginpkg.Event{
-		ID:        "01STU",
-		Stream:    "location:123",
-		Type:      pluginpkg.EventTypeSay,
-		Timestamp: time.Now().UnixMilli(),
-		ActorKind: pluginpkg.ActorCharacter,
-		ActorID:   "char_1",
-		Payload:   `{"message":"Test message"}`,
-	}
-
-	// Wait for processing
-	time.Sleep(100 * time.Millisecond)
-
-	// Stop subscriber
-	cancel()
-	subscriber.Stop()
-
-	// Verify emitted event
-	emitted := emitter.getEmitted()
-	if len(emitted) != 1 {
-		t.Fatalf("len(emitted) = %d, want 1", len(emitted))
-	}
-
-	if emitted[0].Stream != "location:123" {
-		t.Errorf("emit.Stream = %q, want %q", emitted[0].Stream, "location:123")
-	}
-
-	var payload map[string]string
-	if err := json.Unmarshal([]byte(emitted[0].Payload), &payload); err != nil {
-		t.Fatalf("Failed to parse payload: %v", err)
-	}
-
-	if !strings.Contains(payload["message"], "Echo:") {
-		t.Errorf("payload.message = %q, want to contain 'Echo:'", payload["message"])
-	}
-}
 
 // echoBotFixture contains all components needed for echo-bot integration tests.
 type echoBotFixture struct {
@@ -277,14 +36,15 @@ type echoBotFixture struct {
 }
 
 // setupEchoBotTest creates all components needed to test the echo-bot plugin.
-func setupEchoBotTest(t *testing.T) *echoBotFixture {
-	t.Helper()
-
-	pluginsDir := findPluginsDir(t)
+func setupEchoBotTest() (*echoBotFixture, error) {
+	pluginsDir, err := findPluginsDir()
+	if err != nil {
+		return nil, err
+	}
 	echoBotDir := filepath.Join(pluginsDir, "echo-bot")
 
-	if _, err := os.Stat(echoBotDir); os.IsNotExist(err) {
-		t.Fatalf("echo-bot plugin not found at %s", echoBotDir)
+	if _, statErr := os.Stat(echoBotDir); os.IsNotExist(statErr) {
+		return nil, statErr
 	}
 
 	enforcer := capability.NewEnforcer()
@@ -297,7 +57,7 @@ func setupEchoBotTest(t *testing.T) *echoBotFixture {
 	discovered, err := manager.Discover(ctx)
 	if err != nil {
 		luaHost.Close(ctx) //nolint:errcheck
-		t.Fatalf("Discover() error = %v", err)
+		return nil, err
 	}
 
 	var echoBotPlugin *plugin.DiscoveredPlugin
@@ -310,17 +70,17 @@ func setupEchoBotTest(t *testing.T) *echoBotFixture {
 
 	if echoBotPlugin == nil {
 		luaHost.Close(ctx) //nolint:errcheck
-		t.Fatal("echo-bot plugin not discovered")
+		return nil, os.ErrNotExist
 	}
 
 	if err := luaHost.Load(ctx, echoBotPlugin.Manifest, echoBotPlugin.Dir); err != nil {
 		luaHost.Close(ctx) //nolint:errcheck
-		t.Fatalf("Load() error = %v", err)
+		return nil, err
 	}
 
 	if err := enforcer.SetGrants("echo-bot", echoBotPlugin.Manifest.Capabilities); err != nil {
 		luaHost.Close(ctx) //nolint:errcheck
-		t.Fatalf("SetGrants() error = %v", err)
+		return nil, err
 	}
 
 	return &echoBotFixture{
@@ -328,17 +88,13 @@ func setupEchoBotTest(t *testing.T) *echoBotFixture {
 		Enforcer: enforcer,
 		Plugin:   echoBotPlugin,
 		Cleanup: func() {
-			if err := luaHost.Close(context.Background()); err != nil {
-				t.Errorf("Close() error = %v", err)
-			}
+			_ = luaHost.Close(context.Background())
 		},
-	}
+	}, nil
 }
 
 // findPluginsDir locates the plugins directory relative to the test.
-func findPluginsDir(t *testing.T) string {
-	t.Helper()
-
+func findPluginsDir() (string, error) {
 	// Try relative paths from test location
 	candidates := []string{
 		"../../plugins",       // From internal/plugin
@@ -347,10 +103,9 @@ func findPluginsDir(t *testing.T) string {
 		"../../../../plugins", // Deeper nesting
 	}
 
-	// Get current working directory to help debug
 	cwd, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("Failed to get working directory: %v", err)
+		return "", err
 	}
 
 	for _, candidate := range candidates {
@@ -360,31 +115,232 @@ func findPluginsDir(t *testing.T) string {
 			continue
 		}
 		if _, err := os.Stat(absPath); err == nil {
-			return absPath
+			return absPath, nil
 		}
 	}
 
-	t.Fatalf("Could not find plugins directory from %s", cwd)
-	return ""
+	return "", os.ErrNotExist
 }
 
-// mockEmitter captures emitted events for testing with thread-safe access.
-type mockEmitter struct {
-	mu      sync.Mutex
-	emitted []pluginpkg.EmitEvent
-}
+var _ = Describe("Echo Bot Integration", func() {
+	var fixture *echoBotFixture
 
-func (e *mockEmitter) EmitPluginEvent(_ context.Context, _ string, event pluginpkg.EmitEvent) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.emitted = append(e.emitted, event)
-	return nil
-}
+	BeforeEach(func() {
+		var err error
+		fixture, err = setupEchoBotTest()
+		Expect(err).NotTo(HaveOccurred())
+	})
 
-func (e *mockEmitter) getEmitted() []pluginpkg.EmitEvent {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	result := make([]pluginpkg.EmitEvent, len(e.emitted))
-	copy(result, e.emitted)
-	return result
-}
+	AfterEach(func() {
+		fixture.Cleanup()
+	})
+
+	Describe("Plugin Discovery and Loading", func() {
+		It("has correct manifest type", func() {
+			Expect(fixture.Plugin.Manifest.Type).To(Equal(plugin.TypeLua))
+		})
+
+		It("has correct version", func() {
+			Expect(fixture.Plugin.Manifest.Version).To(Equal("1.0.0"))
+		})
+
+		It("subscribes to say events", func() {
+			Expect(slices.Contains(fixture.Plugin.Manifest.Events, "say")).To(BeTrue())
+		})
+
+		It("has events.emit.location capability", func() {
+			Expect(slices.Contains(fixture.Plugin.Manifest.Capabilities, "events.emit.location")).To(BeTrue())
+		})
+	})
+
+	Describe("Event Handling", func() {
+		Context("when receiving say events from characters", func() {
+			It("responds with echo message", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01ABC",
+					Stream:    "location:123",
+					Type:      pluginpkg.EventTypeSay,
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char_1",
+					Payload:   `{"message":"Hello, world!"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "echo-bot", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+
+				Expect(emits[0].Stream).To(Equal("location:123"))
+				Expect(emits[0].Type).To(Equal(pluginpkg.EventTypeSay))
+
+				var payload map[string]string
+				err = json.Unmarshal([]byte(emits[0].Payload), &payload)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(strings.HasPrefix(payload["message"], "Echo:")).To(BeTrue())
+				Expect(payload["message"]).To(ContainSubstring("Hello, world!"))
+			})
+		})
+
+		Context("when receiving events from plugins", func() {
+			It("ignores them to prevent loops", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01DEF",
+					Stream:    "location:123",
+					Type:      pluginpkg.EventTypeSay,
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorPlugin,
+					ActorID:   "some-plugin",
+					Payload:   `{"message":"Echo: something"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "echo-bot", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(BeEmpty())
+			})
+		})
+
+		Context("when receiving non-say events", func() {
+			It("ignores them", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01GHI",
+					Stream:    "location:123",
+					Type:      pluginpkg.EventTypePose,
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char_1",
+					Payload:   `{"message":"waves hello"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "echo-bot", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(BeEmpty())
+			})
+		})
+
+		Context("when receiving empty messages", func() {
+			It("ignores them", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01JKL",
+					Stream:    "location:123",
+					Type:      pluginpkg.EventTypeSay,
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char_1",
+					Payload:   `{"message":""}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "echo-bot", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(BeEmpty())
+			})
+		})
+
+		Context("when payload has no message key", func() {
+			It("handles gracefully", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01MNO",
+					Stream:    "location:123",
+					Type:      pluginpkg.EventTypeSay,
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char_1",
+					Payload:   `{"text":"wrong key"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "echo-bot", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(BeEmpty())
+			})
+		})
+
+		Context("when payload is empty", func() {
+			It("handles gracefully", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01PQR",
+					Stream:    "location:123",
+					Type:      pluginpkg.EventTypeSay,
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char_1",
+					Payload:   "",
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "echo-bot", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("Subscriber Integration", func() {
+		It("processes events through the full subscriber flow", func() {
+			// Create mock emitter to capture emitted events with thread-safe storage
+			var mu sync.Mutex
+			var emitted []pluginpkg.EmitEvent
+
+			emitter := mocks.NewMockEventEmitter(GinkgoT())
+			emitter.EXPECT().EmitPluginEvent(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
+				func(_ context.Context, _ string, event pluginpkg.EmitEvent) error {
+					mu.Lock()
+					defer mu.Unlock()
+					emitted = append(emitted, event)
+					return nil
+				},
+			)
+
+			// Create subscriber
+			subscriber := plugin.NewSubscriber(fixture.LuaHost, emitter)
+			subscriber.Subscribe("echo-bot", "location:123", fixture.Plugin.Manifest.Events)
+
+			// Start subscriber with event channel
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			events := make(chan pluginpkg.Event, 10)
+			subscriber.Start(ctx, events)
+
+			// Send a say event
+			events <- pluginpkg.Event{
+				ID:        "01STU",
+				Stream:    "location:123",
+				Type:      pluginpkg.EventTypeSay,
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginpkg.ActorCharacter,
+				ActorID:   "char_1",
+				Payload:   `{"message":"Test message"}`,
+			}
+
+			// Wait for processing
+			Eventually(func() int {
+				mu.Lock()
+				defer mu.Unlock()
+				return len(emitted)
+			}).Should(Equal(1))
+
+			// Stop subscriber
+			cancel()
+			subscriber.Stop()
+
+			// Verify emitted event
+			mu.Lock()
+			emittedCopy := make([]pluginpkg.EmitEvent, len(emitted))
+			copy(emittedCopy, emitted)
+			mu.Unlock()
+
+			Expect(emittedCopy).To(HaveLen(1))
+			Expect(emittedCopy[0].Stream).To(Equal("location:123"))
+
+			var payload map[string]string
+			err := json.Unmarshal([]byte(emittedCopy[0].Payload), &payload)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(payload["message"]).To(ContainSubstring("Echo:"))
+		})
+	})
+})

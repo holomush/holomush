@@ -8,6 +8,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
@@ -19,12 +22,8 @@ func TestGRPCPlugin_GRPCServer_NilHandler(t *testing.T) {
 	defer s.Stop()
 
 	err := p.GRPCServer(nil, s)
-	if err == nil {
-		t.Error("expected error when handler is nil")
-	}
-	if err.Error() != "plugin: handler is nil" {
-		t.Errorf("unexpected error message: %v", err)
-	}
+	require.Error(t, err, "expected error when handler is nil")
+	assert.Equal(t, "plugin: handler is nil", err.Error())
 }
 
 func TestGRPCPlugin_GRPCServer_RegistersService(t *testing.T) {
@@ -34,15 +33,11 @@ func TestGRPCPlugin_GRPCServer_RegistersService(t *testing.T) {
 	defer s.Stop()
 
 	err := p.GRPCServer(nil, s)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify service was registered by checking GetServiceInfo
 	info := s.GetServiceInfo()
-	if _, ok := info["holomush.plugin.v1.Plugin"]; !ok {
-		t.Error("expected Plugin service to be registered")
-	}
+	assert.Contains(t, info, "holomush.plugin.v1.Plugin", "expected Plugin service to be registered")
 }
 
 func TestGRPCPlugin_GRPCClient_ReturnsError(t *testing.T) {
@@ -51,15 +46,9 @@ func TestGRPCPlugin_GRPCClient_ReturnsError(t *testing.T) {
 	// GRPCClient is not implemented on the plugin side (only host calls it).
 	// Verify it returns an error as expected.
 	client, err := p.GRPCClient(context.Background(), nil, nil)
-	if err == nil {
-		t.Error("expected error from GRPCClient on plugin side")
-	}
-	if client != nil {
-		t.Error("expected nil client when error is returned")
-	}
-	if err.Error() != "plugin: GRPCClient not implemented on plugin side" {
-		t.Errorf("unexpected error message: %v", err)
-	}
+	require.Error(t, err, "expected error from GRPCClient on plugin side")
+	assert.Nil(t, client, "expected nil client when error is returned")
+	assert.Equal(t, "plugin: GRPCClient not implemented on plugin side", err.Error())
 }
 
 type adapterTestHandler struct {
@@ -95,29 +84,21 @@ func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
 	}
 
 	resp, err := adapter.HandleEvent(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(resp.GetEmitEvents()) != 1 {
-		t.Fatalf("expected 1 emit event, got %d", len(resp.GetEmitEvents()))
-	}
+	require.Len(t, resp.GetEmitEvents(), 1, "expected 1 emit event")
 
 	emit := resp.GetEmitEvents()[0]
-	if emit.GetStream() != "room:123" {
-		t.Errorf("emit.Stream = %q, want %q", emit.GetStream(), "room:123")
-	}
-	if emit.GetType() != "say" {
-		t.Errorf("emit.Type = %q, want %q", emit.GetType(), "say")
-	}
-	if emit.GetPayload() != `{"text":"hello"}` {
-		t.Errorf("emit.Payload = %q, want %q", emit.GetPayload(), `{"text":"hello"}`)
-	}
+	assert.Equal(t, "room:123", emit.GetStream())
+	assert.Equal(t, "say", emit.GetType())
+	assert.Equal(t, `{"text":"hello"}`, emit.GetPayload())
 }
+
+var errHandlerFailed = errors.New("handler failed")
 
 func TestPluginServerAdapter_HandleEvent_HandlerError(t *testing.T) {
 	handler := &adapterTestHandler{
-		err: errors.New("handler failed"),
+		err: errHandlerFailed,
 	}
 	adapter := &pluginServerAdapter{handler: handler}
 
@@ -128,12 +109,8 @@ func TestPluginServerAdapter_HandleEvent_HandlerError(t *testing.T) {
 	}
 
 	_, err := adapter.HandleEvent(context.Background(), req)
-	if err == nil {
-		t.Error("expected error when handler fails")
-	}
-	if err.Error() != "handler error: handler failed" {
-		t.Errorf("unexpected error message: %v", err)
-	}
+	require.Error(t, err, "expected error when handler fails")
+	assert.ErrorIs(t, err, errHandlerFailed, "should wrap handler error")
 }
 
 func TestPluginServerAdapter_HandleEvent_EmptyEmits(t *testing.T) {
@@ -149,13 +126,9 @@ func TestPluginServerAdapter_HandleEvent_EmptyEmits(t *testing.T) {
 	}
 
 	resp, err := adapter.HandleEvent(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(resp.GetEmitEvents()) != 0 {
-		t.Errorf("expected 0 emit events, got %d", len(resp.GetEmitEvents()))
-	}
+	assert.Empty(t, resp.GetEmitEvents(), "expected 0 emit events")
 }
 
 func TestPluginServerAdapter_HandleEvent_MultipleEmits(t *testing.T) {
@@ -175,19 +148,13 @@ func TestPluginServerAdapter_HandleEvent_MultipleEmits(t *testing.T) {
 	}
 
 	resp, err := adapter.HandleEvent(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(resp.GetEmitEvents()) != 3 {
-		t.Fatalf("expected 3 emit events, got %d", len(resp.GetEmitEvents()))
-	}
+	require.Len(t, resp.GetEmitEvents(), 3, "expected 3 emit events")
 
+	expectedStreams := []string{"room:1", "room:2", "room:3"}
 	for i, emit := range resp.GetEmitEvents() {
-		expectedStream := "room:" + []string{"1", "2", "3"}[i]
-		if emit.GetStream() != expectedStream {
-			t.Errorf("emit[%d].Stream = %q, want %q", i, emit.GetStream(), expectedStream)
-		}
+		assert.Equal(t, expectedStreams[i], emit.GetStream())
 	}
 }
 
@@ -200,14 +167,10 @@ func TestPluginServerAdapter_HandleEvent_NilEvent(t *testing.T) {
 	}
 
 	resp, err := adapter.HandleEvent(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should handle gracefully with empty response
-	if resp == nil {
-		t.Error("expected non-nil response")
-	}
+	assert.NotNil(t, resp, "expected non-nil response")
 }
 
 func TestPluginServerAdapter_HandleEvent_EventConversion(t *testing.T) {
@@ -229,32 +192,16 @@ func TestPluginServerAdapter_HandleEvent_EventConversion(t *testing.T) {
 	}
 
 	_, err := adapter.HandleEvent(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify proto -> SDK Event conversion
-	if capturedEvent.ID != "evt-abc" {
-		t.Errorf("Event.ID = %q, want %q", capturedEvent.ID, "evt-abc")
-	}
-	if capturedEvent.Stream != "location:xyz" {
-		t.Errorf("Event.Stream = %q, want %q", capturedEvent.Stream, "location:xyz")
-	}
-	if capturedEvent.Type != "custom" {
-		t.Errorf("Event.Type = %q, want %q", capturedEvent.Type, "custom")
-	}
-	if capturedEvent.Timestamp != 9876543210 {
-		t.Errorf("Event.Timestamp = %d, want %d", capturedEvent.Timestamp, 9876543210)
-	}
-	if capturedEvent.ActorKind != ActorSystem {
-		t.Errorf("Event.ActorKind = %v, want %v", capturedEvent.ActorKind, ActorSystem)
-	}
-	if capturedEvent.ActorID != "sys-001" {
-		t.Errorf("Event.ActorID = %q, want %q", capturedEvent.ActorID, "sys-001")
-	}
-	if capturedEvent.Payload != `{"key":"value"}` {
-		t.Errorf("Event.Payload = %q, want %q", capturedEvent.Payload, `{"key":"value"}`)
-	}
+	assert.Equal(t, "evt-abc", capturedEvent.ID)
+	assert.Equal(t, "location:xyz", capturedEvent.Stream)
+	assert.Equal(t, EventType("custom"), capturedEvent.Type)
+	assert.Equal(t, int64(9876543210), capturedEvent.Timestamp)
+	assert.Equal(t, ActorSystem, capturedEvent.ActorKind)
+	assert.Equal(t, "sys-001", capturedEvent.ActorID)
+	assert.Equal(t, `{"key":"value"}`, capturedEvent.Payload)
 }
 
 type captureAdapterTestHandler struct {

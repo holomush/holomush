@@ -8,118 +8,76 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigDir_EnvVar(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
 	got, err := ConfigDir()
-	if err != nil {
-		t.Fatalf("ConfigDir() error = %v", err)
-	}
-	want := "/custom/config/holomush"
-	if got != want {
-		t.Errorf("ConfigDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/config/holomush", got)
 }
 
 func TestConfigDir_Default(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "/home/testuser")
 	got, err := ConfigDir()
-	if err != nil {
-		t.Fatalf("ConfigDir() error = %v", err)
-	}
-	want := "/home/testuser/.config/holomush"
-	if got != want {
-		t.Errorf("ConfigDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/home/testuser/.config/holomush", got)
 }
 
 func TestDataDir_EnvVar(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/custom/data")
 	got, err := DataDir()
-	if err != nil {
-		t.Fatalf("DataDir() error = %v", err)
-	}
-	want := "/custom/data/holomush"
-	if got != want {
-		t.Errorf("DataDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/data/holomush", got)
 }
 
 func TestDataDir_Default(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("HOME", "/home/testuser")
 	got, err := DataDir()
-	if err != nil {
-		t.Fatalf("DataDir() error = %v", err)
-	}
-	want := "/home/testuser/.local/share/holomush"
-	if got != want {
-		t.Errorf("DataDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/home/testuser/.local/share/holomush", got)
 }
 
 func TestStateDir_EnvVar(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "/custom/state")
 	got, err := StateDir()
-	if err != nil {
-		t.Fatalf("StateDir() error = %v", err)
-	}
-	want := "/custom/state/holomush"
-	if got != want {
-		t.Errorf("StateDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/state/holomush", got)
 }
 
 func TestStateDir_Default(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "/home/testuser")
 	got, err := StateDir()
-	if err != nil {
-		t.Fatalf("StateDir() error = %v", err)
-	}
-	want := "/home/testuser/.local/state/holomush"
-	if got != want {
-		t.Errorf("StateDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/home/testuser/.local/state/holomush", got)
 }
 
 func TestRuntimeDir_EnvVar(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 	got, err := RuntimeDir()
-	if err != nil {
-		t.Fatalf("RuntimeDir() error = %v", err)
-	}
-	want := "/run/user/1000/holomush"
-	if got != want {
-		t.Errorf("RuntimeDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/run/user/1000/holomush", got)
 }
 
 func TestRuntimeDir_Fallback(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 	t.Setenv("XDG_STATE_HOME", "/custom/state")
 	got, err := RuntimeDir()
-	if err != nil {
-		t.Fatalf("RuntimeDir() error = %v", err)
-	}
-	want := "/custom/state/holomush/run"
-	if got != want {
-		t.Errorf("RuntimeDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/state/holomush/run", got)
 }
 
 func TestCertsDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
 	got, err := CertsDir()
-	if err != nil {
-		t.Fatalf("CertsDir() error = %v", err)
-	}
-	want := "/custom/config/holomush/certs"
-	if got != want {
-		t.Errorf("CertsDir() = %q, want %q", got, want)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/config/holomush/certs", got)
 }
 
 func TestEnsureDir(t *testing.T) {
@@ -127,17 +85,11 @@ func TestEnsureDir(t *testing.T) {
 	testPath := filepath.Join(tmpDir, "nested", "dir")
 
 	err := EnsureDir(testPath)
-	if err != nil {
-		t.Fatalf("EnsureDir() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	info, err := os.Stat(testPath)
-	if err != nil {
-		t.Fatalf("Stat() error = %v", err)
-	}
-	if !info.IsDir() {
-		t.Error("Expected directory, got file")
-	}
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "Expected directory, got file")
 }
 
 func TestEnsureDir_Permissions(t *testing.T) {
@@ -145,20 +97,14 @@ func TestEnsureDir_Permissions(t *testing.T) {
 	testPath := filepath.Join(tmpDir, "secure", "dir")
 
 	err := EnsureDir(testPath)
-	if err != nil {
-		t.Fatalf("EnsureDir() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	info, err := os.Stat(testPath)
-	if err != nil {
-		t.Fatalf("Stat() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Check permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0o700 {
-		t.Errorf("EnsureDir() permissions = %o, want %o", perm, 0o700)
-	}
+	assert.Equal(t, os.FileMode(0o700), perm, "EnsureDir() permissions mismatch")
 }
 
 func TestEnsureDir_Idempotent(t *testing.T) {
@@ -166,12 +112,10 @@ func TestEnsureDir_Idempotent(t *testing.T) {
 	testPath := filepath.Join(tmpDir, "idempotent")
 
 	// Create twice - should not error
-	if err := EnsureDir(testPath); err != nil {
-		t.Fatalf("First EnsureDir() error = %v", err)
-	}
-	if err := EnsureDir(testPath); err != nil {
-		t.Fatalf("Second EnsureDir() error = %v", err)
-	}
+	err := EnsureDir(testPath)
+	require.NoError(t, err, "First EnsureDir() failed")
+	err = EnsureDir(testPath)
+	require.NoError(t, err, "Second EnsureDir() failed")
 }
 
 func TestEnsureDir_Error(t *testing.T) {
@@ -180,16 +124,13 @@ func TestEnsureDir_Error(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "afile")
 
 	// Create a file
-	if err := os.WriteFile(filePath, []byte("content"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
+	err := os.WriteFile(filePath, []byte("content"), 0o600)
+	require.NoError(t, err)
 
 	// Try to create a directory inside that file
 	invalidPath := filepath.Join(filePath, "subdir")
-	err := EnsureDir(invalidPath)
-	if err == nil {
-		t.Error("EnsureDir() expected error, got nil")
-	}
+	err = EnsureDir(invalidPath)
+	assert.Error(t, err, "EnsureDir() expected error")
 }
 
 func TestHomeDir_Fallback(t *testing.T) {
@@ -203,16 +144,12 @@ func TestHomeDir_Fallback(t *testing.T) {
 	if err != nil {
 		// This is expected on systems where os.UserHomeDir() requires HOME
 		// Verify the error message is properly wrapped
-		if got != "" {
-			t.Errorf("homeDir() returned non-empty string %q with error", got)
-		}
+		assert.Empty(t, got, "homeDir() returned non-empty string with error")
 		return
 	}
 
 	// If no error, we should have a valid path
-	if got == "" {
-		t.Error("homeDir() returned empty string")
-	}
+	assert.NotEmpty(t, got, "homeDir() returned empty string")
 }
 
 func TestConfigDir_HomeDirError(t *testing.T) {

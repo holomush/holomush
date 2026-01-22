@@ -8,8 +8,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/plugin"
@@ -21,7 +23,7 @@ import (
 
 // createTempExecutable creates a dummy file with execute permissions.
 func createTempExecutable(path string) error {
-	//nolint:wrapcheck,gosec // test helper, no wrap; G306 - needs execute permission for testing
+	//nolint:gosec // G306 - needs execute permission for testing
 	return os.WriteFile(path, []byte("dummy"), 0o755)
 }
 
@@ -64,9 +66,9 @@ func (m *mockPluginClient) Kill() {
 
 // mockGRPCPluginClient implements pluginv1.PluginClient for testing.
 type mockGRPCPluginClient struct {
-	response    *pluginv1.HandleEventResponse
-	err         error
-	returnNil   bool // If true, return nil response (simulates edge case)
+	response  *pluginv1.HandleEventResponse
+	err       error
+	returnNil bool // If true, return nil response (simulates edge case)
 }
 
 func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.HandleEventRequest, _ ...grpc.CallOption) (*pluginv1.HandleEventResponse, error) {
@@ -107,34 +109,29 @@ func newMockHost(t *testing.T) (*Host, *mockPluginClient) {
 func TestNewHost(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
-	if host == nil {
-		t.Fatal("NewHost returned nil")
-	}
+	require.NotNil(t, host, "NewHost returned nil")
 }
 
 func TestNewHost_NilEnforcer(t *testing.T) {
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic when enforcer is nil")
-		}
+		r := recover()
+		require.NotNil(t, r, "expected panic when enforcer is nil")
 	}()
 	NewHost(nil)
 }
 
 func TestNewHostWithFactory_NilEnforcer(t *testing.T) {
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic when enforcer is nil")
-		}
+		r := recover()
+		require.NotNil(t, r, "expected panic when enforcer is nil")
 	}()
 	NewHostWithFactory(nil, &DefaultClientFactory{})
 }
 
 func TestNewHostWithFactory_NilFactory(t *testing.T) {
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic when factory is nil")
-		}
+		r := recover()
+		require.NotNil(t, r, "expected panic when factory is nil")
 	}()
 	enforcer := capability.NewEnforcer()
 	NewHostWithFactory(enforcer, nil)
@@ -145,23 +142,18 @@ func TestPlugins_Empty(t *testing.T) {
 	host := NewHost(enforcer)
 
 	plugins := host.Plugins()
-	if len(plugins) != 0 {
-		t.Errorf("expected empty plugins list, got %v", plugins)
-	}
+	assert.Empty(t, plugins, "expected empty plugins list")
 }
 
 func TestPlugins_AfterClose(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
 
-	if err := host.Close(context.Background()); err != nil {
-		t.Fatalf("Close returned error: %v", err)
-	}
+	err := host.Close(context.Background())
+	require.NoError(t, err, "Close returned error")
 
 	plugins := host.Plugins()
-	if plugins != nil {
-		t.Errorf("expected nil plugins after close, got %v", plugins)
-	}
+	assert.Nil(t, plugins, "expected nil plugins after close")
 }
 
 func TestClose_NoPlugins(t *testing.T) {
@@ -169,9 +161,7 @@ func TestClose_NoPlugins(t *testing.T) {
 	host := NewHost(enforcer)
 
 	err := host.Close(context.Background())
-	if err != nil {
-		t.Errorf("Close returned error: %v", err)
-	}
+	assert.NoError(t, err, "Close returned error")
 }
 
 func TestClose_PreventsFurtherLoads(t *testing.T) {
@@ -179,9 +169,7 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 	host := NewHost(enforcer)
 
 	err := host.Close(context.Background())
-	if err != nil {
-		t.Fatalf("Close returned error: %v", err)
-	}
+	require.NoError(t, err, "Close returned error")
 
 	tmpDir := t.TempDir()
 	manifest := &plugin.Manifest{
@@ -193,12 +181,8 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 		},
 	}
 	err = host.Load(context.Background(), manifest, tmpDir)
-	if err == nil {
-		t.Error("expected error when loading after close")
-	}
-	if !errors.Is(err, ErrHostClosed) {
-		t.Errorf("expected ErrHostClosed, got: %v", err)
-	}
+	require.Error(t, err, "expected error when loading after close")
+	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
 
 func TestClose_Idempotent(t *testing.T) {
@@ -207,15 +191,11 @@ func TestClose_Idempotent(t *testing.T) {
 
 	// First close should succeed
 	err1 := host.Close(context.Background())
-	if err1 != nil {
-		t.Fatalf("first Close returned error: %v", err1)
-	}
+	require.NoError(t, err1, "first Close returned error")
 
 	// Second close should also succeed (idempotent)
 	err2 := host.Close(context.Background())
-	if err2 != nil {
-		t.Errorf("second Close returned error: %v", err2)
-	}
+	assert.NoError(t, err2, "second Close returned error")
 }
 
 func TestLoad_ContextCancelled(t *testing.T) {
@@ -237,15 +217,10 @@ func TestLoad_ContextCancelled(t *testing.T) {
 	}
 
 	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Error("expected error when loading with cancelled context")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "load cancelled") {
-		t.Errorf("expected error to mention 'load cancelled', got: %v", err)
-	}
+	require.Error(t, err, "expected error when loading with cancelled context")
+	assert.ErrorIs(t, err, context.Canceled, "expected context.Canceled")
+	// oops.Error() returns underlying error message
+	assert.Contains(t, err.Error(), "context canceled", "expected error to contain 'context canceled'")
 }
 
 func TestUnload_NotLoaded(t *testing.T) {
@@ -253,12 +228,8 @@ func TestUnload_NotLoaded(t *testing.T) {
 	host := NewHost(enforcer)
 
 	err := host.Unload(context.Background(), "nonexistent")
-	if err == nil {
-		t.Error("expected error when unloading nonexistent plugin")
-	}
-	if !errors.Is(err, ErrPluginNotLoaded) {
-		t.Errorf("expected ErrPluginNotLoaded, got: %v", err)
-	}
+	require.Error(t, err, "expected error when unloading nonexistent plugin")
+	assert.ErrorIs(t, err, ErrPluginNotLoaded, "expected ErrPluginNotLoaded")
 }
 
 func TestUnload_AfterClose(t *testing.T) {
@@ -266,17 +237,11 @@ func TestUnload_AfterClose(t *testing.T) {
 	host := NewHost(enforcer)
 
 	err := host.Close(context.Background())
-	if err != nil {
-		t.Fatalf("Close returned error: %v", err)
-	}
+	require.NoError(t, err, "Close returned error")
 
 	err = host.Unload(context.Background(), "any-plugin")
-	if err == nil {
-		t.Error("expected error when unloading after close")
-	}
-	if !errors.Is(err, ErrHostClosed) {
-		t.Errorf("expected ErrHostClosed, got: %v", err)
-	}
+	require.Error(t, err, "expected error when unloading after close")
+	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
 
 func TestDeliverEvent_NotLoaded(t *testing.T) {
@@ -284,29 +249,20 @@ func TestDeliverEvent_NotLoaded(t *testing.T) {
 	host := NewHost(enforcer)
 
 	_, err := host.DeliverEvent(context.Background(), "nonexistent", pluginpkg.Event{})
-	if err == nil {
-		t.Error("expected error when delivering to nonexistent plugin")
-	}
-	if !errors.Is(err, ErrPluginNotLoaded) {
-		t.Errorf("expected ErrPluginNotLoaded, got: %v", err)
-	}
+	require.Error(t, err, "expected error when delivering to nonexistent plugin")
+	assert.ErrorIs(t, err, ErrPluginNotLoaded, "expected ErrPluginNotLoaded")
 }
 
 func TestDeliverEvent_HostClosed(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
 
-	if err := host.Close(context.Background()); err != nil {
-		t.Fatalf("Close returned error: %v", err)
-	}
+	err := host.Close(context.Background())
+	require.NoError(t, err, "Close returned error")
 
-	_, err := host.DeliverEvent(context.Background(), "any-plugin", pluginpkg.Event{})
-	if err == nil {
-		t.Error("expected error when delivering after close")
-	}
-	if !errors.Is(err, ErrHostClosed) {
-		t.Errorf("expected ErrHostClosed, got: %v", err)
-	}
+	_, err = host.DeliverEvent(context.Background(), "any-plugin", pluginpkg.Event{})
+	require.Error(t, err, "expected error when delivering after close")
+	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
 
 func TestDeliverEvent_HandleEventError(t *testing.T) {
@@ -322,9 +278,8 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -335,17 +290,13 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 		},
 	}
 
-	if err := host.Load(ctx, manifest, tmpDir); err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "Load returned error")
 
-	_, err := host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
-	if err == nil {
-		t.Error("expected error when HandleEvent fails")
-	}
-	if !strings.Contains(err.Error(), "HandleEvent failed") {
-		t.Errorf("expected error to mention 'HandleEvent failed', got: %v", err)
-	}
+	_, err = host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	require.Error(t, err, "expected error when HandleEvent fails")
+	// oops.Error() returns underlying error message from mock
+	assert.Contains(t, err.Error(), "plugin crashed", "expected error to contain mock error message")
 }
 
 func TestDeliverEvent_NilResponse(t *testing.T) {
@@ -361,9 +312,8 @@ func TestDeliverEvent_NilResponse(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -374,18 +324,13 @@ func TestDeliverEvent_NilResponse(t *testing.T) {
 		},
 	}
 
-	if err := host.Load(ctx, manifest, tmpDir); err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "Load returned error")
 
 	// DeliverEvent should handle nil response gracefully (proto getters are nil-safe)
 	emits, err := host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
-	if err != nil {
-		t.Errorf("unexpected error with nil response: %v", err)
-	}
-	if len(emits) != 0 {
-		t.Errorf("expected empty emits for nil response, got %d", len(emits))
-	}
+	assert.NoError(t, err, "unexpected error with nil response")
+	assert.Empty(t, emits, "expected empty emits for nil response")
 }
 
 func TestDeliverEvent_Timeout(t *testing.T) {
@@ -401,9 +346,8 @@ func TestDeliverEvent_Timeout(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -414,17 +358,12 @@ func TestDeliverEvent_Timeout(t *testing.T) {
 		},
 	}
 
-	if err := host.Load(ctx, manifest, tmpDir); err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "Load returned error")
 
-	_, err := host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
-	if err == nil {
-		t.Error("expected error on timeout")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("expected context.DeadlineExceeded, got: %v", err)
-	}
+	_, err = host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	require.Error(t, err, "expected error on timeout")
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "expected context.DeadlineExceeded")
 }
 
 func TestLoad_ClientError(t *testing.T) {
@@ -437,9 +376,8 @@ func TestLoad_ClientError(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -450,16 +388,11 @@ func TestLoad_ClientError(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Error("expected error when client connection fails")
-	}
-	if !strings.Contains(err.Error(), "failed to connect") {
-		t.Errorf("expected error to mention 'failed to connect', got: %v", err)
-	}
-	if !mockClient.killed {
-		t.Error("expected client to be killed after connection failure")
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when client connection fails")
+	// oops.Error() returns underlying error message from mock
+	assert.Contains(t, err.Error(), "connection failed", "expected error to contain mock error message")
+	assert.True(t, mockClient.killed, "expected client to be killed after connection failure")
 }
 
 func TestLoad_DispenseError(t *testing.T) {
@@ -474,9 +407,8 @@ func TestLoad_DispenseError(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -487,16 +419,11 @@ func TestLoad_DispenseError(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Error("expected error when dispense fails")
-	}
-	if !strings.Contains(err.Error(), "failed to dispense") {
-		t.Errorf("expected error to mention 'failed to dispense', got: %v", err)
-	}
-	if !mockClient.killed {
-		t.Error("expected client to be killed after dispense failure")
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when dispense fails")
+	// oops.Error() returns underlying error message from mock
+	assert.Contains(t, err.Error(), "dispense failed", "expected error to contain mock error message")
+	assert.True(t, mockClient.killed, "expected client to be killed after dispense failure")
 }
 
 func TestLoad_Unload_Plugins_Cycle(t *testing.T) {
@@ -505,9 +432,8 @@ func TestLoad_Unload_Plugins_Cycle(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tmpFile := tmpDir + "/test-plugin"
-	if err := createTempExecutable(tmpFile); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpFile)
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -518,32 +444,20 @@ func TestLoad_Unload_Plugins_Cycle(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "Load returned error")
 
 	plugins := host.Plugins()
-	if len(plugins) != 1 {
-		t.Errorf("expected 1 plugin, got %d", len(plugins))
-	}
-	if plugins[0] != "test-plugin" {
-		t.Errorf("expected plugin name 'test-plugin', got %q", plugins[0])
-	}
+	require.Len(t, plugins, 1, "expected 1 plugin")
+	assert.Equal(t, "test-plugin", plugins[0], "expected plugin name 'test-plugin'")
 
 	err = host.Unload(ctx, "test-plugin")
-	if err != nil {
-		t.Errorf("Unload returned error: %v", err)
-	}
+	assert.NoError(t, err, "Unload returned error")
 
 	plugins = host.Plugins()
-	if len(plugins) != 0 {
-		t.Errorf("expected 0 plugins after unload, got %d", len(plugins))
-	}
+	assert.Empty(t, plugins, "expected 0 plugins after unload")
 
-	if !mockClient.killed {
-		t.Error("expected mock client to be killed on unload")
-	}
+	assert.True(t, mockClient.killed, "expected mock client to be killed on unload")
 }
 
 func TestLoad_DuplicateName(t *testing.T) {
@@ -552,9 +466,8 @@ func TestLoad_DuplicateName(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	tmpFile := tmpDir + "/test-plugin"
-	if err := createTempExecutable(tmpFile); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpFile)
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -565,18 +478,12 @@ func TestLoad_DuplicateName(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err != nil {
-		t.Fatalf("first Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "first Load returned error")
 
 	err = host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when loading duplicate plugin name")
-	}
-	if !errors.Is(err, ErrPluginAlreadyLoaded) {
-		t.Errorf("expected ErrPluginAlreadyLoaded, got: %v", err)
-	}
+	require.Error(t, err, "expected error when loading duplicate plugin name")
+	assert.ErrorIs(t, err, ErrPluginAlreadyLoaded, "expected ErrPluginAlreadyLoaded")
 }
 
 func TestLoad_ExecutableNotFound(t *testing.T) {
@@ -595,16 +502,11 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	}
 
 	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when loading nonexistent executable")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected error to mention 'not found', got: %v", err)
-	}
+	require.Error(t, err, "expected error when loading nonexistent executable")
+	// oops.Error() returns underlying error message which contains file path
+	assert.Contains(t, err.Error(), "no such file or directory", "expected error to contain OS error message")
 	// Verify error is wrapped (contains underlying os error)
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("expected error to wrap os.ErrNotExist, got: %v", err)
-	}
+	assert.ErrorIs(t, err, os.ErrNotExist, "expected error to wrap os.ErrNotExist")
 }
 
 func TestLoad_SetGrantsFailure(t *testing.T) {
@@ -619,9 +521,8 @@ func TestLoad_SetGrantsFailure(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	// Create manifest with invalid capability pattern (empty string)
 	manifest := &plugin.Manifest{
@@ -634,23 +535,16 @@ func TestLoad_SetGrantsFailure(t *testing.T) {
 		Capabilities: []string{"valid.capability", ""}, // Empty pattern will cause SetGrants to fail
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when SetGrants fails")
-	}
-	if !strings.Contains(err.Error(), "failed to set capabilities") {
-		t.Errorf("expected error to mention 'failed to set capabilities', got: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when SetGrants fails")
+	// oops.Error() returns underlying error message from enforcer
+	assert.Contains(t, err.Error(), "empty capability pattern", "expected error to contain enforcer error message")
 
 	// Verify plugin was not added to the host
-	if len(host.Plugins()) != 0 {
-		t.Error("plugin should not be loaded after SetGrants failure")
-	}
+	assert.Empty(t, host.Plugins(), "plugin should not be loaded after SetGrants failure")
 
 	// Verify client was killed (cleanup on error)
-	if !mockClient.killed {
-		t.Error("client should be killed on SetGrants failure")
-	}
+	assert.True(t, mockClient.killed, "client should be killed on SetGrants failure")
 }
 
 func TestLoad_ExecutableStatError(t *testing.T) {
@@ -666,21 +560,18 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 	tmpDir := t.TempDir()
 	restrictedDir := tmpDir + "/restricted"
 	//nolint:gosec // G301 - needs execute permission to enter directory initially
-	if err := os.Mkdir(restrictedDir, 0o755); err != nil {
-		t.Fatalf("failed to create restricted dir: %v", err)
-	}
+	err := os.Mkdir(restrictedDir, 0o755)
+	require.NoError(t, err, "failed to create restricted dir")
 
 	execPath := restrictedDir + "/plugin"
 	//nolint:gosec // G306 - needs execute permission for valid plugin executable
-	if err := os.WriteFile(execPath, []byte("dummy"), 0o755); err != nil {
-		t.Fatalf("failed to create executable: %v", err)
-	}
+	err = os.WriteFile(execPath, []byte("dummy"), 0o755)
+	require.NoError(t, err, "failed to create executable")
 
 	// Remove all permissions from the directory - this will cause os.Stat to fail
 	// with permission denied, NOT file not found
-	if err := os.Chmod(restrictedDir, 0o000); err != nil {
-		t.Fatalf("failed to chmod directory: %v", err)
-	}
+	err = os.Chmod(restrictedDir, 0o000)
+	require.NoError(t, err, "failed to chmod directory")
 	// Restore permissions on cleanup so t.TempDir() can clean up
 	t.Cleanup(func() {
 		//nolint:gosec // G302 - restore permissions for cleanup
@@ -696,18 +587,13 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, restrictedDir)
-	if err == nil {
-		t.Fatal("expected error when stat fails with permission denied")
-	}
-	// Should get a resolution or access error, not "not found"
-	if !strings.Contains(err.Error(), "cannot resolve") && !strings.Contains(err.Error(), "cannot access") {
-		t.Errorf("expected error to mention 'cannot resolve' or 'cannot access', got: %v", err)
-	}
+	err = host.Load(ctx, manifest, restrictedDir)
+	require.Error(t, err, "expected error when stat fails with permission denied")
+	// oops.Error() returns underlying OS error which is "permission denied"
+	assert.Contains(t, err.Error(), "permission denied",
+		"expected error to contain 'permission denied', got: %v", err)
 	// Verify it's NOT the "not found" error
-	if strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected resolution/access error, not 'not found', got: %v", err)
-	}
+	assert.NotContains(t, err.Error(), "not found", "expected permission error, not 'not found'")
 }
 
 func TestLoad_ExecutableNotExecutable(t *testing.T) {
@@ -718,9 +604,8 @@ func TestLoad_ExecutableNotExecutable(t *testing.T) {
 	tmpDir := t.TempDir()
 	execPath := tmpDir + "/non-executable-plugin"
 	// Create file without execute permission (0o600 = rw-------)
-	if err := os.WriteFile(execPath, []byte("not executable"), 0o600); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
+	err := os.WriteFile(execPath, []byte("not executable"), 0o600)
+	require.NoError(t, err, "failed to create test file")
 
 	manifest := &plugin.Manifest{
 		Name:    "non-executable",
@@ -731,13 +616,9 @@ func TestLoad_ExecutableNotExecutable(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when loading non-executable file")
-	}
-	if !strings.Contains(err.Error(), "not executable") {
-		t.Errorf("expected error to mention 'not executable', got: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when loading non-executable file")
+	assert.Contains(t, err.Error(), "not executable", "expected error to mention 'not executable'")
 }
 
 func TestLoad_ExecutablePathTraversal(t *testing.T) {
@@ -749,9 +630,8 @@ func TestLoad_ExecutablePathTraversal(t *testing.T) {
 
 	// Create executable in parent directory (outside plugin dir)
 	parentExec := filepath.Dir(tmpDir) + "/escaped-plugin"
-	if err := createTempExecutable(parentExec); err != nil {
-		t.Fatalf("failed to create escaped executable: %v", err)
-	}
+	err := createTempExecutable(parentExec)
+	require.NoError(t, err, "failed to create escaped executable")
 	t.Cleanup(func() { _ = os.Remove(parentExec) })
 
 	// Try to load plugin with path traversal in executable path
@@ -764,13 +644,9 @@ func TestLoad_ExecutablePathTraversal(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when executable path escapes plugin directory")
-	}
-	if !strings.Contains(err.Error(), "escapes plugin directory") {
-		t.Errorf("expected error to mention 'escapes plugin directory', got: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when executable path escapes plugin directory")
+	assert.Contains(t, err.Error(), "escapes plugin directory", "expected error to mention 'escapes plugin directory'")
 }
 
 func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
@@ -786,21 +662,18 @@ func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
 	tmpDir := t.TempDir()
 	pluginDir := filepath.Join(tmpDir, "plugin")
 	//nolint:gosec // G301 - needs execute permission to enter directory
-	if err := os.Mkdir(pluginDir, 0o755); err != nil {
-		t.Fatalf("failed to create plugin dir: %v", err)
-	}
+	err := os.Mkdir(pluginDir, 0o755)
+	require.NoError(t, err, "failed to create plugin dir")
 
 	// Create an executable outside the plugin directory
 	outsideExec := filepath.Join(tmpDir, "outside-exec")
-	if err := createTempExecutable(outsideExec); err != nil {
-		t.Fatalf("failed to create outside executable: %v", err)
-	}
+	err = createTempExecutable(outsideExec)
+	require.NoError(t, err, "failed to create outside executable")
 
 	// Create a symlink inside the plugin directory pointing outside
 	symlinkPath := filepath.Join(pluginDir, "evil-link")
-	if err := os.Symlink(outsideExec, symlinkPath); err != nil {
-		t.Fatalf("failed to create symlink: %v", err)
-	}
+	err = os.Symlink(outsideExec, symlinkPath)
+	require.NoError(t, err, "failed to create symlink")
 
 	manifest := &plugin.Manifest{
 		Name:    "symlink-escape",
@@ -811,13 +684,9 @@ func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, pluginDir)
-	if err == nil {
-		t.Fatal("expected error when executable symlink escapes plugin directory")
-	}
-	if !strings.Contains(err.Error(), "escapes plugin directory") {
-		t.Errorf("expected error to mention 'escapes plugin directory', got: %v", err)
-	}
+	err = host.Load(ctx, manifest, pluginDir)
+	require.Error(t, err, "expected error when executable symlink escapes plugin directory")
+	assert.Contains(t, err.Error(), "escapes plugin directory", "expected error to mention 'escapes plugin directory'")
 }
 
 func TestDeliverEvent_Success(t *testing.T) {
@@ -837,9 +706,8 @@ func TestDeliverEvent_Success(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -850,10 +718,8 @@ func TestDeliverEvent_Success(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "Load returned error")
 
 	event := pluginpkg.Event{
 		ID:        "evt-123",
@@ -866,19 +732,10 @@ func TestDeliverEvent_Success(t *testing.T) {
 	}
 
 	emits, err := host.DeliverEvent(ctx, "test-plugin", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent returned error: %v", err)
-	}
-
-	if len(emits) != 1 {
-		t.Fatalf("expected 1 emit event, got %d", len(emits))
-	}
-	if emits[0].Stream != "room:123" {
-		t.Errorf("expected stream 'room:123', got %q", emits[0].Stream)
-	}
-	if emits[0].Type != pluginpkg.EventTypeSay {
-		t.Errorf("expected type 'say', got %q", emits[0].Type)
-	}
+	require.NoError(t, err, "DeliverEvent returned error")
+	require.Len(t, emits, 1, "expected 1 emit event")
+	assert.Equal(t, "room:123", emits[0].Stream, "expected stream 'room:123'")
+	assert.Equal(t, pluginpkg.EventTypeSay, emits[0].Type, "expected type 'say'")
 }
 
 func TestClose_KillsPlugins(t *testing.T) {
@@ -886,9 +743,8 @@ func TestClose_KillsPlugins(t *testing.T) {
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -899,19 +755,13 @@ func TestClose_KillsPlugins(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err, "Load returned error")
 
 	err = host.Close(ctx)
-	if err != nil {
-		t.Errorf("Close returned error: %v", err)
-	}
+	assert.NoError(t, err, "Close returned error")
 
-	if !mockClient.killed {
-		t.Error("expected mock client to be killed on close")
-	}
+	assert.True(t, mockClient.killed, "expected mock client to be killed on close")
 }
 
 func TestDeliverEvent_ActorKinds(t *testing.T) {
@@ -937,9 +787,8 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 
 			ctx := context.Background()
 			tmpDir := t.TempDir()
-			if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-				t.Fatalf("failed to create temp file: %v", err)
-			}
+			err := createTempExecutable(tmpDir + "/test-plugin")
+			require.NoError(t, err, "failed to create temp file")
 
 			manifest := &plugin.Manifest{
 				Name:    "test-plugin",
@@ -950,19 +799,16 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 				},
 			}
 
-			if err := host.Load(ctx, manifest, tmpDir); err != nil {
-				t.Fatalf("Load returned error: %v", err)
-			}
+			err = host.Load(ctx, manifest, tmpDir)
+			require.NoError(t, err, "Load returned error")
 
 			event := pluginpkg.Event{
 				ID:        "evt-123",
 				ActorKind: tt.actorKind,
 			}
 
-			_, err := host.DeliverEvent(ctx, "test-plugin", event)
-			if err != nil {
-				t.Errorf("DeliverEvent returned error: %v", err)
-			}
+			_, err = host.DeliverEvent(ctx, "test-plugin", event)
+			assert.NoError(t, err, "DeliverEvent returned error")
 		})
 	}
 }
@@ -981,12 +827,8 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 	}
 
 	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when BinaryPlugin is nil")
-	}
-	if !strings.Contains(err.Error(), "not a binary plugin") {
-		t.Errorf("expected error to mention 'not a binary plugin', got: %v", err)
-	}
+	require.Error(t, err, "expected error when BinaryPlugin is nil")
+	assert.Contains(t, err.Error(), "not a binary plugin", "expected error to mention 'not a binary plugin'")
 }
 
 func TestLoad_NilManifest(t *testing.T) {
@@ -996,21 +838,16 @@ func TestLoad_NilManifest(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	err := host.Load(ctx, nil, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when manifest is nil")
-	}
-	if !strings.Contains(err.Error(), "manifest cannot be nil") {
-		t.Errorf("expected error to mention 'manifest cannot be nil', got: %v", err)
-	}
+	require.Error(t, err, "expected error when manifest is nil")
+	assert.Contains(t, err.Error(), "manifest cannot be nil", "expected error to mention 'manifest cannot be nil'")
 }
 
 func TestLoad_EmptyPluginName(t *testing.T) {
 	host, _ := newMockHost(t)
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(filepath.Join(tmpDir, "test-plugin")); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(filepath.Join(tmpDir, "test-plugin"))
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "", // Empty name
@@ -1021,13 +858,9 @@ func TestLoad_EmptyPluginName(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error for empty plugin name")
-	}
-	if !strings.Contains(err.Error(), "plugin name cannot be empty") {
-		t.Errorf("expected error to mention 'plugin name cannot be empty', got: %v", err)
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error for empty plugin name")
+	assert.Contains(t, err.Error(), "plugin name cannot be empty", "expected error to mention 'plugin name cannot be empty'")
 }
 
 func TestLoad_InvalidPluginClient(t *testing.T) {
@@ -1043,9 +876,8 @@ func TestLoad_InvalidPluginClient(t *testing.T) {
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	if err := createTempExecutable(tmpDir + "/test-plugin"); err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
-	}
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err, "failed to create temp file")
 
 	manifest := &plugin.Manifest{
 		Name:    "test-plugin",
@@ -1056,14 +888,8 @@ func TestLoad_InvalidPluginClient(t *testing.T) {
 		},
 	}
 
-	err := host.Load(ctx, manifest, tmpDir)
-	if err == nil {
-		t.Fatal("expected error when plugin does not implement PluginClient")
-	}
-	if !strings.Contains(err.Error(), "does not implement PluginClient") {
-		t.Errorf("expected error to mention 'does not implement PluginClient', got: %v", err)
-	}
-	if !mockClient.killed {
-		t.Error("expected client to be killed after type assertion failure")
-	}
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when plugin does not implement PluginClient")
+	assert.Contains(t, err.Error(), "does not implement PluginClient", "expected error to mention 'does not implement PluginClient'")
+	assert.True(t, mockClient.killed, "expected client to be killed after type assertion failure")
 }

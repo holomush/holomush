@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServer_AcceptsConnections(t *testing.T) {
@@ -21,35 +23,24 @@ func TestServer_AcceptsConnections(t *testing.T) {
 	engine := core.NewEngine(store, sessions, broadcaster)
 	srv := NewServer(":0", engine, sessions, broadcaster)
 	go func() {
-		//nolint:errcheck,gosec // Server shutdown error is expected when context cancels
-		srv.Run(ctx)
+		_ = srv.Run(ctx)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 
 	addr := srv.Addr()
-	if addr == "" {
-		t.Fatal("Server has no address")
-	}
+	require.NotEmpty(t, addr, "Server has no address")
 
 	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		t.Fatalf("Failed to connect: %v", err)
-	}
+	require.NoError(t, err, "Failed to connect")
 	defer func() {
 		_ = conn.Close() // Best effort cleanup in tests
 	}()
 
 	err = conn.SetReadDeadline(time.Now().Add(time.Second))
-	if err != nil {
-		t.Fatalf("Failed to set read deadline: %v", err)
-	}
+	require.NoError(t, err, "Failed to set read deadline")
 	reader := bufio.NewReader(conn)
 	line, err := reader.ReadString('\n')
-	if err != nil {
-		t.Fatalf("Failed to read welcome: %v", err)
-	}
-	if line == "" {
-		t.Error("Expected welcome message")
-	}
+	require.NoError(t, err, "Failed to read welcome")
+	assert.NotEmpty(t, line, "Expected welcome message")
 }

@@ -11,23 +11,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/tls"
 )
 
 func TestStatus_Properties(t *testing.T) {
 	cmd := NewStatusCmd()
 
-	if cmd.Use != "status" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "status")
-	}
-
-	if !strings.Contains(cmd.Short, "status") {
-		t.Error("Short description should mention status")
-	}
-
-	if !strings.Contains(cmd.Long, "health") {
-		t.Error("Long description should mention health")
-	}
+	assert.Equal(t, "status", cmd.Use)
+	assert.Contains(t, cmd.Short, "status", "Short description should mention status")
+	assert.Contains(t, cmd.Long, "health", "Long description should mention health")
 }
 
 func TestStatus_Help(t *testing.T) {
@@ -37,9 +32,7 @@ func TestStatus_Help(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
@@ -50,9 +43,7 @@ func TestStatus_Help(t *testing.T) {
 	}
 
 	for _, phrase := range expectedPhrases {
-		if !strings.Contains(output, phrase) {
-			t.Errorf("Help missing phrase %q", phrase)
-		}
+		assert.Contains(t, output, phrase, "Help missing phrase %q", phrase)
 	}
 }
 
@@ -62,9 +53,7 @@ func TestStatus_Flags(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--help"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
@@ -76,9 +65,7 @@ func TestStatus_Flags(t *testing.T) {
 	}
 
 	for _, flag := range expectedFlags {
-		if !strings.Contains(output, flag) {
-			t.Errorf("Help missing %q flag", flag)
-		}
+		assert.Contains(t, output, flag, "Help missing %q flag", flag)
 	}
 }
 
@@ -101,20 +88,14 @@ func TestFormatStatusTable(t *testing.T) {
 	output := formatStatusTable(statuses)
 
 	// Should contain process names
-	if !strings.Contains(output, "core") {
-		t.Error("table should contain 'core'")
-	}
-	if !strings.Contains(output, "gateway") {
-		t.Error("table should contain 'gateway'")
-	}
+	assert.Contains(t, output, "core", "table should contain 'core'")
+	assert.Contains(t, output, "gateway", "table should contain 'gateway'")
 
 	// Should indicate running/stopped
-	if !strings.Contains(output, "running") && !strings.Contains(output, "healthy") {
-		t.Error("table should indicate running/healthy status")
-	}
-	if !strings.Contains(output, "stopped") && !strings.Contains(output, "not running") {
-		t.Error("table should indicate stopped/not running status")
-	}
+	assert.True(t, strings.Contains(output, "running") || strings.Contains(output, "healthy"),
+		"table should indicate running/healthy status")
+	assert.True(t, strings.Contains(output, "stopped") || strings.Contains(output, "not running"),
+		"table should indicate stopped/not running status")
 }
 
 func TestFormatStatusJSON(t *testing.T) {
@@ -134,35 +115,21 @@ func TestFormatStatusJSON(t *testing.T) {
 	}
 
 	output, err := formatStatusJSON(statuses)
-	if err != nil {
-		t.Fatalf("formatStatusJSON() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	var result map[string]any
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		t.Fatalf("output should be valid JSON: %v", err)
-	}
+	require.NoError(t, json.Unmarshal([]byte(output), &result), "output should be valid JSON")
 
 	// Verify core status
 	coreStatus, ok := result["core"].(map[string]any)
-	if !ok {
-		t.Fatal("core should be an object")
-	}
-	if coreStatus["running"] != true {
-		t.Error("core.running should be true")
-	}
-	if coreStatus["health"] != "healthy" {
-		t.Errorf("core.health = %v, want %q", coreStatus["health"], "healthy")
-	}
+	require.True(t, ok, "core should be an object")
+	assert.Equal(t, true, coreStatus["running"], "core.running should be true")
+	assert.Equal(t, "healthy", coreStatus["health"])
 
 	// Verify gateway status
 	gatewayStatus, ok := result["gateway"].(map[string]any)
-	if !ok {
-		t.Fatal("gateway should be an object")
-	}
-	if gatewayStatus["running"] != false {
-		t.Error("gateway.running should be false")
-	}
+	require.True(t, ok, "gateway should be an object")
+	assert.Equal(t, false, gatewayStatus["running"], "gateway.running should be false")
 }
 
 func TestFormatUptime(t *testing.T) {
@@ -183,9 +150,7 @@ func TestFormatUptime(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := formatUptime(tt.seconds)
-			if got != tt.expected {
-				t.Errorf("formatUptime(%d) = %q, want %q", tt.seconds, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
@@ -239,14 +204,10 @@ func TestStatusConfig_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.cfg.Validate()
 			if tt.wantError {
-				if err == nil {
-					t.Fatalf("Validate() expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errorMsg)
-				}
-			} else if err != nil {
-				t.Fatalf("Validate() unexpected error: %v", err)
+				require.Error(t, err, "Validate() expected error")
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -258,41 +219,28 @@ func TestQueryProcessStatusGRPC_NoCerts(t *testing.T) {
 
 	status := queryProcessStatusGRPC("core", "127.0.0.1:9001")
 
-	if status.Running {
-		t.Error("status.Running should be false when certs can't be loaded")
-	}
-	if status.Error == "" {
-		t.Error("status.Error should contain error message")
-	}
+	assert.False(t, status.Running, "status.Running should be false when certs can't be loaded")
+	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
 }
 
 func TestQueryProcessStatusGRPC_InvalidCA(t *testing.T) {
 	// Create temp dir with invalid CA certificate
 	tmpDir := t.TempDir()
 	certsDir := tmpDir + "/holomush/certs"
-	if err := os.MkdirAll(certsDir, 0o700); err != nil {
-		t.Fatalf("failed to create certs dir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(certsDir, 0o700), "failed to create certs dir")
 
 	// Write invalid CA file
 	caPath := certsDir + "/root-ca.crt"
-	if err := os.WriteFile(caPath, []byte("not a valid cert"), 0o600); err != nil {
-		t.Fatalf("failed to write CA: %v", err)
-	}
+	require.NoError(t, os.WriteFile(caPath, []byte("not a valid cert"), 0o600), "failed to write CA")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	status := queryProcessStatusGRPC("core", "127.0.0.1:9001")
 
-	if status.Running {
-		t.Error("status.Running should be false when CA is invalid")
-	}
-	if status.Error == "" {
-		t.Error("status.Error should contain error message")
-	}
-	if !strings.Contains(status.Error, "game_id") {
-		t.Errorf("error should mention game_id extraction, got: %s", status.Error)
-	}
+	assert.False(t, status.Running, "status.Running should be false when CA is invalid")
+	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
+	// Error comes from extracting game_id which fails when CA PEM can't be decoded
+	assert.Contains(t, status.Error, "decode", "error should mention decode failure, got: %s", status.Error)
 }
 
 func TestQueryProcessStatusGRPC_ValidCANoClientCert(t *testing.T) {
@@ -303,28 +251,19 @@ func TestQueryProcessStatusGRPC_ValidCANoClientCert(t *testing.T) {
 	// Generate valid CA
 	gameID := "test-status-game-id"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	// Save only the CA certificate (no client cert)
-	if err := tls.SaveCertificates(certsDir, ca, nil); err != nil {
-		t.Fatalf("failed to save CA: %v", err)
-	}
+	require.NoError(t, tls.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	status := queryProcessStatusGRPC("core", "127.0.0.1:9001")
 
-	if status.Running {
-		t.Error("status.Running should be false when client cert is missing")
-	}
-	if status.Error == "" {
-		t.Error("status.Error should contain error message")
-	}
-	if !strings.Contains(status.Error, "TLS") {
-		t.Errorf("error should mention TLS, got: %s", status.Error)
-	}
+	assert.False(t, status.Running, "status.Running should be false when client cert is missing")
+	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
+	// Error mentions file not found (cert file missing)
+	assert.Contains(t, status.Error, "no such file or directory", "error should mention file not found, got: %s", status.Error)
 }
 
 func TestQueryProcessStatusGRPC_ConnectionFailure(t *testing.T) {
@@ -335,42 +274,28 @@ func TestQueryProcessStatusGRPC_ConnectionFailure(t *testing.T) {
 	// Generate valid CA and server/client certs
 	gameID := "test-conn-refused"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	// Generate server cert (for the core server we'd be connecting to)
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("failed to generate server cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate server cert")
 
 	// Generate client cert (for our status query client)
 	clientCert, err := tls.GenerateClientCert(ca, "core")
-	if err != nil {
-		t.Fatalf("failed to generate client cert: %v", err)
-	}
+	require.NoError(t, err, "failed to generate client cert")
 
 	// Save all certs
-	if err := tls.SaveCertificates(certsDir, ca, serverCert); err != nil {
-		t.Fatalf("failed to save certs: %v", err)
-	}
-	if err := tls.SaveClientCert(certsDir, clientCert); err != nil {
-		t.Fatalf("failed to save client cert: %v", err)
-	}
+	require.NoError(t, tls.SaveCertificates(certsDir, ca, serverCert), "failed to save certs")
+	require.NoError(t, tls.SaveClientCert(certsDir, clientCert), "failed to save client cert")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Use a port that's definitely not listening
 	status := queryProcessStatusGRPC("core", "127.0.0.1:59999")
 
-	if status.Running {
-		t.Error("status.Running should be false when server is not running")
-	}
+	assert.False(t, status.Running, "status.Running should be false when server is not running")
 	// Error could be about connection or about querying status
-	if status.Error == "" {
-		t.Error("status.Error should contain error message")
-	}
+	assert.NotEmpty(t, status.Error, "status.Error should contain error message")
 }
 
 func TestNewProcessStatus(t *testing.T) {
@@ -408,25 +333,13 @@ func TestNewProcessStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status := NewProcessStatus(tt.component, tt.running, tt.pid, tt.uptime)
 
-			if status.Component != tt.component {
-				t.Errorf("Component = %q, want %q", status.Component, tt.component)
-			}
-			if status.Running != tt.running {
-				t.Errorf("Running = %v, want %v", status.Running, tt.running)
-			}
-			if status.PID != tt.pid {
-				t.Errorf("PID = %d, want %d", status.PID, tt.pid)
-			}
-			if status.UptimeSeconds != tt.uptime {
-				t.Errorf("UptimeSeconds = %d, want %d", status.UptimeSeconds, tt.uptime)
-			}
-			if status.Health != "healthy" {
-				t.Errorf("Health = %q, want %q", status.Health, "healthy")
-			}
+			assert.Equal(t, tt.component, status.Component)
+			assert.Equal(t, tt.running, status.Running)
+			assert.Equal(t, tt.pid, status.PID)
+			assert.Equal(t, tt.uptime, status.UptimeSeconds)
+			assert.Equal(t, "healthy", status.Health)
 			// Constructor must not set Error for running processes
-			if status.Error != "" {
-				t.Errorf("Error = %q, want empty string", status.Error)
-			}
+			assert.Empty(t, status.Error)
 		})
 	}
 }
@@ -458,26 +371,14 @@ func TestNewProcessStatusError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status := NewProcessStatusError(tt.component, tt.err)
 
-			if status.Component != tt.component {
-				t.Errorf("Component = %q, want %q", status.Component, tt.component)
-			}
+			assert.Equal(t, tt.component, status.Component)
 			// Constructor must set Running to false for error states
-			if status.Running {
-				t.Error("Running should be false for error status")
-			}
-			if status.Error != tt.err.Error() {
-				t.Errorf("Error = %q, want %q", status.Error, tt.err.Error())
-			}
+			assert.False(t, status.Running, "Running should be false for error status")
+			assert.Equal(t, tt.err.Error(), status.Error)
 			// Constructor must not set these fields for error states
-			if status.Health != "" {
-				t.Errorf("Health = %q, want empty string", status.Health)
-			}
-			if status.PID != 0 {
-				t.Errorf("PID = %d, want 0", status.PID)
-			}
-			if status.UptimeSeconds != 0 {
-				t.Errorf("UptimeSeconds = %d, want 0", status.UptimeSeconds)
-			}
+			assert.Empty(t, status.Health)
+			assert.Equal(t, 0, status.PID)
+			assert.Equal(t, int64(0), status.UptimeSeconds)
 		})
 	}
 }
@@ -489,30 +390,22 @@ func TestProcessStatus_InvalidStatesPreventedByConstructors(t *testing.T) {
 
 	t.Run("NewProcessStatus never has Error set", func(t *testing.T) {
 		status := NewProcessStatus("core", true, 123, 100)
-		if status.Error != "" {
-			t.Error("NewProcessStatus should never set Error field")
-		}
+		assert.Empty(t, status.Error, "NewProcessStatus should never set Error field")
 	})
 
 	t.Run("NewProcessStatusError always has Running=false", func(t *testing.T) {
 		status := NewProcessStatusError("core", errors.New("test error"))
-		if status.Running {
-			t.Error("NewProcessStatusError should always set Running=false")
-		}
+		assert.False(t, status.Running, "NewProcessStatusError should always set Running=false")
 	})
 
 	t.Run("NewProcessStatusError never has Health set", func(t *testing.T) {
 		status := NewProcessStatusError("core", errors.New("test error"))
-		if status.Health != "" {
-			t.Error("NewProcessStatusError should never set Health field")
-		}
+		assert.Empty(t, status.Health, "NewProcessStatusError should never set Health field")
 	})
 
 	t.Run("NewProcessStatus always has Health=healthy", func(t *testing.T) {
 		status := NewProcessStatus("core", true, 123, 100)
-		if status.Health != "healthy" {
-			t.Errorf("NewProcessStatus should always set Health='healthy', got %q", status.Health)
-		}
+		assert.Equal(t, "healthy", status.Health)
 	})
 }
 
@@ -526,27 +419,17 @@ func TestRunStatus_TableOutput(t *testing.T) {
 	cmd.SetArgs([]string{})
 
 	// Should not error - it should handle connection failures gracefully
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("runStatus() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
 	// Should contain table headers
-	if !strings.Contains(output, "PROCESS") {
-		t.Error("output should contain PROCESS header")
-	}
-	if !strings.Contains(output, "STATUS") {
-		t.Error("output should contain STATUS header")
-	}
+	assert.Contains(t, output, "PROCESS", "output should contain PROCESS header")
+	assert.Contains(t, output, "STATUS", "output should contain STATUS header")
 
 	// Should contain component names
-	if !strings.Contains(output, "core") {
-		t.Error("output should mention core")
-	}
-	if !strings.Contains(output, "gateway") {
-		t.Error("output should mention gateway")
-	}
+	assert.Contains(t, output, "core", "output should mention core")
+	assert.Contains(t, output, "gateway", "output should mention gateway")
 }
 
 func TestRunStatus_JSONOutput(t *testing.T) {
@@ -559,25 +442,19 @@ func TestRunStatus_JSONOutput(t *testing.T) {
 	cmd.SetArgs([]string{"--json"})
 
 	// Should not error - it should handle connection failures gracefully
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("runStatus() with --json error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
 	// Should be valid JSON
 	var result map[string]any
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		t.Fatalf("output should be valid JSON: %v, got: %s", err, output)
-	}
+	require.NoError(t, json.Unmarshal([]byte(output), &result), "output should be valid JSON, got: %s", output)
 
 	// Should contain core and gateway keys
-	if _, ok := result["core"]; !ok {
-		t.Error("JSON output should contain 'core' key")
-	}
-	if _, ok := result["gateway"]; !ok {
-		t.Error("JSON output should contain 'gateway' key")
-	}
+	_, ok := result["core"]
+	assert.True(t, ok, "JSON output should contain 'core' key")
+	_, ok = result["gateway"]
+	assert.True(t, ok, "JSON output should contain 'gateway' key")
 }
 
 func TestRunStatus_CustomAddresses(t *testing.T) {
@@ -588,70 +465,42 @@ func TestRunStatus_CustomAddresses(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--core-addr=127.0.0.1:19001", "--gateway-addr=127.0.0.1:19002"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("runStatus() with custom addresses error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	// Should complete without error even with non-standard addresses
 	output := buf.String()
-	if !strings.Contains(output, "core") {
-		t.Error("output should mention core")
-	}
+	assert.Contains(t, output, "core", "output should mention core")
 }
 
 func TestStatusConfig_Defaults(t *testing.T) {
 	cmd := newStatusCmd()
 
 	jsonOutput, err := cmd.Flags().GetBool("json")
-	if err != nil {
-		t.Fatalf("failed to get json flag: %v", err)
-	}
-	if jsonOutput != false {
-		t.Errorf("json default should be false, got %v", jsonOutput)
-	}
+	require.NoError(t, err, "failed to get json flag")
+	assert.False(t, jsonOutput, "json default should be false")
 
 	coreAddr, err := cmd.Flags().GetString("core-addr")
-	if err != nil {
-		t.Fatalf("failed to get core-addr flag: %v", err)
-	}
-	if coreAddr != defaultCoreControlAddr {
-		t.Errorf("core-addr default = %q, want %q", coreAddr, defaultCoreControlAddr)
-	}
+	require.NoError(t, err, "failed to get core-addr flag")
+	assert.Equal(t, defaultCoreControlAddr, coreAddr)
 
 	gatewayAddr, err := cmd.Flags().GetString("gateway-addr")
-	if err != nil {
-		t.Fatalf("failed to get gateway-addr flag: %v", err)
-	}
-	if gatewayAddr != defaultGatewayControlAddr {
-		t.Errorf("gateway-addr default = %q, want %q", gatewayAddr, defaultGatewayControlAddr)
-	}
+	require.NoError(t, err, "failed to get gateway-addr flag")
+	assert.Equal(t, defaultGatewayControlAddr, gatewayAddr)
 }
 
 func TestByteWriter(t *testing.T) {
 	var buf byteWriter
 
 	n, err := buf.Write([]byte("hello"))
-	if err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if n != 5 {
-		t.Errorf("Write() returned %d, want 5", n)
-	}
-	if string(buf) != "hello" {
-		t.Errorf("buf = %q, want %q", string(buf), "hello")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 5, n)
+	assert.Equal(t, "hello", string(buf))
 
 	// Write more
 	n, err = buf.Write([]byte(" world"))
-	if err != nil {
-		t.Fatalf("second Write() error = %v", err)
-	}
-	if n != 6 {
-		t.Errorf("second Write() returned %d, want 6", n)
-	}
-	if string(buf) != "hello world" {
-		t.Errorf("buf = %q, want %q", string(buf), "hello world")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 6, n)
+	assert.Equal(t, "hello world", string(buf))
 }
 
 func TestFormatStatusTable_AllRunning(t *testing.T) {
@@ -674,18 +523,10 @@ func TestFormatStatusTable_AllRunning(t *testing.T) {
 
 	output := formatStatusTable(statuses)
 
-	if !strings.Contains(output, "running") {
-		t.Error("output should contain 'running'")
-	}
-	if !strings.Contains(output, "healthy") {
-		t.Error("output should contain 'healthy'")
-	}
-	if !strings.Contains(output, "1234") {
-		t.Error("output should contain core PID")
-	}
-	if !strings.Contains(output, "5678") {
-		t.Error("output should contain gateway PID")
-	}
+	assert.Contains(t, output, "running", "output should contain 'running'")
+	assert.Contains(t, output, "healthy", "output should contain 'healthy'")
+	assert.Contains(t, output, "1234", "output should contain core PID")
+	assert.Contains(t, output, "5678", "output should contain gateway PID")
 }
 
 func TestFormatStatusTable_AllStopped(t *testing.T) {
@@ -702,10 +543,6 @@ func TestFormatStatusTable_AllStopped(t *testing.T) {
 
 	output := formatStatusTable(statuses)
 
-	if !strings.Contains(output, "stopped") {
-		t.Error("output should contain 'stopped'")
-	}
-	if !strings.Contains(output, "not running") {
-		t.Error("output should contain 'not running'")
-	}
+	assert.Contains(t, output, "stopped", "output should contain 'stopped'")
+	assert.Contains(t, output, "not running", "output should contain 'not running'")
 }

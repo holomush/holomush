@@ -5,9 +5,10 @@
 package xdg
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/samber/oops"
 )
 
 const appName = "holomush"
@@ -20,7 +21,7 @@ func homeDir() (string, error) {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
+		return "", oops.Wrap(err)
 	}
 	return home, nil
 }
@@ -99,7 +100,7 @@ func CertsDir() (string, error) {
 // Directories are created with 0700 permissions.
 func EnsureDir(path string) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", path, err)
+		return oops.With("path", path).Wrap(err)
 	}
 	return nil
 }

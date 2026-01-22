@@ -9,7 +9,6 @@ import (
 	cryptotls "crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -47,7 +47,7 @@ type GRPCServer struct {
 // Returns an error if component is empty.
 func NewGRPCServer(component string, shutdownFunc ShutdownFunc) (*GRPCServer, error) {
 	if component == "" {
-		return nil, fmt.Errorf("component name cannot be empty")
+		return nil, oops.Code("INVALID_COMPONENT").Errorf("component name cannot be empty")
 	}
 	s := &GRPCServer{
 		component:    component,
@@ -68,12 +68,12 @@ func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan err
 
 	// Prevent double-start which would leak the first listener
 	if s.listener != nil {
-		return nil, fmt.Errorf("server is already running")
+		return nil, oops.Code("SERVER_ALREADY_RUNNING").Errorf("server is already running")
 	}
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
+		return nil, oops.Code("LISTEN_FAILED").With("address", addr).Wrap(err)
 	}
 	s.listener = listener
 
@@ -149,7 +149,7 @@ func (s *GRPCServer) Status(_ context.Context, _ *controlv1.StatusRequest) (*con
 
 // LoadControlServerTLS loads TLS config for the control gRPC server with mTLS.
 // Uses the same certificates as the main server (identified by serverName).
-func LoadControlServerTLS(certsDir string, serverName string) (*cryptotls.Config, error) {
+func LoadControlServerTLS(certsDir, serverName string) (*cryptotls.Config, error) {
 	certPath := filepath.Clean(filepath.Join(certsDir, serverName+".crt"))
 	keyPath := filepath.Clean(filepath.Join(certsDir, serverName+".key"))
 	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
@@ -157,18 +157,18 @@ func LoadControlServerTLS(certsDir string, serverName string) (*cryptotls.Config
 	// Load server certificate
 	cert, err := cryptotls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load server certificate: %w", err)
+		return nil, oops.Code("CERT_LOAD_FAILED").With("certPath", certPath).With("keyPath", keyPath).Wrap(err)
 	}
 
 	// Load CA for client verification
 	caCert, err := os.ReadFile(caPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		return nil, oops.Code("CA_READ_FAILED").With("caPath", caPath).Wrap(err)
 	}
 
 	caPool := x509.NewCertPool()
 	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to add CA certificate to pool")
+		return nil, oops.Code("CA_POOL_ADD_FAILED").With("caPath", caPath).Errorf("failed to add CA certificate to pool")
 	}
 
 	return &cryptotls.Config{
@@ -182,7 +182,7 @@ func LoadControlServerTLS(certsDir string, serverName string) (*cryptotls.Config
 // LoadControlClientTLS loads TLS config for the control gRPC client with mTLS.
 // clientName identifies the client certificate to use (e.g., "core" or "gateway").
 // gameID is used for ServerName verification against the server's SAN (holomush-<gameID>).
-func LoadControlClientTLS(certsDir string, clientName string, gameID string) (*cryptotls.Config, error) {
+func LoadControlClientTLS(certsDir, clientName, gameID string) (*cryptotls.Config, error) {
 	certPath := filepath.Clean(filepath.Join(certsDir, clientName+".crt"))
 	keyPath := filepath.Clean(filepath.Join(certsDir, clientName+".key"))
 	caPath := filepath.Clean(filepath.Join(certsDir, "root-ca.crt"))
@@ -190,18 +190,18 @@ func LoadControlClientTLS(certsDir string, clientName string, gameID string) (*c
 	// Load client certificate
 	cert, err := cryptotls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+		return nil, oops.Code("CERT_LOAD_FAILED").With("certPath", certPath).With("keyPath", keyPath).Wrap(err)
 	}
 
 	// Load CA for server verification
 	caCert, err := os.ReadFile(caPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		return nil, oops.Code("CA_READ_FAILED").With("caPath", caPath).Wrap(err)
 	}
 
 	caPool := x509.NewCertPool()
 	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to add CA certificate to pool")
+		return nil, oops.Code("CA_POOL_ADD_FAILED").With("caPath", caPath).Errorf("failed to add CA certificate to pool")
 	}
 
 	return &cryptotls.Config{
@@ -219,24 +219,24 @@ func ExtractGameIDFromCA(certsDir string) (string, error) {
 
 	caCertPEM, err := os.ReadFile(caPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read CA certificate: %w", err)
+		return "", oops.Code("CA_READ_FAILED").With("caPath", caPath).Wrap(err)
 	}
 
 	block, _ := pem.Decode(caCertPEM)
 	if block == nil {
-		return "", fmt.Errorf("failed to decode CA certificate PEM")
+		return "", oops.Code("PEM_DECODE_FAILED").With("caPath", caPath).Errorf("failed to decode CA certificate PEM")
 	}
 
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse CA certificate: %w", err)
+		return "", oops.Code("CERT_PARSE_FAILED").With("caPath", caPath).Wrap(err)
 	}
 
 	// Extract game_id from CN "HoloMUSH CA {game_id}"
 	const prefix = "HoloMUSH CA "
 	cn := cert.Subject.CommonName
 	if len(cn) <= len(prefix) || cn[:len(prefix)] != prefix {
-		return "", fmt.Errorf("CA CN %q does not have expected prefix %q", cn, prefix)
+		return "", oops.Code("INVALID_CA_CN").With("commonName", cn).With("expectedPrefix", prefix).Errorf("CA CN does not have expected prefix")
 	}
 
 	return cn[len(prefix):], nil

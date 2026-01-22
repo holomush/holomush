@@ -5,6 +5,9 @@ package core
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSessionManager_Connect(t *testing.T) {
@@ -14,15 +17,9 @@ func TestSessionManager_Connect(t *testing.T) {
 	connID := NewULID()
 
 	session := sm.Connect(charID, connID)
-	if session == nil {
-		t.Fatal("Expected session, got nil")
-	}
-	if session.CharacterID != charID {
-		t.Errorf("CharacterID mismatch")
-	}
-	if len(session.Connections) != 1 {
-		t.Errorf("Expected 1 connection, got %d", len(session.Connections))
-	}
+	require.NotNil(t, session, "Expected session, got nil")
+	assert.Equal(t, charID, session.CharacterID)
+	assert.Len(t, session.Connections, 1)
 }
 
 func TestSessionManager_Reconnect(t *testing.T) {
@@ -46,12 +43,8 @@ func TestSessionManager_Reconnect(t *testing.T) {
 	session2 := sm.Connect(charID, conn2)
 
 	// Should be same session with preserved cursor
-	if session2.CharacterID != session1.CharacterID {
-		t.Error("Should be same session")
-	}
-	if session2.EventCursors["location:test"] != eventID {
-		t.Error("Cursor should be preserved")
-	}
+	assert.Equal(t, session1.CharacterID, session2.CharacterID, "Should be same session")
+	assert.Equal(t, eventID, session2.EventCursors["location:test"], "Cursor should be preserved")
 }
 
 func TestSessionManager_MultipleConnections(t *testing.T) {
@@ -64,9 +57,7 @@ func TestSessionManager_MultipleConnections(t *testing.T) {
 	sm.Connect(charID, conn1)
 	session := sm.Connect(charID, conn2)
 
-	if len(session.Connections) != 2 {
-		t.Errorf("Expected 2 connections, got %d", len(session.Connections))
-	}
+	assert.Len(t, session.Connections, 2)
 }
 
 func TestSessionManager_DefensiveCopy(t *testing.T) {
@@ -86,19 +77,13 @@ func TestSessionManager_DefensiveCopy(t *testing.T) {
 	session2 := sm.GetSession(charID)
 
 	// Internal state should be unchanged
-	if len(session2.Connections) != 1 {
-		t.Errorf("Expected 1 connection (internal unchanged), got %d", len(session2.Connections))
-	}
-	if _, exists := session2.EventCursors["modified"]; exists {
-		t.Error("Internal EventCursors should not contain 'modified' key")
-	}
+	assert.Len(t, session2.Connections, 1, "Expected 1 connection (internal unchanged)")
+	assert.NotContains(t, session2.EventCursors, "modified", "Internal EventCursors should not contain 'modified' key")
 
 	// Verify GetSession also returns defensive copy
 	session2.Connections = append(session2.Connections, NewULID())
 	session3 := sm.GetSession(charID)
-	if len(session3.Connections) != 1 {
-		t.Errorf("Expected 1 connection after modifying GetSession result, got %d", len(session3.Connections))
-	}
+	assert.Len(t, session3.Connections, 1, "Expected 1 connection after modifying GetSession result")
 }
 
 func TestSessionManager_GetConnections_DefensiveCopy(t *testing.T) {
@@ -111,20 +96,14 @@ func TestSessionManager_GetConnections_DefensiveCopy(t *testing.T) {
 
 	// Get connections and modify the returned slice
 	conns := sm.GetConnections(charID)
-	if len(conns) != 1 {
-		t.Fatalf("Expected 1 connection initially, got %d", len(conns))
-	}
+	require.Len(t, conns, 1, "Expected 1 connection initially")
 	conns = append(conns, NewULID()) // Modify the returned slice
 
 	// Internal state should be unchanged despite modification
 	conns2 := sm.GetConnections(charID)
-	if len(conns2) != 1 {
-		t.Errorf("Expected 1 connection (internal unchanged), got %d", len(conns2))
-	}
+	assert.Len(t, conns2, 1, "Expected 1 connection (internal unchanged)")
 	// Verify we actually modified the first slice
-	if len(conns) != 2 {
-		t.Errorf("Expected modified slice to have 2 connections, got %d", len(conns))
-	}
+	assert.Len(t, conns, 2, "Expected modified slice to have 2 connections")
 }
 
 func TestSessionManager_Disconnect_NonExistentSession(_ *testing.T) {
@@ -153,12 +132,8 @@ func TestSessionManager_Disconnect_NonExistentConnection(t *testing.T) {
 
 	// Original connection should still be there
 	session := sm.GetSession(charID)
-	if len(session.Connections) != 1 {
-		t.Errorf("Expected 1 connection, got %d", len(session.Connections))
-	}
-	if session.Connections[0] != connID {
-		t.Error("Original connection should still exist")
-	}
+	assert.Len(t, session.Connections, 1)
+	assert.Equal(t, connID, session.Connections[0], "Original connection should still exist")
 }
 
 func TestSessionManager_UpdateCursor_NonExistentSession(_ *testing.T) {
@@ -178,9 +153,7 @@ func TestSessionManager_GetSession_NonExistent(t *testing.T) {
 	charID := NewULID()
 
 	session := sm.GetSession(charID)
-	if session != nil {
-		t.Error("Expected nil for non-existent session")
-	}
+	assert.Nil(t, session, "Expected nil for non-existent session")
 }
 
 func TestSessionManager_GetConnections_NonExistent(t *testing.T) {
@@ -189,7 +162,5 @@ func TestSessionManager_GetConnections_NonExistent(t *testing.T) {
 	charID := NewULID()
 
 	conns := sm.GetConnections(charID)
-	if conns != nil {
-		t.Error("Expected nil for non-existent session")
-	}
+	assert.Nil(t, conns, "Expected nil for non-existent session")
 }

@@ -8,7 +8,6 @@ package goplugin
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -18,10 +17,12 @@ import (
 	"time"
 
 	hashiplug "github.com/hashicorp/go-plugin"
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // DefaultEventTimeout is the default timeout for plugin event handling.
@@ -109,15 +110,15 @@ func NewHostWithFactory(enforcer *capability.Enforcer, factory ClientFactory) *H
 func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) error {
 	// Check context before expensive operations
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("load cancelled: %w", err)
+		return oops.In("goplugin").With("operation", "load").Wrap(err)
 	}
 
 	if manifest == nil {
-		return errors.New("manifest cannot be nil")
+		return oops.In("goplugin").With("operation", "load").New("manifest cannot be nil")
 	}
 
 	if manifest.Name == "" {
-		return errors.New("plugin name cannot be empty")
+		return oops.In("goplugin").With("operation", "load").New("plugin name cannot be empty")
 	}
 
 	h.mu.Lock()
@@ -128,11 +129,11 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	}
 
 	if _, ok := h.plugins[manifest.Name]; ok {
-		return fmt.Errorf("%w: %s", ErrPluginAlreadyLoaded, manifest.Name)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").Wrap(ErrPluginAlreadyLoaded)
 	}
 
 	if manifest.BinaryPlugin == nil {
-		return fmt.Errorf("plugin %s is not a binary plugin", manifest.Name)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("not a binary plugin")
 	}
 
 	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
@@ -141,29 +142,29 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	// Use EvalSymlinks to resolve symlinks and prevent symlink-based escapes
 	realDir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		return fmt.Errorf("cannot resolve plugin directory %s: %w", dir, err)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("dir", dir).Hint("cannot resolve plugin directory").Wrap(err)
 	}
 	realExec, err := filepath.EvalSymlinks(execPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("plugin executable not found: %s: %w", execPath, err)
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("path", execPath).Hint("plugin executable not found").Wrap(err)
 		}
-		return fmt.Errorf("cannot resolve executable path %s: %w", execPath, err)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("path", execPath).Hint("cannot resolve executable path").Wrap(err)
 	}
 	// Use filepath.Rel for robust cross-platform path containment check
 	rel, err := filepath.Rel(realDir, realExec)
 	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		return fmt.Errorf("plugin executable path escapes plugin directory: %s", manifest.BinaryPlugin.Executable)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("executable", manifest.BinaryPlugin.Executable).New("plugin executable path escapes plugin directory")
 	}
 
 	// Use realExec (resolved symlink) for stat and client to prevent TOCTOU attacks
 	info, err := os.Stat(realExec)
 	if err != nil {
-		return fmt.Errorf("cannot access plugin executable %s: %w", realExec, err)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("path", realExec).Hint("cannot access plugin executable").Wrap(err)
 	}
 	// Check execute permission (user, group, or other)
 	if info.Mode()&0o111 == 0 {
-		return fmt.Errorf("plugin executable not executable: %s", realExec)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("path", realExec).New("plugin executable not executable")
 	}
 
 	client := h.clientFactory.NewClient(realExec)
@@ -171,24 +172,24 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	rpcClient, err := client.Client()
 	if err != nil {
 		client.Kill()
-		return fmt.Errorf("failed to connect to plugin %s: %w", manifest.Name, err)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "connect").Wrap(err)
 	}
 
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
 		client.Kill()
-		return fmt.Errorf("failed to dispense plugin %s: %w", manifest.Name, err)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "dispense").Wrap(err)
 	}
 
 	pluginClient, ok := raw.(pluginv1.PluginClient)
 	if !ok {
 		client.Kill()
-		return fmt.Errorf("plugin %s does not implement PluginClient", manifest.Name)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("plugin does not implement PluginClient")
 	}
 
 	if err := h.enforcer.SetGrants(manifest.Name, manifest.Capabilities); err != nil {
 		client.Kill()
-		return fmt.Errorf("failed to set capabilities for plugin %s: %w", manifest.Name, err)
+		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "set_capabilities").Wrap(err)
 	}
 
 	h.plugins[manifest.Name] = &loadedPlugin{
@@ -211,7 +212,7 @@ func (h *Host) Unload(_ context.Context, name string) error {
 
 	p, ok := h.plugins[name]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrPluginNotLoaded, name)
+		return oops.In("goplugin").With("plugin", name).With("operation", "unload").Wrap(ErrPluginNotLoaded)
 	}
 
 	if p.client != nil {
@@ -247,7 +248,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	h.mu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrPluginNotLoaded, name)
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "deliver_event").Wrap(ErrPluginNotLoaded)
 	}
 
 	// Log warning for unrecognized actor kinds (useful for debugging)
@@ -272,7 +273,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 
 	resp, err := p.plugin.HandleEvent(callCtx, &pluginv1.HandleEventRequest{Event: protoEvent})
 	if err != nil {
-		return nil, fmt.Errorf("plugin %s HandleEvent failed: %w", name, err)
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "handle_event").Wrap(err)
 	}
 
 	emits := make([]pluginpkg.EmitEvent, len(resp.GetEmitEvents()))
@@ -286,7 +287,6 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 
 	return emits, nil
 }
-
 
 // Plugins returns names of all loaded plugins.
 func (h *Host) Plugins() []string {

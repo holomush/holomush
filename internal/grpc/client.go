@@ -7,14 +7,15 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"time"
 
-	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // Client wraps a gRPC connection to the Core service.
@@ -42,7 +43,7 @@ type ClientConfig struct {
 // The context parameter is reserved for future use (e.g., connection timeouts).
 func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	if cfg.Address == "" {
-		return nil, fmt.Errorf("address is required")
+		return nil, oops.Code("INVALID_CONFIG").Errorf("address is required")
 	}
 
 	// Set defaults
@@ -72,7 +73,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	// Create client connection
 	conn, err := grpc.NewClient(cfg.Address, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to core: %w", err)
+		return nil, oops.Code("CONNECTION_FAILED").With("address", cfg.Address).Wrap(err)
 	}
 
 	return &Client{
@@ -85,7 +86,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 func (c *Client) Close() error {
 	if c.conn != nil {
 		if err := c.conn.Close(); err != nil {
-			return fmt.Errorf("failed to close connection: %w", err)
+			return oops.Code("CLOSE_FAILED").Wrap(err)
 		}
 	}
 	return nil
@@ -95,7 +96,7 @@ func (c *Client) Close() error {
 func (c *Client) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error) {
 	resp, err := c.client.Authenticate(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("authenticate RPC failed: %w", err)
+		return nil, oops.Code("RPC_FAILED").With("method", "Authenticate").Wrap(err)
 	}
 	return resp, nil
 }
@@ -104,7 +105,7 @@ func (c *Client) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*co
 func (c *Client) HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error) {
 	resp, err := c.client.HandleCommand(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("handle command RPC failed: %w", err)
+		return nil, oops.Code("RPC_FAILED").With("method", "HandleCommand").Wrap(err)
 	}
 	return resp, nil
 }
@@ -113,7 +114,7 @@ func (c *Client) HandleCommand(ctx context.Context, req *corev1.CommandRequest) 
 func (c *Client) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error) {
 	stream, err := c.client.Subscribe(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("subscribe RPC failed: %w", err)
+		return nil, oops.Code("RPC_FAILED").With("method", "Subscribe").Wrap(err)
 	}
 	return stream, nil
 }
@@ -122,7 +123,7 @@ func (c *Client) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (c
 func (c *Client) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
 	resp, err := c.client.Disconnect(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("disconnect RPC failed: %w", err)
+		return nil, oops.Code("RPC_FAILED").With("method", "Disconnect").Wrap(err)
 	}
 	return resp, nil
 }

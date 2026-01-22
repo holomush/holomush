@@ -8,9 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -21,25 +22,14 @@ func TestSetup_JSONFormat(t *testing.T) {
 	logger.Info("test message")
 
 	var entry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
-		t.Fatalf("Failed to parse JSON: %v\nOutput: %s", err, buf.String())
-	}
+	err := json.Unmarshal(buf.Bytes(), &entry)
+	require.NoError(t, err, "Failed to parse JSON: %s", buf.String())
 
-	if entry["msg"] != "test message" {
-		t.Errorf("msg = %v, want 'test message'", entry["msg"])
-	}
-	if entry["service"] != "core" {
-		t.Errorf("service = %v, want 'core'", entry["service"])
-	}
-	if entry["version"] != "1.0.0" {
-		t.Errorf("version = %v, want '1.0.0'", entry["version"])
-	}
-	if _, ok := entry["time"]; !ok {
-		t.Error("time field missing")
-	}
-	if _, ok := entry["level"]; !ok {
-		t.Error("level field missing")
-	}
+	assert.Equal(t, "test message", entry["msg"])
+	assert.Equal(t, "core", entry["service"])
+	assert.Equal(t, "1.0.0", entry["version"])
+	assert.Contains(t, entry, "time", "time field missing")
+	assert.Contains(t, entry, "level", "level field missing")
 }
 
 func TestSetup_TextFormat(t *testing.T) {
@@ -49,12 +39,8 @@ func TestSetup_TextFormat(t *testing.T) {
 	logger.Info("test message")
 
 	output := buf.String()
-	if !strings.Contains(output, "test message") {
-		t.Errorf("Output missing message: %s", output)
-	}
-	if !strings.Contains(output, "gateway") {
-		t.Errorf("Output missing service: %s", output)
-	}
+	assert.Contains(t, output, "test message", "Output missing message")
+	assert.Contains(t, output, "gateway", "Output missing service")
 }
 
 func TestHandler_TraceContext(t *testing.T) {
@@ -73,16 +59,11 @@ func TestHandler_TraceContext(t *testing.T) {
 	logger.InfoContext(ctx, "traced message")
 
 	var entry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
-		t.Fatalf("Failed to parse JSON: %v", err)
-	}
+	err := json.Unmarshal(buf.Bytes(), &entry)
+	require.NoError(t, err, "Failed to parse JSON")
 
-	if entry["trace_id"] != "4bf92f3577b34da6a3ce929d0e0e4736" {
-		t.Errorf("trace_id = %v, want '4bf92f3577b34da6a3ce929d0e0e4736'", entry["trace_id"])
-	}
-	if entry["span_id"] != "00f067aa0ba902b7" {
-		t.Errorf("span_id = %v, want '00f067aa0ba902b7'", entry["span_id"])
-	}
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", entry["trace_id"])
+	assert.Equal(t, "00f067aa0ba902b7", entry["span_id"])
 }
 
 func TestHandler_NoTraceContext(t *testing.T) {
@@ -92,16 +73,15 @@ func TestHandler_NoTraceContext(t *testing.T) {
 	logger.Info("no trace message")
 
 	var entry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
-		t.Fatalf("Failed to parse JSON: %v", err)
-	}
+	err := json.Unmarshal(buf.Bytes(), &entry)
+	require.NoError(t, err, "Failed to parse JSON")
 
 	// trace_id and span_id should be empty strings or missing
-	if tid, ok := entry["trace_id"]; ok && tid != "" {
-		t.Errorf("trace_id should be empty, got %v", tid)
+	if tid, ok := entry["trace_id"]; ok {
+		assert.Empty(t, tid, "trace_id should be empty")
 	}
-	if sid, ok := entry["span_id"]; ok && sid != "" {
-		t.Errorf("span_id should be empty, got %v", sid)
+	if sid, ok := entry["span_id"]; ok {
+		assert.Empty(t, sid, "span_id should be empty")
 	}
 }
 
@@ -113,9 +93,8 @@ func TestSetup_DefaultFormat(t *testing.T) {
 
 	// Default should be JSON
 	var entry map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
-		t.Fatalf("Default format should be JSON, failed to parse: %v", err)
-	}
+	err := json.Unmarshal(buf.Bytes(), &entry)
+	require.NoError(t, err, "Default format should be JSON")
 }
 
 func TestSetDefault(t *testing.T) {
@@ -126,7 +105,5 @@ func TestSetDefault(t *testing.T) {
 	SetDefault("test-service", "2.0.0", "json")
 
 	// Verify the default was set (we can't easily test the output without more setup)
-	if slog.Default() == original {
-		t.Error("SetDefault did not change the default logger")
-	}
+	assert.NotEqual(t, original, slog.Default(), "SetDefault did not change the default logger")
 }

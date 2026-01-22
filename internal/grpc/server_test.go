@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -115,25 +117,14 @@ func TestCoreServer_Authenticate_Success(t *testing.T) {
 	}
 
 	resp, err := server.Authenticate(ctx, req)
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Errorf("Success = false, want true")
-	}
-	if resp.SessionId != sessionID.String() {
-		t.Errorf("SessionId = %q, want %q", resp.SessionId, sessionID.String())
-	}
-	if resp.CharacterId != charID.String() {
-		t.Errorf("CharacterId = %q, want %q", resp.CharacterId, charID.String())
-	}
-	if resp.CharacterName != "TestCharacter" {
-		t.Errorf("CharacterName = %q, want 'TestCharacter'", resp.CharacterName)
-	}
-	if resp.Meta == nil || resp.Meta.RequestId != "test-request-id" {
-		t.Errorf("Meta.RequestId not echoed correctly")
-	}
+	assert.True(t, resp.Success)
+	assert.Equal(t, sessionID.String(), resp.SessionId)
+	assert.Equal(t, charID.String(), resp.CharacterId)
+	assert.Equal(t, "TestCharacter", resp.CharacterName)
+	require.NotNil(t, resp.Meta)
+	assert.Equal(t, "test-request-id", resp.Meta.RequestId)
 }
 
 func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
@@ -160,16 +151,10 @@ func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
 	}
 
 	resp, err := server.Authenticate(ctx, req)
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Success = true, want false for invalid credentials")
-	}
-	if resp.Error == "" {
-		t.Error("Error should contain error message")
-	}
+	assert.False(t, resp.Success, "expected failure for invalid credentials")
+	assert.NotEmpty(t, resp.Error, "error message should be present")
 }
 
 func TestCoreServer_HandleCommand_Say(t *testing.T) {
@@ -214,16 +199,10 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Errorf("Success = false, want true; error: %s", resp.Error)
-	}
-	if appendedEvent.Type != core.EventTypeSay {
-		t.Errorf("Event type = %q, want %q", appendedEvent.Type, core.EventTypeSay)
-	}
+	assert.True(t, resp.Success, "expected success, got error: %s", resp.Error)
+	assert.Equal(t, core.EventTypeSay, appendedEvent.Type)
 }
 
 func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
@@ -245,16 +224,10 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Success = true, want false for invalid session")
-	}
-	if resp.Error == "" {
-		t.Error("Error should contain error message")
-	}
+	assert.False(t, resp.Success, "expected failure for invalid session")
+	assert.NotEmpty(t, resp.Error, "error message should be present")
 }
 
 func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
@@ -322,16 +295,14 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	select {
 	case err := <-done:
 		// Context cancellation is expected
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Errorf("Subscribe() unexpected error = %v", err)
+		if err != nil {
+			assert.ErrorIs(t, err, context.Canceled, "unexpected error type")
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 
-	if len(stream.events) == 0 {
-		t.Error("Expected at least one event to be sent")
-	}
+	assert.NotEmpty(t, stream.events, "expected at least one event to be sent")
 }
 
 func TestCoreServer_Disconnect(t *testing.T) {
@@ -363,16 +334,11 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	}
 
 	resp, err := server.Disconnect(ctx, req)
-	if err != nil {
-		t.Fatalf("Disconnect() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Error("Success = false, want true")
-	}
-	if resp.Meta == nil || resp.Meta.RequestId != "disconnect-request-id" {
-		t.Error("Meta.RequestId not echoed correctly")
-	}
+	assert.True(t, resp.Success)
+	require.NotNil(t, resp.Meta)
+	assert.Equal(t, "disconnect-request-id", resp.Meta.RequestId)
 }
 
 // mockSessionStore tracks session-to-character mappings for the gRPC layer.
@@ -404,12 +370,8 @@ func TestNewCoreServer(t *testing.T) {
 		broadcaster,
 	)
 
-	if server == nil {
-		t.Fatal("NewCoreServer returned nil")
-	}
-	if server.sessionStore == nil {
-		t.Error("sessionStore should be initialized")
-	}
+	require.NotNil(t, server, "NewCoreServer returned nil")
+	assert.NotNil(t, server.sessionStore, "sessionStore should be initialized")
 }
 
 func TestNewCoreServer_WithOptions(t *testing.T) {
@@ -428,15 +390,9 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 		WithSessionStore(customStore),
 	)
 
-	if server == nil {
-		t.Fatal("NewCoreServer returned nil")
-	}
-	if server.authenticator != customAuth {
-		t.Error("WithAuthenticator option not applied")
-	}
-	if server.sessionStore != customStore {
-		t.Error("WithSessionStore option not applied")
-	}
+	require.NotNil(t, server, "NewCoreServer returned nil")
+	assert.Equal(t, customAuth, server.authenticator, "WithAuthenticator option not applied")
+	assert.Equal(t, customStore, server.sessionStore, "WithSessionStore option not applied")
 }
 
 func TestInMemorySessionStore(t *testing.T) {
@@ -451,28 +407,20 @@ func TestInMemorySessionStore(t *testing.T) {
 
 	// Test Get on non-existent session
 	_, ok := store.Get(sessionID)
-	if ok {
-		t.Error("Get() should return false for non-existent session")
-	}
+	assert.False(t, ok, "Get() should return false for non-existent session")
 
 	// Test Set
 	store.Set(sessionID, info)
 
 	// Test Get on existing session
 	retrieved, ok := store.Get(sessionID)
-	if !ok {
-		t.Error("Get() should return true for existing session")
-	}
-	if retrieved.CharacterID != info.CharacterID {
-		t.Error("Retrieved session info doesn't match")
-	}
+	assert.True(t, ok, "Get() should return true for existing session")
+	assert.Equal(t, info.CharacterID, retrieved.CharacterID, "Retrieved session info doesn't match")
 
 	// Test Delete
 	store.Delete(sessionID)
 	_, ok = store.Get(sessionID)
-	if ok {
-		t.Error("Get() should return false after Delete")
-	}
+	assert.False(t, ok, "Get() should return false after Delete")
 }
 
 func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
@@ -495,16 +443,10 @@ func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
 	}
 
 	resp, err := server.Authenticate(ctx, req)
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Success = true, want false when authenticator not configured")
-	}
-	if resp.Error != "authentication not configured" {
-		t.Errorf("Error = %q, want 'authentication not configured'", resp.Error)
-	}
+	assert.False(t, resp.Success, "expected failure when authenticator not configured")
+	assert.Equal(t, "authentication not configured", resp.Error)
 }
 
 func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
@@ -536,13 +478,9 @@ func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
 	}
 
 	resp, err := server.Authenticate(ctx, req)
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Errorf("Success = false, want true")
-	}
+	assert.True(t, resp.Success)
 }
 
 func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
@@ -582,13 +520,9 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Errorf("Success = false, want true; error: %s", resp.Error)
-	}
+	assert.True(t, resp.Success, "expected success, got error: %s", resp.Error)
 }
 
 func TestCoreServer_HandleCommand_Pose(t *testing.T) {
@@ -635,16 +569,10 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Errorf("Success = false, want true; error: %s", resp.Error)
-	}
-	if appendedEvent.Type != core.EventTypePose {
-		t.Errorf("Event type = %q, want %q", appendedEvent.Type, core.EventTypePose)
-	}
+	assert.True(t, resp.Success, "expected success, got error: %s", resp.Error)
+	assert.Equal(t, core.EventTypePose, appendedEvent.Type)
 
 	// Test : shortcut for pose
 	req2 := &corev1.CommandRequest{
@@ -657,13 +585,9 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 	}
 
 	resp2, err := server.HandleCommand(ctx, req2)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp2.Success {
-		t.Errorf("Success = false, want true for : shortcut; error: %s", resp2.Error)
-	}
+	assert.True(t, resp2.Success, "expected success for : shortcut, got error: %s", resp2.Error)
 }
 
 func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
@@ -701,16 +625,10 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Success = true, want false for unknown command")
-	}
-	if resp.Error == "" {
-		t.Error("Error should contain error message for unknown command")
-	}
+	assert.False(t, resp.Success, "expected failure for unknown command")
+	assert.NotEmpty(t, resp.Error, "error should contain error message for unknown command")
 }
 
 func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
@@ -753,16 +671,10 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Success = true, want false when say fails")
-	}
-	if resp.Error == "" {
-		t.Error("Error should contain error message")
-	}
+	assert.False(t, resp.Success, "expected failure when say fails")
+	assert.NotEmpty(t, resp.Error, "error should contain error message")
 }
 
 func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
@@ -805,16 +717,10 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Success = true, want false when pose fails")
-	}
-	if resp.Error == "" {
-		t.Error("Error should contain error message")
-	}
+	assert.False(t, resp.Success, "expected failure when pose fails")
+	assert.NotEmpty(t, resp.Error, "error should contain error message")
 }
 
 func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
@@ -840,9 +746,7 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	}
 
 	err := server.Subscribe(req, stream)
-	if err == nil {
-		t.Error("Subscribe() should return error for invalid session")
-	}
+	assert.Error(t, err, "Subscribe() should return error for invalid session")
 }
 
 func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
@@ -890,9 +794,7 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	select {
 	case err := <-done:
 		// Context cancellation expected
-		if err == nil {
-			t.Error("Subscribe() should return error on context cancellation")
-		}
+		assert.Error(t, err, "Subscribe() should return error on context cancellation")
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
@@ -977,9 +879,7 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Error("Subscribe() should return error when send fails")
-		}
+		assert.Error(t, err, "Subscribe() should return error when send fails")
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after send error")
 	}
@@ -1011,13 +911,9 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	}
 
 	resp, err := server.Disconnect(ctx, req)
-	if err != nil {
-		t.Fatalf("Disconnect() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if !resp.Success {
-		t.Error("Success = false, want true")
-	}
+	assert.True(t, resp.Success)
 }
 
 func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
@@ -1038,21 +934,15 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	}
 
 	resp, err := server.Disconnect(ctx, req)
-	if err != nil {
-		t.Fatalf("Disconnect() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should succeed even for non-existent session (idempotent)
-	if !resp.Success {
-		t.Error("Success = false, want true for non-existent session (idempotent)")
-	}
+	assert.True(t, resp.Success, "expected success for non-existent session (idempotent)")
 }
 
 func TestNewGRPCServerInsecure(t *testing.T) {
 	server := NewGRPCServerInsecure()
-	if server == nil {
-		t.Error("NewGRPCServerInsecure() returned nil")
-	}
+	require.NotNil(t, server, "NewGRPCServerInsecure() returned nil")
 	server.Stop()
 }
 
@@ -1068,9 +958,7 @@ func TestMergeChannels_ClosedChannel(t *testing.T) {
 	// Should receive closed channel (no events)
 	select {
 	case _, ok := <-merged:
-		if ok {
-			t.Error("Expected channel to be closed")
-		}
+		assert.False(t, ok, "expected channel to be closed")
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Timed out waiting for closed channel signal")
 	}
@@ -1102,9 +990,8 @@ func TestMergeChannels_MultipleChannels(t *testing.T) {
 		}
 	}
 
-	if !received[event1.ID.String()] || !received[event2.ID.String()] {
-		t.Error("Did not receive both events")
-	}
+	assert.True(t, received[event1.ID.String()], "did not receive event1")
+	assert.True(t, received[event2.ID.String()], "did not receive event2")
 }
 
 func TestMergeChannels_ContextCancellation(t *testing.T) {
@@ -1119,9 +1006,7 @@ func TestMergeChannels_ContextCancellation(t *testing.T) {
 	// merged channel should eventually close
 	select {
 	case _, ok := <-merged:
-		if ok {
-			t.Error("Expected channel to be closed after context cancel")
-		}
+		assert.False(t, ok, "expected channel to be closed after context cancel")
 	case <-time.After(500 * time.Millisecond):
 		t.Error("Timed out waiting for channel to close")
 	}
@@ -1133,30 +1018,21 @@ func TestNewGRPCServer(t *testing.T) {
 
 	// Generate certificates
 	ca, err := holomushtls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("GenerateCA() error = %v", err)
-	}
+	require.NoError(t, err, "GenerateCA() error")
 
 	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
-	if err != nil {
-		t.Fatalf("GenerateServerCert() error = %v", err)
-	}
+	require.NoError(t, err, "GenerateServerCert() error")
 
-	if err := holomushtls.SaveCertificates(tmpDir, ca, serverCert); err != nil {
-		t.Fatalf("SaveCertificates() error = %v", err)
-	}
+	err = holomushtls.SaveCertificates(tmpDir, ca, serverCert)
+	require.NoError(t, err, "SaveCertificates() error")
 
 	// Load TLS config
 	tlsConfig, err := holomushtls.LoadServerTLS(tmpDir, "core")
-	if err != nil {
-		t.Fatalf("LoadServerTLS() error = %v", err)
-	}
+	require.NoError(t, err, "LoadServerTLS() error")
 
 	// Create gRPC server with TLS
 	server := NewGRPCServer(tlsConfig)
-	if server == nil {
-		t.Fatal("NewGRPCServer() returned nil")
-	}
+	require.NotNil(t, server, "NewGRPCServer() returned nil")
 	server.Stop()
 }
 
@@ -1212,12 +1088,9 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 	select {
 	case err := <-done:
 		// Should return an error due to context deadline exceeded
-		if err == nil {
-			t.Error("Subscribe() should return error when context times out")
-		}
-		if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "deadline exceeded") {
-			t.Errorf("Expected deadline exceeded error, got: %v", err)
-		}
+		require.Error(t, err, "Subscribe() should return error when context times out")
+		isDeadlineError := errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "deadline exceeded")
+		assert.True(t, isDeadlineError, "expected deadline exceeded error, got: %v", err)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Subscribe did not return after context timeout")
 	}
@@ -1243,9 +1116,7 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 
 	// Verify session exists before disconnect
 	_, ok := sessionStore.Get(sessionID.String())
-	if !ok {
-		t.Fatal("Session should exist before disconnect")
-	}
+	require.True(t, ok, "Session should exist before disconnect")
 
 	// Disconnect the session
 	ctx := context.Background()
@@ -1258,18 +1129,12 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 	}
 
 	resp, err := server.Disconnect(ctx, req)
-	if err != nil {
-		t.Fatalf("Disconnect() error = %v", err)
-	}
-	if !resp.Success {
-		t.Error("Disconnect() should succeed")
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.Success, "Disconnect() should succeed")
 
 	// Verify session is cleaned up
 	_, ok = sessionStore.Get(sessionID.String())
-	if ok {
-		t.Error("Session should be removed after disconnect")
-	}
+	assert.False(t, ok, "Session should be removed after disconnect")
 }
 
 func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
@@ -1317,19 +1182,13 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 		}
 
 		resp, err := server.HandleCommand(ctx, req)
-		if err != nil {
-			t.Fatalf("HandleCommand() error = %v", err)
-		}
-		if !resp.Success {
-			t.Errorf("HandleCommand() iteration %d failed: %s", i, resp.Error)
-		}
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "HandleCommand() iteration %d failed: %s", i, resp.Error)
 	}
 
 	// Session should still exist after activity
 	_, ok := sessionStore.Get(sessionID.String())
-	if !ok {
-		t.Error("Session should persist after activity")
-	}
+	assert.True(t, ok, "Session should persist after activity")
 }
 
 func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
@@ -1377,24 +1236,16 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	}
 
 	resp, err := server.Disconnect(ctx, req)
-	if err != nil {
-		t.Fatalf("Disconnect() error = %v", err)
-	}
-	if !resp.Success {
-		t.Error("Disconnect() should succeed")
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.Success, "Disconnect() should succeed")
 
 	// Verify session 1 is cleaned up
 	_, ok := sessionStore.Get(session1ID.String())
-	if ok {
-		t.Error("Session 1 should be removed after disconnect")
-	}
+	assert.False(t, ok, "Session 1 should be removed after disconnect")
 
 	// Verify session 2 still exists
 	_, ok = sessionStore.Get(session2ID.String())
-	if !ok {
-		t.Error("Session 2 should still exist after session 1 disconnect")
-	}
+	assert.True(t, ok, "Session 2 should still exist after session 1 disconnect")
 }
 
 // =============================================================================
@@ -1451,17 +1302,11 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() returned error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// The command should fail due to timeout
-	if resp.Success {
-		t.Error("HandleCommand() should fail when context times out")
-	}
-	if resp.Error == "" {
-		t.Error("Error message should be present for timeout")
-	}
+	assert.False(t, resp.Success, "HandleCommand() should fail when context times out")
+	assert.NotEmpty(t, resp.Error, "error message should be present for timeout")
 }
 
 func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
@@ -1524,12 +1369,8 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 	// Wait for response
 	select {
 	case resp := <-done:
-		if resp.Success {
-			t.Error("HandleCommand() should fail when context is cancelled")
-		}
-		if resp.Error == "" {
-			t.Error("Error message should be present for cancellation")
-		}
+		assert.False(t, resp.Success, "HandleCommand() should fail when context is cancelled")
+		assert.NotEmpty(t, resp.Error, "error message should be present for cancellation")
 	case <-time.After(time.Second):
 		t.Fatal("HandleCommand did not return after context cancellation")
 	}
@@ -1598,17 +1439,13 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	// Wait for subscription to end
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Error("Subscribe() should return error when cancelled")
-		}
+		assert.Error(t, err, "Subscribe() should return error when cancelled")
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 
 	// Verify at least one event was received before cancellation
-	if len(stream.events) == 0 {
-		t.Error("Expected at least one event before cancellation")
-	}
+	assert.NotEmpty(t, stream.events, "expected at least one event before cancellation")
 }
 
 func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
@@ -1682,19 +1519,15 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 			}
 
 			resp, err := server.HandleCommand(ctx, req)
-			if err != nil {
-				t.Fatalf("HandleCommand() returned error: %v", err)
-			}
+			require.NoError(t, err)
 
 			if tt.expectError {
-				if resp.Success {
-					t.Error("Expected command to fail with timeout")
+				assert.False(t, resp.Success, "expected command to fail with timeout")
+				if tt.errorContains != "" {
+					assert.Contains(t, strings.ToLower(resp.Error), tt.errorContains)
 				}
-				if tt.errorContains != "" && !strings.Contains(strings.ToLower(resp.Error), tt.errorContains) {
-					t.Errorf("Error %q should contain %q", resp.Error, tt.errorContains)
-				}
-			} else if !resp.Success {
-				t.Errorf("Expected command to succeed, got error: %s", resp.Error)
+			} else {
+				assert.True(t, resp.Success, "expected command to succeed, got error: %s", resp.Error)
 			}
 		})
 	}
@@ -1778,9 +1611,7 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	// Wait for subscription to timeout
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Error("Subscribe() should return error when send times out")
-		}
+		assert.Error(t, err, "Subscribe() should return error when send times out")
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Subscribe did not return after timeout")
 	}
@@ -1824,16 +1655,10 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
-	if err != nil {
-		t.Fatalf("HandleCommand() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Empty command should fail")
-	}
-	if resp.Error == "" {
-		t.Error("Error message should be present")
-	}
+	assert.False(t, resp.Success, "empty command should fail")
+	assert.NotEmpty(t, resp.Error, "error message should be present")
 }
 
 // =============================================================================
@@ -1866,9 +1691,7 @@ func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
 		// gRPC error is acceptable
 		return
 	}
-	if resp.Success {
-		t.Error("Expected failure for empty auth request")
-	}
+	assert.False(t, resp.Success, "expected failure for empty auth request")
 }
 
 func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
@@ -1898,16 +1721,10 @@ func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
 	}
 
 	resp, err := server.Authenticate(ctx, req)
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if resp.Success {
-		t.Error("Expected failure for empty username")
-	}
-	if resp.Error == "" {
-		t.Error("Error message should be present")
-	}
+	assert.False(t, resp.Success, "expected failure for empty username")
+	assert.NotEmpty(t, resp.Error, "error message should be present")
 }
 
 func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
@@ -1955,12 +1772,8 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 				// gRPC error is acceptable
 				return
 			}
-			if resp.Success {
-				t.Error("Expected failure for invalid session ID")
-			}
-			if resp.Error == "" {
-				t.Error("Error message should be present")
-			}
+			assert.False(t, resp.Success, "expected failure for invalid session ID")
+			assert.NotEmpty(t, resp.Error, "error message should be present")
 		})
 	}
 }
@@ -2021,14 +1834,10 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 				}
 			}()
 
-			resp, err := server.HandleCommand(ctx, req)
-			if err != nil {
-				// gRPC error is acceptable
-				return
-			}
-			// May succeed or fail depending on command processing
+			_, err := server.HandleCommand(ctx, req)
+			// May succeed, fail, or return error depending on command processing
 			// Main assertion is that it doesn't panic
-			_ = resp
+			_ = err
 		})
 	}
 }
@@ -2158,12 +1967,8 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 		}()
 
 		resp, err := server.HandleCommand(ctx, req)
-		if err != nil {
-			t.Fatalf("HandleCommand() error = %v", err)
-		}
-		if !resp.Success {
-			t.Errorf("Expected success, got error: %s", resp.Error)
-		}
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "expected success, got error: %s", resp.Error)
 	})
 
 	t.Run("DisconnectRequest with nil Meta", func(t *testing.T) {
@@ -2179,12 +1984,8 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 		}()
 
 		resp, err := server.Disconnect(ctx, req)
-		if err != nil {
-			t.Fatalf("Disconnect() error = %v", err)
-		}
-		if !resp.Success {
-			t.Error("Expected success for disconnect")
-		}
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "expected success for disconnect")
 	})
 }
 
@@ -2227,12 +2028,8 @@ func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
 	}
 
 	resp, err := server.Authenticate(ctx, req)
-	if err != nil {
-		t.Fatalf("Authenticate() error = %v", err)
-	}
-	if !resp.Success {
-		t.Errorf("Expected success, got error: %s", resp.Error)
-	}
+	require.NoError(t, err)
+	assert.True(t, resp.Success, "expected success, got error: %s", resp.Error)
 }
 
 func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {

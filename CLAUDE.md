@@ -130,17 +130,30 @@ All tasks MUST be reviewed before completion. See
 
 ### Error Handling
 
-```go
-// Wrap errors with context
-if err != nil {
-    return fmt.Errorf("failed to load event: %w", err)
-}
+Use oops for structured errors with context:
 
-// Use custom error types for domain errors
-type NotFoundError struct {
-    Resource string
-    ID       string
-}
+```go
+// Wrap existing error with context
+return oops.With("plugin", name).With("operation", "load").Wrap(err)
+
+// Create new error
+return oops.Errorf("validation failed").With("field", fieldName)
+
+// At API boundaries, add error code
+return oops.Code("PLUGIN_LOAD_FAILED").With("plugin", name).Wrap(err)
+```
+
+For logging oops errors, use pkg/errutil:
+
+```go
+errutil.LogError(logger, "operation failed", err)
+```
+
+For testing error codes:
+
+```go
+errutil.AssertErrorCode(t, err, "EXPECTED_CODE")
+errutil.AssertErrorContext(t, err, "key", expectedValue)
 ```
 
 ### Logging
@@ -334,6 +347,57 @@ for _, tt := range tests {
         // ...
     })
 }
+```
+
+### Assertions
+
+Use testify for unit test assertions:
+
+```go
+// Equality
+assert.Equal(t, expected, got)
+
+// Error checking
+require.NoError(t, err)
+assert.Error(t, err)
+
+// Contains
+assert.Contains(t, slice, element)
+```
+
+### Mocking with Mockery
+
+Generate mocks with mockery:
+
+```bash
+mockery # Uses .mockery.yaml config
+```
+
+Use generated mocks:
+
+```go
+store := mocks.NewMockEventStore(t)
+store.EXPECT().Append(mock.Anything, mock.Anything).Return(nil)
+```
+
+### Integration Tests with Ginkgo/Gomega
+
+Use ginkgo/gomega for integration tests:
+
+```go
+var _ = Describe("Feature", func() {
+    It("does something", func() {
+        Expect(result).To(Equal(expected))
+    })
+})
+```
+
+For async operations:
+
+```go
+Eventually(func() int {
+    return len(results)
+}).Should(Equal(expected))
 ```
 
 ## Commands

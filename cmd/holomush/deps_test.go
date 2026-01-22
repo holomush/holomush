@@ -10,12 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -237,9 +238,7 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("runCoreWithDeps() returned unexpected error: %v", err)
-		}
+		require.NoError(t, err, "runCoreWithDeps() returned unexpected error")
 	case <-time.After(5 * time.Second):
 		t.Fatal("runCoreWithDeps() did not return within timeout")
 	}
@@ -256,12 +255,8 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, nil)
-	if err == nil {
-		t.Fatal("expected validation error, got nil")
-	}
-	if !strings.Contains(err.Error(), "grpc-addr") {
-		t.Errorf("expected error to mention grpc-addr, got: %v", err)
-	}
+	require.Error(t, err, "expected validation error")
+	assert.Contains(t, err.Error(), "grpc-addr")
 }
 
 // TestRunCoreWithDeps_DatabaseURLMissing tests missing DATABASE_URL error.
@@ -281,12 +276,8 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected DATABASE_URL error, got nil")
-	}
-	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("expected error to mention DATABASE_URL, got: %v", err)
-	}
+	require.Error(t, err, "expected DATABASE_URL error")
+	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
 
 // TestRunCoreWithDeps_EventStoreFactoryError tests event store creation failure.
@@ -309,12 +300,8 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected event store error, got nil")
-	}
-	if !strings.Contains(err.Error(), "database") {
-		t.Errorf("expected error to mention database, got: %v", err)
-	}
+	require.Error(t, err, "expected event store error")
+	assert.Contains(t, err.Error(), "connection refused")
 }
 
 // TestRunCoreWithDeps_InitGameIDError tests game ID initialization failure.
@@ -342,12 +329,8 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected init game ID error, got nil")
-	}
-	if !strings.Contains(err.Error(), "game ID") {
-		t.Errorf("expected error to mention game ID, got: %v", err)
-	}
+	require.Error(t, err, "expected init game ID error")
+	assert.Contains(t, err.Error(), "game ID")
 }
 
 // TestRunCoreWithDeps_CertsDirError tests certificates directory error.
@@ -376,12 +359,8 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected certs dir error, got nil")
-	}
-	if !strings.Contains(err.Error(), "certs directory") {
-		t.Errorf("expected error to mention certs directory, got: %v", err)
-	}
+	require.Error(t, err, "expected certs dir error")
+	assert.Contains(t, err.Error(), "certs directory")
 }
 
 // TestRunCoreWithDeps_TLSCertError tests TLS certificate setup error.
@@ -413,12 +392,8 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected TLS error, got nil")
-	}
-	if !strings.Contains(err.Error(), "TLS") {
-		t.Errorf("expected error to mention TLS, got: %v", err)
-	}
+	require.Error(t, err, "expected TLS error")
+	assert.Contains(t, err.Error(), "TLS")
 }
 
 // TestRunCoreWithDeps_ControlTLSLoadError tests control TLS loading error.
@@ -453,12 +428,8 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected control TLS error, got nil")
-	}
-	if !strings.Contains(err.Error(), "control TLS") {
-		t.Errorf("expected error to mention control TLS, got: %v", err)
-	}
+	require.Error(t, err, "expected control TLS error")
+	assert.Contains(t, err.Error(), "control TLS")
 }
 
 // TestRunCoreWithDeps_ControlServerFactoryError tests control server creation error.
@@ -496,12 +467,8 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected control server error, got nil")
-	}
-	if !strings.Contains(err.Error(), "control gRPC server") {
-		t.Errorf("expected error to mention control gRPC server, got: %v", err)
-	}
+	require.Error(t, err, "expected control server error")
+	assert.Contains(t, err.Error(), "failed to create control server")
 }
 
 // TestRunCoreWithDeps_ControlServerStartError tests control server start error.
@@ -543,12 +510,8 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected control server start error, got nil")
-	}
-	if !strings.Contains(err.Error(), "start control gRPC server") {
-		t.Errorf("expected error to mention start control gRPC server, got: %v", err)
-	}
+	require.Error(t, err, "expected control server start error")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunCoreWithDeps_ObservabilityServerStartError tests observability server start error.
@@ -599,12 +562,8 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runCoreWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected observability server start error, got nil")
-	}
-	if !strings.Contains(err.Error(), "observability server") {
-		t.Errorf("expected error to mention observability server, got: %v", err)
-	}
+	require.Error(t, err, "expected observability server start error")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunGatewayWithDeps_HappyPath tests the gateway process with all mocked dependencies.
@@ -669,9 +628,7 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("runGatewayWithDeps() returned unexpected error: %v", err)
-		}
+		require.NoError(t, err, "runGatewayWithDeps() returned unexpected error")
 	case <-time.After(5 * time.Second):
 		t.Fatal("runGatewayWithDeps() did not return within timeout")
 	}
@@ -689,12 +646,8 @@ func TestRunGatewayWithDeps_ValidationError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, nil)
-	if err == nil {
-		t.Fatal("expected validation error, got nil")
-	}
-	if !strings.Contains(err.Error(), "telnet-addr") {
-		t.Errorf("expected error to mention telnet-addr, got: %v", err)
-	}
+	require.Error(t, err, "expected validation error")
+	assert.Contains(t, err.Error(), "telnet-addr")
 }
 
 // TestRunGatewayWithDeps_CertsDirError tests certificates directory error.
@@ -717,12 +670,8 @@ func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected certs dir error, got nil")
-	}
-	if !strings.Contains(err.Error(), "certs directory") {
-		t.Errorf("expected error to mention certs directory, got: %v", err)
-	}
+	require.Error(t, err, "expected certs dir error")
+	assert.Contains(t, err.Error(), "certs directory")
 }
 
 // TestRunGatewayWithDeps_GameIDExtractorError tests game ID extraction error.
@@ -748,12 +697,8 @@ func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected game ID error, got nil")
-	}
-	if !strings.Contains(err.Error(), "game_id") {
-		t.Errorf("expected error to mention game_id, got: %v", err)
-	}
+	require.Error(t, err, "expected game ID error")
+	assert.Contains(t, err.Error(), "game_id")
 }
 
 // TestRunGatewayWithDeps_ClientTLSLoaderError tests client TLS loading error.
@@ -782,12 +727,8 @@ func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected TLS error, got nil")
-	}
-	if !strings.Contains(err.Error(), "TLS") {
-		t.Errorf("expected error to mention TLS, got: %v", err)
-	}
+	require.Error(t, err, "expected TLS error")
+	assert.Contains(t, err.Error(), "TLS")
 }
 
 // TestRunGatewayWithDeps_GRPCClientFactoryError tests gRPC client creation error.
@@ -819,12 +760,8 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected gRPC client error, got nil")
-	}
-	if !strings.Contains(err.Error(), "gRPC client") {
-		t.Errorf("expected error to mention gRPC client, got: %v", err)
-	}
+	require.Error(t, err, "expected gRPC client error")
+	assert.Contains(t, err.Error(), "connection refused")
 }
 
 // TestRunGatewayWithDeps_ControlTLSLoadError tests control TLS loading error.
@@ -859,12 +796,8 @@ func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected control TLS error, got nil")
-	}
-	if !strings.Contains(err.Error(), "control TLS") {
-		t.Errorf("expected error to mention control TLS, got: %v", err)
-	}
+	require.Error(t, err, "expected control TLS error")
+	assert.Contains(t, err.Error(), "control TLS")
 }
 
 // TestRunGatewayWithDeps_ControlServerFactoryError tests control server creation error.
@@ -902,12 +835,8 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected control server error, got nil")
-	}
-	if !strings.Contains(err.Error(), "control gRPC server") {
-		t.Errorf("expected error to mention control gRPC server, got: %v", err)
-	}
+	require.Error(t, err, "expected control server error")
+	assert.Contains(t, err.Error(), "failed to create control server")
 }
 
 // TestRunGatewayWithDeps_ControlServerStartError tests control server start error.
@@ -949,12 +878,8 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected control server start error, got nil")
-	}
-	if !strings.Contains(err.Error(), "start control gRPC server") {
-		t.Errorf("expected error to mention start control gRPC server, got: %v", err)
-	}
+	require.Error(t, err, "expected control server start error")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunGatewayWithDeps_ListenerFactoryError tests telnet listener creation error.
@@ -1000,12 +925,8 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected listener error, got nil")
-	}
-	if !strings.Contains(err.Error(), "listen on") {
-		t.Errorf("expected error to mention listen on, got: %v", err)
-	}
+	require.Error(t, err, "expected listener error")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunGatewayWithDeps_ObservabilityServerStartError tests observability server start error.
@@ -1061,12 +982,8 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 
 	cmd := newMockCmd()
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
-	if err == nil {
-		t.Fatal("expected observability server start error, got nil")
-	}
-	if !strings.Contains(err.Error(), "observability server") {
-		t.Errorf("expected error to mention observability server, got: %v", err)
-	}
+	require.Error(t, err, "expected observability server start error")
+	assert.Contains(t, err.Error(), "address already in use")
 }
 
 // TestRunCoreWithDeps_WithObservability tests the happy path with observability server enabled.
@@ -1130,9 +1047,7 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("runCoreWithDeps() returned unexpected error: %v", err)
-		}
+		require.NoError(t, err, "runCoreWithDeps() returned unexpected error")
 	case <-time.After(5 * time.Second):
 		t.Fatal("runCoreWithDeps() did not return within timeout")
 	}
@@ -1203,9 +1118,7 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("runGatewayWithDeps() returned unexpected error: %v", err)
-		}
+		require.NoError(t, err, "runGatewayWithDeps() returned unexpected error")
 	case <-time.After(5 * time.Second):
 		t.Fatal("runGatewayWithDeps() did not return within timeout")
 	}

@@ -7,8 +7,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
@@ -20,17 +22,15 @@ import (
 // writeMainLua creates a main.lua plugin file in the given directory.
 func writeMainLua(t *testing.T, dir, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "main.lua"), []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	err := os.WriteFile(filepath.Join(dir, "main.lua"), []byte(content), 0o600)
+	require.NoError(t, err, "failed to write main.lua")
 }
 
 // closeHost closes the host and fails the test if an error occurs.
 func closeHost(t *testing.T, host *pluginlua.Host) {
 	t.Helper()
-	if err := host.Close(context.Background()); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
+	err := host.Close(context.Background())
+	require.NoError(t, err, "Close() failed")
 }
 
 func TestLuaHost_Load(t *testing.T) {
@@ -56,14 +56,11 @@ end
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	require.NoError(t, err, "Load() failed")
 
 	plugins := host.Plugins()
-	if len(plugins) != 1 || plugins[0] != "test-plugin" {
-		t.Errorf("Plugins() = %v, want [test-plugin]", plugins)
-	}
+	require.Len(t, plugins, 1, "expected 1 plugin")
+	assert.Equal(t, "test-plugin", plugins[0])
 }
 
 func TestLuaHost_DeliverEvent_ReturnsEmitEvents(t *testing.T) {
@@ -95,9 +92,8 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{
 		ID:        "01ABC",
@@ -110,24 +106,13 @@ end
 	}
 
 	emits, err := host.DeliverEvent(context.Background(), "echo", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent() error = %v", err)
-	}
-
-	if len(emits) != 1 {
-		t.Fatalf("len(emits) = %d, want 1", len(emits))
-	}
+	require.NoError(t, err, "DeliverEvent() failed")
+	require.Len(t, emits, 1, "expected 1 emit event")
 
 	// Verify all fields of the emitted event
-	if emits[0].Stream != "location:123" {
-		t.Errorf("emit.Stream = %q, want %q", emits[0].Stream, "location:123")
-	}
-	if emits[0].Type != "say" {
-		t.Errorf("emit.Type = %q, want %q", emits[0].Type, "say")
-	}
-	if !strings.Contains(emits[0].Payload, "Echo:") {
-		t.Errorf("emit.Payload = %q, want to contain %q", emits[0].Payload, "Echo:")
-	}
+	assert.Equal(t, "location:123", emits[0].Stream)
+	assert.Equal(t, pluginpkg.EventType("say"), emits[0].Type)
+	assert.Contains(t, emits[0].Payload, "Echo:")
 }
 
 func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
@@ -146,19 +131,13 @@ func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "no-handler", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent() error = %v", err)
-	}
-
-	if len(emits) != 0 {
-		t.Errorf("expected no emits for plugin without handler")
-	}
+	require.NoError(t, err, "DeliverEvent() failed")
+	assert.Empty(t, emits, "expected no emits for plugin without handler")
 }
 
 func TestLuaHost_Unload(t *testing.T) {
@@ -176,21 +155,13 @@ func TestLuaHost_Unload(t *testing.T) {
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+	require.Len(t, host.Plugins(), 1, "expected 1 plugin after load")
 
-	if len(host.Plugins()) != 1 {
-		t.Fatalf("expected 1 plugin after load")
-	}
-
-	if err := host.Unload(context.Background(), "test-plugin"); err != nil {
-		t.Fatalf("Unload() error = %v", err)
-	}
-
-	if len(host.Plugins()) != 0 {
-		t.Errorf("expected 0 plugins after unload, got %d", len(host.Plugins()))
-	}
+	err = host.Unload(context.Background(), "test-plugin")
+	require.NoError(t, err, "Unload() failed")
+	assert.Empty(t, host.Plugins(), "expected 0 plugins after unload")
 }
 
 func TestLuaHost_Unload_NotFound(t *testing.T) {
@@ -198,9 +169,7 @@ func TestLuaHost_Unload_NotFound(t *testing.T) {
 	defer closeHost(t, host)
 
 	err := host.Unload(context.Background(), "nonexistent")
-	if err == nil {
-		t.Error("expected error when unloading nonexistent plugin")
-	}
+	assert.Error(t, err, "expected error when unloading nonexistent plugin")
 }
 
 func TestLuaHost_DeliverEvent_NotLoaded(t *testing.T) {
@@ -209,9 +178,7 @@ func TestLuaHost_DeliverEvent_NotLoaded(t *testing.T) {
 
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
 	_, err := host.DeliverEvent(context.Background(), "nonexistent", event)
-	if err == nil {
-		t.Error("expected error when delivering to nonexistent plugin")
-	}
+	assert.Error(t, err, "expected error when delivering to nonexistent plugin")
 }
 
 func TestLuaHost_Load_SyntaxError(t *testing.T) {
@@ -231,9 +198,7 @@ func TestLuaHost_Load_SyntaxError(t *testing.T) {
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
-	if err == nil {
-		t.Error("expected error when loading plugin with syntax error")
-	}
+	assert.Error(t, err, "expected error when loading plugin with syntax error")
 }
 
 func TestLuaHost_Load_MissingFile(t *testing.T) {
@@ -250,9 +215,7 @@ func TestLuaHost_Load_MissingFile(t *testing.T) {
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
-	if err == nil {
-		t.Error("expected error when loading plugin with missing file")
-	}
+	assert.Error(t, err, "expected error when loading plugin with missing file")
 }
 
 func TestLuaHost_Close(t *testing.T) {
@@ -269,19 +232,15 @@ func TestLuaHost_Close(t *testing.T) {
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
-	if err := host.Close(context.Background()); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
+	err = host.Close(context.Background())
+	require.NoError(t, err, "Close() failed")
 
 	// Should error when loading after close
-	err := host.Load(context.Background(), manifest, dir)
-	if err == nil {
-		t.Error("expected error when loading after close")
-	}
+	err = host.Load(context.Background(), manifest, dir)
+	assert.Error(t, err, "expected error when loading after close")
 }
 
 func TestLuaHost_DeliverEvent_RuntimeError(t *testing.T) {
@@ -304,22 +263,14 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
-	_, err := host.DeliverEvent(context.Background(), "error-plugin", event)
-	if err == nil {
-		t.Error("expected error when plugin throws runtime error")
-	}
-	// Error should include plugin name for debugging
-	if !strings.Contains(err.Error(), "error-plugin") {
-		t.Errorf("error should contain plugin name 'error-plugin', got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "on_event failed") {
-		t.Errorf("error should contain 'on_event failed', got: %v", err)
-	}
+	_, err = host.DeliverEvent(context.Background(), "error-plugin", event)
+	require.Error(t, err, "expected error when plugin throws runtime error")
+	// oops.Error() returns the underlying Lua error message
+	assert.Contains(t, err.Error(), "intentional failure", "error should contain Lua error message")
 }
 
 func TestLuaHost_DeliverEvent_ActorKinds(t *testing.T) {
@@ -348,9 +299,8 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	tests := []struct {
 		kind     pluginpkg.ActorKind
@@ -371,17 +321,9 @@ end
 			}
 
 			emits, err := host.DeliverEvent(context.Background(), "actor-test", event)
-			if err != nil {
-				t.Fatalf("DeliverEvent() error = %v", err)
-			}
-
-			if len(emits) != 1 {
-				t.Fatalf("len(emits) = %d, want 1", len(emits))
-			}
-
-			if emits[0].Payload != tt.expected {
-				t.Errorf("actor_kind = %q, want %q", emits[0].Payload, tt.expected)
-			}
+			require.NoError(t, err, "DeliverEvent() failed")
+			require.Len(t, emits, 1, "expected 1 emit event")
+			assert.Equal(t, tt.expected, emits[0].Payload, "actor_kind mismatch")
 		})
 	}
 }
@@ -406,20 +348,15 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent() error = %v", err)
-	}
+	require.NoError(t, err, "DeliverEvent() failed")
 
 	// Non-table returns should be gracefully ignored (empty emits)
-	if len(emits) != 0 {
-		t.Errorf("expected empty emits for non-table return, got %d", len(emits))
-	}
+	assert.Empty(t, emits, "expected empty emits for non-table return")
 }
 
 func TestLuaHost_DeliverEvent_MalformedEmitEvents(t *testing.T) {
@@ -455,27 +392,17 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "mixed-return", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent() error = %v", err)
-	}
+	require.NoError(t, err, "DeliverEvent() failed")
 
 	// Should only get the 2 valid emit events
-	if len(emits) != 2 {
-		t.Fatalf("len(emits) = %d, want 2 (valid events only)", len(emits))
-	}
-
-	if emits[0].Stream != "valid:1" {
-		t.Errorf("emits[0].Stream = %q, want %q", emits[0].Stream, "valid:1")
-	}
-	if emits[1].Stream != "valid:2" {
-		t.Errorf("emits[1].Stream = %q, want %q", emits[1].Stream, "valid:2")
-	}
+	require.Len(t, emits, 2, "expected 2 valid events only")
+	assert.Equal(t, "valid:1", emits[0].Stream)
+	assert.Equal(t, "valid:2", emits[1].Stream)
 }
 
 func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
@@ -492,20 +419,16 @@ func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
-	if err := host.Close(context.Background()); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
+	err = host.Close(context.Background())
+	require.NoError(t, err, "Close() failed")
 
 	// DeliverEvent should error after close
 	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
-	_, err := host.DeliverEvent(context.Background(), "test-plugin", event)
-	if err == nil {
-		t.Error("expected error when delivering after close")
-	}
+	_, err = host.DeliverEvent(context.Background(), "test-plugin", event)
+	assert.Error(t, err, "expected error when delivering after close")
 }
 
 func TestLuaHost_DeliverEvent_AllFields(t *testing.T) {
@@ -535,9 +458,8 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{
 		ID:        "01ABC",
@@ -550,18 +472,11 @@ end
 	}
 
 	emits, err := host.DeliverEvent(context.Background(), "field-test", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent() error = %v", err)
-	}
-
-	if len(emits) != 1 {
-		t.Fatalf("len(emits) = %d, want 1", len(emits))
-	}
+	require.NoError(t, err, "DeliverEvent() failed")
+	require.Len(t, emits, 1, "expected 1 emit event")
 
 	expected := "01ABC|location:123|say|1705591234000|character|char_1"
-	if emits[0].Payload != expected {
-		t.Errorf("payload = %q, want %q", emits[0].Payload, expected)
-	}
+	assert.Equal(t, expected, emits[0].Payload)
 }
 
 func TestLuaHost_WithHostFunctions(t *testing.T) {
@@ -593,9 +508,8 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{
 		ID:     "01ABC",
@@ -604,17 +518,12 @@ end
 	}
 
 	emits, err := host.DeliverEvent(context.Background(), "test", event)
-	if err != nil {
-		t.Fatalf("DeliverEvent() error = %v", err)
-	}
-
-	if len(emits) != 1 {
-		t.Errorf("len(emits) = %d, want 1", len(emits))
-	}
+	require.NoError(t, err, "DeliverEvent() failed")
+	assert.Len(t, emits, 1, "expected 1 emit event")
 
 	// Verify the payload contains a request_id (ULID format: 26 chars)
-	if len(emits) > 0 && !strings.Contains(emits[0].Payload, "request_id") {
-		t.Errorf("payload should contain request_id, got %q", emits[0].Payload)
+	if len(emits) > 0 {
+		assert.Contains(t, emits[0].Payload, "request_id", "payload should contain request_id")
 	}
 }
 
@@ -651,9 +560,8 @@ end
 		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
 	}
 
-	if err := host.Load(context.Background(), manifest, dir); err != nil {
-		t.Fatal(err)
-	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
 
 	event := pluginpkg.Event{
 		ID:     "01ABC",
@@ -662,26 +570,19 @@ end
 	}
 
 	// Should fail because plugin lacks kv.read capability
-	_, err := host.DeliverEvent(context.Background(), "no-kv-cap", event)
-	if err == nil {
-		t.Fatal("expected error due to capability denial")
-	}
-	if !strings.Contains(err.Error(), "capability denied") {
-		t.Errorf("expected capability denied error, got: %v", err)
-	}
+	_, err = host.DeliverEvent(context.Background(), "no-kv-cap", event)
+	require.Error(t, err, "expected error due to capability denial")
+	assert.Contains(t, err.Error(), "capability denied", "error should mention capability denial")
 }
 
 func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
 	defer func() {
 		r := recover()
-		if r == nil {
-			t.Error("expected panic when hostFuncs is nil")
-		}
+		require.NotNil(t, r, "expected panic when hostFuncs is nil")
 		// Verify panic message is descriptive
 		msg, ok := r.(string)
-		if !ok || !strings.Contains(msg, "hostFuncs cannot be nil") {
-			t.Errorf("panic message should mention 'hostFuncs cannot be nil', got: %v", r)
-		}
+		require.True(t, ok, "panic should be a string")
+		assert.Contains(t, msg, "hostFuncs cannot be nil", "panic message should mention 'hostFuncs cannot be nil'")
 	}()
 
 	_ = pluginlua.NewHostWithFunctions(nil)

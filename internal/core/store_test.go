@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryEventStore_Append(t *testing.T) {
@@ -25,9 +27,7 @@ func TestMemoryEventStore_Append(t *testing.T) {
 	}
 
 	err := store.Append(ctx, event)
-	if err != nil {
-		t.Fatalf("Append failed: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestMemoryEventStore_Replay(t *testing.T) {
@@ -46,29 +46,20 @@ func TestMemoryEventStore_Replay(t *testing.T) {
 			Payload:   []byte(`{}`),
 		}
 		ids = append(ids, event.ID)
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append failed: %v", err)
-		}
+		err := store.Append(ctx, event)
+		require.NoError(t, err)
 		time.Sleep(time.Millisecond) // Ensure different timestamps
 	}
 
 	// Replay from beginning, limit 3
 	events, err := store.Replay(ctx, "location:test", ulid.ULID{}, 3)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if len(events) != 3 {
-		t.Errorf("Expected 3 events, got %d", len(events))
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 3)
 
 	// Replay after third event
 	events, err = store.Replay(ctx, "location:test", ids[2], 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if len(events) != 2 {
-		t.Errorf("Expected 2 events after id[2], got %d", len(events))
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 2, "Expected 2 events after id[2]")
 }
 
 func TestMemoryEventStore_LastEventID(t *testing.T) {
@@ -77,9 +68,7 @@ func TestMemoryEventStore_LastEventID(t *testing.T) {
 
 	// Empty stream
 	_, err := store.LastEventID(ctx, "empty")
-	if err == nil {
-		t.Error("Expected error for empty stream")
-	}
+	assert.Error(t, err, "Expected error for empty stream")
 
 	// Add event
 	event := Event{
@@ -91,17 +80,11 @@ func TestMemoryEventStore_LastEventID(t *testing.T) {
 		Payload:   []byte(`{}`),
 	}
 	err = store.Append(ctx, event)
-	if err != nil {
-		t.Fatalf("Append failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	lastID, err := store.LastEventID(ctx, "location:test")
-	if err != nil {
-		t.Fatalf("LastEventID failed: %v", err)
-	}
-	if lastID != event.ID {
-		t.Errorf("Expected %v, got %v", event.ID, lastID)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, event.ID, lastID)
 }
 
 func TestMemoryEventStore_Replay_EmptyStream(t *testing.T) {
@@ -109,12 +92,8 @@ func TestMemoryEventStore_Replay_EmptyStream(t *testing.T) {
 	ctx := context.Background()
 
 	events, err := store.Replay(ctx, "nonexistent", ulid.ULID{}, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if events != nil {
-		t.Errorf("Expected nil for empty stream, got %v", events)
-	}
+	require.NoError(t, err)
+	assert.Nil(t, events, "Expected nil for empty stream")
 }
 
 func TestMemoryEventStore_Replay_AfterIDNotFound(t *testing.T) {
@@ -131,9 +110,8 @@ func TestMemoryEventStore_Replay_AfterIDNotFound(t *testing.T) {
 			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
 			Payload:   []byte(`{}`),
 		}
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append failed: %v", err)
-		}
+		err := store.Append(ctx, event)
+		require.NoError(t, err)
 		time.Sleep(time.Millisecond)
 	}
 
@@ -141,13 +119,9 @@ func TestMemoryEventStore_Replay_AfterIDNotFound(t *testing.T) {
 	// Should return all events from start (afterID not found = startIdx stays 0)
 	nonExistentID := NewULID()
 	events, err := store.Replay(ctx, "location:test", nonExistentID, 10)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
+	require.NoError(t, err)
 	// When afterID is not found, startIdx stays at 0, so all events are returned
-	if len(events) != 3 {
-		t.Errorf("Expected 3 events when afterID not found, got %d", len(events))
-	}
+	assert.Len(t, events, 3, "Expected 3 events when afterID not found")
 }
 
 func TestMemoryEventStore_Replay_LimitExceedsEvents(t *testing.T) {
@@ -164,17 +138,12 @@ func TestMemoryEventStore_Replay_LimitExceedsEvents(t *testing.T) {
 			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
 			Payload:   []byte(`{}`),
 		}
-		if err := store.Append(ctx, event); err != nil {
-			t.Fatalf("Append failed: %v", err)
-		}
+		err := store.Append(ctx, event)
+		require.NoError(t, err)
 	}
 
 	// Replay with limit higher than available events
 	events, err := store.Replay(ctx, "location:test", ulid.ULID{}, 100)
-	if err != nil {
-		t.Fatalf("Replay failed: %v", err)
-	}
-	if len(events) != 2 {
-		t.Errorf("Expected 2 events, got %d", len(events))
-	}
+	require.NoError(t, err)
+	assert.Len(t, events, 2)
 }

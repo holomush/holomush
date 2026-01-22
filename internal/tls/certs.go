@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/samber/oops"
 )
 
 // CA holds a certificate authority certificate and private key.
@@ -48,18 +50,18 @@ type ClientCert struct {
 func GenerateCA(gameID string) (*CA, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate CA key: %w", err)
+		return nil, oops.With("operation", "generate CA key").Wrap(err)
 	}
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate serial: %w", err)
+		return nil, oops.With("operation", "generate serial").Wrap(err)
 	}
 
 	// Create URI SAN for game_id
 	gameURI, err := url.Parse("holomush://game/" + gameID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create game URI: %w", err)
+		return nil, oops.With("operation", "create game URI", "game_id", gameID).Wrap(err)
 	}
 
 	template := &x509.Certificate{
@@ -78,12 +80,12 @@ func GenerateCA(gameID string) (*CA, error) {
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CA certificate: %w", err)
+		return nil, oops.With("operation", "create CA certificate").Wrap(err)
 	}
 
 	cert, err := x509.ParseCertificate(certBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse CA certificate: %w", err)
+		return nil, oops.With("operation", "parse CA certificate").Wrap(err)
 	}
 
 	return &CA{Certificate: cert, PrivateKey: key}, nil
@@ -95,12 +97,12 @@ func GenerateCA(gameID string) (*CA, error) {
 func GenerateServerCert(ca *CA, gameID, serverName string) (*ServerCert, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate server key: %w", err)
+		return nil, oops.With("operation", "generate server key", "server_name", serverName).Wrap(err)
 	}
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate serial: %w", err)
+		return nil, oops.With("operation", "generate serial", "server_name", serverName).Wrap(err)
 	}
 
 	template := &x509.Certificate{
@@ -119,12 +121,12 @@ func GenerateServerCert(ca *CA, gameID, serverName string) (*ServerCert, error) 
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &key.PublicKey, ca.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server certificate: %w", err)
+		return nil, oops.With("operation", "create server certificate", "server_name", serverName).Wrap(err)
 	}
 
 	cert, err := x509.ParseCertificate(certBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse server certificate: %w", err)
+		return nil, oops.With("operation", "parse server certificate", "server_name", serverName).Wrap(err)
 	}
 
 	return &ServerCert{Certificate: cert, PrivateKey: key, Name: serverName}, nil
@@ -135,15 +137,15 @@ func GenerateServerCert(ca *CA, gameID, serverName string) (*ServerCert, error) 
 // Server certificate is saved as {name}.crt and {name}.key.
 func SaveCertificates(certsDir string, ca *CA, serverCert *ServerCert) error {
 	if err := os.MkdirAll(certsDir, 0o700); err != nil {
-		return fmt.Errorf("failed to create certs directory: %w", err)
+		return oops.With("operation", "create certs directory", "path", certsDir).Wrap(err)
 	}
 
 	// Save CA
 	if err := saveCert(filepath.Join(certsDir, "root-ca.crt"), ca.Certificate); err != nil {
-		return fmt.Errorf("failed to save CA certificate: %w", err)
+		return oops.With("operation", "save CA certificate").Wrap(err)
 	}
 	if err := saveKey(filepath.Join(certsDir, "root-ca.key"), ca.PrivateKey); err != nil {
-		return fmt.Errorf("failed to save CA key: %w", err)
+		return oops.With("operation", "save CA key").Wrap(err)
 	}
 
 	// Save server certificate if provided
@@ -151,10 +153,10 @@ func SaveCertificates(certsDir string, ca *CA, serverCert *ServerCert) error {
 		certFile := serverCert.Name + ".crt"
 		keyFile := serverCert.Name + ".key"
 		if err := saveCert(filepath.Join(certsDir, certFile), serverCert.Certificate); err != nil {
-			return fmt.Errorf("failed to save server certificate: %w", err)
+			return oops.With("operation", "save server certificate", "server_name", serverCert.Name).Wrap(err)
 		}
 		if err := saveKey(filepath.Join(certsDir, keyFile), serverCert.PrivateKey); err != nil {
-			return fmt.Errorf("failed to save server key: %w", err)
+			return oops.With("operation", "save server key", "server_name", serverCert.Name).Wrap(err)
 		}
 	}
 
@@ -170,33 +172,33 @@ func LoadCA(certsDir string) (*CA, error) {
 	// Read certificate
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		return nil, oops.With("operation", "read CA certificate", "path", certPath).Wrap(err)
 	}
 
 	// Read key
 	keyPEM, err := os.ReadFile(keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA key: %w", err)
+		return nil, oops.With("operation", "read CA key", "path", keyPath).Wrap(err)
 	}
 
 	// Parse certificate
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
-		return nil, fmt.Errorf("failed to decode CA certificate PEM")
+		return nil, oops.With("path", certPath).Errorf("failed to decode CA certificate PEM")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse CA certificate: %w", err)
+		return nil, oops.With("operation", "parse CA certificate", "path", certPath).Wrap(err)
 	}
 
 	// Parse key
 	block, _ = pem.Decode(keyPEM)
 	if block == nil {
-		return nil, fmt.Errorf("failed to decode CA key PEM")
+		return nil, oops.With("path", keyPath).Errorf("failed to decode CA key PEM")
 	}
 	key, err := x509.ParseECPrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse CA key: %w", err)
+		return nil, oops.With("operation", "parse CA key", "path", keyPath).Wrap(err)
 	}
 
 	return &CA{Certificate: cert, PrivateKey: key}, nil
@@ -206,16 +208,17 @@ func LoadCA(certsDir string) (*CA, error) {
 func saveCert(path string, cert *x509.Certificate) error {
 	f, err := os.OpenFile(filepath.Clean(path), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("failed to create cert file: %w", err)
+		return oops.With("operation", "create cert file", "path", path).Wrap(err)
 	}
 
 	if err := pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("failed to encode certificate: %w", err)
+		//nolint:errcheck // f.Close() error ignored; we're already returning pem.Encode error
+		f.Close()
+		return oops.With("operation", "encode certificate", "path", path).Wrap(err)
 	}
 
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close cert file: %w", err)
+		return oops.With("operation", "close cert file", "path", path).Wrap(err)
 	}
 
 	return nil
@@ -225,21 +228,22 @@ func saveCert(path string, cert *x509.Certificate) error {
 func saveKey(path string, key *ecdsa.PrivateKey) error {
 	keyBytes, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		return fmt.Errorf("failed to marshal key: %w", err)
+		return oops.With("operation", "marshal key", "path", path).Wrap(err)
 	}
 
 	f, err := os.OpenFile(filepath.Clean(path), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("failed to create key file: %w", err)
+		return oops.With("operation", "create key file", "path", path).Wrap(err)
 	}
 
 	if err := pem.Encode(f, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("failed to encode key: %w", err)
+		//nolint:errcheck // f.Close() error ignored; we're already returning pem.Encode error
+		f.Close()
+		return oops.With("operation", "encode key", "path", path).Wrap(err)
 	}
 
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close key file: %w", err)
+		return oops.With("operation", "close key file", "path", path).Wrap(err)
 	}
 
 	return nil
@@ -250,12 +254,12 @@ func saveKey(path string, key *ecdsa.PrivateKey) error {
 func GenerateClientCert(ca *CA, clientName string) (*ClientCert, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate client key: %w", err)
+		return nil, oops.With("operation", "generate client key", "client_name", clientName).Wrap(err)
 	}
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate serial: %w", err)
+		return nil, oops.With("operation", "generate serial", "client_name", clientName).Wrap(err)
 	}
 
 	template := &x509.Certificate{
@@ -272,12 +276,12 @@ func GenerateClientCert(ca *CA, clientName string) (*ClientCert, error) {
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &key.PublicKey, ca.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client certificate: %w", err)
+		return nil, oops.With("operation", "create client certificate", "client_name", clientName).Wrap(err)
 	}
 
 	cert, err := x509.ParseCertificate(certBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse client certificate: %w", err)
+		return nil, oops.With("operation", "parse client certificate", "client_name", clientName).Wrap(err)
 	}
 
 	return &ClientCert{Certificate: cert, PrivateKey: key, Name: clientName}, nil
@@ -287,16 +291,16 @@ func GenerateClientCert(ca *CA, clientName string) (*ClientCert, error) {
 // Client certificate is saved as {name}.crt and {name}.key.
 func SaveClientCert(certsDir string, clientCert *ClientCert) error {
 	if err := os.MkdirAll(certsDir, 0o700); err != nil {
-		return fmt.Errorf("failed to create certs directory: %w", err)
+		return oops.With("operation", "create certs directory", "path", certsDir).Wrap(err)
 	}
 
 	certFile := clientCert.Name + ".crt"
 	keyFile := clientCert.Name + ".key"
 	if err := saveCert(filepath.Join(certsDir, certFile), clientCert.Certificate); err != nil {
-		return fmt.Errorf("failed to save client certificate: %w", err)
+		return oops.With("operation", "save client certificate", "client_name", clientCert.Name).Wrap(err)
 	}
 	if err := saveKey(filepath.Join(certsDir, keyFile), clientCert.PrivateKey); err != nil {
-		return fmt.Errorf("failed to save client key: %w", err)
+		return oops.With("operation", "save client key", "client_name", clientCert.Name).Wrap(err)
 	}
 
 	return nil
@@ -304,23 +308,23 @@ func SaveClientCert(certsDir string, clientCert *ClientCert) error {
 
 // LoadServerTLS loads TLS config for the Core gRPC server with mTLS.
 // Requires server cert and CA for client verification.
-func LoadServerTLS(certsDir string, serverName string) (*cryptotls.Config, error) {
+func LoadServerTLS(certsDir, serverName string) (*cryptotls.Config, error) {
 	cert, err := cryptotls.LoadX509KeyPair(
 		filepath.Join(certsDir, serverName+".crt"),
 		filepath.Join(certsDir, serverName+".key"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load server certificate: %w", err)
+		return nil, oops.With("operation", "load server certificate", "server_name", serverName).Wrap(err)
 	}
 
 	caCert, err := os.ReadFile(filepath.Clean(filepath.Join(certsDir, "root-ca.crt")))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		return nil, oops.With("operation", "read CA certificate", "path", certsDir).Wrap(err)
 	}
 
 	caPool := x509.NewCertPool()
 	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to add CA certificate to pool")
+		return nil, oops.With("path", certsDir).Errorf("failed to add CA certificate to pool")
 	}
 
 	return &cryptotls.Config{
@@ -334,23 +338,23 @@ func LoadServerTLS(certsDir string, serverName string) (*cryptotls.Config, error
 // LoadClientTLS loads TLS config for the Gateway gRPC client with mTLS.
 // Requires client cert and CA for server verification.
 // The expectedGameID is used to set ServerName for cert validation against the server's SAN.
-func LoadClientTLS(certsDir string, clientName string, expectedGameID string) (*cryptotls.Config, error) {
+func LoadClientTLS(certsDir, clientName, expectedGameID string) (*cryptotls.Config, error) {
 	cert, err := cryptotls.LoadX509KeyPair(
 		filepath.Join(certsDir, clientName+".crt"),
 		filepath.Join(certsDir, clientName+".key"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+		return nil, oops.With("operation", "load client certificate", "client_name", clientName).Wrap(err)
 	}
 
 	caCert, err := os.ReadFile(filepath.Clean(filepath.Join(certsDir, "root-ca.crt")))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		return nil, oops.With("operation", "read CA certificate", "path", certsDir).Wrap(err)
 	}
 
 	caPool := x509.NewCertPool()
 	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("failed to add CA certificate to pool")
+		return nil, oops.With("path", certsDir).Errorf("failed to add CA certificate to pool")
 	}
 
 	return &cryptotls.Config{
@@ -383,16 +387,15 @@ func CheckCertificateExpiration(cert *x509.Certificate, warningThreshold time.Du
 	// Check if expired
 	if now.After(cert.NotAfter) {
 		status.IsExpired = true
-		status.Error = fmt.Errorf("certificate expired on %s (%.0f hours ago)",
-			cert.NotAfter.Format(time.RFC3339),
-			now.Sub(cert.NotAfter).Hours())
+		status.Error = oops.With("expired_on", cert.NotAfter.Format(time.RFC3339), "hours_ago", now.Sub(cert.NotAfter).Hours()).
+			Errorf("certificate expired")
 		return status
 	}
 
 	// Check if not yet valid
 	if now.Before(cert.NotBefore) {
-		status.Error = fmt.Errorf("certificate not yet valid, becomes valid on %s",
-			cert.NotBefore.Format(time.RFC3339))
+		status.Error = oops.With("valid_from", cert.NotBefore.Format(time.RFC3339)).
+			Errorf("certificate not yet valid")
 		return status
 	}
 
@@ -407,17 +410,17 @@ func CheckCertificateExpiration(cert *x509.Certificate, warningThreshold time.Du
 }
 
 // ValidateCertificateChain validates that a certificate was signed by the given CA.
-func ValidateCertificateChain(cert *x509.Certificate, ca *x509.Certificate) error {
+func ValidateCertificateChain(cert, ca *x509.Certificate) error {
 	if cert == nil {
-		return fmt.Errorf("certificate is nil")
+		return oops.Errorf("certificate is nil")
 	}
 	if ca == nil {
-		return fmt.Errorf("CA certificate is nil")
+		return oops.Errorf("CA certificate is nil")
 	}
 
 	// Check if the cert was signed by the CA
 	if err := cert.CheckSignatureFrom(ca); err != nil {
-		return fmt.Errorf("certificate signature verification failed: %w", err)
+		return oops.With("operation", "verify certificate signature").Wrap(err)
 	}
 
 	return nil
@@ -426,10 +429,10 @@ func ValidateCertificateChain(cert *x509.Certificate, ca *x509.Certificate) erro
 // ValidateHostname validates that the certificate is valid for the given hostname.
 func ValidateHostname(cert *x509.Certificate, hostname string) error {
 	if cert == nil {
-		return fmt.Errorf("certificate is nil")
+		return oops.Errorf("certificate is nil")
 	}
 	if hostname == "" {
-		return fmt.Errorf("hostname is empty")
+		return oops.Errorf("hostname is empty")
 	}
 
 	// Check DNSNames
@@ -453,14 +456,14 @@ func ValidateHostname(cert *x509.Certificate, hostname string) error {
 		return nil
 	}
 
-	return fmt.Errorf("hostname %q does not match certificate: DNSNames=%v, CN=%s",
-		hostname, cert.DNSNames, cert.Subject.CommonName)
+	return oops.With("hostname", hostname, "dns_names", cert.DNSNames, "common_name", cert.Subject.CommonName).
+		Errorf("hostname does not match certificate")
 }
 
 // ValidateExtKeyUsage validates that the certificate has the required extended key usage.
 func ValidateExtKeyUsage(cert *x509.Certificate, requiredUsage x509.ExtKeyUsage) error {
 	if cert == nil {
-		return fmt.Errorf("certificate is nil")
+		return oops.Errorf("certificate is nil")
 	}
 
 	for _, usage := range cert.ExtKeyUsage {
@@ -477,5 +480,5 @@ func ValidateExtKeyUsage(cert *x509.Certificate, requiredUsage x509.ExtKeyUsage)
 		usageName = "ClientAuth"
 	}
 
-	return fmt.Errorf("certificate does not have required ExtKeyUsage %s", usageName)
+	return oops.With("required_usage", usageName).Errorf("certificate missing required ExtKeyUsage")
 }

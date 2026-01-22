@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	cryptotls "crypto/tls"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -41,13 +41,13 @@ type coreConfig struct {
 // Validate checks that the configuration is valid.
 func (cfg *coreConfig) Validate() error {
 	if cfg.grpcAddr == "" {
-		return fmt.Errorf("grpc-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("grpc-addr is required")
 	}
 	if cfg.controlAddr == "" {
-		return fmt.Errorf("control-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("control-addr is required")
 	}
 	if cfg.logFormat != "json" && cfg.logFormat != "text" {
-		return fmt.Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
+		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
 	}
 	return nil
 }
@@ -123,11 +123,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
 	if err := setupLogging(cfg.logFormat); err != nil {
-		return fmt.Errorf("failed to set up logging: %w", err)
+		return oops.Code("LOGGING_SETUP_FAILED").With("operation", "set up logging").Wrap(err)
 	}
 
 	slog.Info("starting core process",
@@ -137,12 +137,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 	databaseURL := deps.DatabaseURLGetter()
 	if databaseURL == "" {
-		return fmt.Errorf("DATABASE_URL environment variable is required")
+		return oops.Code("CONFIG_INVALID").Errorf("DATABASE_URL environment variable is required")
 	}
 
 	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return oops.Code("DB_CONNECT_FAILED").With("operation", "connect to database").Wrap(err)
 	}
 	defer eventStore.Close()
 
@@ -153,7 +153,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	if gameID == "" {
 		gameID, err = eventStore.InitGameID(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to initialize game ID: %w", err)
+			return oops.Code("GAME_ID_INIT_FAILED").With("operation", "initialize game ID").Wrap(err)
 		}
 	}
 
@@ -161,13 +161,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
-		return fmt.Errorf("failed to get certs directory: %w", err)
+		return oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err)
 	}
 
 	// Generate or load TLS certificates
 	tlsConfig, err := deps.TLSCertEnsurer(certsDir, gameID)
 	if err != nil {
-		return fmt.Errorf("failed to set up TLS: %w", err)
+		return oops.Code("TLS_SETUP_FAILED").With("operation", "set up TLS").With("certs_dir", certsDir).Wrap(err)
 	}
 
 	slog.Info("TLS certificates ready", "certs_dir", certsDir)
@@ -195,7 +195,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		// Start gRPC listener
 		listener, err = net.Listen("tcp", cfg.grpcAddr)
 		if err != nil {
-			return fmt.Errorf("failed to listen on %s: %w", cfg.grpcAddr, err)
+			return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.grpcAddr).Wrap(err)
 		}
 		defer func() {
 			if closeErr := listener.Close(); closeErr != nil {
@@ -213,16 +213,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	// Start control gRPC server (always enabled)
 	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "core")
 	if tlsErr != nil {
-		return fmt.Errorf("failed to load control TLS config: %w", tlsErr)
+		return oops.Code("CONTROL_TLS_FAILED").With("operation", "load control TLS config").With("component", "core").Wrap(tlsErr)
 	}
 
 	controlGRPCServer, err := deps.ControlServerFactory("core", func() { cancel() })
 	if err != nil {
-		return fmt.Errorf("failed to create control gRPC server: %w", err)
+		return oops.Code("CONTROL_SERVER_CREATE_FAILED").With("operation", "create control gRPC server").Wrap(err)
 	}
 	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
 	if err != nil {
-		return fmt.Errorf("failed to start control gRPC server: %w", err)
+		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.controlAddr).Wrap(err)
 	}
 	// Monitor control server errors in background - cancel context on error
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
@@ -242,7 +242,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
 				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
 			}
-			return fmt.Errorf("failed to start observability server: %w", err)
+			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.metricsAddr).Wrap(err)
 		}
 		// Monitor observability server errors - cancel context on error
 		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
@@ -275,7 +275,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	case sig := <-sigChan:
 		slog.Info("received shutdown signal", "signal", sig)
 	case err := <-errChan:
-		return fmt.Errorf("gRPC server error: %w", err)
+		return oops.Code("GRPC_SERVER_ERROR").With("operation", "serve gRPC").Wrap(err)
 	case <-ctx.Done():
 		slog.Info("context cancelled, shutting down")
 	}
@@ -321,7 +321,7 @@ func setupLogging(format string) error {
 			Level: slog.LevelInfo,
 		})
 	default:
-		return fmt.Errorf("invalid log format %q: must be 'json' or 'text'", format)
+		return oops.Code("CONFIG_INVALID").Errorf("invalid log format %q: must be 'json' or 'text'", format)
 	}
 
 	slog.SetDefault(slog.New(handler))
@@ -345,7 +345,7 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	if certExists || keyExists || caExists {
 		existingConfig, err := tls.LoadServerTLS(certsDir, "core")
 		if err != nil {
-			return nil, fmt.Errorf("failed to load existing TLS certificates: %w", err)
+			return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load existing TLS certificates").With("certs_dir", certsDir).Wrap(err)
 		}
 		return existingConfig, nil
 	}
@@ -355,34 +355,36 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 
 	// Ensure directory exists
 	if err := xdg.EnsureDir(certsDir); err != nil {
-		return nil, fmt.Errorf("failed to create certs directory: %w", err)
+		return nil, oops.Code("CERTS_DIR_CREATE_FAILED").With("operation", "create certs directory").With("certs_dir", certsDir).Wrap(err)
 	}
 
 	// Generate CA
 	ca, err := tls.GenerateCA(gameID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate CA: %w", err)
+		return nil, oops.Code("CA_GENERATE_FAILED").With("operation", "generate CA").With("game_id", gameID).Wrap(err)
 	}
 
 	// Generate server certificate
 	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate server certificate: %w", err)
+		return nil, oops.Code("SERVER_CERT_GENERATE_FAILED").With("operation", "generate server certificate").With("component", "core").Wrap(err)
 	}
 
 	// Save certificates
-	if err := tls.SaveCertificates(certsDir, ca, serverCert); err != nil {
-		return nil, fmt.Errorf("failed to save certificates: %w", err)
+	err = tls.SaveCertificates(certsDir, ca, serverCert)
+	if err != nil {
+		return nil, oops.Code("CERTS_SAVE_FAILED").With("operation", "save certificates").With("certs_dir", certsDir).Wrap(err)
 	}
 
 	// Generate gateway client certificate
 	gatewayCert, err := tls.GenerateClientCert(ca, "gateway")
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate gateway certificate: %w", err)
+		return nil, oops.Code("CLIENT_CERT_GENERATE_FAILED").With("operation", "generate gateway certificate").With("component", "gateway").Wrap(err)
 	}
 
-	if err := tls.SaveClientCert(certsDir, gatewayCert); err != nil {
-		return nil, fmt.Errorf("failed to save gateway certificate: %w", err)
+	err = tls.SaveClientCert(certsDir, gatewayCert)
+	if err != nil {
+		return nil, oops.Code("CLIENT_CERT_SAVE_FAILED").With("operation", "save gateway certificate").With("component", "gateway").Wrap(err)
 	}
 
 	slog.Info("TLS certificates generated")
@@ -390,7 +392,7 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	// Load the newly generated certificates
 	config, err := tls.LoadServerTLS(certsDir, "core")
 	if err != nil {
-		return nil, fmt.Errorf("failed to load generated certificates: %w", err)
+		return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load generated certificates").With("certs_dir", certsDir).Wrap(err)
 	}
 	return config, nil
 }

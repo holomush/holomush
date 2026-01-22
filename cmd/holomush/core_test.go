@@ -10,10 +10,12 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCoreCommand_Flags(t *testing.T) {
@@ -22,9 +24,7 @@ func TestCoreCommand_Flags(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--help"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
@@ -39,9 +39,7 @@ func TestCoreCommand_Flags(t *testing.T) {
 	}
 
 	for _, flag := range expectedFlags {
-		if !strings.Contains(output, flag) {
-			t.Errorf("Help missing %q flag", flag)
-		}
+		assert.Contains(t, output, flag, "Help missing %q flag", flag)
 	}
 }
 
@@ -50,72 +48,40 @@ func TestCoreCommand_DefaultValues(t *testing.T) {
 
 	// Check default grpc-addr
 	grpcAddr, err := cmd.Flags().GetString("grpc-addr")
-	if err != nil {
-		t.Fatalf("Failed to get grpc-addr flag: %v", err)
-	}
-	if grpcAddr != "localhost:9000" {
-		t.Errorf("grpc-addr default = %q, want %q", grpcAddr, "localhost:9000")
-	}
+	require.NoError(t, err, "Failed to get grpc-addr flag")
+	assert.Equal(t, "localhost:9000", grpcAddr)
 
 	// Check default control-addr
 	controlAddr, err := cmd.Flags().GetString("control-addr")
-	if err != nil {
-		t.Fatalf("Failed to get control-addr flag: %v", err)
-	}
-	if controlAddr != "127.0.0.1:9001" {
-		t.Errorf("control-addr default = %q, want %q", controlAddr, "127.0.0.1:9001")
-	}
+	require.NoError(t, err, "Failed to get control-addr flag")
+	assert.Equal(t, "127.0.0.1:9001", controlAddr)
 
 	// Check default metrics-addr
 	metricsAddr, err := cmd.Flags().GetString("metrics-addr")
-	if err != nil {
-		t.Fatalf("Failed to get metrics-addr flag: %v", err)
-	}
-	if metricsAddr != "127.0.0.1:9100" {
-		t.Errorf("metrics-addr default = %q, want %q", metricsAddr, "127.0.0.1:9100")
-	}
+	require.NoError(t, err, "Failed to get metrics-addr flag")
+	assert.Equal(t, "127.0.0.1:9100", metricsAddr)
 
 	// Check default log-format
 	logFormat, err := cmd.Flags().GetString("log-format")
-	if err != nil {
-		t.Fatalf("Failed to get log-format flag: %v", err)
-	}
-	if logFormat != "json" {
-		t.Errorf("log-format default = %q, want %q", logFormat, "json")
-	}
+	require.NoError(t, err, "Failed to get log-format flag")
+	assert.Equal(t, "json", logFormat)
 
 	// Check other flags have empty defaults
 	dataDir, err := cmd.Flags().GetString("data-dir")
-	if err != nil {
-		t.Fatalf("Failed to get data-dir flag: %v", err)
-	}
-	if dataDir != "" {
-		t.Errorf("data-dir default = %q, want empty string", dataDir)
-	}
+	require.NoError(t, err, "Failed to get data-dir flag")
+	assert.Empty(t, dataDir)
 
 	gameID, err := cmd.Flags().GetString("game-id")
-	if err != nil {
-		t.Fatalf("Failed to get game-id flag: %v", err)
-	}
-	if gameID != "" {
-		t.Errorf("game-id default = %q, want empty string", gameID)
-	}
+	require.NoError(t, err, "Failed to get game-id flag")
+	assert.Empty(t, gameID)
 }
 
 func TestCoreCommand_Properties(t *testing.T) {
 	cmd := NewCoreCmd()
 
-	if cmd.Use != "core" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "core")
-	}
-
-	if !strings.Contains(cmd.Short, "core") {
-		t.Error("Short description should mention core")
-	}
-
-	if !strings.Contains(cmd.Long, "game engine") {
-		t.Error("Long description should mention game engine")
-	}
+	assert.Equal(t, "core", cmd.Use)
+	assert.Contains(t, cmd.Short, "core", "Short description should mention core")
+	assert.Contains(t, cmd.Long, "game engine", "Long description should mention game engine")
 }
 
 func TestCoreCommand_NoDatabaseURL(t *testing.T) {
@@ -130,13 +96,8 @@ func TestCoreCommand_NoDatabaseURL(t *testing.T) {
 	cmd.SetArgs([]string{"core"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error when DATABASE_URL is not set")
-	}
-
-	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("Error should mention DATABASE_URL, got: %v", err)
-	}
+	require.Error(t, err, "Expected error when DATABASE_URL is not set")
+	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
 
 func TestCoreCommand_InvalidDatabaseURL(t *testing.T) {
@@ -151,13 +112,9 @@ func TestCoreCommand_InvalidDatabaseURL(t *testing.T) {
 	cmd.SetArgs([]string{"core"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error with invalid DATABASE_URL")
-	}
-
-	if !strings.Contains(err.Error(), "connect") && !strings.Contains(err.Error(), "database") {
-		t.Errorf("Error should mention connection/database issue, got: %v", err)
-	}
+	require.Error(t, err, "Expected error with invalid DATABASE_URL")
+	// Error from pgx parsing - "cannot parse" the URL
+	assert.Contains(t, err.Error(), "parse", "Error should mention parse issue, got: %v", err)
 }
 
 func TestCoreCommand_FlagParsing(t *testing.T) {
@@ -200,19 +157,13 @@ func TestCoreCommand_FlagParsing(t *testing.T) {
 			cmd.SetOut(buf)
 			cmd.SetArgs(tt.args)
 
-			if err := cmd.Execute(); err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
+			require.NoError(t, cmd.Execute())
 
 			addr, _ := cmd.Flags().GetString("grpc-addr")
-			if addr != tt.wantAddr {
-				t.Errorf("grpc-addr = %q, want %q", addr, tt.wantAddr)
-			}
+			assert.Equal(t, tt.wantAddr, addr)
 
 			fmtVal, _ := cmd.Flags().GetString("log-format")
-			if fmtVal != tt.wantFmt {
-				t.Errorf("log-format = %q, want %q", fmtVal, tt.wantFmt)
-			}
+			assert.Equal(t, tt.wantFmt, fmtVal)
 		})
 	}
 }
@@ -248,8 +199,10 @@ func TestSetupLogging(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := setupLogging(tt.format)
-			if (err != nil) != tt.wantError {
-				t.Errorf("setupLogging(%q) error = %v, wantError = %v", tt.format, err, tt.wantError)
+			if tt.wantError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -258,9 +211,7 @@ func TestSetupLogging(t *testing.T) {
 func TestEnsureTLSCerts(t *testing.T) {
 	// Create a temp directory for certs
 	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp dir")
 	t.Cleanup(func() {
 		_ = os.RemoveAll(tmpDir)
 	})
@@ -269,12 +220,8 @@ func TestEnsureTLSCerts(t *testing.T) {
 
 	// First call should generate new certs
 	config1, err := ensureTLSCerts(tmpDir, gameID)
-	if err != nil {
-		t.Fatalf("ensureTLSCerts() error = %v", err)
-	}
-	if config1 == nil {
-		t.Fatal("ensureTLSCerts() returned nil config")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, config1, "ensureTLSCerts() returned nil config")
 
 	// Verify certificates were created
 	expectedFiles := []string{
@@ -287,19 +234,14 @@ func TestEnsureTLSCerts(t *testing.T) {
 	}
 	for _, file := range expectedFiles {
 		path := tmpDir + "/" + file
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			t.Errorf("Expected file %s was not created", file)
-		}
+		_, statErr := os.Stat(path)
+		assert.False(t, os.IsNotExist(statErr), "Expected file %s was not created", file)
 	}
 
 	// Second call should load existing certs
 	config2, err := ensureTLSCerts(tmpDir, gameID)
-	if err != nil {
-		t.Fatalf("ensureTLSCerts() second call error = %v", err)
-	}
-	if config2 == nil {
-		t.Fatal("ensureTLSCerts() second call returned nil config")
-	}
+	require.NoError(t, err, "ensureTLSCerts() second call error")
+	require.NotNil(t, config2, "ensureTLSCerts() second call returned nil config")
 }
 
 func TestCoreCommand_Help(t *testing.T) {
@@ -309,9 +251,7 @@ func TestCoreCommand_Help(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
@@ -326,9 +266,7 @@ func TestCoreCommand_Help(t *testing.T) {
 	}
 
 	for _, phrase := range expectedPhrases {
-		if !strings.Contains(output, phrase) {
-			t.Errorf("Help missing phrase %q", phrase)
-		}
+		assert.Contains(t, output, phrase, "Help missing phrase %q", phrase)
 	}
 }
 
@@ -339,9 +277,7 @@ func TestCoreCommand_Help(t *testing.T) {
 func TestEnsureTLSCerts_CorruptedCertFile(t *testing.T) {
 	// Create a temp directory for certs
 	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-corrupted-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp dir")
 	t.Cleanup(func() {
 		_ = os.RemoveAll(tmpDir)
 	})
@@ -350,26 +286,20 @@ func TestEnsureTLSCerts_CorruptedCertFile(t *testing.T) {
 
 	// First, generate valid certs
 	_, err = ensureTLSCerts(tmpDir, gameID)
-	if err != nil {
-		t.Fatalf("Initial ensureTLSCerts() error = %v", err)
-	}
+	require.NoError(t, err, "Initial ensureTLSCerts() error")
 
 	// Corrupt the server certificate file by writing invalid data
 	corruptedCertPath := tmpDir + "/core.crt"
-	if err := os.WriteFile(corruptedCertPath, []byte("THIS IS NOT A VALID CERTIFICATE"), 0o600); err != nil {
-		t.Fatalf("Failed to corrupt cert file: %v", err)
-	}
+	require.NoError(t, os.WriteFile(corruptedCertPath, []byte("THIS IS NOT A VALID CERTIFICATE"), 0o600), "Failed to corrupt cert file")
 
 	// Now try to load certs again - should return an error, NOT silently regenerate
 	_, err = ensureTLSCerts(tmpDir, gameID)
-	if err == nil {
-		t.Fatal("ensureTLSCerts() should return error for corrupted cert file, not silently regenerate")
-	}
+	require.Error(t, err, "ensureTLSCerts() should return error for corrupted cert file, not silently regenerate")
 
 	// The error should mention the certificate issue
-	if !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "load") {
-		t.Errorf("Error should mention certificate/load issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		return assert.Contains(t, err.Error(), "certificate") || assert.Contains(t, err.Error(), "load")
+	}), "Error should mention certificate/load issue, got: %v", err)
 }
 
 // TestEnsureTLSCerts_PermissionDenied verifies that ensureTLSCerts returns an error
@@ -382,9 +312,7 @@ func TestEnsureTLSCerts_PermissionDenied(t *testing.T) {
 
 	// Create a temp directory for certs
 	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-perms-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp dir")
 	t.Cleanup(func() {
 		// Restore permissions before cleanup
 		_ = os.Chmod(tmpDir+"/core.crt", 0o600)
@@ -395,27 +323,23 @@ func TestEnsureTLSCerts_PermissionDenied(t *testing.T) {
 
 	// First, generate valid certs
 	_, err = ensureTLSCerts(tmpDir, gameID)
-	if err != nil {
-		t.Fatalf("Initial ensureTLSCerts() error = %v", err)
-	}
+	require.NoError(t, err, "Initial ensureTLSCerts() error")
 
 	// Remove read permissions from the cert file
 	certPath := tmpDir + "/core.crt"
-	if err := os.Chmod(certPath, 0o000); err != nil {
-		t.Fatalf("Failed to remove permissions: %v", err)
-	}
+	require.NoError(t, os.Chmod(certPath, 0o000), "Failed to remove permissions")
 
 	// Now try to load certs again - should return an error, NOT silently regenerate
 	_, err = ensureTLSCerts(tmpDir, gameID)
-	if err == nil {
-		t.Fatal("ensureTLSCerts() should return error for permission denied, not silently regenerate")
-	}
+	require.Error(t, err, "ensureTLSCerts() should return error for permission denied, not silently regenerate")
 
 	// The error should mention permission issue
-	if !strings.Contains(err.Error(), "permission") && !strings.Contains(err.Error(), "denied") &&
-		!strings.Contains(err.Error(), "certificate") {
-		t.Errorf("Error should mention permission/denied/certificate issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		errMsg := err.Error()
+		return assert.Contains(t, errMsg, "permission") ||
+			assert.Contains(t, errMsg, "denied") ||
+			assert.Contains(t, errMsg, "certificate")
+	}), "Error should mention permission/denied/certificate issue, got: %v", err)
 }
 
 // TestListenerCleanupOnFailure verifies that the gRPC listener is properly
@@ -432,9 +356,7 @@ func TestListenerCleanupOnFailure(t *testing.T) {
 
 	// Create a listener to get an available port
 	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("Failed to create initial listener: %v", err)
-	}
+	require.NoError(t, err, "Failed to create initial listener")
 
 	// Get the actual port that was assigned
 	actualAddr := listener.Addr().String()
@@ -450,9 +372,7 @@ func TestListenerCleanupOnFailure(t *testing.T) {
 	// Verify the port is now available again
 	// This would fail if the listener wasn't properly closed
 	listener2, err := net.Listen("tcp", actualAddr)
-	if err != nil {
-		t.Fatalf("Port %s not available after cleanup - listener was leaked: %v", actualAddr, err)
-	}
+	require.NoError(t, err, "Port %s not available after cleanup - listener was leaked", actualAddr)
 	defer func() { _ = listener2.Close() }()
 }
 
@@ -461,9 +381,7 @@ func TestListenerCleanupOnFailure(t *testing.T) {
 func TestEnsureTLSCerts_DirectoryCreationFailure(t *testing.T) {
 	// Create a file where we want to create a directory
 	tmpFile, err := os.CreateTemp("", "holomush-test-certs-block-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp file")
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 	_ = tmpFile.Close()
 
@@ -472,13 +390,11 @@ func TestEnsureTLSCerts_DirectoryCreationFailure(t *testing.T) {
 	badDir := tmpFile.Name() + "/nested/certs"
 
 	_, err = ensureTLSCerts(badDir, "test-game-id")
-	if err == nil {
-		t.Fatal("ensureTLSCerts() should fail when directory cannot be created")
-	}
+	require.Error(t, err, "ensureTLSCerts() should fail when directory cannot be created")
 
-	if !strings.Contains(err.Error(), "directory") && !strings.Contains(err.Error(), "not a directory") {
-		t.Errorf("Error should mention directory issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		return assert.Contains(t, err.Error(), "directory") || assert.Contains(t, err.Error(), "not a directory")
+	}), "Error should mention directory issue, got: %v", err)
 }
 
 // TestEnsureTLSCerts_SaveCertificatesFailure verifies that ensureTLSCerts
@@ -491,9 +407,7 @@ func TestEnsureTLSCerts_SaveCertificatesFailure(t *testing.T) {
 
 	// Create a temp directory and make it read-only
 	tmpDir, err := os.MkdirTemp("", "holomush-test-certs-readonly-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp dir")
 	t.Cleanup(func() {
 		//nolint:gosec // G302: Need 0700 to clean up directory
 		_ = os.Chmod(tmpDir, 0o700)
@@ -502,20 +416,19 @@ func TestEnsureTLSCerts_SaveCertificatesFailure(t *testing.T) {
 
 	// Make directory read-only so files can't be created
 	//nolint:gosec // G302: Intentionally setting restrictive permissions for test
-	if err := os.Chmod(tmpDir, 0o500); err != nil {
-		t.Fatalf("Failed to make dir read-only: %v", err)
-	}
+	require.NoError(t, os.Chmod(tmpDir, 0o500), "Failed to make dir read-only")
 
 	_, err = ensureTLSCerts(tmpDir, "test-game-id")
-	if err == nil {
-		t.Fatal("ensureTLSCerts() should fail when certs cannot be saved")
-	}
+	require.Error(t, err, "ensureTLSCerts() should fail when certs cannot be saved")
 
 	// Error should indicate permission/save issue
-	if !strings.Contains(err.Error(), "permission") && !strings.Contains(err.Error(), "save") &&
-		!strings.Contains(err.Error(), "create") && !strings.Contains(err.Error(), "denied") {
-		t.Errorf("Error should mention save/permission issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		errMsg := err.Error()
+		return assert.Contains(t, errMsg, "permission") ||
+			assert.Contains(t, errMsg, "save") ||
+			assert.Contains(t, errMsg, "create") ||
+			assert.Contains(t, errMsg, "denied")
+	}), "Error should mention save/permission issue, got: %v", err)
 }
 
 // TestEnsureTLSCerts_PartialCertState verifies behavior when only some
@@ -546,9 +459,7 @@ func TestEnsureTLSCerts_PartialCertState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir, err := os.MkdirTemp("", "holomush-test-partial-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
+			require.NoError(t, err, "Failed to create temp dir")
 			t.Cleanup(func() {
 				_ = os.RemoveAll(tmpDir)
 			})
@@ -556,17 +467,14 @@ func TestEnsureTLSCerts_PartialCertState(t *testing.T) {
 			// Create the specified files with dummy content
 			for _, file := range tt.filesToCreate {
 				path := tmpDir + "/" + file
-				if err := os.WriteFile(path, []byte("dummy content"), 0o600); err != nil {
-					t.Fatalf("Failed to create %s: %v", file, err)
-				}
+				require.NoError(t, os.WriteFile(path, []byte("dummy content"), 0o600), "Failed to create %s", file)
 			}
 
 			_, err = ensureTLSCerts(tmpDir, "test-game-id")
-			if tt.expectError && err == nil {
-				t.Error("Expected error for partial cert state, got nil")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if tt.expectError {
+				assert.Error(t, err, "Expected error for partial cert state")
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -575,9 +483,7 @@ func TestEnsureTLSCerts_PartialCertState(t *testing.T) {
 // TestFileExists verifies the fileExists helper function edge cases.
 func TestFileExists(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "holomush-test-fileexists-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp dir")
 	t.Cleanup(func() {
 		_ = os.RemoveAll(tmpDir)
 	})
@@ -591,9 +497,7 @@ func TestFileExists(t *testing.T) {
 			name: "existing file",
 			setup: func(t *testing.T) string {
 				path := tmpDir + "/exists.txt"
-				if err := os.WriteFile(path, []byte("content"), 0o600); err != nil {
-					t.Fatalf("Failed to write test file: %v", err)
-				}
+				require.NoError(t, os.WriteFile(path, []byte("content"), 0o600), "Failed to write test file")
 				return path
 			},
 			expected: true,
@@ -609,9 +513,7 @@ func TestFileExists(t *testing.T) {
 			name: "directory exists",
 			setup: func(t *testing.T) string {
 				path := tmpDir + "/subdir"
-				if err := os.Mkdir(path, 0o700); err != nil {
-					t.Fatalf("Failed to create test dir: %v", err)
-				}
+				require.NoError(t, os.Mkdir(path, 0o700), "Failed to create test dir")
 				return path
 			},
 			expected: true,
@@ -620,13 +522,9 @@ func TestFileExists(t *testing.T) {
 			name: "symlink to existing file",
 			setup: func(t *testing.T) string {
 				target := tmpDir + "/target.txt"
-				if err := os.WriteFile(target, []byte("content"), 0o600); err != nil {
-					t.Fatalf("Failed to write target file: %v", err)
-				}
+				require.NoError(t, os.WriteFile(target, []byte("content"), 0o600), "Failed to write target file")
 				link := tmpDir + "/link.txt"
-				if err := os.Symlink(target, link); err != nil {
-					t.Fatalf("Failed to create symlink: %v", err)
-				}
+				require.NoError(t, os.Symlink(target, link), "Failed to create symlink")
 				return link
 			},
 			expected: true,
@@ -635,9 +533,7 @@ func TestFileExists(t *testing.T) {
 			name: "broken symlink",
 			setup: func(t *testing.T) string {
 				link := tmpDir + "/broken-link.txt"
-				if err := os.Symlink("/nonexistent/path", link); err != nil {
-					t.Fatalf("Failed to create broken symlink: %v", err)
-				}
+				require.NoError(t, os.Symlink("/nonexistent/path", link), "Failed to create broken symlink")
 				return link
 			},
 			// Broken symlink: lstat succeeds (link exists) but target doesn't
@@ -650,9 +546,7 @@ func TestFileExists(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.setup(t)
 			got := fileExists(path)
-			if got != tt.expected {
-				t.Errorf("fileExists(%q) = %v, want %v", path, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
@@ -729,14 +623,10 @@ func TestCoreConfig_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.cfg.Validate()
 			if tt.wantError {
-				if err == nil {
-					t.Fatalf("Validate() expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errorMsg)
-				}
-			} else if err != nil {
-				t.Fatalf("Validate() unexpected error: %v", err)
+				require.Error(t, err, "Validate() expected error")
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -754,13 +644,11 @@ func TestCoreCommand_InvalidLogFormat(t *testing.T) {
 	cmd.SetArgs([]string{"core", "--log-format=invalid"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error with invalid log format")
-	}
+	require.Error(t, err, "Expected error with invalid log format")
 
-	if !strings.Contains(err.Error(), "log") && !strings.Contains(err.Error(), "format") {
-		t.Errorf("Error should mention log/format issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		return assert.Contains(t, err.Error(), "log") || assert.Contains(t, err.Error(), "format")
+	}), "Error should mention log/format issue, got: %v", err)
 }
 
 // TestMonitorServerErrors verifies that monitorServerErrors cancels context on error.
@@ -895,14 +783,10 @@ func TestMonitorServerErrors_ContextCancelled(t *testing.T) {
 func TestListenerCloseError(t *testing.T) {
 	// Create a listener and close it before the defer runs
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Failed to create listener: %v", err)
-	}
+	require.NoError(t, err, "Failed to create listener")
 
 	// Close it now so the defer Close() will get an error
-	if err := listener.Close(); err != nil {
-		t.Fatalf("Failed to close listener: %v", err)
-	}
+	require.NoError(t, listener.Close(), "Failed to close listener")
 
 	// Simulate what the code does - this should log at debug level, not panic
 	// In a real scenario, this would be verified with log capture
@@ -924,9 +808,7 @@ func TestSignalHandling_ChannelSetup(t *testing.T) {
 
 	// Verify the channel is buffered with capacity 1
 	// This is important to prevent signal loss
-	if cap(sigChan) != 1 {
-		t.Errorf("signal channel capacity = %d, want 1", cap(sigChan))
-	}
+	assert.Equal(t, 1, cap(sigChan), "signal channel capacity should be 1")
 
 	// Verify we can send a signal to ourselves and receive it
 	// This simulates what happens when the OS sends a signal
@@ -940,9 +822,7 @@ func TestSignalHandling_ChannelSetup(t *testing.T) {
 	// Wait for the signal with timeout
 	select {
 	case sig := <-sigChan:
-		if sig != syscall.SIGTERM {
-			t.Errorf("received signal = %v, want SIGTERM", sig)
-		}
+		assert.Equal(t, syscall.SIGTERM, sig)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive signal within timeout")
 	}
@@ -972,9 +852,7 @@ func TestSignalHandling_MultipleSignals(t *testing.T) {
 	// Read the first signal
 	select {
 	case sig := <-sigChan:
-		if sig != syscall.SIGINT {
-			t.Errorf("first signal = %v, want SIGINT", sig)
-		}
+		assert.Equal(t, syscall.SIGINT, sig, "first signal should be SIGINT")
 	default:
 		t.Fatal("no signal available when expected")
 	}

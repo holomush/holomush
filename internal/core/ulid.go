@@ -5,11 +5,11 @@ package core
 
 import (
 	"crypto/rand"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 var (
@@ -28,7 +28,7 @@ func NewULID() ulid.ULID {
 func ParseULID(s string) (ulid.ULID, error) {
 	id, err := ulid.Parse(s)
 	if err != nil {
-		return ulid.ULID{}, fmt.Errorf("invalid ULID %q: %w", s, err)
+		return ulid.ULID{}, oops.With("ulid", s).Wrap(err)
 	}
 	return id, nil
 }

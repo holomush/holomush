@@ -15,6 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/tls"
 )
 
@@ -24,9 +27,7 @@ func TestGatewayCommand_Flags(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--help"})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
@@ -40,9 +41,7 @@ func TestGatewayCommand_Flags(t *testing.T) {
 	}
 
 	for _, flag := range expectedFlags {
-		if !strings.Contains(output, flag) {
-			t.Errorf("Help missing %q flag", flag)
-		}
+		assert.Contains(t, output, flag, "Help missing %q flag", flag)
 	}
 }
 
@@ -51,64 +50,36 @@ func TestGatewayCommand_DefaultValues(t *testing.T) {
 
 	// Check default telnet-addr
 	telnetAddr, err := cmd.Flags().GetString("telnet-addr")
-	if err != nil {
-		t.Fatalf("Failed to get telnet-addr flag: %v", err)
-	}
-	if telnetAddr != ":4201" {
-		t.Errorf("telnet-addr default = %q, want %q", telnetAddr, ":4201")
-	}
+	require.NoError(t, err, "Failed to get telnet-addr flag")
+	assert.Equal(t, ":4201", telnetAddr)
 
 	// Check default core-addr
 	coreAddr, err := cmd.Flags().GetString("core-addr")
-	if err != nil {
-		t.Fatalf("Failed to get core-addr flag: %v", err)
-	}
-	if coreAddr != "localhost:9000" {
-		t.Errorf("core-addr default = %q, want %q", coreAddr, "localhost:9000")
-	}
+	require.NoError(t, err, "Failed to get core-addr flag")
+	assert.Equal(t, "localhost:9000", coreAddr)
 
 	// Check default control-addr
 	controlAddr, err := cmd.Flags().GetString("control-addr")
-	if err != nil {
-		t.Fatalf("Failed to get control-addr flag: %v", err)
-	}
-	if controlAddr != "127.0.0.1:9002" {
-		t.Errorf("control-addr default = %q, want %q", controlAddr, "127.0.0.1:9002")
-	}
+	require.NoError(t, err, "Failed to get control-addr flag")
+	assert.Equal(t, "127.0.0.1:9002", controlAddr)
 
 	// Check default metrics-addr
 	metricsAddr, err := cmd.Flags().GetString("metrics-addr")
-	if err != nil {
-		t.Fatalf("Failed to get metrics-addr flag: %v", err)
-	}
-	if metricsAddr != "127.0.0.1:9101" {
-		t.Errorf("metrics-addr default = %q, want %q", metricsAddr, "127.0.0.1:9101")
-	}
+	require.NoError(t, err, "Failed to get metrics-addr flag")
+	assert.Equal(t, "127.0.0.1:9101", metricsAddr)
 
 	// Check default log-format
 	logFormat, err := cmd.Flags().GetString("log-format")
-	if err != nil {
-		t.Fatalf("Failed to get log-format flag: %v", err)
-	}
-	if logFormat != "json" {
-		t.Errorf("log-format default = %q, want %q", logFormat, "json")
-	}
+	require.NoError(t, err, "Failed to get log-format flag")
+	assert.Equal(t, "json", logFormat)
 }
 
 func TestGatewayCommand_Properties(t *testing.T) {
 	cmd := NewGatewayCmd()
 
-	if cmd.Use != "gateway" {
-		t.Errorf("Use = %q, want %q", cmd.Use, "gateway")
-	}
-
-	if !strings.Contains(cmd.Short, "gateway") {
-		t.Error("Short description should mention gateway")
-	}
-
-	if !strings.Contains(cmd.Long, "telnet") {
-		t.Error("Long description should mention telnet")
-	}
+	assert.Equal(t, "gateway", cmd.Use)
+	assert.Contains(t, cmd.Short, "gateway", "Short description should mention gateway")
+	assert.Contains(t, cmd.Long, "telnet", "Long description should mention telnet")
 }
 
 func TestGatewayCommand_FlagParsing(t *testing.T) {
@@ -163,24 +134,16 @@ func TestGatewayCommand_FlagParsing(t *testing.T) {
 			cmd.SetOut(buf)
 			cmd.SetArgs(tt.args)
 
-			if err := cmd.Execute(); err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
+			require.NoError(t, cmd.Execute())
 
 			telnetAddr, _ := cmd.Flags().GetString("telnet-addr")
-			if telnetAddr != tt.wantTelnet {
-				t.Errorf("telnet-addr = %q, want %q", telnetAddr, tt.wantTelnet)
-			}
+			assert.Equal(t, tt.wantTelnet, telnetAddr)
 
 			coreAddr, _ := cmd.Flags().GetString("core-addr")
-			if coreAddr != tt.wantCore {
-				t.Errorf("core-addr = %q, want %q", coreAddr, tt.wantCore)
-			}
+			assert.Equal(t, tt.wantCore, coreAddr)
 
 			fmtVal, _ := cmd.Flags().GetString("log-format")
-			if fmtVal != tt.wantFmt {
-				t.Errorf("log-format = %q, want %q", fmtVal, tt.wantFmt)
-			}
+			assert.Equal(t, tt.wantFmt, fmtVal)
 		})
 	}
 }
@@ -192,9 +155,7 @@ func TestGatewayCommand_Help(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
+	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
 
@@ -209,9 +170,7 @@ func TestGatewayCommand_Help(t *testing.T) {
 	}
 
 	for _, phrase := range expectedPhrases {
-		if !strings.Contains(output, phrase) {
-			t.Errorf("Help missing phrase %q", phrase)
-		}
+		assert.Contains(t, output, phrase, "Help missing phrase %q", phrase)
 	}
 }
 
@@ -227,14 +186,15 @@ func TestGatewayCommand_MissingCertificates(t *testing.T) {
 	cmd.SetArgs([]string{"gateway"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error when certificates are missing")
-	}
+	require.Error(t, err, "Expected error when certificates are missing")
 
 	// Error should mention TLS or certificates
-	if !strings.Contains(err.Error(), "TLS") && !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "certs") {
-		t.Errorf("Error should mention TLS/certificate issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		errMsg := err.Error()
+		return strings.Contains(errMsg, "TLS") ||
+			strings.Contains(errMsg, "certificate") ||
+			strings.Contains(errMsg, "certs")
+	}), "Error should mention TLS/certificate issue, got: %v", err)
 }
 
 func TestGatewayCommand_InvalidLogFormat(t *testing.T) {
@@ -250,30 +210,26 @@ func TestGatewayCommand_InvalidLogFormat(t *testing.T) {
 	cmd.SetArgs([]string{"gateway", "--log-format=invalid"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error with invalid log format")
-	}
+	require.Error(t, err, "Expected error with invalid log format")
 
 	// Error should mention log format (validation moved from setupLogging to Validate)
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, "logging") && !strings.Contains(errMsg, "log format") && !strings.Contains(errMsg, "log-format") {
-		t.Errorf("Error should mention logging issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		return strings.Contains(errMsg, "logging") ||
+			strings.Contains(errMsg, "log format") ||
+			strings.Contains(errMsg, "log-format")
+	}), "Error should mention logging issue, got: %v", err)
 }
 
 func TestGatewayCommand_CAExtractionFails(t *testing.T) {
 	// Create a certs directory with an invalid CA certificate
 	tmpDir := t.TempDir()
 	certsDir := tmpDir + "/holomush/certs"
-	if err := os.MkdirAll(certsDir, 0o700); err != nil {
-		t.Fatalf("failed to create certs dir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(certsDir, 0o700), "failed to create certs dir")
 
 	// Write an invalid CA certificate
 	caPath := certsDir + "/root-ca.crt"
-	if err := os.WriteFile(caPath, []byte("not a valid certificate"), 0o600); err != nil {
-		t.Fatalf("failed to write invalid CA: %v", err)
-	}
+	require.NoError(t, os.WriteFile(caPath, []byte("not a valid certificate"), 0o600), "failed to write invalid CA")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -285,14 +241,12 @@ func TestGatewayCommand_CAExtractionFails(t *testing.T) {
 	cmd.SetArgs([]string{"gateway"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error when CA extraction fails")
-	}
+	require.Error(t, err, "Expected error when CA extraction fails")
 
 	// Error should mention game_id or CA
-	if !strings.Contains(err.Error(), "game_id") && !strings.Contains(err.Error(), "CA") {
-		t.Errorf("Error should mention game_id/CA extraction issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		return strings.Contains(err.Error(), "game_id") || strings.Contains(err.Error(), "CA")
+	}), "Error should mention game_id/CA extraction issue, got: %v", err)
 }
 
 func TestGatewayCommand_TLSLoadFails(t *testing.T) {
@@ -303,14 +257,10 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	// Generate a valid CA
 	gameID := "test-gateway-tls-fail"
 	ca, err := tls.GenerateCA(gameID)
-	if err != nil {
-		t.Fatalf("failed to generate CA: %v", err)
-	}
+	require.NoError(t, err, "failed to generate CA")
 
 	// Save CA only (no gateway certificate)
-	if err := tls.SaveCertificates(certsDir, ca, nil); err != nil {
-		t.Fatalf("failed to save CA: %v", err)
-	}
+	require.NoError(t, tls.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -322,14 +272,12 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	cmd.SetArgs([]string{"gateway"})
 
 	err = cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error when TLS certificates are incomplete")
-	}
+	require.Error(t, err, "Expected error when TLS certificates are incomplete")
 
 	// Error should mention TLS or certificate
-	if !strings.Contains(err.Error(), "TLS") && !strings.Contains(err.Error(), "certificate") {
-		t.Errorf("Error should mention TLS/certificate issue, got: %v", err)
-	}
+	assert.True(t, assert.Condition(t, func() bool {
+		return strings.Contains(err.Error(), "TLS") || strings.Contains(err.Error(), "certificate")
+	}), "Error should mention TLS/certificate issue, got: %v", err)
 }
 
 // TestHandleTelnetConnection tests the telnet handler.
@@ -348,9 +296,7 @@ func TestHandleTelnetConnection(t *testing.T) {
 	// Set a read deadline to prevent hanging if handler doesn't close connection
 	var output strings.Builder
 	buf := make([]byte, 1024)
-	if err := client.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatalf("failed to set read deadline: %v", err)
-	}
+	require.NoError(t, client.SetReadDeadline(time.Now().Add(5*time.Second)), "failed to set read deadline")
 	for {
 		n, err := client.Read(buf)
 		if n > 0 {
@@ -364,15 +310,9 @@ func TestHandleTelnetConnection(t *testing.T) {
 	result := output.String()
 
 	// Verify the welcome messages are sent
-	if !strings.Contains(result, "Welcome to HoloMUSH Gateway") {
-		t.Errorf("output missing welcome message, got: %q", result)
-	}
-	if !strings.Contains(result, "Gateway is connected to core") {
-		t.Errorf("output missing status message, got: %q", result)
-	}
-	if !strings.Contains(result, "Disconnecting") {
-		t.Errorf("output missing disconnect message, got: %q", result)
-	}
+	assert.Contains(t, result, "Welcome to HoloMUSH Gateway", "output missing welcome message")
+	assert.Contains(t, result, "Gateway is connected to core", "output missing status message")
+	assert.Contains(t, result, "Disconnecting", "output missing disconnect message")
 
 	// Wait for handler to finish with timeout
 	select {
@@ -387,9 +327,7 @@ func TestHandleTelnetConnection(t *testing.T) {
 func TestHandleTelnetConnection_WriteError(t *testing.T) {
 	// Create a pipe and close the client side immediately to cause write errors
 	server, client := net.Pipe()
-	if err := client.Close(); err != nil {
-		t.Fatalf("failed to close client: %v", err)
-	}
+	require.NoError(t, client.Close(), "failed to close client")
 
 	// Run handler - should handle write errors gracefully without panic
 	done := make(chan struct{})
@@ -448,18 +386,14 @@ func TestHandleTelnetConnection_SecondWriteFails(t *testing.T) {
 
 	<-done
 
-	if !mock.closed {
-		t.Error("connection should be closed after handler completes")
-	}
+	assert.True(t, mock.closed, "connection should be closed after handler completes")
 }
 
 func TestGatewayCommand_InvalidCACN(t *testing.T) {
 	// Create a certs directory with a CA that has wrong CN prefix
 	tmpDir := t.TempDir()
 	certsDir := tmpDir + "/holomush/certs"
-	if err := os.MkdirAll(certsDir, 0o700); err != nil {
-		t.Fatalf("failed to create certs dir: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(certsDir, 0o700), "failed to create certs dir")
 
 	// Write a valid PEM certificate with wrong CN prefix
 	caPath := certsDir + "/root-ca.crt"
@@ -473,9 +407,7 @@ A1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFC+WzLPcVjgMRBKQmFjCCRh5jPvE
 MAoGCCqGSM49BAMCA0gAMEUCIFJdkxsZ0I1p5tSyPgMqsyLTQI+bfK0hv0GJm7Yf
 Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
 -----END CERTIFICATE-----`
-	if err := os.WriteFile(caPath, []byte(pemData), 0o600); err != nil {
-		t.Fatalf("failed to write CA with wrong CN: %v", err)
-	}
+	require.NoError(t, os.WriteFile(caPath, []byte(pemData), 0o600), "failed to write CA with wrong CN")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -487,14 +419,13 @@ Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
 	cmd.SetArgs([]string{"gateway"})
 
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("Expected error when CA has wrong CN prefix")
-	}
+	require.Error(t, err, "Expected error when CA has wrong CN prefix")
 
-	// Error should mention game_id or CN
-	if !strings.Contains(err.Error(), "game_id") && !strings.Contains(err.Error(), "prefix") {
-		t.Errorf("Error should mention game_id/prefix issue, got: %v", err)
-	}
+	// Error should mention certificate parsing issue (the underlying error)
+	assert.True(t, assert.Condition(t, func() bool {
+		errMsg := err.Error()
+		return strings.Contains(errMsg, "certificate") || strings.Contains(errMsg, "CA")
+	}), "Error should mention certificate/CA issue, got: %v", err)
 }
 
 // TestGatewayConfig_Validate tests validation of gatewayConfig.
@@ -586,14 +517,10 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.cfg.Validate()
 			if tt.wantError {
-				if err == nil {
-					t.Fatalf("Validate() expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errorMsg)
-				}
-			} else if err != nil {
-				t.Fatalf("Validate() unexpected error: %v", err)
+				require.Error(t, err, "Validate() expected error")
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -601,18 +528,10 @@ func TestGatewayConfig_Validate(t *testing.T) {
 
 func TestGatewayConfig_Defaults(t *testing.T) {
 	// Verify the default constants are set correctly
-	if defaultTelnetAddr != ":4201" {
-		t.Errorf("defaultTelnetAddr = %q, want %q", defaultTelnetAddr, ":4201")
-	}
-	if defaultCoreAddr != "localhost:9000" {
-		t.Errorf("defaultCoreAddr = %q, want %q", defaultCoreAddr, "localhost:9000")
-	}
-	if defaultGatewayControlAddr != "127.0.0.1:9002" {
-		t.Errorf("defaultGatewayControlAddr = %q, want %q", defaultGatewayControlAddr, "127.0.0.1:9002")
-	}
-	if defaultGatewayMetricsAddr != "127.0.0.1:9101" {
-		t.Errorf("defaultGatewayMetricsAddr = %q, want %q", defaultGatewayMetricsAddr, "127.0.0.1:9101")
-	}
+	assert.Equal(t, ":4201", defaultTelnetAddr)
+	assert.Equal(t, "localhost:9000", defaultCoreAddr)
+	assert.Equal(t, "127.0.0.1:9002", defaultGatewayControlAddr)
+	assert.Equal(t, "127.0.0.1:9101", defaultGatewayMetricsAddr)
 }
 
 // TestControlServerError_TriggersShutdown verifies that when the control gRPC server
@@ -770,9 +689,7 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 
 	// Close the listener first, then cancel context to stop the loop
 	// The loop checks ctx.Done() after Accept() returns an error
-	if err := mock.Close(); err != nil {
-		t.Fatalf("failed to close mock listener: %v", err)
-	}
+	require.NoError(t, mock.Close(), "failed to close mock listener")
 	cancel()
 
 	select {
@@ -783,9 +700,7 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 	}
 
 	// Verify backoff behavior: should have recorded 3+ accept attempts
-	if mock.acceptCalls < 3 {
-		t.Errorf("expected at least 3 accept calls, got %d", mock.acceptCalls)
-	}
+	assert.GreaterOrEqual(t, mock.acceptCalls, 3, "expected at least 3 accept calls")
 
 	// Verify timing shows backoff (first to second should be ~100ms, second to third ~200ms)
 	if len(mock.acceptTimes) >= 3 {
@@ -793,14 +708,12 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 		gap2 := mock.acceptTimes[2].Sub(mock.acceptTimes[1])
 
 		// First gap should be around 100ms (the initial backoff)
-		if gap1 < 50*time.Millisecond || gap1 > 200*time.Millisecond {
-			t.Errorf("first backoff gap = %v, expected ~100ms", gap1)
-		}
+		assert.True(t, gap1 >= 50*time.Millisecond && gap1 <= 200*time.Millisecond,
+			"first backoff gap = %v, expected ~100ms", gap1)
 
 		// Second gap should be around 200ms (doubled from first)
-		if gap2 < 150*time.Millisecond || gap2 > 350*time.Millisecond {
-			t.Errorf("second backoff gap = %v, expected ~200ms", gap2)
-		}
+		assert.True(t, gap2 >= 150*time.Millisecond && gap2 <= 350*time.Millisecond,
+			"second backoff gap = %v, expected ~200ms", gap2)
 	}
 }
 
@@ -809,27 +722,19 @@ func TestAcceptBackoff_ExponentialIncrease(t *testing.T) {
 	b := newAcceptBackoff()
 
 	// Initial state - no delay
-	if b.wait() != 0 {
-		t.Errorf("initial wait = %v, want 0", b.wait())
-	}
+	assert.Equal(t, time.Duration(0), b.wait(), "initial wait should be 0")
 
 	// First failure - should be initial (100ms)
 	b.failure()
-	if b.wait() != 100*time.Millisecond {
-		t.Errorf("after first failure wait = %v, want 100ms", b.wait())
-	}
+	assert.Equal(t, 100*time.Millisecond, b.wait())
 
 	// Second failure - should double (200ms)
 	b.failure()
-	if b.wait() != 200*time.Millisecond {
-		t.Errorf("after second failure wait = %v, want 200ms", b.wait())
-	}
+	assert.Equal(t, 200*time.Millisecond, b.wait())
 
 	// Third failure - should double again (400ms)
 	b.failure()
-	if b.wait() != 400*time.Millisecond {
-		t.Errorf("after third failure wait = %v, want 400ms", b.wait())
-	}
+	assert.Equal(t, 400*time.Millisecond, b.wait())
 }
 
 // TestAcceptBackoff_MaxCap verifies the backoff is capped at max (30s).
@@ -842,9 +747,7 @@ func TestAcceptBackoff_MaxCap(t *testing.T) {
 	}
 
 	// Should be capped at 30 seconds
-	if b.wait() != 30*time.Second {
-		t.Errorf("after many failures wait = %v, want 30s (max)", b.wait())
-	}
+	assert.Equal(t, 30*time.Second, b.wait(), "backoff should be capped at 30s")
 }
 
 // TestAcceptBackoff_ResetOnSuccess verifies backoff resets after successful accept.
@@ -856,22 +759,16 @@ func TestAcceptBackoff_ResetOnSuccess(t *testing.T) {
 	b.failure()
 	b.failure()
 
-	if b.wait() == 0 {
-		t.Fatal("expected non-zero backoff after failures")
-	}
+	assert.NotEqual(t, time.Duration(0), b.wait(), "expected non-zero backoff after failures")
 
 	// Success should reset
 	b.success()
 
-	if b.wait() != 0 {
-		t.Errorf("after success wait = %v, want 0", b.wait())
-	}
+	assert.Equal(t, time.Duration(0), b.wait(), "backoff should reset to 0 after success")
 
 	// Next failure should start at initial again
 	b.failure()
-	if b.wait() != 100*time.Millisecond {
-		t.Errorf("after reset and failure wait = %v, want 100ms", b.wait())
-	}
+	assert.Equal(t, 100*time.Millisecond, b.wait())
 }
 
 // TestGatewaySignalHandling_TriggersShutdown verifies that receiving a signal
@@ -949,9 +846,7 @@ func TestGatewaySignalHandling_BothSignals(t *testing.T) {
 			// Verify it was received
 			select {
 			case sig := <-received:
-				if sig != tt.signal {
-					t.Errorf("received %v, want %v", sig, tt.signal)
-				}
+				assert.Equal(t, tt.signal, sig)
 			case <-time.After(1 * time.Second):
 				t.Fatal("signal not received within timeout")
 			}

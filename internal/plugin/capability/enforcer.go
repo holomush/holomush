@@ -18,10 +18,10 @@ package capability
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/gobwas/glob"
+	"github.com/samber/oops"
 )
 
 // compiledGrant holds a pattern and its compiled glob for efficient matching.
@@ -78,12 +78,12 @@ func (e *Enforcer) SetGrants(plugin string, capabilities []string) error {
 	compiled := make([]compiledGrant, len(capabilities))
 	for i, pattern := range capabilities {
 		if pattern == "" {
-			return fmt.Errorf("capability %d: empty capability pattern", i)
+			return oops.In("capability").With("plugin", plugin).With("index", i).New("empty capability pattern")
 		}
 		// Compile with '.' as separator so '*' doesn't cross segment boundaries
 		g, err := glob.Compile(pattern, '.')
 		if err != nil {
-			return fmt.Errorf("capability %d (%q): %w", i, pattern, err)
+			return oops.In("capability").With("plugin", plugin).With("index", i).With("pattern", pattern).Wrap(err)
 		}
 		compiled[i] = compiledGrant{pattern: pattern, glob: g}
 	}

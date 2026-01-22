@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/oklog/ulid/v2"
@@ -21,9 +24,8 @@ import (
 
 func TestNew_NilEnforcerPanics(t *testing.T) {
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic for nil enforcer")
-		}
+		r := recover()
+		require.NotNil(t, r, "expected panic for nil enforcer")
 	}()
 
 	hostfunc.New(nil, nil)
@@ -37,9 +39,7 @@ func TestHostFunctions_Log(t *testing.T) {
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.log("info", "test message")`)
-	if err != nil {
-		t.Errorf("log() failed: %v", err)
-	}
+	assert.NoError(t, err, "log() failed")
 }
 
 func TestHostFunctions_Log_Levels(t *testing.T) {
@@ -62,9 +62,7 @@ func TestHostFunctions_Log_Levels(t *testing.T) {
 			hf.Register(L, "test-plugin")
 
 			err := L.DoString(`holomush.log("` + tt.level + `", "test message")`)
-			if err != nil {
-				t.Errorf("log(%q) failed: %v", tt.level, err)
-			}
+			assert.NoError(t, err, "log(%q) failed", tt.level)
 		})
 	}
 }
@@ -78,9 +76,7 @@ func TestHostFunctions_Log_InvalidLevel(t *testing.T) {
 
 	// Invalid log level should raise an error so plugin developers know their code is wrong
 	err := L.DoString(`holomush.log("invalid_level", "test message")`)
-	if err == nil {
-		t.Error("expected error for invalid log level")
-	}
+	assert.Error(t, err, "expected error for invalid log level")
 }
 
 func TestHostFunctions_Log_MissingArguments(t *testing.T) {
@@ -101,9 +97,7 @@ func TestHostFunctions_Log_MissingArguments(t *testing.T) {
 			hf.Register(L, "test-plugin")
 
 			err := L.DoString(tt.code)
-			if err == nil {
-				t.Errorf("expected error for %s", tt.name)
-			}
+			assert.Error(t, err, "expected error for %s", tt.name)
 		})
 	}
 }
@@ -128,9 +122,7 @@ func TestHostFunctions_Log_InvalidLevel_ErrorMessage(t *testing.T) {
 			hf.Register(L, "test-plugin")
 
 			err := L.DoString(`holomush.log("` + tt.level + `", "test message")`)
-			if err == nil {
-				t.Errorf("expected error for invalid log level %q", tt.level)
-			}
+			assert.Error(t, err, "expected error for invalid log level %q", tt.level)
 		})
 	}
 }
@@ -143,19 +135,14 @@ func TestHostFunctions_NewRequestID(t *testing.T) {
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`id = holomush.new_request_id()`)
-	if err != nil {
-		t.Fatalf("new_request_id() failed: %v", err)
-	}
+	require.NoError(t, err, "new_request_id() failed")
 
 	id := L.GetGlobal("id").String()
-	if len(id) != 26 { // ULID length
-		t.Errorf("id length = %d, want 26", len(id))
-	}
+	assert.Len(t, id, 26, "ULID should be 26 characters")
 
 	// Verify it's a valid ULID (not just 26 random characters)
-	if _, err := ulid.Parse(id); err != nil {
-		t.Errorf("id %q is not a valid ULID: %v", id, err)
-	}
+	_, err = ulid.Parse(id)
+	assert.NoError(t, err, "id %q is not a valid ULID", id)
 }
 
 func TestHostFunctions_NewRequestID_Unique(t *testing.T) {
@@ -169,15 +156,11 @@ func TestHostFunctions_NewRequestID_Unique(t *testing.T) {
 		id1 = holomush.new_request_id()
 		id2 = holomush.new_request_id()
 	`)
-	if err != nil {
-		t.Fatalf("new_request_id() failed: %v", err)
-	}
+	require.NoError(t, err, "new_request_id() failed")
 
 	id1 := L.GetGlobal("id1").String()
 	id2 := L.GetGlobal("id2").String()
-	if id1 == id2 {
-		t.Errorf("IDs should be unique, got %q twice", id1)
-	}
+	assert.NotEqual(t, id1, id2, "IDs should be unique")
 }
 
 func TestHostFunctions_KV_RequiresCapability(t *testing.T) {
@@ -191,9 +174,7 @@ func TestHostFunctions_KV_RequiresCapability(t *testing.T) {
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_get("key")`)
-	if err == nil {
-		t.Error("expected capability error for kv_get without kv.read")
-	}
+	assert.Error(t, err, "expected capability error for kv_get without kv.read")
 }
 
 func TestHostFunctions_KVSet_RequiresWriteCapability(t *testing.T) {
@@ -202,18 +183,15 @@ func TestHostFunctions_KVSet_RequiresWriteCapability(t *testing.T) {
 
 	enforcer := capability.NewEnforcer()
 	// Only kv.read, not kv.write
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`holomush.kv_set("key", "value")`)
-	if err == nil {
-		t.Error("expected capability error for kv_set without kv.write")
-	}
+	err = L.DoString(`holomush.kv_set("key", "value")`)
+	assert.Error(t, err, "expected capability error for kv_set without kv.write")
 }
 
 func TestHostFunctions_KVDelete_RequiresWriteCapability(t *testing.T) {
@@ -222,18 +200,15 @@ func TestHostFunctions_KVDelete_RequiresWriteCapability(t *testing.T) {
 
 	enforcer := capability.NewEnforcer()
 	// Only kv.read, not kv.write
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`holomush.kv_delete("key")`)
-	if err == nil {
-		t.Error("expected capability error for kv_delete without kv.write")
-	}
+	err = L.DoString(`holomush.kv_delete("key")`)
+	assert.Error(t, err, "expected capability error for kv_delete without kv.write")
 }
 
 func TestHostFunctions_KV_WithCapability(t *testing.T) {
@@ -241,39 +216,28 @@ func TestHostFunctions_KV_WithCapability(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	// Set returns (nil, nil) on success
-	err := L.DoString(`result, err = holomush.kv_set("mykey", "myvalue")`)
-	if err != nil {
-		t.Fatalf("kv_set failed: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_set("mykey", "myvalue")`)
+	require.NoError(t, err, "kv_set failed")
 
 	setResult := L.GetGlobal("result")
 	setErr := L.GetGlobal("err")
-	if setResult.Type() != lua.LTNil {
-		t.Errorf("kv_set result = %v, want nil", setResult)
-	}
-	if setErr.Type() != lua.LTNil {
-		t.Errorf("kv_set err = %v, want nil", setErr)
-	}
+	assert.Equal(t, lua.LTNil, setResult.Type(), "kv_set result should be nil")
+	assert.Equal(t, lua.LTNil, setErr.Type(), "kv_set err should be nil")
 
 	// Get returns (value, nil) on success
 	err = L.DoString(`result, err = holomush.kv_get("mykey")`)
-	if err != nil {
-		t.Fatalf("kv_get failed: %v", err)
-	}
+	require.NoError(t, err, "kv_get failed")
 
 	result := L.GetGlobal("result").String()
-	if result != "myvalue" {
-		t.Errorf("result = %q, want %q", result, "myvalue")
-	}
+	assert.Equal(t, "myvalue", result)
 }
 
 func TestHostFunctions_KVGet_ReturnsNilForMissingKey(t *testing.T) {
@@ -281,30 +245,23 @@ func TestHostFunctions_KVGet_ReturnsNilForMissingKey(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`
+	err = L.DoString(`
 		val, err = holomush.kv_get("nonexistent")
 	`)
-	if err != nil {
-		t.Fatalf("kv_get failed: %v", err)
-	}
+	require.NoError(t, err, "kv_get failed")
 
 	val := L.GetGlobal("val")
 	errVal := L.GetGlobal("err")
 
-	if val.Type() != lua.LTNil {
-		t.Errorf("expected nil for missing key, got %v", val)
-	}
-	if errVal.Type() != lua.LTNil {
-		t.Errorf("expected nil error for missing key, got %v", errVal)
-	}
+	assert.Equal(t, lua.LTNil, val.Type(), "expected nil for missing key")
+	assert.Equal(t, lua.LTNil, errVal.Type(), "expected nil error for missing key")
 }
 
 func TestHostFunctions_KVGet_NoStoreAvailable(t *testing.T) {
@@ -312,25 +269,20 @@ func TestHostFunctions_KVGet_NoStoreAvailable(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	// nil kv store
 	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`
+	err = L.DoString(`
 		val, err = holomush.kv_get("key")
 	`)
-	if err != nil {
-		t.Fatalf("kv_get failed: %v", err)
-	}
+	require.NoError(t, err, "kv_get failed")
 
 	errVal := L.GetGlobal("err")
-	if errVal.Type() != lua.LTString {
-		t.Errorf("expected error string when kv store unavailable, got %v", errVal.Type())
-	}
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string when kv store unavailable")
 }
 
 func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
@@ -338,27 +290,20 @@ func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	// nil kv store
 	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
-	if err != nil {
-		t.Fatalf("kv_set failed: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_set("key", "value")`)
+	require.NoError(t, err, "kv_set failed")
 
 	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
-	if result.Type() != lua.LTNil {
-		t.Errorf("expected nil result, got %v", result.Type())
-	}
-	if errVal.Type() != lua.LTString {
-		t.Errorf("expected error string when kv store unavailable, got %v", errVal.Type())
-	}
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string when kv store unavailable")
 }
 
 func TestHostFunctions_KVDelete(t *testing.T) {
@@ -366,36 +311,27 @@ func TestHostFunctions_KVDelete(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	// Set a key
-	err := L.DoString(`holomush.kv_set("deletekey", "somevalue")`)
-	if err != nil {
-		t.Fatalf("kv_set failed: %v", err)
-	}
+	err = L.DoString(`holomush.kv_set("deletekey", "somevalue")`)
+	require.NoError(t, err, "kv_set failed")
 
 	// Delete it
 	err = L.DoString(`holomush.kv_delete("deletekey")`)
-	if err != nil {
-		t.Fatalf("kv_delete failed: %v", err)
-	}
+	require.NoError(t, err, "kv_delete failed")
 
 	// Verify it's gone
 	err = L.DoString(`result, err = holomush.kv_get("deletekey")`)
-	if err != nil {
-		t.Fatalf("kv_get failed: %v", err)
-	}
+	require.NoError(t, err, "kv_get failed")
 
 	result := L.GetGlobal("result")
-	if result.Type() != lua.LTNil {
-		t.Errorf("expected nil after delete, got %v", result)
-	}
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil after delete")
 }
 
 func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
@@ -403,27 +339,20 @@ func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	// nil kv store
 	hf := hostfunc.New(nil, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`result, err = holomush.kv_delete("key")`)
-	if err != nil {
-		t.Fatalf("kv_delete failed: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_delete("key")`)
+	require.NoError(t, err, "kv_delete failed")
 
 	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
-	if result.Type() != lua.LTNil {
-		t.Errorf("expected nil result, got %v", result.Type())
-	}
-	if errVal.Type() != lua.LTString {
-		t.Errorf("expected error string when kv store unavailable, got %v", errVal.Type())
-	}
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string when kv store unavailable")
 }
 
 func TestHostFunctions_KVGet_StoreError(t *testing.T) {
@@ -431,9 +360,8 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{
 		data:   make(map[string][]byte),
@@ -442,18 +370,12 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`val, err = holomush.kv_get("key")`)
-	if err != nil {
-		t.Fatalf("kv_get failed: %v", err)
-	}
+	err = L.DoString(`val, err = holomush.kv_get("key")`)
+	require.NoError(t, err, "kv_get failed")
 
 	errVal := L.GetGlobal("err")
-	if errVal.Type() != lua.LTString {
-		t.Fatalf("expected error string, got %v", errVal.Type())
-	}
-	if errVal.String() != "database connection failed" {
-		t.Errorf("error = %q, want %q", errVal.String(), "database connection failed")
-	}
+	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Equal(t, "database connection failed", errVal.String())
 }
 
 func TestHostFunctions_KVSet_StoreError(t *testing.T) {
@@ -461,9 +383,8 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{
 		data:   make(map[string][]byte),
@@ -472,22 +393,14 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
-	if err != nil {
-		t.Fatalf("kv_set failed: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_set("key", "value")`)
+	require.NoError(t, err, "kv_set failed")
 
 	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
-	if result.Type() != lua.LTNil {
-		t.Errorf("expected nil result, got %v", result.Type())
-	}
-	if errVal.Type() != lua.LTString {
-		t.Fatalf("expected error string, got %v", errVal.Type())
-	}
-	if errVal.String() != "write failed: disk full" {
-		t.Errorf("error = %q, want %q", errVal.String(), "write failed: disk full")
-	}
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
+	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Equal(t, "write failed: disk full", errVal.String())
 }
 
 func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
@@ -495,9 +408,8 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{
 		data:      make(map[string][]byte),
@@ -506,22 +418,14 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`result, err = holomush.kv_delete("key")`)
-	if err != nil {
-		t.Fatalf("kv_delete failed: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_delete("key")`)
+	require.NoError(t, err, "kv_delete failed")
 
 	result := L.GetGlobal("result")
 	errVal := L.GetGlobal("err")
-	if result.Type() != lua.LTNil {
-		t.Errorf("expected nil result, got %v", result.Type())
-	}
-	if errVal.Type() != lua.LTString {
-		t.Fatalf("expected error string, got %v", errVal.Type())
-	}
-	if errVal.String() != "delete failed: permission denied" {
-		t.Errorf("error = %q, want %q", errVal.String(), "delete failed: permission denied")
-	}
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
+	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Equal(t, "delete failed: permission denied", errVal.String())
 }
 
 func TestHostFunctions_KV_MissingArguments(t *testing.T) {
@@ -542,18 +446,15 @@ func TestHostFunctions_KV_MissingArguments(t *testing.T) {
 			defer L.Close()
 
 			enforcer := capability.NewEnforcer()
-			if err := enforcer.SetGrants("test-plugin", tt.caps); err != nil {
-				t.Fatal(err)
-			}
+			err := enforcer.SetGrants("test-plugin", tt.caps)
+			require.NoError(t, err)
 
 			kvStore := &mockKVStore{data: make(map[string][]byte)}
 			hf := hostfunc.New(kvStore, enforcer)
 			hf.Register(L, "test-plugin")
 
-			err := L.DoString(tt.code)
-			if err == nil {
-				t.Errorf("expected error for %s", tt.name)
-			}
+			err = L.DoString(tt.code)
+			assert.Error(t, err, "expected error for %s", tt.name)
 		})
 	}
 }
@@ -563,18 +464,15 @@ func TestHostFunctions_KVGet_EmptyKeyRejected(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`holomush.kv_get("")`)
-	if err == nil {
-		t.Error("expected error for empty key")
-	}
+	err = L.DoString(`holomush.kv_get("")`)
+	assert.Error(t, err, "expected error for empty key")
 }
 
 func TestHostFunctions_KVSet_EmptyKeyRejected(t *testing.T) {
@@ -582,18 +480,15 @@ func TestHostFunctions_KVSet_EmptyKeyRejected(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`holomush.kv_set("", "value")`)
-	if err == nil {
-		t.Error("expected error for empty key")
-	}
+	err = L.DoString(`holomush.kv_set("", "value")`)
+	assert.Error(t, err, "expected error for empty key")
 }
 
 func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
@@ -601,18 +496,15 @@ func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`holomush.kv_delete("")`)
-	if err == nil {
-		t.Error("expected error for empty key")
-	}
+	err = L.DoString(`holomush.kv_delete("")`)
+	assert.Error(t, err, "expected error for empty key")
 }
 
 func TestHostFunctions_KVSet_EmptyValueAllowed(t *testing.T) {
@@ -620,38 +512,27 @@ func TestHostFunctions_KVSet_EmptyValueAllowed(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read", "kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
 	// Empty values should be allowed (useful for clearing/resetting)
-	err := L.DoString(`result, err = holomush.kv_set("mykey", "")`)
-	if err != nil {
-		t.Fatalf("kv_set with empty value failed: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_set("mykey", "")`)
+	require.NoError(t, err, "kv_set with empty value failed")
 
 	setErr := L.GetGlobal("err")
-	if setErr.Type() != lua.LTNil {
-		t.Errorf("expected nil error for empty value, got %v", setErr)
-	}
+	assert.Equal(t, lua.LTNil, setErr.Type(), "expected nil error for empty value")
 
 	// Verify we can read it back
 	err = L.DoString(`result, err = holomush.kv_get("mykey")`)
-	if err != nil {
-		t.Fatalf("kv_get failed: %v", err)
-	}
+	require.NoError(t, err, "kv_get failed")
 
 	result := L.GetGlobal("result")
-	if result.Type() != lua.LTString {
-		t.Errorf("expected string result, got %v", result.Type())
-	}
-	if result.String() != "" {
-		t.Errorf("expected empty string, got %q", result.String())
-	}
+	assert.Equal(t, lua.LTString, result.Type(), "expected string result")
+	assert.Equal(t, "", result.String(), "expected empty string")
 }
 
 func TestHostFunctions_KV_CapabilityDenied_ErrorMessage(t *testing.T) {
@@ -665,18 +546,12 @@ func TestHostFunctions_KV_CapabilityDenied_ErrorMessage(t *testing.T) {
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_get("key")`)
-	if err == nil {
-		t.Fatal("expected capability error")
-	}
+	require.Error(t, err, "expected capability error")
 
 	// Error message should contain plugin name and capability for debugging
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, "test-plugin") {
-		t.Errorf("error message should contain plugin name, got: %s", errMsg)
-	}
-	if !strings.Contains(errMsg, "kv.read") {
-		t.Errorf("error message should contain capability name, got: %s", errMsg)
-	}
+	assert.Contains(t, errMsg, "test-plugin", "error message should contain plugin name")
+	assert.Contains(t, errMsg, "kv.read", "error message should contain capability name")
 }
 
 func TestHostFunctions_KVGet_Timeout(t *testing.T) {
@@ -684,30 +559,24 @@ func TestHostFunctions_KVGet_Timeout(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.read"})
+	require.NoError(t, err)
 
 	// Create a slow store that exceeds the 5-second timeout
 	kvStore := &slowKVStore{delay: 10 * time.Second}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`val, err = holomush.kv_get("key")`)
-	if err != nil {
-		t.Fatalf("kv_get raised error instead of returning error tuple: %v", err)
-	}
+	err = L.DoString(`val, err = holomush.kv_get("key")`)
+	require.NoError(t, err, "kv_get raised error instead of returning error tuple")
 
 	errVal := L.GetGlobal("err")
-	if errVal.Type() != lua.LTString {
-		t.Errorf("expected error string for timeout, got %v", errVal.Type())
-	}
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
 	// Error should indicate deadline/timeout
 	errMsg := errVal.String()
-	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
-		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
-	}
+	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
+		"error should mention timeout/deadline, got: %s", errMsg)
 }
 
 func TestHostFunctions_KVSet_Timeout(t *testing.T) {
@@ -715,28 +584,22 @@ func TestHostFunctions_KVSet_Timeout(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &slowKVStore{delay: 10 * time.Second}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
-	if err != nil {
-		t.Fatalf("kv_set raised error instead of returning error tuple: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_set("key", "value")`)
+	require.NoError(t, err, "kv_set raised error instead of returning error tuple")
 
 	errVal := L.GetGlobal("err")
-	if errVal.Type() != lua.LTString {
-		t.Errorf("expected error string for timeout, got %v", errVal.Type())
-	}
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
 	errMsg := errVal.String()
-	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
-		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
-	}
+	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
+		"error should mention timeout/deadline, got: %s", errMsg)
 }
 
 func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
@@ -744,28 +607,22 @@ func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
 	defer L.Close()
 
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("test-plugin", []string{"kv.write"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("test-plugin", []string{"kv.write"})
+	require.NoError(t, err)
 
 	kvStore := &slowKVStore{delay: 10 * time.Second}
 	hf := hostfunc.New(kvStore, enforcer)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`result, err = holomush.kv_delete("key")`)
-	if err != nil {
-		t.Fatalf("kv_delete raised error instead of returning error tuple: %v", err)
-	}
+	err = L.DoString(`result, err = holomush.kv_delete("key")`)
+	require.NoError(t, err, "kv_delete raised error instead of returning error tuple")
 
 	errVal := L.GetGlobal("err")
-	if errVal.Type() != lua.LTString {
-		t.Errorf("expected error string for timeout, got %v", errVal.Type())
-	}
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
 	errMsg := errVal.String()
-	if !strings.Contains(errMsg, "deadline") && !strings.Contains(errMsg, "timeout") {
-		t.Errorf("error should mention timeout/deadline, got: %s", errMsg)
-	}
+	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
+		"error should mention timeout/deadline, got: %s", errMsg)
 }
 
 func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
@@ -775,20 +632,16 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	L1 := lua.NewState()
 	defer L1.Close()
 	enforcer := capability.NewEnforcer()
-	if err := enforcer.SetGrants("plugin-a", []string{"kv.read", "kv.write"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := enforcer.SetGrants("plugin-b", []string{"kv.read"}); err != nil {
-		t.Fatal(err)
-	}
+	err := enforcer.SetGrants("plugin-a", []string{"kv.read", "kv.write"})
+	require.NoError(t, err)
+	err = enforcer.SetGrants("plugin-b", []string{"kv.read"})
+	require.NoError(t, err)
 
 	hfA := hostfunc.New(kvStore, enforcer)
 	hfA.Register(L1, "plugin-a")
 
-	err := L1.DoString(`holomush.kv_set("secret", "plugin-a-data")`)
-	if err != nil {
-		t.Fatalf("plugin-a kv_set failed: %v", err)
-	}
+	err = L1.DoString(`holomush.kv_set("secret", "plugin-a-data")`)
+	require.NoError(t, err, "plugin-a kv_set failed")
 
 	// Plugin B tries to read - should get nil (different namespace)
 	L2 := lua.NewState()
@@ -797,14 +650,10 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	hfB.Register(L2, "plugin-b")
 
 	err = L2.DoString(`val, err = holomush.kv_get("secret")`)
-	if err != nil {
-		t.Fatalf("plugin-b kv_get failed: %v", err)
-	}
+	require.NoError(t, err, "plugin-b kv_get failed")
 
 	val := L2.GetGlobal("val")
-	if val.Type() != lua.LTNil {
-		t.Errorf("plugin-b should not see plugin-a's data, got %v", val)
-	}
+	assert.Equal(t, lua.LTNil, val.Type(), "plugin-b should not see plugin-a's data")
 }
 
 type mockKVStore struct {

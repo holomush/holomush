@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -66,10 +67,10 @@ type statusConfig struct {
 // Validate checks that the configuration is valid.
 func (cfg *statusConfig) Validate() error {
 	if cfg.coreAddr == "" {
-		return fmt.Errorf("core-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("core-addr is required")
 	}
 	if cfg.gatewayAddr == "" {
-		return fmt.Errorf("gateway-addr is required")
+		return oops.Code("CONFIG_INVALID").Errorf("gateway-addr is required")
 	}
 	return nil
 }
@@ -98,7 +99,7 @@ func newStatusCmd() *cobra.Command {
 func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
 	// Query both core and gateway processes
@@ -114,7 +115,7 @@ func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
 	if cfg.jsonOutput {
 		output, err = formatStatusJSON(statuses)
 		if err != nil {
-			return fmt.Errorf("failed to format JSON: %w", err)
+			return oops.Code("JSON_FORMAT_FAILED").With("operation", "format JSON").Wrap(err)
 		}
 	} else {
 		output = formatStatusTable(statuses)
@@ -129,19 +130,19 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	// Get certs directory
 	certsDir, err := xdg.CertsDir()
 	if err != nil {
-		return NewProcessStatusError(component, fmt.Errorf("failed to get certs directory: %w", err))
+		return NewProcessStatusError(component, oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err))
 	}
 
 	// Extract game_id from CA certificate for ServerName verification
 	gameID, err := control.ExtractGameIDFromCA(certsDir)
 	if err != nil {
-		return NewProcessStatusError(component, fmt.Errorf("failed to extract game_id from CA: %w", err))
+		return NewProcessStatusError(component, oops.Code("GAME_ID_EXTRACT_FAILED").With("operation", "extract game_id from CA").With("certs_dir", certsDir).Wrap(err))
 	}
 
 	// Load TLS config for client with game_id for proper ServerName verification
 	tlsConfig, err := control.LoadControlClientTLS(certsDir, component, gameID)
 	if err != nil {
-		return NewProcessStatusError(component, fmt.Errorf("failed to load TLS config: %w", err))
+		return NewProcessStatusError(component, oops.Code("TLS_LOAD_FAILED").With("operation", "load TLS config").With("component", component).Wrap(err))
 	}
 
 	// Create gRPC client with mTLS
@@ -175,7 +176,7 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	//nolint:staticcheck // grpc.NewClient requires different setup; DialContext works for 1.x
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
 	if err != nil {
-		return NewProcessStatusError(component, fmt.Errorf("failed to connect: %w", err))
+		return NewProcessStatusError(component, oops.Code("GRPC_CONNECT_FAILED").With("operation", "connect").With("addr", addr).Wrap(err))
 	}
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
@@ -188,7 +189,7 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	// Query status
 	resp, err := client.Status(ctx, &controlv1.StatusRequest{})
 	if err != nil {
-		return NewProcessStatusError(component, fmt.Errorf("failed to query status: %w", err))
+		return NewProcessStatusError(component, oops.Code("STATUS_QUERY_FAILED").With("operation", "query status").With("component", component).Wrap(err))
 	}
 
 	// Process is running and responding
@@ -200,27 +201,32 @@ func formatStatusTable(statuses map[string]ProcessStatus) string {
 	var buf []byte
 	w := tabwriter.NewWriter((*byteWriter)(&buf), 0, 0, 2, ' ', 0)
 
-	// Header
-	_, _ = fmt.Fprintln(w, "PROCESS\tSTATUS\tHEALTH\tPID\tUPTIME")
-	_, _ = fmt.Fprintln(w, "-------\t------\t------\t---\t------")
+	// Header - tabwriter writes to []byte buffer, errors impossible
+	//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+	fmt.Fprintln(w, "PROCESS\tSTATUS\tHEALTH\tPID\tUPTIME")
+	//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+	fmt.Fprintln(w, "-------\t------\t------\t---\t------")
 
 	// Process rows in consistent order
 	for _, component := range []string{"core", "gateway"} {
 		status := statuses[component]
 		if status.Running {
 			uptime := formatUptime(status.UptimeSeconds)
-			_, _ = fmt.Fprintf(w, "%s\trunning\t%s\t%d\t%s\n",
+			//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+			fmt.Fprintf(w, "%s\trunning\t%s\t%d\t%s\n",
 				component, status.Health, status.PID, uptime)
 		} else {
 			reason := "not running"
 			if status.Error != "" {
 				reason = status.Error
 			}
-			_, _ = fmt.Fprintf(w, "%s\tstopped\t-\t-\t%s\n", component, reason)
+			//nolint:errcheck // tabwriter writes to in-memory buffer, cannot fail
+			fmt.Fprintf(w, "%s\tstopped\t-\t-\t%s\n", component, reason)
 		}
 	}
 
-	_ = w.Flush()
+	//nolint:errcheck // tabwriter Flush to in-memory buffer cannot fail
+	w.Flush()
 	return string(buf)
 }
 
@@ -228,7 +234,7 @@ func formatStatusTable(statuses map[string]ProcessStatus) string {
 func formatStatusJSON(statuses map[string]ProcessStatus) (string, error) {
 	data, err := json.MarshalIndent(statuses, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal status: %w", err)
+		return "", oops.Code("JSON_MARSHAL_FAILED").With("operation", "marshal status").Wrap(err)
 	}
 	return string(data), nil
 }

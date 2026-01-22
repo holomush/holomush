@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/holomush/holomush/internal/plugin"
 )
 
@@ -25,9 +28,7 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() error = %v, want nil", err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestValidateSchema_ValidBinaryManifest(t *testing.T) {
@@ -44,9 +45,7 @@ binary-plugin:
   executable: combat-linux-amd64
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() error = %v, want nil", err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestValidateSchema_NameTooLong(t *testing.T) {
@@ -59,9 +58,7 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err == nil {
-		t.Error("ValidateSchema() expected error for name exceeding 64 chars")
-	}
+	assert.Error(t, err, "ValidateSchema() expected error for name exceeding 64 chars")
 }
 
 func TestValidateSchema_NameExactlyMaxLength(t *testing.T) {
@@ -74,9 +71,7 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() error = %v, want nil for 64 char name", err)
-	}
+	assert.NoError(t, err, "ValidateSchema() error for 64 char name")
 }
 
 func TestValidateSchema_MissingRequiredFields(t *testing.T) {
@@ -116,9 +111,7 @@ lua-plugin:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := plugin.ValidateSchema([]byte(tt.yaml))
-			if err == nil {
-				t.Errorf("ValidateSchema() expected error for %s", tt.name)
-			}
+			assert.Error(t, err, "ValidateSchema() expected error for %s", tt.name)
 		})
 	}
 }
@@ -193,9 +186,7 @@ lua-plugin:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := plugin.ValidateSchema([]byte(tt.yaml))
-			if err == nil {
-				t.Errorf("ValidateSchema() expected error for %s", tt.name)
-			}
+			assert.Error(t, err, "ValidateSchema() expected error for %s", tt.name)
 		})
 	}
 }
@@ -209,9 +200,7 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err == nil {
-		t.Error("ValidateSchema() expected error for invalid type")
-	}
+	assert.Error(t, err, "ValidateSchema() expected error for invalid type")
 }
 
 func TestValidateSchema_EmptyInput(t *testing.T) {
@@ -226,23 +215,17 @@ func TestValidateSchema_EmptyInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := plugin.ValidateSchema(tt.input)
-			if err == nil {
-				t.Error("ValidateSchema() expected error for empty input")
-			}
+			assert.Error(t, err, "ValidateSchema() expected error for empty input")
 		})
 	}
 }
 
 func TestGenerateSchema(t *testing.T) {
 	schema, err := plugin.GenerateSchema()
-	if err != nil {
-		t.Fatalf("GenerateSchema() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Schema should be valid JSON
-	if len(schema) == 0 {
-		t.Error("GenerateSchema() returned empty schema")
-	}
+	assert.NotEmpty(t, schema, "GenerateSchema() returned empty schema")
 
 	// Schema should contain expected fields
 	schemaStr := string(schema)
@@ -255,9 +238,7 @@ func TestGenerateSchema(t *testing.T) {
 		`"$schema"`,
 	}
 	for _, field := range expectedFields {
-		if !strings.Contains(schemaStr, field) {
-			t.Errorf("GenerateSchema() missing expected field %s", field)
-		}
+		assert.Contains(t, schemaStr, field, "GenerateSchema() missing expected field %s", field)
 	}
 }
 
@@ -271,28 +252,20 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Fatalf("ValidateSchema() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Reset cache
 	plugin.ResetSchemaCache()
 
 	// Validation should still work (recompiles schema)
 	err = plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() after reset error = %v", err)
-	}
+	assert.NoError(t, err, "ValidateSchema() after reset")
 }
 
 func TestGetSchemaID(t *testing.T) {
 	id := plugin.GetSchemaID()
-	if id == "" {
-		t.Error("GetSchemaID() returned empty string")
-	}
-	if !strings.Contains(id, "holomush") {
-		t.Errorf("GetSchemaID() = %q, want to contain 'holomush'", id)
-	}
+	assert.NotEmpty(t, id, "GetSchemaID() returned empty string")
+	assert.Contains(t, id, "holomush", "GetSchemaID() should contain 'holomush'")
 }
 
 func TestFormatSchemaError(t *testing.T) {
@@ -325,9 +298,7 @@ func TestFormatSchemaError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := plugin.FormatSchemaError(tt.err)
-			if got != tt.want {
-				t.Errorf("FormatSchemaError() = %q, want %q", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -337,9 +308,7 @@ func TestValidateSchema_InvalidYAML(t *testing.T) {
 version: 1.0.0
 type: [invalid`
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err == nil {
-		t.Error("ValidateSchema() expected error for invalid YAML")
-	}
+	assert.Error(t, err, "ValidateSchema() expected error for invalid YAML")
 }
 
 func TestValidateSchema_WithEngineField(t *testing.T) {
@@ -352,9 +321,7 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() error = %v, want nil for manifest with engine field", err)
-	}
+	assert.NoError(t, err, "ValidateSchema() for manifest with engine field")
 }
 
 func TestValidateSchema_WithDependenciesField(t *testing.T) {
@@ -369,9 +336,7 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() error = %v, want nil for manifest with dependencies field", err)
-	}
+	assert.NoError(t, err, "ValidateSchema() for manifest with dependencies field")
 }
 
 func TestValidateSchema_WithAllOptionalFields(t *testing.T) {
@@ -392,7 +357,87 @@ lua-plugin:
   entry: main.lua
 `
 	err := plugin.ValidateSchema([]byte(yaml))
-	if err != nil {
-		t.Errorf("ValidateSchema() error = %v, want nil for manifest with all optional fields", err)
+	assert.NoError(t, err, "ValidateSchema() for manifest with all optional fields")
+}
+
+func TestGenerateSchema_ContainsRequiredFields(t *testing.T) {
+	schema, err := plugin.GenerateSchema()
+	require.NoError(t, err)
+
+	schemaStr := string(schema)
+
+	// Check for required fields marker
+	assert.Contains(t, schemaStr, "required")
+
+	// Check for type enum
+	assert.Contains(t, schemaStr, "lua")
+	assert.Contains(t, schemaStr, "binary")
+}
+
+func TestValidateSchema_ValidNamePatterns(t *testing.T) {
+	validNames := []string{
+		"a",
+		"test",
+		"test-plugin",
+		"my-cool-plugin",
+		"plugin123",
+		"a234567890123456789012345678901234567890123456789012345678901234", // exactly 64 chars
 	}
+
+	for _, name := range validNames {
+		t.Run(name, func(t *testing.T) {
+			yaml := fmt.Sprintf(`
+name: %s
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`, name)
+			err := plugin.ValidateSchema([]byte(yaml))
+			assert.NoError(t, err, "ValidateSchema() should accept valid name %q", name)
+		})
+	}
+}
+
+func TestValidateSchema_Capabilities(t *testing.T) {
+	yaml := `
+name: test
+version: 1.0.0
+type: lua
+capabilities:
+  - events.emit.*
+  - world.read.**
+  - kv.read
+  - kv.write
+lua-plugin:
+  entry: main.lua
+`
+	err := plugin.ValidateSchema([]byte(yaml))
+	assert.NoError(t, err)
+}
+
+func TestValidateSchema_Events(t *testing.T) {
+	yaml := `
+name: test
+version: 1.0.0
+type: lua
+events:
+  - say
+  - pose
+  - arrive
+  - leave
+  - custom_event
+lua-plugin:
+  entry: main.lua
+`
+	err := plugin.ValidateSchema([]byte(yaml))
+	assert.NoError(t, err)
+}
+
+func TestGetSchemaID_Format(t *testing.T) {
+	id := plugin.GetSchemaID()
+
+	// Should be a URI-like string
+	assert.True(t, strings.HasPrefix(id, "https://") || strings.Contains(id, "holomush"),
+		"Schema ID should be a URI or contain 'holomush': %s", id)
 }

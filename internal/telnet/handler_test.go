@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // testConn wraps net.Pipe for testing.
@@ -101,12 +103,8 @@ func TestConnectionHandler_Connect_Success(t *testing.T) {
 	tc.writeLine("connect testuser password")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Welcome back") {
-		t.Errorf("expected welcome message, got: %s", response)
-	}
-	if !handler.authed {
-		t.Error("expected handler to be authenticated")
-	}
+	assert.Contains(t, response, "Welcome back", "expected welcome message")
+	assert.True(t, handler.authed, "expected handler to be authenticated")
 }
 
 func TestConnectionHandler_Connect_AlreadyAuthed(t *testing.T) {
@@ -128,9 +126,7 @@ func TestConnectionHandler_Connect_AlreadyAuthed(t *testing.T) {
 	tc.writeLine("connect testuser password")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Already connected") {
-		t.Errorf("expected 'Already connected', got: %s", response)
-	}
+	assert.Contains(t, response, "Already connected")
 }
 
 func TestConnectionHandler_Connect_MissingPassword(t *testing.T) {
@@ -147,9 +143,7 @@ func TestConnectionHandler_Connect_MissingPassword(t *testing.T) {
 	tc.writeLine("connect testuser")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Usage: connect") {
-		t.Errorf("expected usage message, got: %s", response)
-	}
+	assert.Contains(t, response, "Usage: connect")
 }
 
 func TestConnectionHandler_Connect_InvalidCredentials(t *testing.T) {
@@ -166,9 +160,7 @@ func TestConnectionHandler_Connect_InvalidCredentials(t *testing.T) {
 	tc.writeLine("connect wronguser wrongpass")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Invalid username or password") {
-		t.Errorf("expected invalid credentials message, got: %s", response)
-	}
+	assert.Contains(t, response, "Invalid username or password")
 }
 
 // --- Look command tests ---
@@ -187,9 +179,7 @@ func TestConnectionHandler_Look_NotAuthed(t *testing.T) {
 	tc.writeLine("look")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "must connect first") {
-		t.Errorf("expected auth required message, got: %s", response)
-	}
+	assert.Contains(t, response, "must connect first")
 }
 
 func TestConnectionHandler_Look_Success(t *testing.T) {
@@ -211,12 +201,8 @@ func TestConnectionHandler_Look_Success(t *testing.T) {
 	tc.writeLine("look")
 	lines := tc.readLines(2) // Room name and description
 
-	if lines[0] != "The Void" {
-		t.Errorf("expected 'The Void', got: %s", lines[0])
-	}
-	if !strings.Contains(lines[1], "empty expanse") {
-		t.Errorf("expected room description, got: %s", lines[1])
-	}
+	assert.Equal(t, "The Void", lines[0])
+	assert.Contains(t, lines[1], "empty expanse")
 }
 
 // --- Say command tests ---
@@ -235,9 +221,7 @@ func TestConnectionHandler_Say_NotAuthed(t *testing.T) {
 	tc.writeLine("say Hello!")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "must connect first") {
-		t.Errorf("expected auth required message, got: %s", response)
-	}
+	assert.Contains(t, response, "must connect first")
 }
 
 func TestConnectionHandler_Say_EmptyMessage(t *testing.T) {
@@ -257,9 +241,7 @@ func TestConnectionHandler_Say_EmptyMessage(t *testing.T) {
 	tc.writeLine("say")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Say what?") {
-		t.Errorf("expected 'Say what?', got: %s", response)
-	}
+	assert.Contains(t, response, "Say what?")
 }
 
 func TestConnectionHandler_Say_Success(t *testing.T) {
@@ -279,9 +261,7 @@ func TestConnectionHandler_Say_Success(t *testing.T) {
 	tc.writeLine("say Hello, world!")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "You say") && !strings.Contains(response, "Hello, world!") {
-		t.Errorf("expected say confirmation, got: %s", response)
-	}
+	assert.True(t, strings.Contains(response, "You say") || strings.Contains(response, "Hello, world!"), "expected say confirmation, got: %s", response)
 }
 
 // --- Pose command tests ---
@@ -300,9 +280,7 @@ func TestConnectionHandler_Pose_NotAuthed(t *testing.T) {
 	tc.writeLine("pose waves")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "must connect first") {
-		t.Errorf("expected auth required message, got: %s", response)
-	}
+	assert.Contains(t, response, "must connect first")
 }
 
 func TestConnectionHandler_Pose_EmptyAction(t *testing.T) {
@@ -322,9 +300,7 @@ func TestConnectionHandler_Pose_EmptyAction(t *testing.T) {
 	tc.writeLine("pose")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Pose what?") {
-		t.Errorf("expected 'Pose what?', got: %s", response)
-	}
+	assert.Contains(t, response, "Pose what?")
 }
 
 func TestConnectionHandler_Pose_Success(t *testing.T) {
@@ -344,9 +320,7 @@ func TestConnectionHandler_Pose_Success(t *testing.T) {
 	tc.writeLine("pose waves happily")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "TestChar") || !strings.Contains(response, "waves happily") {
-		t.Errorf("expected pose confirmation with character name, got: %s", response)
-	}
+	assert.True(t, strings.Contains(response, "TestChar") && strings.Contains(response, "waves happily"), "expected pose confirmation with character name, got: %s", response)
 }
 
 // --- Quit command tests ---
@@ -369,16 +343,14 @@ func TestConnectionHandler_Quit_NotAuthed(t *testing.T) {
 	tc.writeLine("quit")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Goodbye") {
-		t.Errorf("expected 'Goodbye', got: %s", response)
-	}
+	assert.Contains(t, response, "Goodbye")
 
 	// Wait for handler to exit
 	select {
 	case <-done:
 		// Good, handler exited
 	case <-time.After(time.Second):
-		t.Error("handler did not exit after quit")
+		assert.Fail(t, "handler did not exit after quit")
 	}
 }
 
@@ -403,16 +375,14 @@ func TestConnectionHandler_Quit_Authed(t *testing.T) {
 	tc.writeLine("quit")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Goodbye") {
-		t.Errorf("expected 'Goodbye', got: %s", response)
-	}
+	assert.Contains(t, response, "Goodbye")
 
 	// Wait for handler to exit
 	select {
 	case <-done:
 		// Good, handler exited
 	case <-time.After(time.Second):
-		t.Error("handler did not exit after quit")
+		assert.Fail(t, "handler did not exit after quit")
 	}
 }
 
@@ -432,9 +402,7 @@ func TestConnectionHandler_UnknownCommand(t *testing.T) {
 	tc.writeLine("foobar")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "Unknown command: foobar") {
-		t.Errorf("expected unknown command message, got: %s", response)
-	}
+	assert.Contains(t, response, "Unknown command: foobar")
 }
 
 func TestConnectionHandler_EmptyLine(t *testing.T) {
@@ -455,9 +423,7 @@ func TestConnectionHandler_EmptyLine(t *testing.T) {
 	tc.writeLine("look")
 	response := tc.readLine()
 
-	if !strings.Contains(response, "must connect first") {
-		t.Errorf("expected auth message after empty line, got: %s", response)
-	}
+	assert.Contains(t, response, "must connect first")
 }
 
 // --- sendEvent tests ---
@@ -480,9 +446,7 @@ func TestConnectionHandler_SendEvent_Say(t *testing.T) {
 	}()
 
 	response := tc.readLine()
-	if !strings.Contains(response, "says") && !strings.Contains(response, "Hello!") {
-		t.Errorf("expected say event format, got: %s", response)
-	}
+	assert.True(t, strings.Contains(response, "says") || strings.Contains(response, "Hello!"), "expected say event format, got: %s", response)
 }
 
 func TestConnectionHandler_SendEvent_Pose(t *testing.T) {
@@ -503,9 +467,7 @@ func TestConnectionHandler_SendEvent_Pose(t *testing.T) {
 	}()
 
 	response := tc.readLine()
-	if !strings.Contains(response, "waves") {
-		t.Errorf("expected pose event format, got: %s", response)
-	}
+	assert.Contains(t, response, "waves", "expected pose event format")
 }
 
 func TestConnectionHandler_SendEvent_CorruptedPayload(t *testing.T) {
@@ -525,9 +487,7 @@ func TestConnectionHandler_SendEvent_CorruptedPayload(t *testing.T) {
 	}()
 
 	response := tc.readLine()
-	if !strings.Contains(response, "corrupted") {
-		t.Errorf("expected corrupted message indicator, got: %s", response)
-	}
+	assert.Contains(t, response, "corrupted", "expected corrupted message indicator")
 }
 
 func TestConnectionHandler_SendEvent_UnknownType(t *testing.T) {
@@ -547,9 +507,7 @@ func TestConnectionHandler_SendEvent_UnknownType(t *testing.T) {
 	}()
 
 	response := tc.readLine()
-	if !strings.Contains(response, "unknown_type") {
-		t.Errorf("expected unknown type in output, got: %s", response)
-	}
+	assert.Contains(t, response, "unknown_type", "expected unknown type in output")
 }
 
 func TestConnectionHandler_SendEvent_ShortActorID(t *testing.T) {
@@ -571,9 +529,7 @@ func TestConnectionHandler_SendEvent_ShortActorID(t *testing.T) {
 
 	response := tc.readLine()
 	// Should not panic and should use the full short ID
-	if !strings.Contains(response, "short") {
-		t.Errorf("expected short actor ID in output, got: %s", response)
-	}
+	assert.Contains(t, response, "short", "expected short actor ID in output")
 }
 
 // --- Real-time event subscription tests ---
@@ -604,19 +560,16 @@ func TestConnectionHandler_ReceivesRealTimeEvents(t *testing.T) {
 	// This event should be broadcast and received by the connected handler
 	otherCharID := core.NewULID()
 	err := engine.HandleSay(ctx, otherCharID, testLocationID, "Hello from another player!")
-	if err != nil {
-		t.Fatalf("HandleSay failed: %v", err)
-	}
+	require.NoError(t, err, "HandleSay failed")
 
 	// The handler should receive and display the event via real-time broadcast
 	// Keep reading until we find the expected message (there may be replay prefix)
 	found := false
 	for i := 0; i < 5; i++ {
-		if err := tc.client.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
-			t.Fatalf("failed to set deadline: %v", err)
-		}
-		response, err := tc.reader.ReadString('\n')
-		if err != nil {
+		err := tc.client.SetReadDeadline(time.Now().Add(time.Second))
+		require.NoError(t, err, "failed to set deadline")
+		response, readErr := tc.reader.ReadString('\n')
+		if readErr != nil {
 			break
 		}
 		response = strings.TrimSpace(response)
@@ -625,9 +578,7 @@ func TestConnectionHandler_ReceivesRealTimeEvents(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Error("expected to receive real-time event with 'Hello from another player!'")
-	}
+	assert.True(t, found, "expected to receive real-time event with 'Hello from another player!'")
 }
 
 func TestConnectionHandler_ReceivesRealTimePoseEvents(t *testing.T) {
@@ -655,19 +606,16 @@ func TestConnectionHandler_ReceivesRealTimePoseEvents(t *testing.T) {
 	// Another character poses
 	otherCharID := core.NewULID()
 	err := engine.HandlePose(ctx, otherCharID, testLocationID, "waves hello")
-	if err != nil {
-		t.Fatalf("HandlePose failed: %v", err)
-	}
+	require.NoError(t, err, "HandlePose failed")
 
 	// The handler should receive and display the event via real-time broadcast
 	// Keep reading until we find the expected message (there may be replay prefix)
 	found := false
 	for i := 0; i < 5; i++ {
-		if err := tc.client.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
-			t.Fatalf("failed to set deadline: %v", err)
-		}
-		response, err := tc.reader.ReadString('\n')
-		if err != nil {
+		err := tc.client.SetReadDeadline(time.Now().Add(time.Second))
+		require.NoError(t, err, "failed to set deadline")
+		response, readErr := tc.reader.ReadString('\n')
+		if readErr != nil {
 			break
 		}
 		response = strings.TrimSpace(response)
@@ -676,9 +624,7 @@ func TestConnectionHandler_ReceivesRealTimePoseEvents(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Error("expected to receive real-time pose event with 'waves hello'")
-	}
+	assert.True(t, found, "expected to receive real-time pose event with 'waves hello'")
 }
 
 func TestConnectionHandler_UnsubscribesOnDisconnect(t *testing.T) {
@@ -715,7 +661,7 @@ func TestConnectionHandler_UnsubscribesOnDisconnect(t *testing.T) {
 	case <-done:
 		// Good
 	case <-time.After(time.Second):
-		t.Fatal("handler did not exit")
+		require.Fail(t, "handler did not exit")
 	}
 
 	tc.close()
@@ -725,9 +671,7 @@ func TestConnectionHandler_UnsubscribesOnDisconnect(t *testing.T) {
 	// (the subscription channel should be cleaned up)
 	otherCharID := core.NewULID()
 	err := engine.HandleSay(ctx, otherCharID, testLocationID, "This should not cause issues")
-	if err != nil {
-		t.Fatalf("HandleSay after disconnect failed: %v", err)
-	}
+	require.NoError(t, err, "HandleSay after disconnect failed")
 }
 
 func TestConnectionHandler_FiltersOwnEvents(t *testing.T) {
@@ -757,18 +701,13 @@ func TestConnectionHandler_FiltersOwnEvents(t *testing.T) {
 	response := tc.readLine()
 
 	// Should be the "You say" confirmation, not the broadcast format
-	if !strings.Contains(response, "You say") {
-		t.Errorf("expected 'You say' confirmation, got: %s", response)
-	}
+	assert.Contains(t, response, "You say", "expected 'You say' confirmation")
 
 	// Verify we don't get a duplicate broadcast (try reading with short timeout)
-	if err := tc.client.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
-		t.Fatalf("failed to set deadline: %v", err)
-	}
-	_, err := tc.reader.ReadString('\n')
-	if err == nil {
-		t.Error("expected no additional message (own event should be filtered)")
-	}
+	err := tc.client.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	require.NoError(t, err, "failed to set deadline")
+	_, readErr := tc.reader.ReadString('\n')
+	assert.Error(t, readErr, "expected no additional message (own event should be filtered)")
 }
 
 // --- Context cancellation test ---
@@ -795,6 +734,6 @@ func TestConnectionHandler_ContextCancellation(t *testing.T) {
 	case <-done:
 		// Good, handler exited on context cancellation
 	case <-time.After(time.Second):
-		t.Error("handler did not exit after context cancellation")
+		assert.Fail(t, "handler did not exit after context cancellation")
 	}
 }
