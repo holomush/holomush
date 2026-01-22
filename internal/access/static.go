@@ -9,6 +9,7 @@ import (
 
 	"github.com/gobwas/glob"
 	"github.com/holomush/holomush/internal/plugin/capability"
+	"github.com/samber/oops"
 )
 
 // StaticAccessControl implements AccessControl with static role definitions.
@@ -121,18 +122,38 @@ func (s *StaticAccessControl) checkRole(_ context.Context, subject, action, reso
 	return false
 }
 
-// AssignRole assigns a role to a subject.
-func (s *StaticAccessControl) AssignRole(subject, role string) {
+// AssignRole sets the role for a subject.
+// Returns error if subject or role is empty, or role is unknown.
+func (s *StaticAccessControl) AssignRole(subject, role string) error {
+	if subject == "" {
+		return oops.In("access").Code("INVALID_SUBJECT").New("subject cannot be empty")
+	}
+	if role == "" {
+		return oops.In("access").Code("INVALID_ROLE").New("role cannot be empty")
+	}
+	if _, ok := s.roles[role]; !ok {
+		return oops.In("access").Code("UNKNOWN_ROLE").With("role", role).New("unknown role")
+	}
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.subjects[subject] = role
+	s.mu.Unlock()
+
+	return nil
 }
 
-// RemoveRole removes a subject's role assignment.
-func (s *StaticAccessControl) RemoveRole(subject string) {
+// RevokeRole removes a subject's role assignment.
+// Returns error if subject is empty.
+func (s *StaticAccessControl) RevokeRole(subject string) error {
+	if subject == "" {
+		return oops.In("access").Code("INVALID_SUBJECT").New("subject cannot be empty")
+	}
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.subjects, subject)
+	s.mu.Unlock()
+
+	return nil
 }
 
 // GetRole returns the role assigned to a subject, or empty string if none.

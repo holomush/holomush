@@ -9,6 +9,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/plugin/capability"
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,9 +72,9 @@ func TestStaticAccessControl_RoleBasedAccess(t *testing.T) {
 	ctx := context.Background()
 
 	// Assign roles
-	ac.AssignRole("char:player1", "player")
-	ac.AssignRole("char:builder1", "builder")
-	ac.AssignRole("char:admin1", "admin")
+	require.NoError(t, ac.AssignRole("char:player1", "player"))
+	require.NoError(t, ac.AssignRole("char:builder1", "builder"))
+	require.NoError(t, ac.AssignRole("char:admin1", "admin"))
 
 	// Player can execute basic commands
 	assert.True(t, ac.Check(ctx, "char:player1", "execute", "command:say"))
@@ -101,22 +102,22 @@ func TestStaticAccessControl_AssignRole(t *testing.T) {
 	assert.False(t, ac.Check(ctx, "char:test", "execute", "command:say"))
 
 	// After assignment - allowed
-	ac.AssignRole("char:test", "player")
+	require.NoError(t, ac.AssignRole("char:test", "player"))
 	assert.True(t, ac.Check(ctx, "char:test", "execute", "command:say"))
 
 	// Change role
-	ac.AssignRole("char:test", "admin")
+	require.NoError(t, ac.AssignRole("char:test", "admin"))
 	assert.True(t, ac.Check(ctx, "char:test", "grant", "anything"))
 }
 
-func TestStaticAccessControl_RemoveRole(t *testing.T) {
+func TestStaticAccessControl_RevokeRole(t *testing.T) {
 	ac := access.NewStaticAccessControl(nil, nil)
 	ctx := context.Background()
 
-	ac.AssignRole("char:test", "player")
+	require.NoError(t, ac.AssignRole("char:test", "player"))
 	assert.True(t, ac.Check(ctx, "char:test", "execute", "command:say"))
 
-	ac.RemoveRole("char:test")
+	require.NoError(t, ac.RevokeRole("char:test"))
 	assert.False(t, ac.Check(ctx, "char:test", "execute", "command:say"))
 }
 
@@ -127,7 +128,7 @@ func TestStaticAccessControl_GetRole(t *testing.T) {
 	assert.Equal(t, "", ac.GetRole("char:unknown"))
 
 	// Role assigned
-	ac.AssignRole("char:test", "builder")
+	require.NoError(t, ac.AssignRole("char:test", "builder"))
 	assert.Equal(t, "builder", ac.GetRole("char:test"))
 }
 
@@ -146,7 +147,7 @@ func TestStaticAccessControl_SessionSubjects(t *testing.T) {
 	ctx := context.Background()
 
 	// Session subjects work like char subjects
-	ac.AssignRole("session:web-123", "player")
+	require.NoError(t, ac.AssignRole("session:web-123", "player"))
 	assert.True(t, ac.Check(ctx, "session:web-123", "execute", "command:say"))
 	assert.False(t, ac.Check(ctx, "session:web-123", "execute", "command:@dig"))
 }
@@ -162,7 +163,7 @@ func TestStaticAccessControl_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func(n int) {
 			subject := "char:user" + string(rune('0'+n%10))
-			ac.AssignRole(subject, "player")
+			_ = ac.AssignRole(subject, "player")
 			ac.Check(ctx, subject, "execute", "command:say")
 			ac.GetRole(subject)
 			done <- true
@@ -175,14 +176,68 @@ func TestStaticAccessControl_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestStaticAccessControl_InvalidRoleNoPermissions(t *testing.T) {
+func TestStaticAccessControl_UnknownRoleReturnsError(t *testing.T) {
 	ac := access.NewStaticAccessControl(nil, nil)
-	ctx := context.Background()
 
-	// Assign a non-existent role
-	ac.AssignRole("char:test", "nonexistent")
+	// Assign a non-existent role returns error
+	err := ac.AssignRole("char:test", "nonexistent")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "UNKNOWN_ROLE")
+	errutil.AssertErrorContext(t, err, "role", "nonexistent")
+}
 
-	// Should have no permissions
-	assert.False(t, ac.Check(ctx, "char:test", "read", "anything"))
-	assert.False(t, ac.Check(ctx, "char:test", "execute", "command:say"))
+func TestStaticAccessControl_AssignRoleValidation(t *testing.T) {
+	ac := access.NewStaticAccessControl(nil, nil)
+
+	tests := []struct {
+		name        string
+		subject     string
+		role        string
+		wantCode    string
+		wantContext map[string]any
+	}{
+		{
+			name:     "empty subject",
+			subject:  "",
+			role:     "player",
+			wantCode: "INVALID_SUBJECT",
+		},
+		{
+			name:     "empty role",
+			subject:  "char:test",
+			role:     "",
+			wantCode: "INVALID_ROLE",
+		},
+		{
+			name:        "unknown role",
+			subject:     "char:test",
+			role:        "superadmin",
+			wantCode:    "UNKNOWN_ROLE",
+			wantContext: map[string]any{"role": "superadmin"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ac.AssignRole(tt.subject, tt.role)
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, tt.wantCode)
+			for k, v := range tt.wantContext {
+				errutil.AssertErrorContext(t, err, k, v)
+			}
+		})
+	}
+}
+
+func TestStaticAccessControl_RevokeRoleValidation(t *testing.T) {
+	ac := access.NewStaticAccessControl(nil, nil)
+
+	// Empty subject returns error
+	err := ac.RevokeRole("")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_SUBJECT")
+
+	// Non-existent subject is not an error (idempotent)
+	err = ac.RevokeRole("char:nonexistent")
+	assert.NoError(t, err)
 }
