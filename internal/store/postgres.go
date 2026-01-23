@@ -50,10 +50,32 @@ type poolIface interface {
 	Close()
 }
 
+// connIface defines the pgx.Conn methods used for LISTEN/NOTIFY subscriptions.
+// This interface enables testing with mocks.
+type connIface interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	WaitForNotification(ctx context.Context) (*pgconn.Notification, error)
+	Close(ctx context.Context) error
+}
+
+// connectorFunc creates a new database connection for LISTEN/NOTIFY.
+// This is a function type to enable test mocking.
+type connectorFunc func(ctx context.Context, dsn string) (connIface, error)
+
+// defaultConnector creates a real pgx connection.
+func defaultConnector(ctx context.Context, dsn string) (connIface, error) {
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		return nil, oops.With("dsn_length", len(dsn)).Wrap(err)
+	}
+	return conn, nil
+}
+
 // PostgresEventStore implements EventStore using PostgreSQL.
 type PostgresEventStore struct {
-	pool poolIface
-	dsn  string // stored for creating new connections for LISTEN
+	pool      poolIface
+	dsn       string        // stored for creating new connections for LISTEN
+	connector connectorFunc // for creating LISTEN connections (nil uses default)
 }
 
 // NewPostgresEventStore creates a new PostgreSQL event store.
@@ -231,7 +253,11 @@ func streamToChannel(stream string) string {
 // to fetch full events by ID. Channels are closed when context is cancelled.
 func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error) {
 	// Create a dedicated connection for LISTEN (can't use pooled connections)
-	conn, err := pgx.Connect(ctx, s.dsn)
+	connector := s.connector
+	if connector == nil {
+		connector = defaultConnector
+	}
+	conn, err := connector(ctx, s.dsn)
 	if err != nil {
 		return nil, nil, oops.With("operation", "connect for subscription").With("stream", stream).Wrap(err)
 	}

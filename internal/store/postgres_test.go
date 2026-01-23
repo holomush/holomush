@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
@@ -772,4 +773,242 @@ func TestPostgresEventStore_Close(t *testing.T) {
 
 func TestErrSystemInfoNotFound(t *testing.T) {
 	assert.Equal(t, "system info key not found", ErrSystemInfoNotFound.Error())
+}
+
+func TestStreamToChannel(t *testing.T) {
+	tests := []struct {
+		name   string
+		stream string
+		want   string
+	}{
+		{
+			name:   "simple stream",
+			stream: "location",
+			want:   "events_location",
+		},
+		{
+			name:   "stream with colon",
+			stream: "location:room-1",
+			want:   "events_location_room_1",
+		},
+		{
+			name:   "stream with hyphens",
+			stream: "character-events",
+			want:   "events_character_events",
+		},
+		{
+			name:   "stream with both",
+			stream: "world:location-abc:exit-123",
+			want:   "events_world_location_abc_exit_123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := streamToChannel(tt.stream)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// mockConn implements connIface for testing Subscribe.
+type mockConn struct {
+	execFunc               func(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	waitForNotificationFunc func(ctx context.Context) (*pgconn.Notification, error)
+	closeFunc              func(ctx context.Context) error
+}
+
+func (m *mockConn) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+	if m.execFunc != nil {
+		return m.execFunc(ctx, sql, arguments...)
+	}
+	return pgconn.NewCommandTag("LISTEN"), nil
+}
+
+func (m *mockConn) WaitForNotification(ctx context.Context) (*pgconn.Notification, error) {
+	if m.waitForNotificationFunc != nil {
+		return m.waitForNotificationFunc(ctx)
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (m *mockConn) Close(_ context.Context) error {
+	if m.closeFunc != nil {
+		return m.closeFunc(context.Background())
+	}
+	return nil
+}
+
+func TestPostgresEventStore_Subscribe_ConnectionError(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return nil, errors.New("connection refused")
+		},
+	}
+
+	ctx := context.Background()
+	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+
+	require.Error(t, err)
+	assert.Nil(t, eventCh)
+	assert.Nil(t, errCh)
+	assert.Contains(t, err.Error(), "connection refused")
+}
+
+func TestPostgresEventStore_Subscribe_ListenError(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				execFunc: func(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+					return pgconn.CommandTag{}, errors.New("LISTEN failed")
+				},
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+
+	require.Error(t, err)
+	assert.Nil(t, eventCh)
+	assert.Nil(t, errCh)
+	assert.Contains(t, err.Error(), "LISTEN failed")
+}
+
+func TestPostgresEventStore_Subscribe_Success(t *testing.T) {
+	validULID := core.NewULID()
+	notificationSent := make(chan struct{})
+
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				waitForNotificationFunc: func(ctx context.Context) (*pgconn.Notification, error) {
+					select {
+					case <-notificationSent:
+						return &pgconn.Notification{
+							Channel: "events_test_stream",
+							Payload: validULID.String(),
+						}, nil
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+				},
+			}, nil
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+	require.NoError(t, err)
+	require.NotNil(t, eventCh)
+	require.NotNil(t, errCh)
+
+	// Trigger a notification
+	close(notificationSent)
+
+	// Should receive the event ID
+	select {
+	case id := <-eventCh:
+		assert.Equal(t, validULID, id)
+	case err := <-errCh:
+		t.Fatalf("unexpected error: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for event")
+	}
+}
+
+func TestPostgresEventStore_Subscribe_InvalidPayload(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				waitForNotificationFunc: func(_ context.Context) (*pgconn.Notification, error) {
+					return &pgconn.Notification{
+						Channel: "events_test_stream",
+						Payload: "invalid-ulid",
+					}, nil
+				},
+			}, nil
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+	require.NoError(t, err)
+
+	// Should receive an error due to invalid ULID
+	select {
+	case <-eventCh:
+		t.Fatal("should not receive event with invalid payload")
+	case err := <-errCh:
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bad data size")
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for error")
+	}
+}
+
+func TestPostgresEventStore_Subscribe_WaitError(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				waitForNotificationFunc: func(_ context.Context) (*pgconn.Notification, error) {
+					return nil, errors.New("connection lost")
+				},
+			}, nil
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+	require.NoError(t, err)
+
+	// Should receive an error due to wait failure
+	select {
+	case <-eventCh:
+		t.Fatal("should not receive event")
+	case err := <-errCh:
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "connection lost")
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for error")
+	}
+}
+
+func TestPostgresEventStore_Subscribe_ContextCancelled(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{}, nil
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+	require.NoError(t, err)
+	require.NotNil(t, eventCh)
+	require.NotNil(t, errCh)
+
+	// Cancel context - should close channels gracefully
+	cancel()
+
+	// Channels should eventually close without errors
+	select {
+	case _, ok := <-eventCh:
+		assert.False(t, ok, "event channel should be closed")
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for channel close")
+	}
 }
