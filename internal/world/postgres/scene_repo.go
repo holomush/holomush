@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -118,51 +117,7 @@ func (r *SceneRepository) GetScenesFor(ctx context.Context, characterID ulid.ULI
 	}
 	defer rows.Close()
 
-	return r.scanLocations(rows)
-}
-
-func (r *SceneRepository) scanLocations(rows pgx.Rows) ([]*world.Location, error) {
-	var locations []*world.Location
-	for rows.Next() {
-		var loc world.Location
-		var idStr string
-		var shadowsIDStr, ownerIDStr *string
-
-		if err := rows.Scan(
-			&idStr, &loc.Type, &shadowsIDStr, &loc.Name, &loc.Description,
-			&ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
-		); err != nil {
-			return nil, oops.With("operation", "scan location").Wrap(err)
-		}
-
-		var err error
-		loc.ID, err = ulid.Parse(idStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse location id").With("id", idStr).Wrap(err)
-		}
-		if shadowsIDStr != nil {
-			sid, err := ulid.Parse(*shadowsIDStr)
-			if err != nil {
-				return nil, oops.With("operation", "parse shadows_id").With("shadows_id", *shadowsIDStr).Wrap(err)
-			}
-			loc.ShadowsID = &sid
-		}
-		if ownerIDStr != nil {
-			oid, err := ulid.Parse(*ownerIDStr)
-			if err != nil {
-				return nil, oops.With("operation", "parse owner_id").With("owner_id", *ownerIDStr).Wrap(err)
-			}
-			loc.OwnerID = &oid
-		}
-
-		locations = append(locations, &loc)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, oops.With("operation", "iterate locations").Wrap(err)
-	}
-
-	return locations, nil
+	return scanLocations(rows)
 }
 
 // Compile-time interface check.

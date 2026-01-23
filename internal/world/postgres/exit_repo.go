@@ -186,7 +186,14 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	// If bidirectional, find and delete the return exit
 	if exit.Bidirectional && exit.ReturnName != "" {
 		returnExit, findErr := r.FindByName(ctx, exit.ToLocationID, exit.ReturnName)
-		if findErr == nil && returnExit != nil {
+		if findErr != nil {
+			// Log but don't fail - the primary delete succeeded
+			slog.Warn("failed to find return exit during bidirectional cleanup",
+				"exit_id", id.String(),
+				"to_location_id", exit.ToLocationID.String(),
+				"return_name", exit.ReturnName,
+				"error", findErr)
+		} else if returnExit != nil {
 			// Check that this is indeed the matching return exit
 			if returnExit.ToLocationID == exit.FromLocationID {
 				_, cleanupErr := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
@@ -400,9 +407,15 @@ func stringsToULIDs(strs []string) []ulid.ULID {
 	}
 	ids := make([]ulid.ULID, 0, len(strs))
 	for _, s := range strs {
-		if id, err := ulid.Parse(strings.TrimSpace(s)); err == nil {
-			ids = append(ids, id)
+		trimmed := strings.TrimSpace(s)
+		id, err := ulid.Parse(trimmed)
+		if err != nil {
+			slog.Warn("invalid ULID in database array, skipping",
+				"value", trimmed,
+				"error", err)
+			continue
 		}
+		ids = append(ids, id)
 	}
 	return ids
 }
