@@ -259,6 +259,7 @@ type ExitRepository interface {
     Delete(ctx context.Context, id ulid.ULID) error
     ListFromLocation(ctx context.Context, locationID ulid.ULID) ([]*Exit, error)
     FindByName(ctx context.Context, locationID ulid.ULID, name string) (*Exit, error)
+    FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*Exit, error)
 }
 
 // ObjectRepository manages objects and containment.
@@ -278,6 +279,20 @@ type Containment struct {
     LocationID  *ulid.ULID
     CharacterID *ulid.ULID
     ObjectID    *ulid.ULID  // Container
+}
+
+// SceneRepository manages scene-specific operations.
+type SceneRepository interface {
+    AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role string) error
+    RemoveParticipant(ctx context.Context, sceneID, characterID ulid.ULID) error
+    ListParticipants(ctx context.Context, sceneID ulid.ULID) ([]SceneParticipant, error)
+    GetScenesFor(ctx context.Context, characterID ulid.ULID) ([]*Location, error)
+}
+
+// SceneParticipant represents a character's membership in a scene.
+type SceneParticipant struct {
+    CharacterID ulid.ULID
+    Role        string // "owner", "member", "invited"
 }
 ```
 
