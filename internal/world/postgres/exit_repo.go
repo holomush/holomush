@@ -58,13 +58,6 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 		exit.CreatedAt = time.Now()
 	}
 
-	lockDataJSON, err := marshalLockData(exit.LockData)
-	if err != nil {
-		return oops.With("operation", "marshal lock data").Wrap(err)
-	}
-
-	visibleToStrings := ulidsToStrings(exit.VisibleTo)
-
 	// Use a transaction to ensure atomic creation of bidirectional exits
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -74,6 +67,39 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 		// Rollback is a no-op if tx was committed; error is safe to ignore
 		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
 	}()
+
+	if err := r.insertExitTx(ctx, tx, exit); err != nil {
+		return err
+	}
+
+	// Create return exit if bidirectional
+	if exit.Bidirectional && exit.ReturnName != "" {
+		returnExit := exit.ReverseExit()
+		if returnExit != nil {
+			returnExit.ID = core.NewULID()
+			returnExit.CreatedAt = exit.CreatedAt
+
+			if err := r.insertExitTx(ctx, tx, returnExit); err != nil {
+				return oops.With("operation", "create return exit").Wrap(err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.With("operation", "commit transaction").Wrap(err)
+	}
+
+	return nil
+}
+
+// insertExitTx inserts a single exit row within a transaction.
+func (r *ExitRepository) insertExitTx(ctx context.Context, tx pgx.Tx, exit *world.Exit) error {
+	lockDataJSON, err := marshalLockData(exit.LockData)
+	if err != nil {
+		return oops.With("operation", "marshal lock data").Wrap(err)
+	}
+
+	visibleToStrings := ulidsToStrings(exit.VisibleTo)
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
@@ -96,47 +122,6 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 	)
 	if err != nil {
 		return oops.With("operation", "create exit").With("id", exit.ID.String()).Wrap(err)
-	}
-
-	// Create return exit if bidirectional
-	if exit.Bidirectional && exit.ReturnName != "" {
-		returnExit := exit.ReverseExit()
-		if returnExit != nil {
-			returnExit.ID = core.NewULID()
-			returnExit.CreatedAt = exit.CreatedAt
-
-			returnLockDataJSON, err := marshalLockData(returnExit.LockData)
-			if err != nil {
-				return oops.With("operation", "marshal return exit lock data").Wrap(err)
-			}
-
-			_, err = tx.Exec(ctx, `
-				INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
-				                   return_name, visibility, visible_to, locked, lock_type, lock_data, created_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-			`,
-				returnExit.ID.String(),
-				returnExit.FromLocationID.String(),
-				returnExit.ToLocationID.String(),
-				returnExit.Name,
-				returnExit.Aliases,
-				returnExit.Bidirectional,
-				nullableString(returnExit.ReturnName),
-				string(returnExit.Visibility),
-				visibleToStrings, // Same visibility as the original exit
-				returnExit.Locked,
-				nullableLockType(returnExit.LockType),
-				returnLockDataJSON,
-				returnExit.CreatedAt,
-			)
-			if err != nil {
-				return oops.With("operation", "create return exit").With("id", returnExit.ID.String()).Wrap(err)
-			}
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return oops.With("operation", "commit transaction").Wrap(err)
 	}
 
 	return nil
