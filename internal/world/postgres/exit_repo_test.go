@@ -49,8 +49,6 @@ func createTestLocations(ctx context.Context, t *testing.T) (ulid.ULID, ulid.ULI
 }
 
 func TestExitRepository_CRUD(t *testing.T) {
-
-
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 
@@ -215,8 +213,6 @@ func TestExitRepository_CRUD(t *testing.T) {
 }
 
 func TestExitRepository_ListFromLocation(t *testing.T) {
-
-
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)
@@ -257,8 +253,6 @@ func TestExitRepository_ListFromLocation(t *testing.T) {
 }
 
 func TestExitRepository_FindByName(t *testing.T) {
-
-
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)
@@ -306,8 +300,6 @@ func TestExitRepository_FindByName(t *testing.T) {
 }
 
 func TestExitRepository_WithLockData(t *testing.T) {
-
-
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)
@@ -339,8 +331,6 @@ func TestExitRepository_WithLockData(t *testing.T) {
 }
 
 func TestExitRepository_WithVisibleToList(t *testing.T) {
-
-
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)

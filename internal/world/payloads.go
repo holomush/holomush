@@ -5,11 +5,11 @@ package world
 
 // MovePayload represents a move event for characters or objects.
 type MovePayload struct {
-	EntityType string `json:"entity_type"`  // "character" | "object"
+	EntityType string `json:"entity_type"` // "character" | "object"
 	EntityID   string `json:"entity_id"`
-	FromType   string `json:"from_type"`    // "location" | "character" | "object"
+	FromType   string `json:"from_type"` // "location" | "character" | "object"
 	FromID     string `json:"from_id"`
-	ToType     string `json:"to_type"`      // "location" | "character" | "object"
+	ToType     string `json:"to_type"` // "location" | "character" | "object"
 	ToID       string `json:"to_id"`
 	ExitID     string `json:"exit_id,omitempty"`
 	ExitName   string `json:"exit_name,omitempty"`

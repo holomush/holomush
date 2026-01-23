@@ -321,4 +321,104 @@ var _ = Describe("PostgresEventStore", func() {
 			Expect(storedID).To(Equal(gameID))
 		})
 	})
+
+	Describe("Subscribe", func() {
+		const stream = "location:subscribe-test"
+
+		It("receives events via LISTEN/NOTIFY", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Start subscription before appending
+			eventCh, errCh, err := eventStore.Subscribe(ctx, stream)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Append an event
+			event := core.Event{
+				ID:        core.NewULID(),
+				Stream:    stream,
+				Type:      core.EventTypeSay,
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+				Payload:   []byte(`{"message":"Hello via NOTIFY!"}`),
+			}
+			err = eventStore.Append(ctx, event)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should receive the event via subscription
+			Eventually(eventCh, 2*time.Second).Should(Receive(Equal(event.ID)))
+
+			// No errors
+			Consistently(errCh, 100*time.Millisecond).ShouldNot(Receive())
+		})
+
+		It("receives multiple events in order", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			eventCh, errCh, err := eventStore.Subscribe(ctx, stream)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Append multiple events
+			ids := make([]ulid.ULID, 3)
+			for i := range 3 {
+				ids[i] = core.NewULID()
+				event := core.Event{
+					ID:        ids[i],
+					Stream:    stream,
+					Type:      core.EventTypeSay,
+					Timestamp: time.Now(),
+					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+					Payload:   []byte(`{}`),
+				}
+				err := eventStore.Append(ctx, event)
+				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(10 * time.Millisecond) // Ensure ordering
+			}
+
+			// Should receive all events in order
+			for _, expectedID := range ids {
+				Eventually(eventCh, 2*time.Second).Should(Receive(Equal(expectedID)))
+			}
+
+			Consistently(errCh, 100*time.Millisecond).ShouldNot(Receive())
+		})
+
+		It("stops receiving when context is cancelled", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+			eventCh, _, err := eventStore.Subscribe(ctx, stream)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Cancel context
+			cancel()
+
+			// Channel should eventually close
+			Eventually(eventCh).Should(BeClosed())
+		})
+
+		It("isolates subscriptions by stream", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Subscribe to a specific stream
+			eventCh, _, err := eventStore.Subscribe(ctx, "location:stream-a")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Append to a different stream
+			event := core.Event{
+				ID:        core.NewULID(),
+				Stream:    "location:stream-b",
+				Type:      core.EventTypeSay,
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+				Payload:   []byte(`{}`),
+			}
+			err = eventStore.Append(ctx, event)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should not receive event from other stream
+			Consistently(eventCh, 500*time.Millisecond).ShouldNot(Receive())
+		})
+	})
 })

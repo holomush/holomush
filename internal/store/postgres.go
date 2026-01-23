@@ -8,6 +8,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -42,6 +43,7 @@ type poolIface interface {
 // PostgresEventStore implements EventStore using PostgreSQL.
 type PostgresEventStore struct {
 	pool poolIface
+	dsn  string // stored for creating new connections for LISTEN
 }
 
 // NewPostgresEventStore creates a new PostgreSQL event store.
@@ -50,7 +52,7 @@ func NewPostgresEventStore(ctx context.Context, dsn string) (*PostgresEventStore
 	if err != nil {
 		return nil, oops.With("operation", "connect to database").Wrap(err)
 	}
-	return &PostgresEventStore{pool: pool}, nil
+	return &PostgresEventStore{pool: pool, dsn: dsn}, nil
 }
 
 // Close closes the database connection pool.
@@ -69,7 +71,7 @@ func (s *PostgresEventStore) Migrate(ctx context.Context) error {
 	return nil
 }
 
-// Append persists an event.
+// Append persists an event and notifies subscribers via NOTIFY.
 func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO events (id, stream, type, actor_kind, actor_id, payload, created_at)
@@ -85,6 +87,11 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 	if err != nil {
 		return oops.With("operation", "append event").With("event_id", event.ID.String()).With("stream", event.Stream).Wrap(err)
 	}
+
+	// Notify subscribers of the new event
+	// Errors here are ignored - event is already persisted, subscribers catch up via Replay
+	channel := streamToChannel(event.Stream)
+	_, _ = s.pool.Exec(ctx, "SELECT pg_notify($1, $2)", channel, event.ID.String()) //nolint:errcheck // best-effort notification
 	return nil
 }
 
@@ -193,4 +200,68 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return gameID, nil
+}
+
+// streamToChannel converts a stream name to a PostgreSQL notification channel name.
+// Replaces colons and hyphens with underscores since PG channel names must be valid identifiers.
+func streamToChannel(stream string) string {
+	s := strings.ReplaceAll(stream, ":", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	return "events_" + s
+}
+
+// Subscribe starts listening for events on the given stream via PostgreSQL LISTEN/NOTIFY.
+// Returns a channel of event IDs and an error channel. The caller should use Replay()
+// to fetch full events by ID. Channels are closed when context is cancelled.
+func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error) {
+	// Create a dedicated connection for LISTEN (can't use pooled connections)
+	conn, err := pgx.Connect(ctx, s.dsn)
+	if err != nil {
+		return nil, nil, oops.With("operation", "connect for subscription").With("stream", stream).Wrap(err)
+	}
+
+	channel := streamToChannel(stream)
+
+	// Start listening on the channel
+	_, err = conn.Exec(ctx, "LISTEN "+channel)
+	if err != nil {
+		_ = conn.Close(ctx) //nolint:errcheck // cleanup on error path
+		return nil, nil, oops.With("operation", "listen").With("channel", channel).Wrap(err)
+	}
+
+	events := make(chan ulid.ULID, 100)
+	errs := make(chan error, 1)
+
+	go func() {
+		defer close(events)
+		defer close(errs)
+		defer func() { _ = conn.Close(context.Background()) }() //nolint:errcheck // cleanup in goroutine
+
+		for {
+			notification, err := conn.WaitForNotification(ctx)
+			if err != nil {
+				// Context cancelled is normal shutdown
+				if ctx.Err() != nil {
+					return
+				}
+				errs <- oops.With("operation", "wait for notification").With("stream", stream).Wrap(err)
+				return
+			}
+
+			// Parse event ID from notification payload
+			eventID, err := ulid.Parse(notification.Payload)
+			if err != nil {
+				errs <- oops.With("operation", "parse event ID from notification").With("payload", notification.Payload).Wrap(err)
+				return
+			}
+
+			select {
+			case events <- eventID:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return events, errs, nil
 }

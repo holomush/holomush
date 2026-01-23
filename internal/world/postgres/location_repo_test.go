@@ -183,7 +183,6 @@ func TestLocationRepository_CRUD(t *testing.T) {
 }
 
 func TestLocationRepository_ListByType(t *testing.T) {
-
 	ctx := context.Background()
 	repo := postgres.NewLocationRepository(testPool)
 
@@ -253,7 +252,6 @@ func TestLocationRepository_ListByType(t *testing.T) {
 }
 
 func TestLocationRepository_GetShadowedBy(t *testing.T) {
-
 	ctx := context.Background()
 	repo := postgres.NewLocationRepository(testPool)
 

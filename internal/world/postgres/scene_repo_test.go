@@ -72,7 +72,6 @@ func createTestCharacterForSceneRepo(ctx context.Context, t *testing.T, name str
 }
 
 func TestSceneRepository_AddParticipant(t *testing.T) {
-
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
 	locationRepo := postgres.NewLocationRepository(testPool)
@@ -111,7 +110,6 @@ func TestSceneRepository_AddParticipant(t *testing.T) {
 }
 
 func TestSceneRepository_RemoveParticipant(t *testing.T) {
-
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
 	locationRepo := postgres.NewLocationRepository(testPool)
@@ -148,7 +146,6 @@ func TestSceneRepository_RemoveParticipant(t *testing.T) {
 }
 
 func TestSceneRepository_ListParticipants(t *testing.T) {
-
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
 	locationRepo := postgres.NewLocationRepository(testPool)
@@ -193,7 +190,6 @@ func TestSceneRepository_ListParticipants(t *testing.T) {
 }
 
 func TestSceneRepository_GetScenesFor(t *testing.T) {
-
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
 	locationRepo := postgres.NewLocationRepository(testPool)
