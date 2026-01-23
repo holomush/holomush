@@ -5,6 +5,7 @@
 package world
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -94,6 +95,21 @@ func (e *Exit) ReverseExit() *Exit {
 	if !e.Bidirectional || e.ReturnName == "" {
 		return nil
 	}
+
+	// Deep copy VisibleTo slice to avoid shared reference
+	var visibleTo []ulid.ULID
+	if len(e.VisibleTo) > 0 {
+		visibleTo = make([]ulid.ULID, len(e.VisibleTo))
+		copy(visibleTo, e.VisibleTo)
+	}
+
+	// Deep copy LockData map to avoid shared reference
+	var lockData map[string]any
+	if e.LockData != nil {
+		lockData = make(map[string]any, len(e.LockData))
+		maps.Copy(lockData, e.LockData)
+	}
+
 	return &Exit{
 		FromLocationID: e.ToLocationID,
 		ToLocationID:   e.FromLocationID,
@@ -101,9 +117,9 @@ func (e *Exit) ReverseExit() *Exit {
 		Bidirectional:  true,
 		ReturnName:     e.Name,
 		Visibility:     e.Visibility,
-		VisibleTo:      e.VisibleTo,
+		VisibleTo:      visibleTo,
 		Locked:         e.Locked,
 		LockType:       e.LockType,
-		LockData:       e.LockData,
+		LockData:       lockData,
 	}
 }

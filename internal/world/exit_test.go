@@ -31,6 +31,7 @@ func TestExit_MatchesName(t *testing.T) {
 		{"case insensitive alias", "N", true},
 		{"no match", "south", false},
 		{"partial match", "nor", false},
+		{"empty string", "", false},
 	}
 
 	for _, tt := range tests {
@@ -77,6 +78,12 @@ func TestExit_IsVisibleTo(t *testing.T) {
 	t.Run("visibility owner - not owner", func(t *testing.T) {
 		exit := &world.Exit{Visibility: world.VisibilityOwner}
 		assert.False(t, exit.IsVisibleTo(otherID, &ownerID))
+	})
+
+	t.Run("visibility owner - nil location owner returns false", func(t *testing.T) {
+		exit := &world.Exit{Visibility: world.VisibilityOwner}
+		// When location has no owner, owner-only exits should not be visible to anyone
+		assert.False(t, exit.IsVisibleTo(ownerID, nil))
 	})
 
 	t.Run("visibility list - in list", func(t *testing.T) {
@@ -145,6 +152,50 @@ func TestExit_ReverseExit(t *testing.T) {
 			ReturnName:    "",
 		}
 		assert.Nil(t, exit.ReverseExit())
+	})
+
+	t.Run("reverse exit does not share mutable references", func(t *testing.T) {
+		visibleTo := []ulid.ULID{ulid.Make()}
+		lockData := map[string]any{"key_id": "original-key"}
+
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Bidirectional:  true,
+			ReturnName:     "south",
+			Visibility:     world.VisibilityList,
+			VisibleTo:      visibleTo,
+			LockData:       lockData,
+		}
+
+		reverse := exit.ReverseExit()
+		assert.NotNil(t, reverse)
+
+		// Modify the reverse exit's mutable fields
+		reverse.LockData["key_id"] = "modified-key"
+		reverse.VisibleTo = append(reverse.VisibleTo, ulid.Make())
+
+		// Original should be unchanged
+		assert.Equal(t, "original-key", exit.LockData["key_id"], "modifying reverse should not affect original LockData")
+		assert.Len(t, exit.VisibleTo, 1, "modifying reverse should not affect original VisibleTo")
+	})
+
+	t.Run("reverse exit has empty aliases", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Aliases:        []string{"n", "forward"},
+			Bidirectional:  true,
+			ReturnName:     "south",
+		}
+
+		reverse := exit.ReverseExit()
+		assert.NotNil(t, reverse)
+		assert.Empty(t, reverse.Aliases, "reverse exit should not inherit aliases")
 	})
 }
 

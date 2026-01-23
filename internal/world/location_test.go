@@ -42,6 +42,8 @@ func TestParseReplayPolicy(t *testing.T) {
 		{"unlimited", "last:-1", -1},
 		{"invalid prefix", "recent:10", 0},
 		{"empty", "", 0},
+		{"malformed non-integer", "last:abc", 0},
+		{"malformed float", "last:1.5", 0},
 	}
 
 	for _, tt := range tests {
