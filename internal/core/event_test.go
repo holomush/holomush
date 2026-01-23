@@ -20,6 +20,12 @@ func TestEventType_String(t *testing.T) {
 		{"arrive event", EventTypeArrive, "arrive"},
 		{"leave event", EventTypeLeave, "leave"},
 		{"system event", EventTypeSystem, "system"},
+		{"move event", EventTypeMove, "move"},
+		{"object_create event", EventTypeObjectCreate, "object_create"},
+		{"object_destroy event", EventTypeObjectDestroy, "object_destroy"},
+		{"object_use event", EventTypeObjectUse, "object_use"},
+		{"object_examine event", EventTypeObjectExamine, "object_examine"},
+		{"object_give event", EventTypeObjectGive, "object_give"},
 	}
 
 	for _, tt := range tests {
@@ -41,11 +47,17 @@ func TestDocumentedEventTypes(t *testing.T) {
 	documentedTypes := []string{"say", "pose", "arrive"}
 
 	validTypes := map[string]bool{
-		string(EventTypeSay):    true,
-		string(EventTypePose):   true,
-		string(EventTypeArrive): true,
-		string(EventTypeLeave):  true,
-		string(EventTypeSystem): true,
+		string(EventTypeSay):           true,
+		string(EventTypePose):          true,
+		string(EventTypeArrive):        true,
+		string(EventTypeLeave):         true,
+		string(EventTypeSystem):        true,
+		string(EventTypeMove):          true,
+		string(EventTypeObjectCreate):  true,
+		string(EventTypeObjectDestroy): true,
+		string(EventTypeObjectUse):     true,
+		string(EventTypeObjectExamine): true,
+		string(EventTypeObjectGive):    true,
 	}
 
 	for _, docType := range documentedTypes {

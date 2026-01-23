@@ -20,6 +20,14 @@ const (
 	EventTypeArrive EventType = "arrive"
 	EventTypeLeave  EventType = "leave"
 	EventTypeSystem EventType = "system"
+
+	// World event types
+	EventTypeMove          EventType = "move"
+	EventTypeObjectCreate  EventType = "object_create"
+	EventTypeObjectDestroy EventType = "object_destroy"
+	EventTypeObjectUse     EventType = "object_use"
+	EventTypeObjectExamine EventType = "object_examine"
+	EventTypeObjectGive    EventType = "object_give"
 )
 
 // ActorKind identifies what type of entity caused an event.
