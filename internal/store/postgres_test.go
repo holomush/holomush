@@ -53,6 +53,10 @@ func TestPostgresEventStore_Append(t *testing.T) {
 						pgxmock.AnyArg(), // created_at
 					).
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				// pg_notify for real-time subscription
+				mock.ExpectExec(`SELECT pg_notify`).
+					WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+					WillReturnResult(pgxmock.NewResult("SELECT", 1))
 			},
 			wantErr: false,
 		},
@@ -90,6 +94,10 @@ func TestPostgresEventStore_Append(t *testing.T) {
 						pgxmock.AnyArg(),
 					).
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				// pg_notify for real-time subscription
+				mock.ExpectExec(`SELECT pg_notify`).
+					WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+					WillReturnResult(pgxmock.NewResult("SELECT", 1))
 			},
 			wantErr: false,
 		},
@@ -108,6 +116,10 @@ func TestPostgresEventStore_Append(t *testing.T) {
 						pgxmock.AnyArg(),
 					).
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+				// pg_notify for real-time subscription
+				mock.ExpectExec(`SELECT pg_notify`).
+					WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+					WillReturnResult(pgxmock.NewResult("SELECT", 1))
 			},
 			wantErr: false,
 		},

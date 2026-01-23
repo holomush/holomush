@@ -166,7 +166,10 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 }
 
 // Delete removes an exit by ID.
-// If bidirectional, also removes the return exit.
+// If bidirectional, also removes the return exit on a best-effort basis.
+// Note: Return exit cleanup failures are logged at ERROR level but don't fail
+// the operation, as the primary delete succeeded. This avoids transactional
+// complexity while maintaining visibility of orphaned exits.
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	// First, get the exit to check if it's bidirectional
 	exit, err := r.Get(ctx, id)
@@ -425,7 +428,7 @@ func stringsToULIDs(strs []string) []ulid.ULID {
 		trimmed := strings.TrimSpace(s)
 		id, err := ulid.Parse(trimmed)
 		if err != nil {
-			slog.Warn("invalid ULID in database array, skipping",
+			slog.Error("invalid ULID in database array - data corruption detected",
 				"value", trimmed,
 				"error", err)
 			continue
