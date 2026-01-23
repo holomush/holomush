@@ -433,11 +433,7 @@ func nullableString(s string) *string {
 }
 
 func nullableLockType(lt world.LockType) *string {
-	if lt == "" {
-		return nil
-	}
-	s := string(lt)
-	return &s
+	return nullableString(string(lt))
 }
 
 func marshalLockData(data map[string]any) ([]byte, error) {
