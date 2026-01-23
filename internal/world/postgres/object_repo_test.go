@@ -713,4 +713,42 @@ func TestObjectRepository_Move(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circular containment")
 	})
+
+	t.Run("move with multiple containment fields fails", func(t *testing.T) {
+		// Create a character for the test
+		charID := core.NewULID()
+		playerID := core.NewULID()
+		_, err := testPool.Exec(ctx, `
+			INSERT INTO players (id, username, password_hash, created_at)
+			VALUES ($1, $2, 'testhash', NOW())
+		`, playerID.String(), "player_multi_"+playerID.String())
+		require.NoError(t, err)
+		_, err = testPool.Exec(ctx, `
+			INSERT INTO characters (id, player_id, name, location_id, created_at)
+			VALUES ($1, $2, 'MultiTestChar', $3, NOW())
+		`, charID.String(), playerID.String(), loc1ID.String())
+		require.NoError(t, err)
+		defer func() {
+			_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
+			_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
+		}()
+
+		item := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Multi Containment Item",
+			Description: "Item for testing invalid containment.",
+			LocationID:  &loc1ID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, item))
+		defer func() { _ = repo.Delete(ctx, item.ID) }()
+
+		// Try to move with both LocationID and CharacterID set - should fail
+		err = repo.Move(ctx, item.ID, world.Containment{
+			LocationID:  &loc1ID,
+			CharacterID: &charID,
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exactly one")
+	})
 }

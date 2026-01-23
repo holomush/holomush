@@ -336,7 +336,10 @@ func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any
 		exit.ReturnName = *returnName
 	}
 	exit.Visibility = world.Visibility(visibilityStr)
-	exit.VisibleTo = stringsToULIDs(visibleToStrs)
+	exit.VisibleTo, err = stringsToULIDs(visibleToStrs)
+	if err != nil {
+		return nil, err
+	}
 	if lockType != nil {
 		exit.LockType = world.LockType(*lockType)
 	}
@@ -386,7 +389,10 @@ func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
 			exit.ReturnName = *returnName
 		}
 		exit.Visibility = world.Visibility(visibilityStr)
-		exit.VisibleTo = stringsToULIDs(visibleToStrs)
+		exit.VisibleTo, err = stringsToULIDs(visibleToStrs)
+		if err != nil {
+			return nil, err
+		}
 		if lockType != nil {
 			exit.LockType = world.LockType(*lockType)
 		}
@@ -419,23 +425,22 @@ func ulidsToStrings(ids []ulid.ULID) []string {
 	return strs
 }
 
-func stringsToULIDs(strs []string) []ulid.ULID {
+func stringsToULIDs(strs []string) ([]ulid.ULID, error) {
 	if len(strs) == 0 {
-		return nil
+		return nil, nil
 	}
 	ids := make([]ulid.ULID, 0, len(strs))
 	for _, s := range strs {
 		trimmed := strings.TrimSpace(s)
 		id, err := ulid.Parse(trimmed)
 		if err != nil {
-			slog.Error("invalid ULID in database array - data corruption detected",
-				"value", trimmed,
-				"error", err)
-			continue
+			return nil, oops.With("operation", "parse visible_to ulid").
+				With("value", trimmed).
+				Wrap(err)
 		}
 		ids = append(ids, id)
 	}
-	return ids
+	return ids, nil
 }
 
 func nullableString(s string) *string {
