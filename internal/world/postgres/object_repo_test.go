@@ -666,6 +666,66 @@ func TestObjectRepository_Move(t *testing.T) {
 		assert.Contains(t, err.Error(), "max nesting depth")
 	})
 
+	t.Run("move container with nested items exceeds depth fails", func(t *testing.T) {
+		// This tests the scenario where we move a container that already has items
+		// into another container, which could exceed max depth.
+		// Max depth is 3, so:
+		// - Create containerA (in room) with itemA inside (depth 2)
+		// - Create containerB (in room) with containerC inside (depth 2)
+		// - Moving containerA into containerC would make itemA at depth 4 - should fail
+
+		// Container A in room with an item inside
+		containerA := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Container A with item",
+			Description: "Has an item inside.",
+			LocationID:  &loc1ID,
+			IsContainer: true,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, containerA))
+		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
+
+		itemA := &world.Object{
+			ID:                  core.NewULID(),
+			Name:                "Item in Container A",
+			Description:         "Nested item.",
+			ContainedInObjectID: &containerA.ID,
+			CreatedAt:           time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, itemA))
+		defer func() { _ = repo.Delete(ctx, itemA.ID) }()
+
+		// Container B in room containing Container C
+		containerB := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Container B",
+			Description: "Top level.",
+			LocationID:  &loc1ID,
+			IsContainer: true,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, containerB))
+		defer func() { _ = repo.Delete(ctx, containerB.ID) }()
+
+		containerC := &world.Object{
+			ID:                  core.NewULID(),
+			Name:                "Container C",
+			Description:         "Inside B.",
+			ContainedInObjectID: &containerB.ID,
+			IsContainer:         true,
+			CreatedAt:           time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, containerC))
+		defer func() { _ = repo.Delete(ctx, containerC.ID) }()
+
+		// Moving containerA (which has itemA inside) into containerC would create:
+		// B -> C -> A -> itemA (depth 4, exceeds max of 3)
+		err := repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerC.ID})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "max nesting depth")
+	})
+
 	t.Run("move creates circular containment fails", func(t *testing.T) {
 		// Create container A containing container B
 		containerA := &world.Object{

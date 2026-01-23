@@ -249,9 +249,9 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 			return err
 		}
 
-		// Check max nesting depth: count how deep the target container is,
-		// then verify adding this object doesn't exceed the limit
-		if err := r.checkNestingDepth(ctx, *to.ObjectID); err != nil {
+		// Check max nesting depth: verify that target container depth + object subtree depth
+		// won't exceed the maximum allowed depth
+		if err := r.checkNestingDepth(ctx, objectID, *to.ObjectID); err != nil {
 			return err
 		}
 	}
@@ -332,13 +332,18 @@ func (r *ObjectRepository) checkCircularContainment(ctx context.Context, objectI
 	return nil
 }
 
-// checkNestingDepth verifies that placing an object into targetContainerID
+// checkNestingDepth verifies that placing objectID into targetContainerID
 // won't exceed the maximum nesting depth.
-// Uses a recursive CTE to count how deep the target container already is.
-func (r *ObjectRepository) checkNestingDepth(ctx context.Context, targetContainerID ulid.ULID) error {
-	var depth int
+// This checks both:
+// 1. How deep the target container is (walking up)
+// 2. How deep the descendants of objectID are (walking down)
+// The total must not exceed DefaultMaxNestingDepth.
+func (r *ObjectRepository) checkNestingDepth(ctx context.Context, objectID, targetContainerID ulid.ULID) error {
+	var targetDepth, objectSubtreeDepth int
+
+	// Query 1: Find how deep the target container is (walk up to root)
 	err := r.pool.QueryRow(ctx, `
-		WITH RECURSIVE containment_chain AS (
+		WITH RECURSIVE ancestors AS (
 			-- Start from the target container
 			SELECT id, contained_in_object_id, 1 as depth
 			FROM objects WHERE id = $1
@@ -346,22 +351,53 @@ func (r *ObjectRepository) checkNestingDepth(ctx context.Context, targetContaine
 			UNION ALL
 
 			-- Walk up the containment chain
-			SELECT o.id, o.contained_in_object_id, cc.depth + 1
+			SELECT o.id, o.contained_in_object_id, a.depth + 1
 			FROM objects o
-			JOIN containment_chain cc ON o.id = cc.contained_in_object_id
-			WHERE cc.depth < 100  -- Safety limit
+			JOIN ancestors a ON o.id = a.contained_in_object_id
+			WHERE a.depth < 100  -- Safety limit
 		)
-		SELECT COALESCE(MAX(depth), 0) FROM containment_chain
-	`, targetContainerID.String()).Scan(&depth)
+		SELECT COALESCE(MAX(depth), 0) FROM ancestors
+	`, targetContainerID.String()).Scan(&targetDepth)
 	if err != nil {
-		return oops.With("operation", "check nesting depth").With("container_id", targetContainerID.String()).Wrap(err)
+		return oops.With("operation", "check target depth").With("container_id", targetContainerID.String()).Wrap(err)
 	}
 
-	// Adding an object increases depth by 1
-	if depth >= DefaultMaxNestingDepth {
+	// Query 2: Find the deepest descendant of the object being moved (walk down)
+	err = r.pool.QueryRow(ctx, `
+		WITH RECURSIVE descendants AS (
+			-- Start from the object being moved (depth 0 = the object itself)
+			SELECT id, 0 as depth
+			FROM objects WHERE id = $1
+
+			UNION ALL
+
+			-- Walk down to find all contained objects
+			SELECT o.id, d.depth + 1
+			FROM objects o
+			JOIN descendants d ON o.contained_in_object_id = d.id
+			WHERE d.depth < 100  -- Safety limit
+		)
+		SELECT COALESCE(MAX(depth), 0) FROM descendants
+	`, objectID.String()).Scan(&objectSubtreeDepth)
+	if err != nil {
+		return oops.With("operation", "check object subtree depth").With("object_id", objectID.String()).Wrap(err)
+	}
+
+	// Total depth after move: target container depth + 1 (for objectID) + subtree depth
+	// But since objectSubtreeDepth includes objectID at depth 0, we use: targetDepth + objectSubtreeDepth + 1
+	// Actually: if target is at depth 2, putting object in it makes object at depth 3.
+	// If object has descendants at relative depth 1, they'd be at absolute depth 4.
+	// So: totalDepth = targetDepth + 1 + objectSubtreeDepth
+	// Which simplifies to checking: targetDepth + objectSubtreeDepth >= DefaultMaxNestingDepth
+	// (because adding 1 for the object itself would make it exceed)
+	totalDepth := targetDepth + objectSubtreeDepth + 1
+	if totalDepth > DefaultMaxNestingDepth {
 		return oops.With("operation", "move object").
+			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).
-			With("current_depth", depth).
+			With("target_depth", targetDepth).
+			With("object_subtree_depth", objectSubtreeDepth).
+			With("total_depth", totalDepth).
 			With("max_depth", DefaultMaxNestingDepth).
 			Wrap(errors.New("max nesting depth exceeded"))
 	}
