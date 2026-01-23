@@ -78,7 +78,7 @@ func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULI
 	}
 	defer rows.Close()
 
-	var participants []world.SceneParticipant
+	participants := make([]world.SceneParticipant, 0)
 	for rows.Next() {
 		var p world.SceneParticipant
 		var charIDStr string
