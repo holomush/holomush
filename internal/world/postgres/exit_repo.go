@@ -314,53 +314,67 @@ func (r *ExitRepository) FindByNameFuzzy(ctx context.Context, locationID ulid.UL
 	return exit, nil
 }
 
+// exitScanFields holds the intermediate scan values for an exit row.
+type exitScanFields struct {
+	idStr, fromLocStr, toLocStr string
+	aliases                     []string
+	returnName                  *string
+	visibilityStr               string
+	visibleToStrs               []string
+	lockType                    *string
+	lockDataJSON                []byte
+}
+
+// parseExitFromFields converts scanned fields into a world.Exit.
+func parseExitFromFields(f *exitScanFields, exit *world.Exit) error {
+	var err error
+	exit.ID, err = ulid.Parse(f.idStr)
+	if err != nil {
+		return oops.With("operation", "parse exit id").With("id", f.idStr).Wrap(err)
+	}
+	exit.FromLocationID, err = ulid.Parse(f.fromLocStr)
+	if err != nil {
+		return oops.With("operation", "parse from_location_id").With("from_location_id", f.fromLocStr).Wrap(err)
+	}
+	exit.ToLocationID, err = ulid.Parse(f.toLocStr)
+	if err != nil {
+		return oops.With("operation", "parse to_location_id").With("to_location_id", f.toLocStr).Wrap(err)
+	}
+	exit.Aliases = f.aliases
+	if f.returnName != nil {
+		exit.ReturnName = *f.returnName
+	}
+	exit.Visibility = world.Visibility(f.visibilityStr)
+	exit.VisibleTo, err = stringsToULIDs(f.visibleToStrs)
+	if err != nil {
+		return err
+	}
+	if f.lockType != nil {
+		exit.LockType = world.LockType(*f.lockType)
+	}
+	exit.LockData, err = unmarshalLockData(f.lockDataJSON)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // scanExit scans a single exit from a query.
 func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any) (*world.Exit, error) {
 	row := r.pool.QueryRow(ctx, query, args...)
 
 	var exit world.Exit
-	var idStr, fromLocStr, toLocStr string
-	var aliases []string
-	var returnName *string
-	var visibilityStr string
-	var visibleToStrs []string
-	var lockType *string
-	var lockDataJSON []byte
+	var f exitScanFields
 
 	err := row.Scan(
-		&idStr, &fromLocStr, &toLocStr, &exit.Name, &aliases, &exit.Bidirectional,
-		&returnName, &visibilityStr, &visibleToStrs, &exit.Locked, &lockType, &lockDataJSON, &exit.CreatedAt,
+		&f.idStr, &f.fromLocStr, &f.toLocStr, &exit.Name, &f.aliases, &exit.Bidirectional,
+		&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &exit.CreatedAt,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan exit").Wrap(err)
 	}
 
-	exit.ID, err = ulid.Parse(idStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse exit id").With("id", idStr).Wrap(err)
-	}
-	exit.FromLocationID, err = ulid.Parse(fromLocStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse from_location_id").With("from_location_id", fromLocStr).Wrap(err)
-	}
-	exit.ToLocationID, err = ulid.Parse(toLocStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse to_location_id").With("to_location_id", toLocStr).Wrap(err)
-	}
-	exit.Aliases = aliases
-	if returnName != nil {
-		exit.ReturnName = *returnName
-	}
-	exit.Visibility = world.Visibility(visibilityStr)
-	exit.VisibleTo, err = stringsToULIDs(visibleToStrs)
-	if err != nil {
-		return nil, err
-	}
-	if lockType != nil {
-		exit.LockType = world.LockType(*lockType)
-	}
-	exit.LockData, err = unmarshalLockData(lockDataJSON)
-	if err != nil {
+	if err := parseExitFromFields(&f, &exit); err != nil {
 		return nil, err
 	}
 
@@ -372,51 +386,18 @@ func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
 	exits := make([]*world.Exit, 0)
 	for rows.Next() {
 		var exit world.Exit
-		var idStr, fromLocStr, toLocStr string
-		var aliases []string
-		var returnName *string
-		var visibilityStr string
-		var visibleToStrs []string
-		var lockType *string
-		var lockDataJSON []byte
+		var f exitScanFields
 
 		if err := rows.Scan(
-			&idStr, &fromLocStr, &toLocStr, &exit.Name, &aliases, &exit.Bidirectional,
-			&returnName, &visibilityStr, &visibleToStrs, &exit.Locked, &lockType, &lockDataJSON, &exit.CreatedAt,
+			&f.idStr, &f.fromLocStr, &f.toLocStr, &exit.Name, &f.aliases, &exit.Bidirectional,
+			&f.returnName, &f.visibilityStr, &f.visibleToStrs, &exit.Locked, &f.lockType, &f.lockDataJSON, &exit.CreatedAt,
 		); err != nil {
 			return nil, oops.With("operation", "scan exit").Wrap(err)
 		}
 
-		var err error
-		exit.ID, err = ulid.Parse(idStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse exit id").With("id", idStr).Wrap(err)
-		}
-		exit.FromLocationID, err = ulid.Parse(fromLocStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse from_location_id").With("from_location_id", fromLocStr).Wrap(err)
-		}
-		exit.ToLocationID, err = ulid.Parse(toLocStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse to_location_id").With("to_location_id", toLocStr).Wrap(err)
-		}
-		exit.Aliases = aliases
-		if returnName != nil {
-			exit.ReturnName = *returnName
-		}
-		exit.Visibility = world.Visibility(visibilityStr)
-		exit.VisibleTo, err = stringsToULIDs(visibleToStrs)
-		if err != nil {
+		if err := parseExitFromFields(&f, &exit); err != nil {
 			return nil, err
 		}
-		if lockType != nil {
-			exit.LockType = world.LockType(*lockType)
-		}
-		lockData, lockErr := unmarshalLockData(lockDataJSON)
-		if lockErr != nil {
-			return nil, lockErr
-		}
-		exit.LockData = lockData
 
 		exits = append(exits, &exit)
 	}
