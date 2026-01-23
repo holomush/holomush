@@ -47,17 +47,18 @@ internal/world/
   location.go        # Location types and domain logic
   exit.go            # Exit types and bidirectional handling
   object.go          # Object types and containment
-  scene.go           # Scene-specific logic
+  payloads.go        # Event payload types (MovePayload, etc.)
   repository.go      # Repository interfaces
 
 internal/world/postgres/
   location_repo.go   # PostgreSQL LocationRepository
   exit_repo.go       # PostgreSQL ExitRepository
   object_repo.go     # PostgreSQL ObjectRepository
-  scene_repo.go      # PostgreSQL scene queries
+  scene_repo.go      # PostgreSQL SceneRepository
+  errors.go          # Package-specific errors
 
 internal/world/worldtest/
-  mocks.go           # Test helpers and mocks
+  mock_*.go          # Generated mocks (mockery)
 ```
 
 ## Data Model
