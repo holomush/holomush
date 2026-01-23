@@ -210,19 +210,21 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 			SELECT is_container FROM objects WHERE id = $1
 		`, to.ObjectID.String()).Scan(&isContainer)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.With("operation", "move object").
+			return oops.
+				With("operation", "move object").
 				With("object_id", objectID.String()).
 				With("container_id", to.ObjectID.String()).
-				Wrap(errors.New("container object not found"))
+				Errorf("container object not found")
 		}
 		if err != nil {
 			return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 		}
 		if !isContainer {
-			return oops.With("operation", "move object").
+			return oops.
+				With("operation", "move object").
 				With("object_id", objectID.String()).
 				With("container_id", to.ObjectID.String()).
-				Wrap(errors.New("target object is not a container"))
+				Errorf("target object is not a container")
 		}
 
 		// Check for circular containment: object cannot be placed inside itself
@@ -265,10 +267,11 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q querier, objectID, targetContainerID ulid.ULID) error {
 	// Self-containment check
 	if objectID == targetContainerID {
-		return oops.With("operation", "move object").
+		return oops.
+			With("operation", "move object").
 			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).
-			Wrap(errors.New("circular containment: cannot place object inside itself"))
+			Errorf("circular containment: cannot place object inside itself")
 	}
 
 	// Check if targetContainer is contained (directly or transitively) inside objectID
@@ -292,10 +295,11 @@ func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q que
 	}
 
 	if isCircular {
-		return oops.With("operation", "move object").
+		return oops.
+			With("operation", "move object").
 			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).
-			Wrap(errors.New("circular containment: target container is inside this object"))
+			Errorf("circular containment: target container is inside this object")
 	}
 
 	return nil
@@ -343,14 +347,15 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 
 	totalDepth := targetDepth + objectSubtreeDepth + 1
 	if totalDepth > DefaultMaxNestingDepth {
-		return oops.With("operation", "move object").
+		return oops.
+			With("operation", "move object").
 			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).
 			With("target_depth", targetDepth).
 			With("object_subtree_depth", objectSubtreeDepth).
 			With("total_depth", totalDepth).
 			With("max_depth", DefaultMaxNestingDepth).
-			Wrap(errors.New("max nesting depth exceeded"))
+			Errorf("max nesting depth exceeded")
 	}
 
 	return nil
