@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+//go:build integration
+
 package postgres_test
 
 import (
@@ -35,17 +37,41 @@ func createTestSceneForSceneRepo(ctx context.Context, t *testing.T, repo *postgr
 // createTestCharacterForSceneRepo creates a character in the database for testing.
 func createTestCharacterForSceneRepo(ctx context.Context, t *testing.T, name string) string {
 	t.Helper()
-	charID := core.NewULID()
+
+	// First create a test player with unique username
+	playerID := core.NewULID()
 	_, err := testPool.Exec(ctx, `
-		INSERT INTO characters (id, name, description, created_at)
-		VALUES ($1, $2, $3, $4)
-	`, charID.String(), name, "A test character", time.Now())
+		INSERT INTO players (id, username, password_hash, created_at)
+		VALUES ($1, $2, 'testhash', NOW())
+	`, playerID.String(), "player_"+playerID.String())
 	require.NoError(t, err)
+
+	// Create a test location for the character
+	locationID := core.NewULID()
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
+		VALUES ($1, 'Test Loc', 'Test location', 'persistent', 'last:0', NOW())
+	`, locationID.String())
+	require.NoError(t, err)
+
+	// Create the character
+	charID := core.NewULID()
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO characters (id, player_id, name, location_id, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+	`, charID.String(), playerID.String(), name, locationID.String())
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locationID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
+	})
+
 	return charID.String()
 }
 
 func TestSceneRepository_AddParticipant(t *testing.T) {
-	skipIfNoDatabase(t)
 
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
@@ -85,7 +111,6 @@ func TestSceneRepository_AddParticipant(t *testing.T) {
 }
 
 func TestSceneRepository_RemoveParticipant(t *testing.T) {
-	skipIfNoDatabase(t)
 
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
@@ -123,7 +148,6 @@ func TestSceneRepository_RemoveParticipant(t *testing.T) {
 }
 
 func TestSceneRepository_ListParticipants(t *testing.T) {
-	skipIfNoDatabase(t)
 
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)
@@ -169,7 +193,6 @@ func TestSceneRepository_ListParticipants(t *testing.T) {
 }
 
 func TestSceneRepository_GetScenesFor(t *testing.T) {
-	skipIfNoDatabase(t)
 
 	ctx := context.Background()
 	sceneRepo := postgres.NewSceneRepository(testPool)

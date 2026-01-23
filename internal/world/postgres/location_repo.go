@@ -46,13 +46,22 @@ func (r *LocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.Loca
 		return nil, oops.With("operation", "get location").With("id", id.String()).Wrap(err)
 	}
 
-	loc.ID = ulid.MustParse(idStr)
+	loc.ID, err = ulid.Parse(idStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse location id").With("id", idStr).Wrap(err)
+	}
 	if shadowsIDStr != nil {
-		sid := ulid.MustParse(*shadowsIDStr)
+		sid, err := ulid.Parse(*shadowsIDStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse shadows_id").With("shadows_id", *shadowsIDStr).Wrap(err)
+		}
 		loc.ShadowsID = &sid
 	}
 	if ownerIDStr != nil {
-		oid := ulid.MustParse(*ownerIDStr)
+		oid, err := ulid.Parse(*ownerIDStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse owner_id").With("owner_id", *ownerIDStr).Wrap(err)
+		}
 		loc.OwnerID = &oid
 	}
 
@@ -163,13 +172,24 @@ func scanLocations(rows pgx.Rows) ([]*world.Location, error) {
 			return nil, oops.With("operation", "scan location").Wrap(err)
 		}
 
-		loc.ID = ulid.MustParse(idStr)
+		id, err := ulid.Parse(idStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse location id").With("id", idStr).Wrap(err)
+		}
+		loc.ID = id
+
 		if shadowsIDStr != nil {
-			sid := ulid.MustParse(*shadowsIDStr)
+			sid, err := ulid.Parse(*shadowsIDStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse shadows_id").With("shadows_id", *shadowsIDStr).Wrap(err)
+			}
 			loc.ShadowsID = &sid
 		}
 		if ownerIDStr != nil {
-			oid := ulid.MustParse(*ownerIDStr)
+			oid, err := ulid.Parse(*ownerIDStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse owner_id").With("owner_id", *ownerIDStr).Wrap(err)
+			}
 			loc.OwnerID = &oid
 		}
 

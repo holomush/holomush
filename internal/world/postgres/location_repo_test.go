@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+//go:build integration
+
 package postgres_test
 
 import (
@@ -17,16 +19,43 @@ import (
 	"github.com/holomush/holomush/internal/world/postgres"
 )
 
-func skipIfNoDatabase(t *testing.T) {
+// createTestCharacter creates a character in the database for testing.
+func createTestCharacter(ctx context.Context, t *testing.T, name string) ulid.ULID {
 	t.Helper()
-	if testPool == nil {
-		t.Skip("skipping integration test: no database connection")
-	}
+	charID := core.NewULID()
+	// First create a test player
+	playerID := core.NewULID()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO players (id, username, password_hash, created_at)
+		VALUES ($1, $2, 'testhash', NOW())
+	`, playerID.String(), "player_"+playerID.String())
+	require.NoError(t, err)
+
+	// Create a test location for the character
+	locationID := core.NewULID()
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
+		VALUES ($1, 'Test Loc', 'Test', 'persistent', 'last:0', NOW())
+	`, locationID.String())
+	require.NoError(t, err)
+
+	// Create the character
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO characters (id, player_id, name, location_id, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+	`, charID.String(), playerID.String(), name, locationID.String())
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locationID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
+	})
+
+	return charID
 }
 
 func TestLocationRepository_CRUD(t *testing.T) {
-	skipIfNoDatabase(t)
-
 	ctx := context.Background()
 	repo := postgres.NewLocationRepository(testPool)
 
@@ -55,7 +84,8 @@ func TestLocationRepository_CRUD(t *testing.T) {
 	})
 
 	t.Run("create with optional fields", func(t *testing.T) {
-		ownerID := core.NewULID()
+		// Create a valid character to use as owner
+		ownerID := createTestCharacter(ctx, t, "SceneOwner")
 		loc := &world.Location{
 			ID:           core.NewULID(),
 			Type:         world.LocationTypeScene,
@@ -153,7 +183,6 @@ func TestLocationRepository_CRUD(t *testing.T) {
 }
 
 func TestLocationRepository_ListByType(t *testing.T) {
-	skipIfNoDatabase(t)
 
 	ctx := context.Background()
 	repo := postgres.NewLocationRepository(testPool)
@@ -224,7 +253,6 @@ func TestLocationRepository_ListByType(t *testing.T) {
 }
 
 func TestLocationRepository_GetShadowedBy(t *testing.T) {
-	skipIfNoDatabase(t)
 
 	ctx := context.Background()
 	repo := postgres.NewLocationRepository(testPool)

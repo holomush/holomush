@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+//go:build integration
+
 package postgres_test
 
 import (
@@ -47,7 +49,7 @@ func createTestLocations(ctx context.Context, t *testing.T) (ulid.ULID, ulid.ULI
 }
 
 func TestExitRepository_CRUD(t *testing.T) {
-	skipIfNoDatabase(t)
+
 
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
@@ -213,7 +215,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 }
 
 func TestExitRepository_ListFromLocation(t *testing.T) {
-	skipIfNoDatabase(t)
+
 
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
@@ -255,7 +257,7 @@ func TestExitRepository_ListFromLocation(t *testing.T) {
 }
 
 func TestExitRepository_FindByName(t *testing.T) {
-	skipIfNoDatabase(t)
+
 
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
@@ -304,7 +306,7 @@ func TestExitRepository_FindByName(t *testing.T) {
 }
 
 func TestExitRepository_WithLockData(t *testing.T) {
-	skipIfNoDatabase(t)
+
 
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
@@ -337,7 +339,7 @@ func TestExitRepository_WithLockData(t *testing.T) {
 }
 
 func TestExitRepository_WithVisibleToList(t *testing.T) {
-	skipIfNoDatabase(t)
+
 
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)

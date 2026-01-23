@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+//go:build integration
+
 package postgres_test
 
 import (
@@ -18,10 +20,6 @@ import (
 )
 
 func TestObjectRepository_CRUD(t *testing.T) {
-	if testPool == nil {
-		t.Skip("skipping integration test: no database connection")
-	}
-
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)
 
@@ -116,10 +114,6 @@ func TestObjectRepository_CRUD(t *testing.T) {
 }
 
 func TestObjectRepository_ListAtLocation(t *testing.T) {
-	if testPool == nil {
-		t.Skip("skipping integration test: no database connection")
-	}
-
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)
 
@@ -171,10 +165,6 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 }
 
 func TestObjectRepository_ListHeldBy(t *testing.T) {
-	if testPool == nil {
-		t.Skip("skipping integration test: no database connection")
-	}
-
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)
 
@@ -189,12 +179,23 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locationID.String())
 	}()
 
+	// Create a test player first with unique username
+	playerID := core.NewULID()
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO players (id, username, password_hash, created_at)
+		VALUES ($1, $2, 'testhash', NOW())
+	`, playerID.String(), "player_"+playerID.String())
+	require.NoError(t, err)
+	defer func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
+	}()
+
 	// Create a test character
 	characterID := core.NewULID()
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO characters (id, name, location_id, created_at)
-		VALUES ($1, 'Test Character', $2, NOW())
-	`, characterID.String(), locationID.String())
+		INSERT INTO characters (id, player_id, name, location_id, created_at)
+		VALUES ($1, $2, 'Test Character', $3, NOW())
+	`, characterID.String(), playerID.String(), locationID.String())
 	require.NoError(t, err)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, characterID.String())
@@ -221,10 +222,6 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 }
 
 func TestObjectRepository_ListContainedIn(t *testing.T) {
-	if testPool == nil {
-		t.Skip("skipping integration test: no database connection")
-	}
-
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)
 
@@ -273,10 +270,6 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 }
 
 func TestObjectRepository_Move(t *testing.T) {
-	if testPool == nil {
-		t.Skip("skipping integration test: no database connection")
-	}
-
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)
 
