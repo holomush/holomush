@@ -135,6 +135,75 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		_ = repo.Delete(ctx, loc.ID)
 	})
 
+	t.Run("update with shadows_id", func(t *testing.T) {
+		// Create a parent location to shadow
+		parent := &world.Location{
+			ID:           core.NewULID(),
+			Type:         world.LocationTypePersistent,
+			Name:         "Parent Location",
+			Description:  "The parent.",
+			ReplayPolicy: "last:0",
+			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		}
+		err := repo.Create(ctx, parent)
+		require.NoError(t, err)
+
+		// Create a scene without shadows_id
+		scene := &world.Location{
+			ID:           core.NewULID(),
+			Type:         world.LocationTypeScene,
+			Name:         "Scene Without Shadow",
+			Description:  "A scene.",
+			ReplayPolicy: "last:-1",
+			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		}
+		err = repo.Create(ctx, scene)
+		require.NoError(t, err)
+
+		// Update to add shadows_id
+		scene.ShadowsID = &parent.ID
+		err = repo.Update(ctx, scene)
+		require.NoError(t, err)
+
+		got, err := repo.Get(ctx, scene.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.ShadowsID)
+		assert.Equal(t, parent.ID, *got.ShadowsID)
+
+		// Cleanup
+		_ = repo.Delete(ctx, scene.ID)
+		_ = repo.Delete(ctx, parent.ID)
+	})
+
+	t.Run("update with owner_id", func(t *testing.T) {
+		ownerID := createTestCharacter(ctx, t, "UpdateOwner")
+
+		// Create a location without owner
+		loc := &world.Location{
+			ID:           core.NewULID(),
+			Type:         world.LocationTypeScene,
+			Name:         "Scene Without Owner",
+			Description:  "A scene.",
+			ReplayPolicy: "last:-1",
+			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		}
+		err := repo.Create(ctx, loc)
+		require.NoError(t, err)
+
+		// Update to add owner
+		loc.OwnerID = &ownerID
+		err = repo.Update(ctx, loc)
+		require.NoError(t, err)
+
+		got, err := repo.Get(ctx, loc.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.OwnerID)
+		assert.Equal(t, ownerID, *got.OwnerID)
+
+		// Cleanup
+		_ = repo.Delete(ctx, loc.ID)
+	})
+
 	t.Run("delete", func(t *testing.T) {
 		loc := &world.Location{
 			ID:           core.NewULID(),

@@ -207,8 +207,14 @@ func (r *ObjectRepository) ListContainedIn(ctx context.Context, objectID ulid.UL
 	return scanObjects(rows)
 }
 
+// DefaultMaxNestingDepth is the maximum allowed nesting depth for object containment.
+const DefaultMaxNestingDepth = 3
+
 // Move changes an object's containment.
-// Validates containment and enforces business rules.
+// Validates containment and enforces business rules:
+// - Target must be a valid container if moving to an object
+// - Max nesting depth is enforced (default 3)
+// - Circular containment is prevented
 func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
 	// Validate containment
 	if err := to.Validate(); err != nil {
@@ -235,6 +241,18 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 				With("object_id", objectID.String()).
 				With("container_id", to.ObjectID.String()).
 				Wrap(errors.New("target object is not a container"))
+		}
+
+		// Check for circular containment: object cannot be placed inside itself
+		// or inside any object that is contained within it
+		if err := r.checkCircularContainment(ctx, objectID, *to.ObjectID); err != nil {
+			return err
+		}
+
+		// Check max nesting depth: count how deep the target container is,
+		// then verify adding this object doesn't exceed the limit
+		if err := r.checkNestingDepth(ctx, *to.ObjectID); err != nil {
+			return err
 		}
 	}
 
@@ -263,6 +281,91 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 	if result.RowsAffected() == 0 {
 		return oops.With("object_id", objectID.String()).Wrap(ErrNotFound)
 	}
+	return nil
+}
+
+// checkCircularContainment verifies that placing objectID into targetContainerID
+// won't create a circular containment loop (e.g., A in B, then trying to put B in A).
+// Uses a recursive CTE to traverse the containment hierarchy.
+func (r *ObjectRepository) checkCircularContainment(ctx context.Context, objectID, targetContainerID ulid.ULID) error {
+	// Self-containment check
+	if objectID == targetContainerID {
+		return oops.With("operation", "move object").
+			With("object_id", objectID.String()).
+			With("container_id", targetContainerID.String()).
+			Wrap(errors.New("circular containment: cannot place object inside itself"))
+	}
+
+	// Check if targetContainer is contained (directly or transitively) inside objectID
+	// This would create a loop: objectID contains targetContainer, so putting objectID
+	// into targetContainer would be circular.
+	var isCircular bool
+	err := r.pool.QueryRow(ctx, `
+		WITH RECURSIVE containment_chain AS (
+			-- Start from the target container
+			SELECT id, contained_in_object_id, 1 as depth
+			FROM objects WHERE id = $1
+
+			UNION ALL
+
+			-- Walk up the containment chain
+			SELECT o.id, o.contained_in_object_id, cc.depth + 1
+			FROM objects o
+			JOIN containment_chain cc ON o.id = cc.contained_in_object_id
+			WHERE cc.depth < 100  -- Safety limit
+		)
+		SELECT EXISTS(
+			SELECT 1 FROM containment_chain WHERE contained_in_object_id = $2
+		)
+	`, targetContainerID.String(), objectID.String()).Scan(&isCircular)
+	if err != nil {
+		return oops.With("operation", "check circular containment").With("object_id", objectID.String()).Wrap(err)
+	}
+
+	if isCircular {
+		return oops.With("operation", "move object").
+			With("object_id", objectID.String()).
+			With("container_id", targetContainerID.String()).
+			Wrap(errors.New("circular containment: target container is inside this object"))
+	}
+
+	return nil
+}
+
+// checkNestingDepth verifies that placing an object into targetContainerID
+// won't exceed the maximum nesting depth.
+// Uses a recursive CTE to count how deep the target container already is.
+func (r *ObjectRepository) checkNestingDepth(ctx context.Context, targetContainerID ulid.ULID) error {
+	var depth int
+	err := r.pool.QueryRow(ctx, `
+		WITH RECURSIVE containment_chain AS (
+			-- Start from the target container
+			SELECT id, contained_in_object_id, 1 as depth
+			FROM objects WHERE id = $1
+
+			UNION ALL
+
+			-- Walk up the containment chain
+			SELECT o.id, o.contained_in_object_id, cc.depth + 1
+			FROM objects o
+			JOIN containment_chain cc ON o.id = cc.contained_in_object_id
+			WHERE cc.depth < 100  -- Safety limit
+		)
+		SELECT COALESCE(MAX(depth), 0) FROM containment_chain
+	`, targetContainerID.String()).Scan(&depth)
+	if err != nil {
+		return oops.With("operation", "check nesting depth").With("container_id", targetContainerID.String()).Wrap(err)
+	}
+
+	// Adding an object increases depth by 1
+	if depth >= DefaultMaxNestingDepth {
+		return oops.With("operation", "move object").
+			With("container_id", targetContainerID.String()).
+			With("current_depth", depth).
+			With("max_depth", DefaultMaxNestingDepth).
+			Wrap(errors.New("max nesting depth exceeded"))
+	}
+
 	return nil
 }
 
