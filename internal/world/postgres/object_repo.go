@@ -89,30 +89,17 @@ func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error 
 		return oops.With("operation", "create object").With("object_id", obj.ID.String()).Wrap(err)
 	}
 
-	var locationID, heldBy, containedIn, ownerID *string
-	if obj.LocationID != nil {
-		s := obj.LocationID.String()
-		locationID = &s
-	}
-	if obj.HeldByCharacterID != nil {
-		s := obj.HeldByCharacterID.String()
-		heldBy = &s
-	}
-	if obj.ContainedInObjectID != nil {
-		s := obj.ContainedInObjectID.String()
-		containedIn = &s
-	}
-	if obj.OwnerID != nil {
-		s := obj.OwnerID.String()
-		ownerID = &s
-	}
-
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO objects (id, name, description, location_id, held_by_character_id,
 		                     contained_in_object_id, is_container, owner_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, obj.ID.String(), obj.Name, obj.Description, locationID, heldBy,
-		containedIn, obj.IsContainer, ownerID, obj.CreatedAt)
+	`, obj.ID.String(), obj.Name, obj.Description,
+		ulidToStringPtr(obj.LocationID),
+		ulidToStringPtr(obj.HeldByCharacterID),
+		ulidToStringPtr(obj.ContainedInObjectID),
+		obj.IsContainer,
+		ulidToStringPtr(obj.OwnerID),
+		obj.CreatedAt)
 	if err != nil {
 		return oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
 	}
@@ -126,31 +113,17 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error 
 		return oops.With("operation", "update object").With("object_id", obj.ID.String()).Wrap(err)
 	}
 
-	var locationID, heldBy, containedIn, ownerID *string
-	if obj.LocationID != nil {
-		s := obj.LocationID.String()
-		locationID = &s
-	}
-	if obj.HeldByCharacterID != nil {
-		s := obj.HeldByCharacterID.String()
-		heldBy = &s
-	}
-	if obj.ContainedInObjectID != nil {
-		s := obj.ContainedInObjectID.String()
-		containedIn = &s
-	}
-	if obj.OwnerID != nil {
-		s := obj.OwnerID.String()
-		ownerID = &s
-	}
-
 	result, err := r.pool.Exec(ctx, `
 		UPDATE objects SET name = $2, description = $3, location_id = $4,
 		       held_by_character_id = $5, contained_in_object_id = $6,
 		       is_container = $7, owner_id = $8
 		WHERE id = $1
-	`, obj.ID.String(), obj.Name, obj.Description, locationID, heldBy,
-		containedIn, obj.IsContainer, ownerID)
+	`, obj.ID.String(), obj.Name, obj.Description,
+		ulidToStringPtr(obj.LocationID),
+		ulidToStringPtr(obj.HeldByCharacterID),
+		ulidToStringPtr(obj.ContainedInObjectID),
+		obj.IsContainer,
+		ulidToStringPtr(obj.OwnerID))
 	if err != nil {
 		return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
 	}

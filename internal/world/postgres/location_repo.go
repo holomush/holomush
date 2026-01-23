@@ -70,21 +70,11 @@ func (r *LocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.Loca
 
 // Create persists a new location.
 func (r *LocationRepository) Create(ctx context.Context, loc *world.Location) error {
-	var shadowsID, ownerID *string
-	if loc.ShadowsID != nil {
-		s := loc.ShadowsID.String()
-		shadowsID = &s
-	}
-	if loc.OwnerID != nil {
-		o := loc.OwnerID.String()
-		ownerID = &o
-	}
-
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO locations (id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, loc.ID.String(), loc.Type, shadowsID, loc.Name, loc.Description,
-		ownerID, loc.ReplayPolicy, loc.CreatedAt, loc.ArchivedAt)
+	`, loc.ID.String(), loc.Type, ulidToStringPtr(loc.ShadowsID), loc.Name, loc.Description,
+		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, loc.CreatedAt, loc.ArchivedAt)
 	if err != nil {
 		return oops.With("operation", "create location").With("id", loc.ID.String()).Wrap(err)
 	}
@@ -93,22 +83,12 @@ func (r *LocationRepository) Create(ctx context.Context, loc *world.Location) er
 
 // Update modifies an existing location.
 func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) error {
-	var shadowsID, ownerID *string
-	if loc.ShadowsID != nil {
-		s := loc.ShadowsID.String()
-		shadowsID = &s
-	}
-	if loc.OwnerID != nil {
-		o := loc.OwnerID.String()
-		ownerID = &o
-	}
-
 	result, err := r.pool.Exec(ctx, `
 		UPDATE locations SET type = $2, shadows_id = $3, name = $4, description = $5,
 		owner_id = $6, replay_policy = $7, archived_at = $8
 		WHERE id = $1
-	`, loc.ID.String(), loc.Type, shadowsID, loc.Name, loc.Description,
-		ownerID, loc.ReplayPolicy, loc.ArchivedAt)
+	`, loc.ID.String(), loc.Type, ulidToStringPtr(loc.ShadowsID), loc.Name, loc.Description,
+		ulidToStringPtr(loc.OwnerID), loc.ReplayPolicy, loc.ArchivedAt)
 	if err != nil {
 		return oops.With("operation", "update location").With("id", loc.ID.String()).Wrap(err)
 	}
