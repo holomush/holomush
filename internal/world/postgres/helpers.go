@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
@@ -16,7 +15,6 @@ import (
 // This allows helper methods to work within or outside of transactions.
 type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
 // ulidToStringPtr converts a ULID pointer to a string pointer for SQL parameters.
