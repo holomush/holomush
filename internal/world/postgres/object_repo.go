@@ -1,0 +1,297 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package postgres
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/world"
+)
+
+// ObjectRepository implements world.ObjectRepository using PostgreSQL.
+type ObjectRepository struct {
+	pool *pgxpool.Pool
+}
+
+// NewObjectRepository creates a new ObjectRepository.
+func NewObjectRepository(pool *pgxpool.Pool) *ObjectRepository {
+	return &ObjectRepository{pool: pool}
+}
+
+// Get retrieves an object by ID.
+func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object, error) {
+	var obj world.Object
+	var idStr string
+	var locationIDStr, heldByStr, containedInStr, ownerIDStr *string
+
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, name, description, location_id, held_by_character_id,
+		       contained_in_object_id, is_container, owner_id, created_at
+		FROM objects WHERE id = $1
+	`, id.String()).Scan(
+		&idStr, &obj.Name, &obj.Description, &locationIDStr, &heldByStr,
+		&containedInStr, &obj.IsContainer, &ownerIDStr, &obj.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.With("id", id.String()).Wrap(ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "get object").With("id", id.String()).Wrap(err)
+	}
+
+	obj.ID = ulid.MustParse(idStr)
+	if locationIDStr != nil {
+		lid := ulid.MustParse(*locationIDStr)
+		obj.LocationID = &lid
+	}
+	if heldByStr != nil {
+		hid := ulid.MustParse(*heldByStr)
+		obj.HeldByCharacterID = &hid
+	}
+	if containedInStr != nil {
+		cid := ulid.MustParse(*containedInStr)
+		obj.ContainedInObjectID = &cid
+	}
+	if ownerIDStr != nil {
+		oid := ulid.MustParse(*ownerIDStr)
+		obj.OwnerID = &oid
+	}
+
+	return &obj, nil
+}
+
+// Create persists a new object.
+func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error {
+	var locationID, heldBy, containedIn, ownerID *string
+	if obj.LocationID != nil {
+		s := obj.LocationID.String()
+		locationID = &s
+	}
+	if obj.HeldByCharacterID != nil {
+		s := obj.HeldByCharacterID.String()
+		heldBy = &s
+	}
+	if obj.ContainedInObjectID != nil {
+		s := obj.ContainedInObjectID.String()
+		containedIn = &s
+	}
+	if obj.OwnerID != nil {
+		s := obj.OwnerID.String()
+		ownerID = &s
+	}
+
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO objects (id, name, description, location_id, held_by_character_id,
+		                     contained_in_object_id, is_container, owner_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, obj.ID.String(), obj.Name, obj.Description, locationID, heldBy,
+		containedIn, obj.IsContainer, ownerID, obj.CreatedAt)
+	if err != nil {
+		return oops.With("operation", "create object").With("id", obj.ID.String()).Wrap(err)
+	}
+	return nil
+}
+
+// Update modifies an existing object.
+func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error {
+	var locationID, heldBy, containedIn, ownerID *string
+	if obj.LocationID != nil {
+		s := obj.LocationID.String()
+		locationID = &s
+	}
+	if obj.HeldByCharacterID != nil {
+		s := obj.HeldByCharacterID.String()
+		heldBy = &s
+	}
+	if obj.ContainedInObjectID != nil {
+		s := obj.ContainedInObjectID.String()
+		containedIn = &s
+	}
+	if obj.OwnerID != nil {
+		s := obj.OwnerID.String()
+		ownerID = &s
+	}
+
+	result, err := r.pool.Exec(ctx, `
+		UPDATE objects SET name = $2, description = $3, location_id = $4,
+		       held_by_character_id = $5, contained_in_object_id = $6,
+		       is_container = $7, owner_id = $8
+		WHERE id = $1
+	`, obj.ID.String(), obj.Name, obj.Description, locationID, heldBy,
+		containedIn, obj.IsContainer, ownerID)
+	if err != nil {
+		return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.With("id", obj.ID.String()).Wrap(ErrNotFound)
+	}
+	return nil
+}
+
+// Delete removes an object by ID.
+func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID) error {
+	result, err := r.pool.Exec(ctx, `DELETE FROM objects WHERE id = $1`, id.String())
+	if err != nil {
+		return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.With("id", id.String()).Wrap(ErrNotFound)
+	}
+	return nil
+}
+
+// ListAtLocation returns all objects at a location.
+func (r *ObjectRepository) ListAtLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Object, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, name, description, location_id, held_by_character_id,
+		       contained_in_object_id, is_container, owner_id, created_at
+		FROM objects WHERE location_id = $1 ORDER BY created_at DESC
+	`, locationID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list objects at location").With("location_id", locationID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	return scanObjects(rows)
+}
+
+// ListHeldBy returns all objects held by a character.
+func (r *ObjectRepository) ListHeldBy(ctx context.Context, characterID ulid.ULID) ([]*world.Object, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, name, description, location_id, held_by_character_id,
+		       contained_in_object_id, is_container, owner_id, created_at
+		FROM objects WHERE held_by_character_id = $1 ORDER BY created_at DESC
+	`, characterID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list objects held by").With("character_id", characterID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	return scanObjects(rows)
+}
+
+// ListContainedIn returns all objects inside a container object.
+func (r *ObjectRepository) ListContainedIn(ctx context.Context, objectID ulid.ULID) ([]*world.Object, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, name, description, location_id, held_by_character_id,
+		       contained_in_object_id, is_container, owner_id, created_at
+		FROM objects WHERE contained_in_object_id = $1 ORDER BY created_at DESC
+	`, objectID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list objects contained in").With("object_id", objectID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	return scanObjects(rows)
+}
+
+// Move changes an object's containment.
+// Validates containment and enforces business rules.
+func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
+	// Validate containment
+	if err := to.Validate(); err != nil {
+		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+	}
+
+	// If moving to a container, verify the container exists and is actually a container
+	if to.ObjectID != nil {
+		var isContainer bool
+		err := r.pool.QueryRow(ctx, `
+			SELECT is_container FROM objects WHERE id = $1
+		`, to.ObjectID.String()).Scan(&isContainer)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.With("operation", "move object").
+				With("object_id", objectID.String()).
+				With("container_id", to.ObjectID.String()).
+				Wrap(errors.New("container object not found"))
+		}
+		if err != nil {
+			return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+		}
+		if !isContainer {
+			return oops.With("operation", "move object").
+				With("object_id", objectID.String()).
+				With("container_id", to.ObjectID.String()).
+				Wrap(errors.New("target object is not a container"))
+		}
+	}
+
+	// Clear all containment fields and set the new one
+	var locationID, heldBy, containedIn *string
+	if to.LocationID != nil {
+		s := to.LocationID.String()
+		locationID = &s
+	}
+	if to.CharacterID != nil {
+		s := to.CharacterID.String()
+		heldBy = &s
+	}
+	if to.ObjectID != nil {
+		s := to.ObjectID.String()
+		containedIn = &s
+	}
+
+	result, err := r.pool.Exec(ctx, `
+		UPDATE objects SET location_id = $2, held_by_character_id = $3, contained_in_object_id = $4
+		WHERE id = $1
+	`, objectID.String(), locationID, heldBy, containedIn)
+	if err != nil {
+		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.With("object_id", objectID.String()).Wrap(ErrNotFound)
+	}
+	return nil
+}
+
+func scanObjects(rows pgx.Rows) ([]*world.Object, error) {
+	var objects []*world.Object
+	for rows.Next() {
+		var obj world.Object
+		var idStr string
+		var locationIDStr, heldByStr, containedInStr, ownerIDStr *string
+
+		if err := rows.Scan(
+			&idStr, &obj.Name, &obj.Description, &locationIDStr, &heldByStr,
+			&containedInStr, &obj.IsContainer, &ownerIDStr, &obj.CreatedAt,
+		); err != nil {
+			return nil, oops.With("operation", "scan object").Wrap(err)
+		}
+
+		obj.ID = ulid.MustParse(idStr)
+		if locationIDStr != nil {
+			lid := ulid.MustParse(*locationIDStr)
+			obj.LocationID = &lid
+		}
+		if heldByStr != nil {
+			hid := ulid.MustParse(*heldByStr)
+			obj.HeldByCharacterID = &hid
+		}
+		if containedInStr != nil {
+			cid := ulid.MustParse(*containedInStr)
+			obj.ContainedInObjectID = &cid
+		}
+		if ownerIDStr != nil {
+			oid := ulid.MustParse(*ownerIDStr)
+			obj.OwnerID = &oid
+		}
+
+		objects = append(objects, &obj)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, oops.With("operation", "iterate objects").Wrap(err)
+	}
+
+	return objects, nil
+}
+
+// Compile-time interface check.
+var _ world.ObjectRepository = (*ObjectRepository)(nil)

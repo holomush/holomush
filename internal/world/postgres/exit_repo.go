@@ -1,0 +1,389 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// Package postgres provides PostgreSQL implementations of world repositories.
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/world"
+)
+
+// ExitRepository implements world.ExitRepository using PostgreSQL.
+type ExitRepository struct {
+	pool *pgxpool.Pool
+}
+
+// NewExitRepository creates a new ExitRepository.
+func NewExitRepository(pool *pgxpool.Pool) *ExitRepository {
+	return &ExitRepository{pool: pool}
+}
+
+// Get retrieves an exit by ID.
+func (r *ExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, error) {
+	exit, err := r.scanExit(ctx, `
+		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		FROM exits WHERE id = $1
+	`, id.String())
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.With("id", id.String()).Wrap(ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "get exit").With("id", id.String()).Wrap(err)
+	}
+	return exit, nil
+}
+
+// Create persists a new exit.
+// If bidirectional, also creates the return exit.
+func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
+	// Assign ID if not set
+	if exit.ID.Compare(ulid.ULID{}) == 0 {
+		exit.ID = core.NewULID()
+	}
+	if exit.CreatedAt.IsZero() {
+		exit.CreatedAt = time.Now()
+	}
+
+	lockDataJSON, err := marshalLockData(exit.LockData)
+	if err != nil {
+		return oops.With("operation", "marshal lock data").Wrap(err)
+	}
+
+	visibleToStrings := ulidsToStrings(exit.VisibleTo)
+
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
+		                   return_name, visibility, visible_to, locked, lock_type, lock_data, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`,
+		exit.ID.String(),
+		exit.FromLocationID.String(),
+		exit.ToLocationID.String(),
+		exit.Name,
+		exit.Aliases,
+		exit.Bidirectional,
+		nullableString(exit.ReturnName),
+		string(exit.Visibility),
+		visibleToStrings,
+		exit.Locked,
+		nullableLockType(exit.LockType),
+		lockDataJSON,
+		exit.CreatedAt,
+	)
+	if err != nil {
+		return oops.With("operation", "create exit").With("id", exit.ID.String()).Wrap(err)
+	}
+
+	// Create return exit if bidirectional
+	if exit.Bidirectional && exit.ReturnName != "" {
+		returnExit := exit.ReverseExit()
+		if returnExit != nil {
+			returnExit.ID = core.NewULID()
+			returnExit.CreatedAt = exit.CreatedAt
+
+			returnLockDataJSON, err := marshalLockData(returnExit.LockData)
+			if err != nil {
+				return oops.With("operation", "marshal return exit lock data").Wrap(err)
+			}
+
+			_, err = r.pool.Exec(ctx, `
+				INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
+				                   return_name, visibility, visible_to, locked, lock_type, lock_data, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			`,
+				returnExit.ID.String(),
+				returnExit.FromLocationID.String(),
+				returnExit.ToLocationID.String(),
+				returnExit.Name,
+				returnExit.Aliases,
+				returnExit.Bidirectional,
+				nullableString(returnExit.ReturnName),
+				string(returnExit.Visibility),
+				visibleToStrings, // Same visibility as the original exit
+				returnExit.Locked,
+				nullableLockType(returnExit.LockType),
+				returnLockDataJSON,
+				returnExit.CreatedAt,
+			)
+			if err != nil {
+				return oops.With("operation", "create return exit").With("id", returnExit.ID.String()).Wrap(err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// Update modifies an existing exit.
+func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
+	lockDataJSON, err := marshalLockData(exit.LockData)
+	if err != nil {
+		return oops.With("operation", "marshal lock data").Wrap(err)
+	}
+
+	visibleToStrings := ulidsToStrings(exit.VisibleTo)
+
+	result, err := r.pool.Exec(ctx, `
+		UPDATE exits SET from_location_id = $2, to_location_id = $3, name = $4, aliases = $5,
+		       bidirectional = $6, return_name = $7, visibility = $8, visible_to = $9,
+		       locked = $10, lock_type = $11, lock_data = $12
+		WHERE id = $1
+	`,
+		exit.ID.String(),
+		exit.FromLocationID.String(),
+		exit.ToLocationID.String(),
+		exit.Name,
+		exit.Aliases,
+		exit.Bidirectional,
+		nullableString(exit.ReturnName),
+		string(exit.Visibility),
+		visibleToStrings,
+		exit.Locked,
+		nullableLockType(exit.LockType),
+		lockDataJSON,
+	)
+	if err != nil {
+		return oops.With("operation", "update exit").With("id", exit.ID.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.With("id", exit.ID.String()).Wrap(ErrNotFound)
+	}
+	return nil
+}
+
+// Delete removes an exit by ID.
+// If bidirectional, also removes the return exit.
+func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
+	// First, get the exit to check if it's bidirectional
+	exit, err := r.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete the exit
+	result, err := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, id.String())
+	if err != nil {
+		return oops.With("operation", "delete exit").With("id", id.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.With("id", id.String()).Wrap(ErrNotFound)
+	}
+
+	// If bidirectional, find and delete the return exit
+	if exit.Bidirectional && exit.ReturnName != "" {
+		returnExit, findErr := r.FindByName(ctx, exit.ToLocationID, exit.ReturnName)
+		if findErr == nil && returnExit != nil {
+			// Check that this is indeed the matching return exit
+			if returnExit.ToLocationID == exit.FromLocationID {
+				r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String()) //nolint:errcheck // best-effort cleanup
+			}
+		}
+	}
+
+	return nil
+}
+
+// ListFromLocation returns all exits from a location.
+func (r *ExitRepository) ListFromLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Exit, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		FROM exits WHERE from_location_id = $1 ORDER BY name
+	`, locationID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list exits from location").With("location_id", locationID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	return r.scanExits(rows)
+}
+
+// FindByName finds an exit by name or alias from a location.
+// Matching is case-insensitive for both name and aliases.
+func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, name string) (*world.Exit, error) {
+	// Use PostgreSQL ILIKE for case-insensitive matching
+	// Also check if name matches any alias using array operator
+	exit, err := r.scanExit(ctx, `
+		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		FROM exits
+		WHERE from_location_id = $1
+		  AND (LOWER(name) = LOWER($2) OR $2 ILIKE ANY(aliases))
+		LIMIT 1
+	`, locationID.String(), name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.With("location_id", locationID.String()).With("name", name).Wrap(ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "find exit by name").With("location_id", locationID.String()).With("name", name).Wrap(err)
+	}
+	return exit, nil
+}
+
+// scanExit scans a single exit from a query.
+func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any) (*world.Exit, error) {
+	row := r.pool.QueryRow(ctx, query, args...)
+
+	var exit world.Exit
+	var idStr, fromLocStr, toLocStr string
+	var aliases []string
+	var returnName *string
+	var visibilityStr string
+	var visibleToStrs []string
+	var lockType *string
+	var lockDataJSON []byte
+
+	err := row.Scan(
+		&idStr, &fromLocStr, &toLocStr, &exit.Name, &aliases, &exit.Bidirectional,
+		&returnName, &visibilityStr, &visibleToStrs, &exit.Locked, &lockType, &lockDataJSON, &exit.CreatedAt,
+	)
+	if err != nil {
+		return nil, oops.With("operation", "scan exit").Wrap(err)
+	}
+
+	exit.ID = ulid.MustParse(idStr)
+	exit.FromLocationID = ulid.MustParse(fromLocStr)
+	exit.ToLocationID = ulid.MustParse(toLocStr)
+	exit.Aliases = aliases
+	if returnName != nil {
+		exit.ReturnName = *returnName
+	}
+	exit.Visibility = world.Visibility(visibilityStr)
+	exit.VisibleTo = stringsToULIDs(visibleToStrs)
+	if lockType != nil {
+		exit.LockType = world.LockType(*lockType)
+	}
+	exit.LockData, err = unmarshalLockData(lockDataJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	return &exit, nil
+}
+
+// scanExits scans multiple exits from rows.
+func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
+	var exits []*world.Exit
+	for rows.Next() {
+		var exit world.Exit
+		var idStr, fromLocStr, toLocStr string
+		var aliases []string
+		var returnName *string
+		var visibilityStr string
+		var visibleToStrs []string
+		var lockType *string
+		var lockDataJSON []byte
+
+		if err := rows.Scan(
+			&idStr, &fromLocStr, &toLocStr, &exit.Name, &aliases, &exit.Bidirectional,
+			&returnName, &visibilityStr, &visibleToStrs, &exit.Locked, &lockType, &lockDataJSON, &exit.CreatedAt,
+		); err != nil {
+			return nil, oops.With("operation", "scan exit").Wrap(err)
+		}
+
+		exit.ID = ulid.MustParse(idStr)
+		exit.FromLocationID = ulid.MustParse(fromLocStr)
+		exit.ToLocationID = ulid.MustParse(toLocStr)
+		exit.Aliases = aliases
+		if returnName != nil {
+			exit.ReturnName = *returnName
+		}
+		exit.Visibility = world.Visibility(visibilityStr)
+		exit.VisibleTo = stringsToULIDs(visibleToStrs)
+		if lockType != nil {
+			exit.LockType = world.LockType(*lockType)
+		}
+		lockData, lockErr := unmarshalLockData(lockDataJSON)
+		if lockErr != nil {
+			return nil, lockErr
+		}
+		exit.LockData = lockData
+
+		exits = append(exits, &exit)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, oops.With("operation", "iterate exits").Wrap(err)
+	}
+
+	return exits, nil
+}
+
+// Helper functions
+
+func ulidsToStrings(ids []ulid.ULID) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = id.String()
+	}
+	return strs
+}
+
+func stringsToULIDs(strs []string) []ulid.ULID {
+	if len(strs) == 0 {
+		return nil
+	}
+	ids := make([]ulid.ULID, 0, len(strs))
+	for _, s := range strs {
+		if id, err := ulid.Parse(strings.TrimSpace(s)); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func nullableLockType(lt world.LockType) *string {
+	if lt == "" {
+		return nil
+	}
+	s := string(lt)
+	return &s
+}
+
+func marshalLockData(data map[string]any) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return nil, oops.With("operation", "marshal lock data").Wrap(err)
+	}
+	return b, nil
+}
+
+func unmarshalLockData(data []byte) (map[string]any, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, oops.With("operation", "unmarshal lock data").Wrap(err)
+	}
+	return result, nil
+}
+
+// Compile-time interface check.
+var _ world.ExitRepository = (*ExitRepository)(nil)
