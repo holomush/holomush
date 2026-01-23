@@ -240,14 +240,16 @@ func (r *ExitRepository) ListFromLocation(ctx context.Context, locationID ulid.U
 // FindByName finds an exit by name or alias from a location.
 // Matching is case-insensitive for both name and aliases.
 func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, name string) (*world.Exit, error) {
-	// Use PostgreSQL ILIKE for case-insensitive matching
-	// Also check if name matches any alias using array operator
+	// Use PostgreSQL LOWER() for case-insensitive matching
+	// For aliases, unnest and compare with LOWER() for consistent behavior
 	exit, err := r.scanExit(ctx, `
 		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
 		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
 		FROM exits
 		WHERE from_location_id = $1
-		  AND (LOWER(name) = LOWER($2) OR $2 ILIKE ANY(aliases))
+		  AND (LOWER(name) = LOWER($2) OR EXISTS (
+		    SELECT 1 FROM unnest(aliases) AS a WHERE LOWER(a) = LOWER($2)
+		  ))
 		LIMIT 1
 	`, locationID.String(), name)
 	if errors.Is(err, pgx.ErrNoRows) {

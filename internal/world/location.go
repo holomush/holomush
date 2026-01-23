@@ -65,7 +65,8 @@ func (l *Location) EffectiveName(parent *Location) string {
 }
 
 // ParseReplayPolicy extracts the count from "last:N" format.
-// Returns -1 for unlimited, 0 for none/invalid, positive N for limited.
+// Returns the parsed integer N, or 0 if the format is invalid.
+// By convention: -1 means unlimited replay, 0 means no replay, positive N means last N events.
 func ParseReplayPolicy(policy string) int {
 	if !strings.HasPrefix(policy, "last:") {
 		return 0

@@ -88,6 +88,8 @@ func (o *Object) Containment() Containment {
 
 // SetContainment updates the object's location.
 // Clears all previous containment and sets the new one.
+// NOTE: Does not validate the containment - callers must call c.Validate() first
+// or use ObjectRepository.Move() which handles validation.
 func (o *Object) SetContainment(c Containment) {
 	o.LocationID = c.LocationID
 	o.HeldByCharacterID = c.CharacterID
