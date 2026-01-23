@@ -5,7 +5,7 @@
 package world
 
 import (
-	"maps"
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -105,12 +105,8 @@ func (e *Exit) ReverseExit() *Exit {
 		copy(visibleTo, e.VisibleTo)
 	}
 
-	// Deep copy LockData map to avoid shared reference
-	var lockData map[string]any
-	if e.LockData != nil {
-		lockData = make(map[string]any, len(e.LockData))
-		maps.Copy(lockData, e.LockData)
-	}
+	// Deep copy LockData map to avoid shared reference (including nested structures)
+	lockData := deepCopyLockData(e.LockData)
 
 	return &Exit{
 		FromLocationID: e.ToLocationID,
@@ -124,4 +120,24 @@ func (e *Exit) ReverseExit() *Exit {
 		LockType:       e.LockType,
 		LockData:       lockData,
 	}
+}
+
+// deepCopyLockData creates a true deep copy of LockData, including nested maps/slices.
+// Uses JSON round-trip which handles arbitrary nested structures in map[string]any.
+// Returns nil if input is nil or if marshaling fails (defensive).
+func deepCopyLockData(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	data, err := json.Marshal(src)
+	if err != nil {
+		// Should not happen with valid map[string]any, but be defensive
+		return nil
+	}
+	var dst map[string]any
+	if err := json.Unmarshal(data, &dst); err != nil {
+		// Should not happen with valid JSON, but be defensive
+		return nil
+	}
+	return dst
 }

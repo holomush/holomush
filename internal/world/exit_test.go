@@ -208,6 +208,39 @@ func TestExit_ReverseExit(t *testing.T) {
 		assert.Len(t, exit.VisibleTo, 1, "modifying reverse should not affect original VisibleTo")
 	})
 
+	t.Run("reverse exit deep copies nested LockData structures", func(t *testing.T) {
+		// LockData with nested map (e.g., condition lock with multiple requirements)
+		nestedConditions := map[string]any{
+			"has_item": "key123",
+			"level":    5,
+		}
+		lockData := map[string]any{
+			"type":       "condition",
+			"conditions": nestedConditions,
+		}
+
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Bidirectional:  true,
+			ReturnName:     "south",
+			LockData:       lockData,
+		}
+
+		reverse := exit.ReverseExit()
+		assert.NotNil(t, reverse)
+
+		// Modify the nested map in reverse exit
+		reverseConditions := reverse.LockData["conditions"].(map[string]any)
+		reverseConditions["has_item"] = "modified-key"
+
+		// Original nested map should be unchanged
+		originalConditions := exit.LockData["conditions"].(map[string]any)
+		assert.Equal(t, "key123", originalConditions["has_item"], "modifying reverse nested map should not affect original")
+	})
+
 	t.Run("reverse exit has empty aliases", func(t *testing.T) {
 		exit := &world.Exit{
 			ID:             ulid.Make(),

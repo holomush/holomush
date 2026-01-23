@@ -59,6 +59,20 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		_ = repo.Delete(ctx, obj.ID)
 	})
 
+	t.Run("create with invalid containment - no location", func(t *testing.T) {
+		obj := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Invalid Object",
+			Description: "Has no containment set.",
+			// No LocationID, HeldByCharacterID, or ContainedInObjectID set
+			CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+		}
+
+		err := repo.Create(ctx, obj)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+	})
+
 	t.Run("update", func(t *testing.T) {
 		obj := &world.Object{
 			ID:          core.NewULID(),

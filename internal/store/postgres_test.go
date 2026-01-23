@@ -813,9 +813,9 @@ func TestStreamToChannel(t *testing.T) {
 
 // mockConn implements connIface for testing Subscribe.
 type mockConn struct {
-	execFunc               func(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	execFunc                func(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	waitForNotificationFunc func(ctx context.Context) (*pgconn.Notification, error)
-	closeFunc              func(ctx context.Context) error
+	closeFunc               func(ctx context.Context) error
 }
 
 func (m *mockConn) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
