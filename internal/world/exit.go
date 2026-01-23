@@ -76,6 +76,7 @@ func (e *Exit) MatchesName(input string) bool {
 
 // IsVisibleTo returns true if the given character can see this exit.
 // locationOwnerID is the owner of the location this exit is in (for VisibilityOwner).
+// Note: Unknown visibility values default to not visible (fail-closed for security).
 func (e *Exit) IsVisibleTo(charID ulid.ULID, locationOwnerID *ulid.ULID) bool {
 	switch e.Visibility {
 	case VisibilityAll:
@@ -85,7 +86,8 @@ func (e *Exit) IsVisibleTo(charID ulid.ULID, locationOwnerID *ulid.ULID) bool {
 	case VisibilityList:
 		return slices.Contains(e.VisibleTo, charID)
 	default:
-		return true
+		// Security: Unknown visibility should deny access, not grant it
+		return false
 	}
 }
 

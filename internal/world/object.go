@@ -95,3 +95,9 @@ func (o *Object) SetContainment(c Containment) {
 	o.HeldByCharacterID = c.CharacterID
 	o.ContainedInObjectID = c.ObjectID
 }
+
+// Validate checks that the object has valid containment (exactly one location).
+func (o *Object) Validate() error {
+	c := o.Containment()
+	return c.Validate()
+}

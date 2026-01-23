@@ -84,6 +84,11 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 
 // Create persists a new object.
 func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error {
+	// Validate containment: object must be in exactly one place
+	if err := obj.Validate(); err != nil {
+		return oops.With("operation", "create object").With("object_id", obj.ID.String()).Wrap(err)
+	}
+
 	var locationID, heldBy, containedIn, ownerID *string
 	if obj.LocationID != nil {
 		s := obj.LocationID.String()

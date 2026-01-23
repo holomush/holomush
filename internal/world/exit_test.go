@@ -121,6 +121,12 @@ func TestExit_IsVisibleTo(t *testing.T) {
 		assert.False(t, exit.IsVisibleTo(allowedID, nil))
 		assert.False(t, exit.IsVisibleTo(otherID, nil))
 	})
+
+	t.Run("unknown visibility defaults to not visible (fail-closed)", func(t *testing.T) {
+		exit := &world.Exit{Visibility: world.Visibility("unknown")}
+		// Security: Unknown visibility should deny access, not grant it
+		assert.False(t, exit.IsVisibleTo(otherID, nil))
+	})
 }
 
 func TestExit_ReverseExit(t *testing.T) {

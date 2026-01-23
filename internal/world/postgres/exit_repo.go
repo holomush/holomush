@@ -48,7 +48,7 @@ func (r *ExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, er
 }
 
 // Create persists a new exit.
-// If bidirectional, also creates the return exit.
+// If bidirectional, also creates the return exit atomically within a transaction.
 func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 	// Assign ID if not set
 	if exit.ID.Compare(ulid.ULID{}) == 0 {
@@ -65,7 +65,17 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 
 	visibleToStrings := ulidsToStrings(exit.VisibleTo)
 
-	_, err = r.pool.Exec(ctx, `
+	// Use a transaction to ensure atomic creation of bidirectional exits
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return oops.With("operation", "begin transaction").Wrap(err)
+	}
+	defer func() {
+		// Rollback is a no-op if tx was committed; error is safe to ignore
+		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
+	}()
+
+	_, err = tx.Exec(ctx, `
 		INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
 		                   return_name, visibility, visible_to, locked, lock_type, lock_data, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -100,7 +110,7 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 				return oops.With("operation", "marshal return exit lock data").Wrap(err)
 			}
 
-			_, err = r.pool.Exec(ctx, `
+			_, err = tx.Exec(ctx, `
 				INSERT INTO exits (id, from_location_id, to_location_id, name, aliases, bidirectional,
 				                   return_name, visibility, visible_to, locked, lock_type, lock_data, created_at)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -123,6 +133,10 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 				return oops.With("operation", "create return exit").With("id", returnExit.ID.String()).Wrap(err)
 			}
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.With("operation", "commit transaction").Wrap(err)
 	}
 
 	return nil

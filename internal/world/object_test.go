@@ -193,3 +193,39 @@ func TestContainment_Validate_AllThreeSet(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, world.ErrInvalidContainment)
 }
+
+func TestObject_Validate(t *testing.T) {
+	locID := ulid.Make()
+	charID := ulid.Make()
+
+	t.Run("valid object with location", func(t *testing.T) {
+		obj := &world.Object{
+			ID:         ulid.Make(),
+			Name:       "Sword",
+			LocationID: &locID,
+		}
+		assert.NoError(t, obj.Validate())
+	})
+
+	t.Run("invalid object with no containment", func(t *testing.T) {
+		obj := &world.Object{
+			ID:   ulid.Make(),
+			Name: "Orphan",
+		}
+		err := obj.Validate()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+	})
+
+	t.Run("invalid object with multiple containment", func(t *testing.T) {
+		obj := &world.Object{
+			ID:                ulid.Make(),
+			Name:              "Confused",
+			LocationID:        &locID,
+			HeldByCharacterID: &charID,
+		}
+		err := obj.Validate()
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+	})
+}
