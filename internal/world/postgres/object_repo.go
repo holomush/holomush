@@ -198,16 +198,27 @@ const DefaultMaxNestingDepth = 3
 // - Target must be a valid container if moving to an object
 // - Max nesting depth is enforced (default 3)
 // - Circular containment is prevented
+// Uses a transaction to ensure atomicity between validation and update.
 func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
 	// Validate containment
 	if err := to.Validate(); err != nil {
 		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 
+	// Use a transaction to ensure validation and update are atomic
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return oops.With("operation", "begin transaction").Wrap(err)
+	}
+	defer func() {
+		// Rollback is a no-op if tx was committed
+		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
+	}()
+
 	// If moving to a container, verify the container exists and is actually a container
 	if to.ObjectID != nil {
 		var isContainer bool
-		err := r.pool.QueryRow(ctx, `
+		err = tx.QueryRow(ctx, `
 			SELECT is_container FROM objects WHERE id = $1
 		`, to.ObjectID.String()).Scan(&isContainer)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -228,49 +239,42 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 
 		// Check for circular containment: object cannot be placed inside itself
 		// or inside any object that is contained within it
-		if err := r.checkCircularContainment(ctx, objectID, *to.ObjectID); err != nil {
+		err = r.checkCircularContainmentTx(ctx, tx, objectID, *to.ObjectID)
+		if err != nil {
 			return err
 		}
 
 		// Check max nesting depth: verify that target container depth + object subtree depth
 		// won't exceed the maximum allowed depth
-		if err := r.checkNestingDepth(ctx, objectID, *to.ObjectID); err != nil {
+		err = r.checkNestingDepthTx(ctx, tx, objectID, *to.ObjectID)
+		if err != nil {
 			return err
 		}
 	}
 
 	// Clear all containment fields and set the new one
-	var locationID, heldBy, containedIn *string
-	if to.LocationID != nil {
-		s := to.LocationID.String()
-		locationID = &s
-	}
-	if to.CharacterID != nil {
-		s := to.CharacterID.String()
-		heldBy = &s
-	}
-	if to.ObjectID != nil {
-		s := to.ObjectID.String()
-		containedIn = &s
-	}
-
-	result, err := r.pool.Exec(ctx, `
+	result, err := tx.Exec(ctx, `
 		UPDATE objects SET location_id = $2, held_by_character_id = $3, contained_in_object_id = $4
 		WHERE id = $1
-	`, objectID.String(), locationID, heldBy, containedIn)
+	`, objectID.String(), ulidToStringPtr(to.LocationID), ulidToStringPtr(to.CharacterID), ulidToStringPtr(to.ObjectID))
 	if err != nil {
 		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
 		return oops.With("object_id", objectID.String()).Wrap(ErrNotFound)
 	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.With("operation", "commit transaction").Wrap(err)
+	}
 	return nil
 }
 
-// checkCircularContainment verifies that placing objectID into targetContainerID
+// checkCircularContainmentTx verifies that placing objectID into targetContainerID
 // won't create a circular containment loop (e.g., A in B, then trying to put B in A).
 // Uses a recursive CTE to traverse the containment hierarchy.
-func (r *ObjectRepository) checkCircularContainment(ctx context.Context, objectID, targetContainerID ulid.ULID) error {
+// Accepts a querier interface to work within a transaction.
+func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q querier, objectID, targetContainerID ulid.ULID) error {
 	// Self-containment check
 	if objectID == targetContainerID {
 		return oops.With("operation", "move object").
@@ -280,22 +284,16 @@ func (r *ObjectRepository) checkCircularContainment(ctx context.Context, objectI
 	}
 
 	// Check if targetContainer is contained (directly or transitively) inside objectID
-	// This would create a loop: objectID contains targetContainer, so putting objectID
-	// into targetContainer would be circular.
 	var isCircular bool
-	err := r.pool.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 		WITH RECURSIVE containment_chain AS (
-			-- Start from the target container
 			SELECT id, contained_in_object_id, 1 as depth
 			FROM objects WHERE id = $1
-
 			UNION ALL
-
-			-- Walk up the containment chain
 			SELECT o.id, o.contained_in_object_id, cc.depth + 1
 			FROM objects o
 			JOIN containment_chain cc ON o.id = cc.contained_in_object_id
-			WHERE cc.depth < 100  -- Safety limit
+			WHERE cc.depth < 100
 		)
 		SELECT EXISTS(
 			SELECT 1 FROM containment_chain WHERE contained_in_object_id = $2
@@ -315,29 +313,20 @@ func (r *ObjectRepository) checkCircularContainment(ctx context.Context, objectI
 	return nil
 }
 
-// checkNestingDepth verifies that placing objectID into targetContainerID
-// won't exceed the maximum nesting depth.
-// This checks both:
-// 1. How deep the target container is (walking up)
-// 2. How deep the descendants of objectID are (walking down)
-// The total must not exceed DefaultMaxNestingDepth.
-func (r *ObjectRepository) checkNestingDepth(ctx context.Context, objectID, targetContainerID ulid.ULID) error {
+// checkNestingDepthTx is the transaction-aware version of checkNestingDepth.
+func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, objectID, targetContainerID ulid.ULID) error {
 	var targetDepth, objectSubtreeDepth int
 
 	// Query 1: Find how deep the target container is (walk up to root)
-	err := r.pool.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 		WITH RECURSIVE ancestors AS (
-			-- Start from the target container
 			SELECT id, contained_in_object_id, 1 as depth
 			FROM objects WHERE id = $1
-
 			UNION ALL
-
-			-- Walk up the containment chain
 			SELECT o.id, o.contained_in_object_id, a.depth + 1
 			FROM objects o
 			JOIN ancestors a ON o.id = a.contained_in_object_id
-			WHERE a.depth < 100  -- Safety limit
+			WHERE a.depth < 100
 		)
 		SELECT COALESCE(MAX(depth), 0) FROM ancestors
 	`, targetContainerID.String()).Scan(&targetDepth)
@@ -346,19 +335,15 @@ func (r *ObjectRepository) checkNestingDepth(ctx context.Context, objectID, targ
 	}
 
 	// Query 2: Find the deepest descendant of the object being moved (walk down)
-	err = r.pool.QueryRow(ctx, `
+	err = q.QueryRow(ctx, `
 		WITH RECURSIVE descendants AS (
-			-- Start from the object being moved (depth 0 = the object itself)
 			SELECT id, 0 as depth
 			FROM objects WHERE id = $1
-
 			UNION ALL
-
-			-- Walk down to find all contained objects
 			SELECT o.id, d.depth + 1
 			FROM objects o
 			JOIN descendants d ON o.contained_in_object_id = d.id
-			WHERE d.depth < 100  -- Safety limit
+			WHERE d.depth < 100
 		)
 		SELECT COALESCE(MAX(depth), 0) FROM descendants
 	`, objectID.String()).Scan(&objectSubtreeDepth)
@@ -366,7 +351,6 @@ func (r *ObjectRepository) checkNestingDepth(ctx context.Context, objectID, targ
 		return oops.With("operation", "check object subtree depth").With("object_id", objectID.String()).Wrap(err)
 	}
 
-	// Total depth = target container depth + 1 (placing the object) + object's deepest descendant
 	totalDepth := targetDepth + objectSubtreeDepth + 1
 	if totalDepth > DefaultMaxNestingDepth {
 		return oops.With("operation", "move object").
