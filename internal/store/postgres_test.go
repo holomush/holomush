@@ -692,6 +692,8 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
 				// Second migration
 				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
+				// Third migration
+				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
 			},
 			wantErr: false,
 		},
