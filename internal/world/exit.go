@@ -99,11 +99,7 @@ func (e *Exit) ReverseExit() *Exit {
 	}
 
 	// Deep copy VisibleTo slice to avoid shared reference
-	var visibleTo []ulid.ULID
-	if len(e.VisibleTo) > 0 {
-		visibleTo = make([]ulid.ULID, len(e.VisibleTo))
-		copy(visibleTo, e.VisibleTo)
-	}
+	visibleTo := slices.Clone(e.VisibleTo)
 
 	// Deep copy LockData map to avoid shared reference (including nested structures)
 	lockData := deepCopyLockData(e.LockData)
