@@ -25,6 +25,12 @@ type EventStore interface {
 
 	// LastEventID returns the most recent event ID for a stream.
 	LastEventID(ctx context.Context, stream string) (ulid.ULID, error)
+
+	// Subscribe starts listening for new events on the given stream.
+	// Returns a channel of event IDs and an error channel.
+	// The caller should use Replay() to fetch full events by ID.
+	// Channels are closed when context is cancelled.
+	Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error)
 }
 
 // MemoryEventStore is an in-memory EventStore for testing.
@@ -87,4 +93,20 @@ func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.U
 		return ulid.ULID{}, ErrStreamEmpty
 	}
 	return events[len(events)-1].ID, nil
+}
+
+// Subscribe returns closed channels for the in-memory store.
+// This is a stub implementation for testing - real subscriptions use PostgreSQL LISTEN/NOTIFY.
+func (s *MemoryEventStore) Subscribe(ctx context.Context, _ string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error) {
+	events := make(chan ulid.ULID)
+	errs := make(chan error)
+
+	// Close channels when context is cancelled
+	go func() {
+		<-ctx.Done()
+		close(events)
+		close(errs)
+	}()
+
+	return events, errs, nil
 }

@@ -198,6 +198,10 @@ func (f *failingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID,
 	return ulid.ULID{}, errStoreFailure
 }
 
+func (f *failingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	return nil, nil, errStoreFailure
+}
+
 var errStoreFailure = &storeError{msg: "store failure"}
 
 type storeError struct {
