@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // querier is an interface that abstracts query execution for both *pgxpool.Pool and pgx.Tx.
@@ -26,4 +27,17 @@ func ulidToStringPtr(id *ulid.ULID) *string {
 	}
 	s := id.String()
 	return &s
+}
+
+// parseOptionalULID parses an optional ULID string pointer into a ULID pointer.
+// Returns nil if the input is nil. Wraps parse errors with the field name for context.
+func parseOptionalULID(strPtr *string, fieldName string) (*ulid.ULID, error) {
+	if strPtr == nil {
+		return nil, nil
+	}
+	id, err := ulid.Parse(*strPtr)
+	if err != nil {
+		return nil, oops.With("operation", "parse "+fieldName).With(fieldName, *strPtr).Wrap(err)
+	}
+	return &id, nil
 }
