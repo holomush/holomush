@@ -128,7 +128,8 @@ database triggers, to keep logic explicit and testable.
 
 ### Objects
 
-Objects use flexible containment with mutual exclusion enforced at application layer:
+Objects use flexible containment with mutual exclusion enforced at both the
+application layer (validation methods) and database layer (CHECK constraint):
 
 ```sql
 CREATE TABLE objects (

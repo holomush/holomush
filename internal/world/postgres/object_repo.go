@@ -184,7 +184,7 @@ const DefaultMaxNestingDepth = 3
 // Move changes an object's containment.
 // Validates containment and enforces business rules:
 // - Target must be a valid container if moving to an object
-// - Max nesting depth is enforced (default 3)
+// - Max nesting depth is enforced (see DefaultMaxNestingDepth)
 // - Circular containment is prevented
 // Uses a transaction to ensure atomicity between validation and update.
 func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
