@@ -111,6 +111,23 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
 	})
+
+	t.Run("update not found", func(t *testing.T) {
+		obj := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Nonexistent",
+			Description: "Does not exist.",
+			LocationID:  &locationID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		err := repo.Update(ctx, obj)
+		assert.Error(t, err)
+	})
+
+	t.Run("delete not found", func(t *testing.T) {
+		err := repo.Delete(ctx, ulid.Make())
+		assert.Error(t, err)
+	})
 }
 
 func TestObjectRepository_ListAtLocation(t *testing.T) {
@@ -417,5 +434,52 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "container object not found")
+	})
+
+	t.Run("move to character", func(t *testing.T) {
+		// Create a test player first
+		playerID := core.NewULID()
+		_, err := testPool.Exec(ctx, `
+			INSERT INTO players (id, username, password_hash, created_at)
+			VALUES ($1, $2, 'testhash', NOW())
+		`, playerID.String(), "player_move_"+playerID.String())
+		require.NoError(t, err)
+		defer func() {
+			_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
+		}()
+
+		// Create a test character
+		characterID := core.NewULID()
+		_, err = testPool.Exec(ctx, `
+			INSERT INTO characters (id, player_id, name, location_id, created_at)
+			VALUES ($1, $2, 'Move Test Character', $3, NOW())
+		`, characterID.String(), playerID.String(), loc1ID.String())
+		require.NoError(t, err)
+		defer func() {
+			_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, characterID.String())
+		}()
+
+		item := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Portable Item",
+			Description: "Can be picked up.",
+			LocationID:  &loc1ID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, item))
+		defer func() {
+			_ = repo.Delete(ctx, item.ID)
+		}()
+
+		// Move to character
+		err = repo.Move(ctx, item.ID, world.Containment{CharacterID: &characterID})
+		require.NoError(t, err)
+
+		got, err := repo.Get(ctx, item.ID)
+		require.NoError(t, err)
+		assert.Nil(t, got.LocationID)
+		assert.NotNil(t, got.HeldByCharacterID)
+		assert.Equal(t, characterID, *got.HeldByCharacterID)
+		assert.Nil(t, got.ContainedInObjectID)
 	})
 }

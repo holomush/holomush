@@ -8,6 +8,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -98,9 +99,15 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 	}
 
 	// Notify subscribers of the new event
-	// Errors here are ignored - event is already persisted, subscribers catch up via Replay
+	// Errors are logged but not returned - event is already persisted, subscribers catch up via Replay
 	channel := streamToChannel(event.Stream)
-	_, _ = s.pool.Exec(ctx, "SELECT pg_notify($1, $2)", channel, event.ID.String()) //nolint:errcheck // best-effort notification
+	if _, notifyErr := s.pool.Exec(ctx, "SELECT pg_notify($1, $2)", channel, event.ID.String()); notifyErr != nil {
+		slog.Warn("failed to notify subscribers of event",
+			"event_id", event.ID.String(),
+			"stream", event.Stream,
+			"channel", channel,
+			"error", notifyErr)
+	}
 	return nil
 }
 
@@ -232,7 +239,8 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	channel := streamToChannel(stream)
 
 	// Start listening on the channel
-	_, err = conn.Exec(ctx, "LISTEN "+channel)
+	// Use pgx.Identifier to safely quote the channel name, preventing SQL injection
+	_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
 	if err != nil {
 		_ = conn.Close(ctx) //nolint:errcheck // cleanup on error path
 		return nil, nil, oops.With("operation", "listen").With("channel", channel).Wrap(err)

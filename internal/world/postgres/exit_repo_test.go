@@ -457,6 +457,20 @@ func TestExitRepository_FindByNameFuzzy(t *testing.T) {
 			wantErr:     true,
 			errContains: "not found",
 		},
+		{
+			name:        "invalid threshold - negative",
+			searchTerm:  "north",
+			threshold:   -0.1,
+			wantErr:     true,
+			errContains: "threshold must be between 0.0 and 1.0",
+		},
+		{
+			name:        "invalid threshold - too high",
+			searchTerm:  "north",
+			threshold:   1.5,
+			wantErr:     true,
+			errContains: "threshold must be between 0.0 and 1.0",
+		},
 	}
 
 	for _, tt := range tests {

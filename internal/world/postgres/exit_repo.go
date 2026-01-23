@@ -187,19 +187,27 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	if exit.Bidirectional && exit.ReturnName != "" {
 		returnExit, findErr := r.FindByName(ctx, exit.ToLocationID, exit.ReturnName)
 		if findErr != nil {
-			// Log but don't fail - the primary delete succeeded
-			slog.Warn("failed to find return exit during bidirectional cleanup",
-				"exit_id", id.String(),
-				"to_location_id", exit.ToLocationID.String(),
-				"return_name", exit.ReturnName,
-				"error", findErr)
+			// Distinguish between "not found" (acceptable - may have been deleted) and actual errors
+			if errors.Is(findErr, ErrNotFound) {
+				slog.Debug("return exit not found during bidirectional cleanup (may have been already deleted)",
+					"exit_id", id.String(),
+					"to_location_id", exit.ToLocationID.String(),
+					"return_name", exit.ReturnName)
+			} else {
+				// Actual database error - log at error level for visibility
+				slog.Error("failed to find return exit during bidirectional cleanup",
+					"exit_id", id.String(),
+					"to_location_id", exit.ToLocationID.String(),
+					"return_name", exit.ReturnName,
+					"error", findErr)
+			}
 		} else if returnExit != nil {
 			// Check that this is indeed the matching return exit
 			if returnExit.ToLocationID == exit.FromLocationID {
 				_, cleanupErr := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
 				if cleanupErr != nil {
-					// Log but don't fail - the primary delete succeeded
-					slog.Warn("failed to delete return exit during bidirectional cleanup",
+					// Delete failure leaves data inconsistent - log at error level
+					slog.Error("failed to delete return exit - orphaned exit remains in database",
 						"exit_id", id.String(),
 						"return_exit_id", returnExit.ID.String(),
 						"error", cleanupErr)
@@ -250,7 +258,14 @@ func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, n
 
 // FindByNameFuzzy finds an exit by name using fuzzy matching (pg_trgm).
 // Returns the best match above the similarity threshold, or ErrNotFound.
+// Threshold must be between 0.0 and 1.0 inclusive.
 func (r *ExitRepository) FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*world.Exit, error) {
+	if threshold < 0.0 || threshold > 1.0 {
+		return nil, oops.
+			With("threshold", threshold).
+			Errorf("threshold must be between 0.0 and 1.0")
+	}
+
 	// Use pg_trgm similarity() to find best matching exit name
 	// Also check aliases using array unnest
 	exit, err := r.scanExit(ctx, `
