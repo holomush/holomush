@@ -87,9 +87,7 @@ func TestLocation_EffectiveDescription(t *testing.T) {
 			Name:        "Town Square",
 			Description: "The center of town.",
 		}
-		desc, err := loc.EffectiveDescription(nil)
-		assert.NoError(t, err)
-		assert.Equal(t, "The center of town.", desc)
+		assert.Equal(t, "The center of town.", loc.EffectiveDescription(nil))
 	})
 
 	t.Run("scene with shadow returns parent description", func(t *testing.T) {
@@ -100,9 +98,7 @@ func TestLocation_EffectiveDescription(t *testing.T) {
 			Name:        "",
 			Description: "",
 		}
-		desc, err := loc.EffectiveDescription(parent)
-		assert.NoError(t, err)
-		assert.Equal(t, "A cozy tavern with a roaring fire.", desc)
+		assert.Equal(t, "A cozy tavern with a roaring fire.", loc.EffectiveDescription(parent))
 	})
 
 	t.Run("scene with override returns own description", func(t *testing.T) {
@@ -113,9 +109,19 @@ func TestLocation_EffectiveDescription(t *testing.T) {
 			Name:        "Private Room",
 			Description: "A private back room in the tavern.",
 		}
-		desc, err := loc.EffectiveDescription(parent)
-		assert.NoError(t, err)
-		assert.Equal(t, "A private back room in the tavern.", desc)
+		assert.Equal(t, "A private back room in the tavern.", loc.EffectiveDescription(parent))
+	})
+
+	t.Run("shadows_id set but parent nil returns empty description", func(t *testing.T) {
+		loc := &world.Location{
+			ID:          ulid.Make(),
+			Type:        world.LocationTypeScene,
+			ShadowsID:   &parentID,
+			Name:        "Orphan Scene",
+			Description: "",
+		}
+		// When parent is not loaded/passed, returns own (empty) description
+		assert.Equal(t, "", loc.EffectiveDescription(nil))
 	})
 }
 

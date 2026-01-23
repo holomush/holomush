@@ -39,6 +39,16 @@ func TestExit_MatchesName(t *testing.T) {
 			assert.Equal(t, tt.expected, exit.MatchesName(tt.input))
 		})
 	}
+
+	t.Run("nil aliases does not match alias input", func(t *testing.T) {
+		exitNoAliases := &world.Exit{
+			ID:      ulid.Make(),
+			Name:    "north",
+			Aliases: nil, // nil, not empty slice
+		}
+		assert.True(t, exitNoAliases.MatchesName("north"))
+		assert.False(t, exitNoAliases.MatchesName("n"))
+	})
 }
 
 func TestVisibility_String(t *testing.T) {
@@ -99,6 +109,16 @@ func TestExit_IsVisibleTo(t *testing.T) {
 			Visibility: world.VisibilityList,
 			VisibleTo:  []ulid.ULID{allowedID},
 		}
+		assert.False(t, exit.IsVisibleTo(otherID, nil))
+	})
+
+	t.Run("visibility list - empty list visible to no one", func(t *testing.T) {
+		exit := &world.Exit{
+			Visibility: world.VisibilityList,
+			VisibleTo:  []ulid.ULID{}, // empty list
+		}
+		// With empty VisibleTo, no character can see the exit
+		assert.False(t, exit.IsVisibleTo(allowedID, nil))
 		assert.False(t, exit.IsVisibleTo(otherID, nil))
 	})
 }

@@ -43,14 +43,14 @@ type Location struct {
 // EffectiveDescription returns the description to show, falling back to shadow if empty.
 // If this location shadows another and has an empty description, returns the parent's description.
 // The parent parameter should be the shadowed location, or nil if not shadowing.
-func (l *Location) EffectiveDescription(parent *Location) (string, error) {
+func (l *Location) EffectiveDescription(parent *Location) string {
 	if l.Description != "" {
-		return l.Description, nil
+		return l.Description
 	}
 	if l.ShadowsID != nil && parent != nil {
-		return parent.Description, nil
+		return parent.Description
 	}
-	return l.Description, nil
+	return l.Description
 }
 
 // EffectiveName returns the name to show, falling back to shadow if empty.

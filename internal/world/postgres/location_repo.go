@@ -159,7 +159,7 @@ func (r *LocationRepository) GetShadowedBy(ctx context.Context, id ulid.ULID) ([
 }
 
 func scanLocations(rows pgx.Rows) ([]*world.Location, error) {
-	var locations []*world.Location
+	locations := make([]*world.Location, 0)
 	for rows.Next() {
 		var loc world.Location
 		var idStr string

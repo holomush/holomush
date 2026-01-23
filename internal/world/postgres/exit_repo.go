@@ -355,7 +355,7 @@ func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any
 
 // scanExits scans multiple exits from rows.
 func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
-	var exits []*world.Exit
+	exits := make([]*world.Exit, 0)
 	for rows.Next() {
 		var exit world.Exit
 		var idStr, fromLocStr, toLocStr string
