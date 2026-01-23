@@ -46,21 +46,36 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 		return nil, oops.With("operation", "get object").With("id", id.String()).Wrap(err)
 	}
 
-	obj.ID = ulid.MustParse(idStr)
+	obj.ID, err = ulid.Parse(idStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse object id").With("id", idStr).Wrap(err)
+	}
 	if locationIDStr != nil {
-		lid := ulid.MustParse(*locationIDStr)
+		lid, err := ulid.Parse(*locationIDStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse location_id").With("location_id", *locationIDStr).Wrap(err)
+		}
 		obj.LocationID = &lid
 	}
 	if heldByStr != nil {
-		hid := ulid.MustParse(*heldByStr)
+		hid, err := ulid.Parse(*heldByStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse held_by_character_id").With("held_by_character_id", *heldByStr).Wrap(err)
+		}
 		obj.HeldByCharacterID = &hid
 	}
 	if containedInStr != nil {
-		cid := ulid.MustParse(*containedInStr)
+		cid, err := ulid.Parse(*containedInStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse contained_in_object_id").With("contained_in_object_id", *containedInStr).Wrap(err)
+		}
 		obj.ContainedInObjectID = &cid
 	}
 	if ownerIDStr != nil {
-		oid := ulid.MustParse(*ownerIDStr)
+		oid, err := ulid.Parse(*ownerIDStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse owner_id").With("owner_id", *ownerIDStr).Wrap(err)
+		}
 		obj.OwnerID = &oid
 	}
 
@@ -265,21 +280,37 @@ func scanObjects(rows pgx.Rows) ([]*world.Object, error) {
 			return nil, oops.With("operation", "scan object").Wrap(err)
 		}
 
-		obj.ID = ulid.MustParse(idStr)
+		var err error
+		obj.ID, err = ulid.Parse(idStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse object id").With("id", idStr).Wrap(err)
+		}
 		if locationIDStr != nil {
-			lid := ulid.MustParse(*locationIDStr)
+			lid, err := ulid.Parse(*locationIDStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse location_id").With("location_id", *locationIDStr).Wrap(err)
+			}
 			obj.LocationID = &lid
 		}
 		if heldByStr != nil {
-			hid := ulid.MustParse(*heldByStr)
+			hid, err := ulid.Parse(*heldByStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse held_by_character_id").With("held_by_character_id", *heldByStr).Wrap(err)
+			}
 			obj.HeldByCharacterID = &hid
 		}
 		if containedInStr != nil {
-			cid := ulid.MustParse(*containedInStr)
+			cid, err := ulid.Parse(*containedInStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse contained_in_object_id").With("contained_in_object_id", *containedInStr).Wrap(err)
+			}
 			obj.ContainedInObjectID = &cid
 		}
 		if ownerIDStr != nil {
-			oid := ulid.MustParse(*ownerIDStr)
+			oid, err := ulid.Parse(*ownerIDStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse owner_id").With("owner_id", *ownerIDStr).Wrap(err)
+			}
 			obj.OwnerID = &oid
 		}
 

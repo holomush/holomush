@@ -698,6 +698,8 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
 				// Fifth migration (pg_stat_statements)
 				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
+				// Sixth migration (object containment constraint)
+				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
 			},
 			wantErr: false,
 		},

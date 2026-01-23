@@ -398,4 +398,24 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, obj.ID, world.Containment{})
 		assert.Error(t, err)
 	})
+
+	t.Run("move to non-existent container fails", func(t *testing.T) {
+		item := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Lost Item",
+			Description: "Item looking for container.",
+			LocationID:  &loc1ID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, item))
+		defer func() {
+			_ = repo.Delete(ctx, item.ID)
+		}()
+
+		// Try to move to a container that doesn't exist
+		nonExistentID := core.NewULID()
+		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "container object not found")
+	})
 }

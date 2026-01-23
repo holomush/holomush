@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -188,7 +189,14 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		if findErr == nil && returnExit != nil {
 			// Check that this is indeed the matching return exit
 			if returnExit.ToLocationID == exit.FromLocationID {
-				r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String()) //nolint:errcheck // best-effort cleanup
+				_, cleanupErr := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
+				if cleanupErr != nil {
+					// Log but don't fail - the primary delete succeeded
+					slog.Warn("failed to delete return exit during bidirectional cleanup",
+						"exit_id", id.String(),
+						"return_exit_id", returnExit.ID.String(),
+						"error", cleanupErr)
+				}
 			}
 		}
 	}
@@ -286,9 +294,18 @@ func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any
 		return nil, oops.With("operation", "scan exit").Wrap(err)
 	}
 
-	exit.ID = ulid.MustParse(idStr)
-	exit.FromLocationID = ulid.MustParse(fromLocStr)
-	exit.ToLocationID = ulid.MustParse(toLocStr)
+	exit.ID, err = ulid.Parse(idStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse exit id").With("id", idStr).Wrap(err)
+	}
+	exit.FromLocationID, err = ulid.Parse(fromLocStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse from_location_id").With("from_location_id", fromLocStr).Wrap(err)
+	}
+	exit.ToLocationID, err = ulid.Parse(toLocStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse to_location_id").With("to_location_id", toLocStr).Wrap(err)
+	}
 	exit.Aliases = aliases
 	if returnName != nil {
 		exit.ReturnName = *returnName
@@ -326,9 +343,19 @@ func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
 			return nil, oops.With("operation", "scan exit").Wrap(err)
 		}
 
-		exit.ID = ulid.MustParse(idStr)
-		exit.FromLocationID = ulid.MustParse(fromLocStr)
-		exit.ToLocationID = ulid.MustParse(toLocStr)
+		var err error
+		exit.ID, err = ulid.Parse(idStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse exit id").With("id", idStr).Wrap(err)
+		}
+		exit.FromLocationID, err = ulid.Parse(fromLocStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse from_location_id").With("from_location_id", fromLocStr).Wrap(err)
+		}
+		exit.ToLocationID, err = ulid.Parse(toLocStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse to_location_id").With("to_location_id", toLocStr).Wrap(err)
+		}
 		exit.Aliases = aliases
 		if returnName != nil {
 			exit.ReturnName = *returnName

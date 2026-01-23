@@ -86,7 +86,11 @@ func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULI
 		if err := rows.Scan(&charIDStr, &p.Role); err != nil {
 			return nil, oops.With("operation", "scan participant").Wrap(err)
 		}
-		p.CharacterID = ulid.MustParse(charIDStr)
+		var err error
+		p.CharacterID, err = ulid.Parse(charIDStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse character_id").With("character_id", charIDStr).Wrap(err)
+		}
 		participants = append(participants, p)
 	}
 
@@ -131,13 +135,23 @@ func (r *SceneRepository) scanLocations(rows pgx.Rows) ([]*world.Location, error
 			return nil, oops.With("operation", "scan location").Wrap(err)
 		}
 
-		loc.ID = ulid.MustParse(idStr)
+		var err error
+		loc.ID, err = ulid.Parse(idStr)
+		if err != nil {
+			return nil, oops.With("operation", "parse location id").With("id", idStr).Wrap(err)
+		}
 		if shadowsIDStr != nil {
-			sid := ulid.MustParse(*shadowsIDStr)
+			sid, err := ulid.Parse(*shadowsIDStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse shadows_id").With("shadows_id", *shadowsIDStr).Wrap(err)
+			}
 			loc.ShadowsID = &sid
 		}
 		if ownerIDStr != nil {
-			oid := ulid.MustParse(*ownerIDStr)
+			oid, err := ulid.Parse(*ownerIDStr)
+			if err != nil {
+				return nil, oops.With("operation", "parse owner_id").With("owner_id", *ownerIDStr).Wrap(err)
+			}
 			loc.OwnerID = &oid
 		}
 
