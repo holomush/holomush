@@ -380,24 +380,42 @@ store := mocks.NewMockEventStore(t)
 store.EXPECT().Append(mock.Anything, mock.Anything).Return(nil)
 ```
 
-### Integration Tests with Ginkgo/Gomega
+### Integration Tests with Ginkgo/Gomega (BDD)
 
-Use ginkgo/gomega for integration tests:
+| Requirement                           | Description                                |
+| ------------------------------------- | ------------------------------------------ |
+| **MUST** use Ginkgo/Gomega            | All integration tests use BDD-style specs  |
+| **MUST** write feature specs          | User stories become `Describe`/`It` blocks |
+| **MUST** use `//go:build integration` | Tag all integration test files             |
+| **SHOULD** use testcontainers         | For database integration tests             |
+
+**Structure:** Feature specs live in `test/integration/<domain>/`:
 
 ```go
-var _ = Describe("Feature", func() {
-    It("does something", func() {
-        Expect(result).To(Equal(expected))
+//go:build integration
+
+var _ = Describe("Feature Name", func() {
+    Describe("User story or capability", func() {
+        It("expected behavior in plain English", func() {
+            // Given/When/Then pattern
+            Expect(result).To(Equal(expected))
+        })
     })
 })
 ```
 
-For async operations:
+**Async operations:**
 
 ```go
 Eventually(func() int {
     return len(results)
 }).Should(Equal(expected))
+```
+
+**Run integration tests:**
+
+```bash
+go test -race -v -tags=integration ./test/integration/...
 ```
 
 ## Commands
