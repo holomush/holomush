@@ -1,6 +1,6 @@
 # World Model Architecture Design
 
-**Status:** Draft
+**Status:** Implemented
 **Date:** 2026-01-22
 **Epic:** holomush-x2t (Epic 4: World Model)
 **Task:** holomush-x2t.1
@@ -448,12 +448,12 @@ CreateObject(name, description string, at Containment) (*Object, error)
 
 ## Acceptance Criteria
 
-- [ ] Document location, exit, and object schemas
-- [ ] Define repository interfaces for each entity type
-- [ ] Specify event types for world state changes
-- [ ] Design ABAC policies for world objects
-- [ ] Document location streaming strategy
-- [ ] Define plugin hook points for world events
+- [x] Document location, exit, and object schemas
+- [x] Define repository interfaces for each entity type
+- [x] Specify event types for world state changes
+- [x] Design ABAC policies for world objects
+- [x] Document location streaming strategy
+- [x] Define plugin hook points for world events
 
 ## References
 

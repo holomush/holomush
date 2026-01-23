@@ -316,31 +316,17 @@ flowchart TB
 - `alloc(size) → ptr` - Memory allocation for host
 - `handle_event(ptr, len) → packed` - Event handler returning response
 
-## Directory Structure
+## World Model
 
-```text
-cmd/holomush/        # Server entry point
-internal/            # Private implementation
-  core/              # Event system, sessions, engine
-    event.go         # Event types and structures
-    store.go         # EventStore interface
-    session.go       # Session management
-    engine.go        # Command processing
-    broadcaster.go   # Real-time event distribution
-  telnet/            # Telnet protocol adapter
-    server.go        # TCP server
-    handler.go       # Connection handling
-  store/             # Storage implementations
-    postgres.go      # PostgreSQL EventStore
-  wasm/              # Plugin host
-    host.go          # wazero runtime
-pkg/                 # Public plugin API (future)
-plugins/             # WASM plugins
-docs/
-  specs/             # Specifications
-  plans/             # Implementation plans
-  reference/         # This documentation
-```
+The world model (`internal/world/`) provides locations, exits, and objects with PostgreSQL persistence via `internal/world/postgres/`.
+
+| Location Type | Description           | Replay Policy |
+| ------------- | --------------------- | ------------- |
+| `persistent`  | Permanent world rooms | `last:0`      |
+| `scene`       | Temporary RP scenes   | `last:-1`     |
+| `instance`    | Instanced content     | `last:0`      |
+
+Objects use flexible containment - each object exists in exactly one place (room, character inventory, or container). See [World Model Design](../specs/2026-01-22-world-model-design.md) for details.
 
 ## Key Interfaces
 
@@ -453,12 +439,12 @@ Phase 1 delivers a minimal vertical slice:
 
 ## Future Phases
 
-| Phase | Features                                 |
-| ----- | ---------------------------------------- |
-| 2     | Web client, multiple locations, movement |
-| 3     | Character creation, player accounts      |
-| 4     | Full plugin API, capability model        |
-| 5     | ABAC access control, scenes              |
+| Phase | Features                                 | Status      |
+| ----- | ---------------------------------------- | ----------- |
+| 2     | Web client, multiple locations, movement | Planned     |
+| 3     | Character creation, player accounts      | Planned     |
+| 4     | World model (locations, exits, objects)  | Implemented |
+| 5     | ABAC access control, scenes              | Planned     |
 
 ## Further Reading
 
