@@ -16,8 +16,8 @@ import (
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
 
@@ -822,8 +822,8 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 	manifest := &plugin.Manifest{
 		Name:         "wasm-plugin",
 		Version:      "1.0.0",
-		Type:         "wasm",  // Wrong type for goplugin host
-		BinaryPlugin: nil,     // No BinaryPlugin config
+		Type:         "wasm", // Wrong type for goplugin host
+		BinaryPlugin: nil,    // No BinaryPlugin config
 	}
 
 	err := host.Load(ctx, manifest, tmpDir)

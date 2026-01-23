@@ -17,8 +17,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	holomushtls "github.com/holomush/holomush/internal/tls"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // closeWithCheck is a helper that closes an io.Closer and logs any error.
