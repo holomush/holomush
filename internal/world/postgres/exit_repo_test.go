@@ -358,3 +358,162 @@ func TestExitRepository_WithVisibleToList(t *testing.T) {
 	assert.Contains(t, got.VisibleTo, charID1)
 	assert.Contains(t, got.VisibleTo, charID2)
 }
+
+func TestExitRepository_FindByNameFuzzy(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	// Create exits with various names for fuzzy matching tests
+	exits := []*world.Exit{
+		{
+			ID:             core.NewULID(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "north",
+			Aliases:        []string{"n", "northward"},
+			Bidirectional:  false,
+			Visibility:     world.VisibilityAll,
+		},
+		{
+			ID:             core.NewULID(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "northeast",
+			Aliases:        []string{"ne"},
+			Bidirectional:  false,
+			Visibility:     world.VisibilityAll,
+		},
+		{
+			ID:             core.NewULID(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "south",
+			Aliases:        []string{"s", "southward"},
+			Bidirectional:  false,
+			Visibility:     world.VisibilityAll,
+		},
+	}
+
+	for _, exit := range exits {
+		err := repo.Create(ctx, exit)
+		require.NoError(t, err)
+	}
+
+	tests := []struct {
+		name        string
+		searchTerm  string
+		threshold   float64
+		wantName    string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:       "exact match",
+			searchTerm: "north",
+			threshold:  0.3,
+			wantName:   "north",
+			wantErr:    false,
+		},
+		{
+			name:       "typo match - nroth for north",
+			searchTerm: "nroth",
+			threshold:  0.2, // pg_trgm similarity for nroth/north is ~0.25
+			wantName:   "north",
+			wantErr:    false,
+		},
+		{
+			name:       "typo match - soth for south",
+			searchTerm: "soth",
+			threshold:  0.3,
+			wantName:   "south",
+			wantErr:    false,
+		},
+		{
+			name:       "partial match - nor",
+			searchTerm: "nor",
+			threshold:  0.3,
+			wantName:   "north",
+			wantErr:    false,
+		},
+		{
+			name:       "alias fuzzy match - northwrd for northward",
+			searchTerm: "northwrd",
+			threshold:  0.3,
+			wantName:   "north",
+			wantErr:    false,
+		},
+		{
+			name:        "below threshold - no match",
+			searchTerm:  "xyz",
+			threshold:   0.5,
+			wantErr:     true,
+			errContains: "not found",
+		},
+		{
+			name:        "high threshold - no match",
+			searchTerm:  "nroth",
+			threshold:   0.9,
+			wantErr:     true,
+			errContains: "not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.FindByNameFuzzy(ctx, loc1ID, tt.searchTerm, tt.threshold)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, got.Name)
+		})
+	}
+}
+
+func TestExitRepository_FindByNameFuzzy_BestMatch(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	// Create exits with similar names to test best match selection
+	exits := []*world.Exit{
+		{
+			ID:             core.NewULID(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "door",
+			Bidirectional:  false,
+			Visibility:     world.VisibilityAll,
+		},
+		{
+			ID:             core.NewULID(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "doorway",
+			Bidirectional:  false,
+			Visibility:     world.VisibilityAll,
+		},
+	}
+
+	for _, exit := range exits {
+		err := repo.Create(ctx, exit)
+		require.NoError(t, err)
+	}
+
+	// "door" should match "door" better than "doorway"
+	got, err := repo.FindByNameFuzzy(ctx, loc1ID, "door", 0.3)
+	require.NoError(t, err)
+	assert.Equal(t, "door", got.Name)
+
+	// "doorwa" should match "doorway" better than "door"
+	got, err = repo.FindByNameFuzzy(ctx, loc1ID, "doorwa", 0.3)
+	require.NoError(t, err)
+	assert.Equal(t, "doorway", got.Name)
+}

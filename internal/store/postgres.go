@@ -28,6 +28,9 @@ var migration002SQL string
 //go:embed migrations/003_world_model.sql
 var migration003SQL string
 
+//go:embed migrations/004_pg_trgm.sql
+var migration004SQL string
+
 // ErrSystemInfoNotFound is returned when a system info key doesn't exist.
 var ErrSystemInfoNotFound = errors.New("system info key not found")
 
@@ -62,7 +65,7 @@ func (s *PostgresEventStore) Close() {
 
 // Migrate runs database migrations.
 func (s *PostgresEventStore) Migrate(ctx context.Context) error {
-	migrations := []string{migration001SQL, migration002SQL, migration003SQL}
+	migrations := []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL}
 	for i, sql := range migrations {
 		if _, err := s.pool.Exec(ctx, sql); err != nil {
 			return oops.With("operation", "run migration").With("migration_number", i+1).Wrap(err)

@@ -233,6 +233,38 @@ func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, n
 	return exit, nil
 }
 
+// FindByNameFuzzy finds an exit by name using fuzzy matching (pg_trgm).
+// Returns the best match above the similarity threshold, or ErrNotFound.
+func (r *ExitRepository) FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*world.Exit, error) {
+	// Use pg_trgm similarity() to find best matching exit name
+	// Also check aliases using array unnest
+	exit, err := r.scanExit(ctx, `
+		SELECT e.id, e.from_location_id, e.to_location_id, e.name, e.aliases, e.bidirectional,
+		       e.return_name, e.visibility, e.visible_to, e.locked, e.lock_type, e.lock_data, e.created_at
+		FROM exits e
+		WHERE e.from_location_id = $1
+		  AND (
+		    similarity(e.name, $2) >= $3
+		    OR EXISTS (
+		      SELECT 1 FROM unnest(e.aliases) AS alias
+		      WHERE similarity(alias, $2) >= $3
+		    )
+		  )
+		ORDER BY GREATEST(
+		  similarity(e.name, $2),
+		  COALESCE((SELECT MAX(similarity(alias, $2)) FROM unnest(e.aliases) AS alias), 0)
+		) DESC
+		LIMIT 1
+	`, locationID.String(), name, threshold)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.With("location_id", locationID.String()).With("name", name).With("threshold", threshold).Wrap(ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "find exit by name fuzzy").With("location_id", locationID.String()).With("name", name).Wrap(err)
+	}
+	return exit, nil
+}
+
 // scanExit scans a single exit from a query.
 func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any) (*world.Exit, error) {
 	row := r.pool.QueryRow(ctx, query, args...)
