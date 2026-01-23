@@ -43,7 +43,7 @@ type ExitRepository interface {
 	Update(ctx context.Context, exit *Exit) error
 
 	// Delete removes an exit by ID.
-	// If bidirectional, also removes the return exit.
+	// If bidirectional, attempts to remove the return exit (best-effort, failures logged).
 	Delete(ctx context.Context, id ulid.ULID) error
 
 	// ListFromLocation returns all exits from a location.
