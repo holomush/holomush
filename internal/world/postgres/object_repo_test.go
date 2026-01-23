@@ -261,6 +261,30 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, postgres.ErrNotFound)
 	})
+
+	t.Run("update with invalid containment - no location", func(t *testing.T) {
+		obj := &world.Object{
+			ID:          core.NewULID(),
+			Name:        "Valid Object",
+			Description: "Initially valid.",
+			LocationID:  &locationID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+
+		err := repo.Create(ctx, obj)
+		require.NoError(t, err)
+
+		// Invalidate containment by clearing all locations
+		obj.LocationID = nil
+		obj.HeldByCharacterID = nil
+		obj.ContainedInObjectID = nil
+		err = repo.Update(ctx, obj)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+
+		// Cleanup
+		_ = repo.Delete(ctx, obj.ID)
+	})
 }
 
 func TestObjectRepository_ListAtLocation(t *testing.T) {
