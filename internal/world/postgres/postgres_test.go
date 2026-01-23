@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 		panic("failed to create event store: " + err.Error())
 	}
 
-	// Run all migrations (001, 002, 003)
+	// Run all migrations
 	if err := eventStore.Migrate(ctx); err != nil {
 		eventStore.Close()
 		_ = container.Terminate(ctx)
