@@ -313,7 +313,9 @@ func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q que
 	return nil
 }
 
-// checkNestingDepthTx is the transaction-aware version of checkNestingDepth.
+// checkNestingDepthTx verifies that moving objectID into targetContainerID
+// won't exceed the maximum nesting depth. Accepts a querier interface to work
+// within a transaction.
 func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, objectID, targetContainerID ulid.ULID) error {
 	var targetDepth, objectSubtreeDepth int
 
