@@ -240,6 +240,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 	t.Run("get not found", func(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
+		assert.ErrorIs(t, err, postgres.ErrNotFound)
 	})
 
 	t.Run("update not found", func(t *testing.T) {
@@ -252,11 +253,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		}
 		err := repo.Update(ctx, obj)
 		assert.Error(t, err)
+		assert.ErrorIs(t, err, postgres.ErrNotFound)
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := repo.Delete(ctx, ulid.Make())
 		assert.Error(t, err)
+		assert.ErrorIs(t, err, postgres.ErrNotFound)
 	})
 }
 
@@ -309,6 +312,28 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 	}
 	assert.True(t, foundNames["Object 1"])
 	assert.True(t, foundNames["Object 2"])
+}
+
+func TestObjectRepository_ListAtLocation_Empty(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewObjectRepository(testPool)
+
+	// Create an empty location
+	emptyLocationID := core.NewULID()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
+		VALUES ($1, 'Empty Location', 'No objects here', 'persistent', 'last:0', NOW())
+	`, emptyLocationID.String())
+	require.NoError(t, err)
+	defer func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, emptyLocationID.String())
+	}()
+
+	// Query for objects at empty location
+	objects, err := repo.ListAtLocation(ctx, emptyLocationID)
+	require.NoError(t, err)
+	assert.NotNil(t, objects, "should return non-nil empty slice, not nil")
+	assert.Empty(t, objects)
 }
 
 func TestObjectRepository_ListHeldBy(t *testing.T) {
@@ -772,6 +797,13 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, container.ID, world.Containment{ObjectID: &container.ID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circular containment")
+	})
+
+	t.Run("move non-existent object fails", func(t *testing.T) {
+		nonExistentID := core.NewULID()
+		err := repo.Move(ctx, nonExistentID, world.Containment{LocationID: &loc1ID})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, postgres.ErrNotFound)
 	})
 
 	t.Run("move with multiple containment fields fails", func(t *testing.T) {

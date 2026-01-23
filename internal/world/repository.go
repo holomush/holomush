@@ -53,7 +53,7 @@ type ExitRepository interface {
 	FindByName(ctx context.Context, locationID ulid.ULID, name string) (*Exit, error)
 
 	// FindByNameFuzzy finds an exit by name using fuzzy matching (pg_trgm).
-	// Returns the best match above the similarity threshold, or ErrExitNotFound.
+	// Returns the best match above the similarity threshold, or ErrNotFound.
 	FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*Exit, error)
 }
 

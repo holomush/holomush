@@ -383,13 +383,7 @@ func (r *ObjectRepository) checkNestingDepth(ctx context.Context, objectID, targ
 		return oops.With("operation", "check object subtree depth").With("object_id", objectID.String()).Wrap(err)
 	}
 
-	// Total depth after move: target container depth + 1 (for objectID) + subtree depth
-	// But since objectSubtreeDepth includes objectID at depth 0, we use: targetDepth + objectSubtreeDepth + 1
-	// Actually: if target is at depth 2, putting object in it makes object at depth 3.
-	// If object has descendants at relative depth 1, they'd be at absolute depth 4.
-	// So: totalDepth = targetDepth + 1 + objectSubtreeDepth
-	// Which simplifies to checking: targetDepth + objectSubtreeDepth >= DefaultMaxNestingDepth
-	// (because adding 1 for the object itself would make it exceed)
+	// Total depth = target container depth + 1 (placing the object) + object's deepest descendant
 	totalDepth := targetDepth + objectSubtreeDepth + 1
 	if totalDepth > DefaultMaxNestingDepth {
 		return oops.With("operation", "move object").
@@ -406,7 +400,7 @@ func (r *ObjectRepository) checkNestingDepth(ctx context.Context, objectID, targ
 }
 
 func scanObjects(rows pgx.Rows) ([]*world.Object, error) {
-	var objects []*world.Object
+	objects := make([]*world.Object, 0)
 	for rows.Next() {
 		var obj world.Object
 		var idStr string
