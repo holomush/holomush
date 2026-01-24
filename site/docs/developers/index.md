@@ -24,9 +24,9 @@ events and can emit new events in response.
 
 ### Architecture
 
-- [System Architecture](architecture.md) - Core components and data flow
-- [Event System](events.md) - How events drive the game world
-- [World Model](world-model.md) - Objects, rooms, and the spatial graph
+- [System Architecture](../contributors/architecture.md) - Core components and data flow
+- [Coding Standards](../contributors/coding-standards.md) - Go idioms and conventions
+- [PR Guide](../contributors/pr-guide.md) - Contributing workflow
 
 ### Plugin Development
 

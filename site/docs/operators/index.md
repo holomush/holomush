@@ -45,7 +45,7 @@ with PostgreSQL as its only external dependency.
 | ---------- | ------- | ----------- |
 | CPU        | 1 core  | 2+ cores    |
 | Memory     | 256 MB  | 512 MB      |
-| PostgreSQL | 14+     | 16+         |
+| PostgreSQL | 18+     | 18+         |
 | Storage    | 1 GB    | 10+ GB      |
 
 ## Telnet vs Web

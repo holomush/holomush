@@ -135,7 +135,7 @@ sudo mv holomush /usr/local/bin/
 
 ### PostgreSQL Setup
 
-HoloMUSH requires PostgreSQL 14 or later.
+HoloMUSH requires PostgreSQL 18 or later.
 
 **Quick start with Docker:**
 
@@ -155,7 +155,7 @@ docker run -d --name holomush-db \
 sudo apt install postgresql postgresql-contrib
 
 # macOS
-brew install postgresql@16
+brew install postgresql@18
 ```
 
 Create the database:
