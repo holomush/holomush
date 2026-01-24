@@ -6,6 +6,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -270,7 +271,7 @@ func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q que
 
 	// Check if targetContainer is contained (directly or transitively) inside objectID
 	var isCircular bool
-	err := q.QueryRow(ctx, `
+	err := q.QueryRow(ctx, fmt.Sprintf(`
 		WITH RECURSIVE containment_chain AS (
 			SELECT id, contained_in_object_id, 1 as depth
 			FROM objects WHERE id = $1
@@ -278,12 +279,12 @@ func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q que
 			SELECT o.id, o.contained_in_object_id, cc.depth + 1
 			FROM objects o
 			JOIN containment_chain cc ON o.id = cc.contained_in_object_id
-			WHERE cc.depth < 100
+			WHERE cc.depth < %d
 		)
 		SELECT EXISTS(
 			SELECT 1 FROM containment_chain WHERE contained_in_object_id = $2
 		)
-	`, targetContainerID.String(), objectID.String()).Scan(&isCircular)
+	`, maxCTERecursionDepth), targetContainerID.String(), objectID.String()).Scan(&isCircular)
 	if err != nil {
 		return oops.With("operation", "check circular containment").With("object_id", objectID.String()).Wrap(err)
 	}
@@ -306,7 +307,7 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 	var targetDepth, objectSubtreeDepth int
 
 	// Query 1: Find how deep the target container is (walk up to root)
-	err := q.QueryRow(ctx, `
+	err := q.QueryRow(ctx, fmt.Sprintf(`
 		WITH RECURSIVE ancestors AS (
 			SELECT id, contained_in_object_id, 1 as depth
 			FROM objects WHERE id = $1
@@ -314,16 +315,16 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 			SELECT o.id, o.contained_in_object_id, a.depth + 1
 			FROM objects o
 			JOIN ancestors a ON o.id = a.contained_in_object_id
-			WHERE a.depth < 100
+			WHERE a.depth < %d
 		)
 		SELECT COALESCE(MAX(depth), 0) FROM ancestors
-	`, targetContainerID.String()).Scan(&targetDepth)
+	`, maxCTERecursionDepth), targetContainerID.String()).Scan(&targetDepth)
 	if err != nil {
 		return oops.With("operation", "check target depth").With("container_id", targetContainerID.String()).Wrap(err)
 	}
 
 	// Query 2: Find the deepest descendant of the object being moved (walk down)
-	err = q.QueryRow(ctx, `
+	err = q.QueryRow(ctx, fmt.Sprintf(`
 		WITH RECURSIVE descendants AS (
 			SELECT id, 0 as depth
 			FROM objects WHERE id = $1
@@ -331,10 +332,10 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 			SELECT o.id, d.depth + 1
 			FROM objects o
 			JOIN descendants d ON o.contained_in_object_id = d.id
-			WHERE d.depth < 100
+			WHERE d.depth < %d
 		)
 		SELECT COALESCE(MAX(depth), 0) FROM descendants
-	`, objectID.String()).Scan(&objectSubtreeDepth)
+	`, maxCTERecursionDepth), objectID.String()).Scan(&objectSubtreeDepth)
 	if err != nil {
 		return oops.With("operation", "check object subtree depth").With("object_id", objectID.String()).Wrap(err)
 	}

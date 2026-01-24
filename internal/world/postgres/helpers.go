@@ -19,6 +19,10 @@ type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+// maxCTERecursionDepth limits recursion in CTEs to prevent infinite loops.
+// This is a safety guard; actual nesting is limited by business rules (maxNestingDepth).
+const maxCTERecursionDepth = 100
+
 // ulidToStringPtr converts a ULID pointer to a string pointer for SQL parameters.
 // Returns nil if the input is nil.
 func ulidToStringPtr(id *ulid.ULID) *string {
