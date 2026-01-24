@@ -776,6 +776,34 @@ func TestWorldService_MoveObject(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "object repository not configured")
 	})
+
+	t.Run("handles object with no current containment", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		to := world.Containment{LocationID: &locationID}
+
+		// Object with no containment set (not yet placed in world)
+		existingObj := &world.Object{
+			ID:   objID,
+			Name: "Unplaced Object",
+			// All containment fields nil
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+
+		// Should not panic, should succeed
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		require.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
 }
 
 func TestWorldService_AddSceneParticipant(t *testing.T) {

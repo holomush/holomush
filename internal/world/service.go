@@ -385,9 +385,9 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		EntityType: EntityTypeObject,
 		EntityID:   id.String(),
 		FromType:   from.Type(),
-		FromID:     from.ID().String(),
+		FromID:     ulidPtrToString(from.ID()),
 		ToType:     to.Type(),
-		ToID:       to.ID().String(),
+		ToID:       ulidPtrToString(to.ID()),
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
 		slog.Warn("failed to emit move event", "object_id", id.String(), "error", err)
@@ -453,4 +453,12 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Wrapf(err, "list participants for scene %s", sceneID)
 	}
 	return participants, nil
+}
+
+// ulidPtrToString safely converts a ULID pointer to string, returning empty string for nil.
+func ulidPtrToString(id *ulid.ULID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }

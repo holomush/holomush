@@ -5,6 +5,7 @@ package hostfunc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
@@ -49,10 +50,16 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 
 		loc, err := f.world.GetLocation(ctx, id)
 		if err != nil {
-			slog.Error("query_room failed",
-				"plugin", pluginName,
-				"room_id", roomID,
-				"error", err)
+			if errors.Is(err, world.ErrNotFound) {
+				slog.Debug("query_room: room not found",
+					"plugin", pluginName,
+					"room_id", roomID)
+			} else {
+				slog.Error("query_room failed",
+					"plugin", pluginName,
+					"room_id", roomID,
+					"error", err)
+			}
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2
@@ -95,10 +102,16 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 
 		char, err := f.world.GetCharacter(ctx, id)
 		if err != nil {
-			slog.Error("query_character failed",
-				"plugin", pluginName,
-				"character_id", charID,
-				"error", err)
+			if errors.Is(err, world.ErrNotFound) {
+				slog.Debug("query_character: character not found",
+					"plugin", pluginName,
+					"character_id", charID)
+			} else {
+				slog.Error("query_character failed",
+					"plugin", pluginName,
+					"character_id", charID,
+					"error", err)
+			}
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2
@@ -142,10 +155,16 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 
 		chars, err := f.world.GetCharactersByLocation(ctx, id)
 		if err != nil {
-			slog.Error("query_room_characters failed",
-				"plugin", pluginName,
-				"room_id", roomID,
-				"error", err)
+			if errors.Is(err, world.ErrNotFound) {
+				slog.Debug("query_room_characters: room not found",
+					"plugin", pluginName,
+					"room_id", roomID)
+			} else {
+				slog.Error("query_room_characters failed",
+					"plugin", pluginName,
+					"room_id", roomID,
+					"error", err)
+			}
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2
