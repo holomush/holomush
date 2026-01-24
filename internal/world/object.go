@@ -88,12 +88,15 @@ func (o *Object) Containment() Containment {
 
 // SetContainment updates the object's location.
 // Clears all previous containment and sets the new one.
-// NOTE: Does not validate the containment - callers must call c.Validate() first
-// or use ObjectRepository.Move() which handles validation.
-func (o *Object) SetContainment(c Containment) {
+// Returns ErrInvalidContainment if the containment is invalid (not exactly one field set).
+func (o *Object) SetContainment(c Containment) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
 	o.LocationID = c.LocationID
 	o.HeldByCharacterID = c.CharacterID
 	o.ContainedInObjectID = c.ObjectID
+	return nil
 }
 
 // Validate checks that the object has valid containment (exactly one location).

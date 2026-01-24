@@ -8,6 +8,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -141,7 +142,8 @@ func TestObject_SetContainment(t *testing.T) {
 			Name:              "Test",
 			HeldByCharacterID: &charID,
 		}
-		obj.SetContainment(world.Containment{LocationID: &locID})
+		err := obj.SetContainment(world.Containment{LocationID: &locID})
+		require.NoError(t, err)
 
 		assert.NotNil(t, obj.LocationID)
 		assert.Equal(t, locID, *obj.LocationID)
@@ -155,7 +157,8 @@ func TestObject_SetContainment(t *testing.T) {
 			Name:       "Test",
 			LocationID: &locID,
 		}
-		obj.SetContainment(world.Containment{CharacterID: &charID})
+		err := obj.SetContainment(world.Containment{CharacterID: &charID})
+		require.NoError(t, err)
 
 		assert.Nil(t, obj.LocationID)
 		assert.NotNil(t, obj.HeldByCharacterID)
@@ -169,12 +172,25 @@ func TestObject_SetContainment(t *testing.T) {
 			Name:              "Test",
 			HeldByCharacterID: &charID,
 		}
-		obj.SetContainment(world.Containment{ObjectID: &objID})
+		err := obj.SetContainment(world.Containment{ObjectID: &objID})
+		require.NoError(t, err)
 
 		assert.Nil(t, obj.LocationID)
 		assert.Nil(t, obj.HeldByCharacterID)
 		assert.NotNil(t, obj.ContainedInObjectID)
 		assert.Equal(t, objID, *obj.ContainedInObjectID)
+	})
+
+	t.Run("rejects invalid containment with multiple fields", func(t *testing.T) {
+		obj := &world.Object{ID: ulid.Make(), Name: "Test"}
+		err := obj.SetContainment(world.Containment{LocationID: &locID, CharacterID: &charID})
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+	})
+
+	t.Run("rejects empty containment", func(t *testing.T) {
+		obj := &world.Object{ID: ulid.Make(), Name: "Test"}
+		err := obj.SetContainment(world.Containment{})
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 	})
 }
 
