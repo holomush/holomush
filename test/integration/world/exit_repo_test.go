@@ -187,7 +187,7 @@ var _ = Describe("ExitRepository", func() {
 		})
 	})
 
-	Describe("FindByNameFuzzy", func() {
+	Describe("FindBySimilarity", func() {
 		BeforeEach(func() {
 			exits := []*world.Exit{
 				createTestExit(room1.ID, room2.ID, "north"),
@@ -200,28 +200,28 @@ var _ = Describe("ExitRepository", func() {
 
 		It("returns matches above threshold with typo", func() {
 			// pg_trgm similarity for "nroth" vs "north" is ~0.25
-			found, err := env.Exits.FindByNameFuzzy(ctx, room1.ID, "nroth", 0.2)
+			found, err := env.Exits.FindBySimilarity(ctx, room1.ID, "nroth", 0.2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found.Name).To(Equal("north"))
 		})
 
 		It("returns matches with partial input", func() {
 			// pg_trgm similarity for "nor" vs "north" is ~0.3
-			found, err := env.Exits.FindByNameFuzzy(ctx, room1.ID, "nor", 0.3)
+			found, err := env.Exits.FindBySimilarity(ctx, room1.ID, "nor", 0.3)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found.Name).To(Equal("north"))
 		})
 
 		It("returns ErrNotFound when below threshold", func() {
-			_, err := env.Exits.FindByNameFuzzy(ctx, room1.ID, "xyz", 0.5)
+			_, err := env.Exits.FindBySimilarity(ctx, room1.ID, "xyz", 0.5)
 			Expect(err).To(MatchError(ContainSubstring("not found")))
 		})
 
 		It("validates threshold bounds (0.0-1.0)", func() {
-			_, err := env.Exits.FindByNameFuzzy(ctx, room1.ID, "test", -0.1)
+			_, err := env.Exits.FindBySimilarity(ctx, room1.ID, "test", -0.1)
 			Expect(err).To(HaveOccurred())
 
-			_, err = env.Exits.FindByNameFuzzy(ctx, room1.ID, "test", 1.1)
+			_, err = env.Exits.FindBySimilarity(ctx, room1.ID, "test", 1.1)
 			Expect(err).To(HaveOccurred())
 		})
 	})

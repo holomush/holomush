@@ -336,10 +336,10 @@ func (r *ExitRepository) findByNameTx(ctx context.Context, tx pgx.Tx, locationID
 	return exit, nil
 }
 
-// FindByNameFuzzy finds an exit by name using fuzzy matching (pg_trgm).
+// FindBySimilarity finds an exit by name using fuzzy matching (pg_trgm).
 // Returns the best match above the similarity threshold, or ErrNotFound.
 // Threshold must be between 0.0 and 1.0 inclusive.
-func (r *ExitRepository) FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*world.Exit, error) {
+func (r *ExitRepository) FindBySimilarity(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*world.Exit, error) {
 	if threshold < 0.0 || threshold > 1.0 {
 		return nil, oops.
 			With("threshold", threshold).

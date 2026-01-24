@@ -178,7 +178,7 @@ var _ = Describe("Character Movement", func() {
 		})
 
 		It("matches by fuzzy search with threshold", func() {
-			found, err := env.Exits.FindByNameFuzzy(ctx, room1.ID, "nort", 0.3)
+			found, err := env.Exits.FindBySimilarity(ctx, room1.ID, "nort", 0.3)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found.Name).To(Equal("Northern Gate"))
 		})

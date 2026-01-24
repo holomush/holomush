@@ -359,7 +359,7 @@ func TestExitRepository_WithVisibleToList(t *testing.T) {
 	assert.Contains(t, got.VisibleTo, charID2)
 }
 
-func TestExitRepository_FindByNameFuzzy(t *testing.T) {
+func TestExitRepository_FindBySimilarity(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)
@@ -475,7 +475,7 @@ func TestExitRepository_FindByNameFuzzy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := repo.FindByNameFuzzy(ctx, loc1ID, tt.searchTerm, tt.threshold)
+			got, err := repo.FindBySimilarity(ctx, loc1ID, tt.searchTerm, tt.threshold)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -491,7 +491,7 @@ func TestExitRepository_FindByNameFuzzy(t *testing.T) {
 	}
 }
 
-func TestExitRepository_FindByNameFuzzy_BestMatch(t *testing.T) {
+func TestExitRepository_FindBySimilarity_BestMatch(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)
@@ -522,12 +522,12 @@ func TestExitRepository_FindByNameFuzzy_BestMatch(t *testing.T) {
 	}
 
 	// "door" should match "door" better than "doorway"
-	got, err := repo.FindByNameFuzzy(ctx, loc1ID, "door", 0.3)
+	got, err := repo.FindBySimilarity(ctx, loc1ID, "door", 0.3)
 	require.NoError(t, err)
 	assert.Equal(t, "door", got.Name)
 
 	// "doorwa" should match "doorway" better than "door"
-	got, err = repo.FindByNameFuzzy(ctx, loc1ID, "doorwa", 0.3)
+	got, err = repo.FindBySimilarity(ctx, loc1ID, "doorwa", 0.3)
 	require.NoError(t, err)
 	assert.Equal(t, "doorway", got.Name)
 }

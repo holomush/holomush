@@ -52,9 +52,9 @@ type ExitRepository interface {
 	// FindByName finds an exit by name or alias from a location.
 	FindByName(ctx context.Context, locationID ulid.ULID, name string) (*Exit, error)
 
-	// FindByNameFuzzy finds an exit by name using fuzzy matching (pg_trgm).
+	// FindBySimilarity finds an exit by name using fuzzy matching (pg_trgm).
 	// Returns the best match above the similarity threshold, or ErrNotFound.
-	FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*Exit, error)
+	FindBySimilarity(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*Exit, error)
 
 	// ListVisibleExits returns exits from a location that are visible to a character.
 	// The visibility check is atomic - the location owner is fetched and compared in a single query.
