@@ -95,6 +95,16 @@ func (s *PostgresEventStore) Close() {
 	s.pool.Close()
 }
 
+// Pool returns the underlying database connection pool.
+// This allows sharing the connection with other repositories.
+// Returns nil if the pool is not a *pgxpool.Pool (e.g., in tests with mocks).
+func (s *PostgresEventStore) Pool() *pgxpool.Pool {
+	if pool, ok := s.pool.(*pgxpool.Pool); ok {
+		return pool
+	}
+	return nil
+}
+
 // Migrate runs database migrations.
 func (s *PostgresEventStore) Migrate(ctx context.Context) error {
 	migrations := []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL}

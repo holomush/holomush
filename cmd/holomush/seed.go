@@ -5,11 +5,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
@@ -37,7 +38,9 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 		return oops.Code("CONFIG_INVALID").Errorf("DATABASE_URL environment variable is required")
 	}
 
-	ctx := context.Background()
+	// Add timeout to prevent indefinite hangs
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	cmd.Println("Connecting to database...")
 	eventStore, err := store.NewPostgresEventStore(ctx, databaseURL)
@@ -51,18 +54,22 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 		return oops.Code("MIGRATION_FAILED").With("operation", "run migrations").Wrap(migrateErr)
 	}
 
-	// Create a separate pool for the location repository
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		return oops.Code("DB_POOL_FAILED").With("operation", "create pool").Wrap(err)
+	// Reuse the event store's pool for the location repository
+	pool := eventStore.Pool()
+	if pool == nil {
+		return oops.Code("DB_POOL_FAILED").Errorf("failed to get database pool from event store")
 	}
-	defer pool.Close()
-
 	locationRepo := postgres.NewLocationRepository(pool)
 
-	// Seed starting location
+	// Seed starting location using a well-known ID for idempotency
+	// Using a fixed ID means duplicate inserts will fail with a constraint violation
+	startingLocID, err := ulid.Parse("01NEXUS00000000000000000000")
+	if err != nil {
+		return oops.Code("SEED_FAILED").With("operation", "parse seed location ID").Wrap(err)
+	}
+
 	startingLoc := &world.Location{
-		ID:           ulid.Make(),
+		ID:           startingLocID,
 		Type:         world.LocationTypePersistent,
 		Name:         "The Nexus",
 		Description:  "A swirling vortex of energy marks the center of the multiverse. Paths branch off in every direction, leading to countless worlds and possibilities. This is where all journeys begin.",
@@ -70,19 +77,15 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	// Check if any persistent locations exist (idempotent check)
-	existing, err := locationRepo.ListByType(ctx, world.LocationTypePersistent)
-	if err != nil {
-		return oops.Code("SEED_CHECK_FAILED").With("operation", "check existing locations").Wrap(err)
-	}
-
-	if len(existing) > 0 {
-		cmd.Println("Starting location already exists, skipping seed")
-		slog.Info("World already seeded", "existing_locations", len(existing))
-		return nil
-	}
-
+	// Attempt to create the location; handle duplicate gracefully
 	if err := locationRepo.Create(ctx, startingLoc); err != nil {
+		// Check for unique constraint violation (PostgreSQL error code 23505)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			cmd.Println("Starting location already exists, skipping seed")
+			slog.Info("World already seeded", "location_id", startingLocID)
+			return nil
+		}
 		return oops.Code("SEED_FAILED").With("operation", "create starting location").Wrap(err)
 	}
 
