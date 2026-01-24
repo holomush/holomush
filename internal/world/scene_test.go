@@ -38,17 +38,13 @@ func TestParticipantRole_Validate(t *testing.T) {
 	t.Run("invalid role", func(t *testing.T) {
 		err := ParticipantRole("admin").Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid participant role")
-
-		var ve *ValidationError
-		assert.ErrorAs(t, err, &ve)
-		assert.Equal(t, "role", ve.Field)
+		assert.ErrorIs(t, err, ErrInvalidParticipantRole)
 	})
 
 	t.Run("empty role", func(t *testing.T) {
 		err := ParticipantRole("").Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid participant role")
+		assert.ErrorIs(t, err, ErrInvalidParticipantRole)
 	})
 }
 

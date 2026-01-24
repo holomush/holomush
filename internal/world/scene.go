@@ -3,6 +3,8 @@
 
 package world
 
+import "errors"
+
 // ParticipantRole identifies a character's role in a scene.
 type ParticipantRole string
 
@@ -18,13 +20,16 @@ func (r ParticipantRole) String() string {
 	return string(r)
 }
 
+// ErrInvalidParticipantRole indicates an unrecognized participant role.
+var ErrInvalidParticipantRole = errors.New("invalid participant role")
+
 // Validate checks that the role is a valid participant role.
 func (r ParticipantRole) Validate() error {
 	switch r {
 	case RoleOwner, RoleMember, RoleInvited:
 		return nil
 	default:
-		return &ValidationError{Field: "role", Message: "invalid participant role"}
+		return ErrInvalidParticipantRole
 	}
 }
 

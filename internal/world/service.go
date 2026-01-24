@@ -67,9 +67,16 @@ func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULI
 
 // CreateLocation creates a new location after checking write authorization.
 // The location ID is generated if not set.
+// Returns a ValidationError if the name or description is invalid.
 func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Location) error {
 	if !s.accessControl.Check(ctx, subjectID, "write", "location:*") {
 		return ErrPermissionDenied
+	}
+	if err := ValidateName(loc.Name); err != nil {
+		return err
+	}
+	if err := ValidateDescription(loc.Description); err != nil {
+		return err
 	}
 	if loc.ID.IsZero() {
 		loc.ID = ulid.Make()
@@ -119,9 +126,16 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 
 // CreateExit creates a new exit after checking write authorization.
 // The exit ID is generated if not set.
+// Returns a ValidationError if the name or aliases are invalid.
 func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	if !s.accessControl.Check(ctx, subjectID, "write", "exit:*") {
 		return ErrPermissionDenied
+	}
+	if err := ValidateName(exit.Name); err != nil {
+		return err
+	}
+	if err := ValidateAliases(exit.Aliases); err != nil {
+		return err
 	}
 	if exit.ID.IsZero() {
 		exit.ID = ulid.Make()
@@ -191,9 +205,16 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 
 // CreateObject creates a new object after checking write authorization.
 // The object ID is generated if not set.
+// Returns a ValidationError if the name or description is invalid.
 func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Object) error {
 	if !s.accessControl.Check(ctx, subjectID, "write", "object:*") {
 		return ErrPermissionDenied
+	}
+	if err := ValidateName(obj.Name); err != nil {
+		return err
+	}
+	if err := ValidateDescription(obj.Description); err != nil {
+		return err
 	}
 	if obj.ID.IsZero() {
 		obj.ID = ulid.Make()
@@ -229,10 +250,14 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 }
 
 // AddSceneParticipant adds a character to a scene after checking write authorization.
+// Returns ErrInvalidParticipantRole if the role is not valid.
 func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
+	}
+	if err := role.Validate(); err != nil {
+		return err
 	}
 	if err := s.sceneRepo.AddParticipant(ctx, sceneID, characterID, role); err != nil {
 		return oops.Wrapf(err, "add participant %s to scene %s", characterID, sceneID)

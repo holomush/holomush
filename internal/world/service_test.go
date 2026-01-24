@@ -758,3 +758,458 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		mockAC.AssertExpectations(t)
 	})
 }
+
+// --- Input Validation Tests ---
+
+func TestWorldService_CreateLocation_Validation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		loc := &world.Location{
+			Name:        "", // Empty name
+			Description: "A test room",
+			Type:        world.LocationTypePersistent,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+
+		err := svc.CreateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("rejects name exceeding max length", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		longName := make([]byte, world.MaxNameLength+1)
+		for i := range longName {
+			longName[i] = 'a'
+		}
+
+		loc := &world.Location{
+			Name: string(longName),
+			Type: world.LocationTypePersistent,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+
+		err := svc.CreateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateExit_Validation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			FromLocationID: fromLocID,
+			ToLocationID:   toLocID,
+			Name:           "", // Empty name
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+
+		err := svc.CreateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateObject_Validation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{
+			Name: "", // Empty name
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+
+		err := svc.CreateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects invalid role", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockSceneRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.ParticipantRole("invalid"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidParticipantRole)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+// --- Repository Error Propagation Tests ---
+
+func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, locID).Return(nil, errors.New("db error"))
+
+		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		assert.Nil(t, loc)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		loc := &world.Location{
+			Name: "Test Room",
+			Type: world.LocationTypePersistent,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.CreateLocation(ctx, subjectID, loc)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Get(ctx, exitID).Return(nil, errors.New("db error"))
+
+		exit, err := svc.GetExit(ctx, subjectID, exitID)
+		assert.Nil(t, exit)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			FromLocationID: fromLocID,
+			ToLocationID:   toLocID,
+			Name:           "north",
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.CreateExit(ctx, subjectID, exit)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(nil, errors.New("db error"))
+
+		obj, err := svc.GetObject(ctx, subjectID, objID)
+		assert.Nil(t, obj)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{Name: "sword"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.CreateObject(ctx, subjectID, obj)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+// --- Scene Repository Error Propagation Tests ---
+
+func TestWorldService_AddSceneParticipant_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockSceneRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(errors.New("db error"))
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockSceneRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		mockSceneRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(errors.New("db error"))
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockSceneRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		mockSceneRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, errors.New("db error"))
+
+		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		assert.Nil(t, participants)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+// --- DeleteExit Severe Cleanup Test ---
+
+func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("handles severe cleanup error for bidirectional exit", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		toLocationID := ulid.Make()
+		cleanupResult := &world.BidirectionalCleanupResult{
+			ExitID:       exitID,
+			ToLocationID: toLocationID,
+			ReturnName:   "south",
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupFindError,
+				Err:  errors.New("database connection lost"),
+			},
+		}
+
+		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
+
+		// Should still succeed since primary delete worked, but severe issue is logged
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		assert.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("handles delete error cleanup for bidirectional exit", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		toLocationID := ulid.Make()
+		returnExitID := ulid.Make()
+		cleanupResult := &world.BidirectionalCleanupResult{
+			ExitID:       exitID,
+			ToLocationID: toLocationID,
+			ReturnName:   "south",
+			Issue: &world.CleanupIssue{
+				Type:         world.CleanupDeleteError,
+				ReturnExitID: returnExitID,
+				Err:          errors.New("constraint violation"),
+			},
+		}
+
+		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
+
+		// Should still succeed since primary delete worked, but severe issue is logged
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		assert.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
+}
