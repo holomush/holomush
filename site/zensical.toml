@@ -1,0 +1,30 @@
+[project]
+site_name = "HoloMUSH Documentation"
+site_url = "https://docs.holomush.dev"
+site_description = "Modern MUSH platform with WASM plugins"
+site_author = "HoloMUSH Contributors"
+copyright = "© 2026 HoloMUSH Contributors • Apache-2.0"
+
+docs_dir = "docs"
+site_dir = "build"
+
+[project.theme]
+variant = "modern"
+logo = "assets/logo.png"
+favicon = "assets/favicon.png"
+
+[project.theme.palette]
+scheme = "slate"
+primary = "deep-orange"
+accent = "amber"
+
+[project.theme.features]
+navigation.tabs = true
+navigation.sections = true
+navigation.instant = true
+search.suggest = true
+content.code.copy = true
+
+[project.repo]
+url = "https://github.com/holomush/holomush"
+name = "GitHub"
