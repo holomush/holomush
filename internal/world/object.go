@@ -45,7 +45,7 @@ func (c *Containment) Validate() error {
 	return nil
 }
 
-// Type returns the containment type: "location", "character", "object", or "".
+// Type returns the containment type: "location", "character", "object", or "none".
 func (c *Containment) Type() string {
 	if c.LocationID != nil {
 		return ContainmentTypeLocation
@@ -56,7 +56,7 @@ func (c *Containment) Type() string {
 	if c.ObjectID != nil {
 		return ContainmentTypeObject
 	}
-	return ""
+	return ContainmentTypeNone
 }
 
 // ID returns the ID of the container (location, character, or object).

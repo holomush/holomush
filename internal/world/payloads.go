@@ -26,6 +26,7 @@ const (
 	ContainmentTypeLocation  = "location"
 	ContainmentTypeCharacter = "character"
 	ContainmentTypeObject    = "object"
+	ContainmentTypeNone      = "none" // Used for first-time placements (no prior containment)
 )
 
 // Validate checks that the MovePayload has all required fields and valid values.
@@ -42,10 +43,11 @@ func (p *MovePayload) Validate() error {
 	if p.FromType == "" {
 		return &ValidationError{Field: "from_type", Message: "cannot be empty"}
 	}
-	if !isValidContainmentType(p.FromType) {
-		return &ValidationError{Field: "from_type", Message: "must be 'location', 'character', or 'object'"}
+	if !isValidContainmentTypeOrNone(p.FromType) {
+		return &ValidationError{Field: "from_type", Message: "must be 'location', 'character', 'object', or 'none'"}
 	}
-	if p.FromID == "" {
+	// FromID can be empty only for first-time placements (FromType == "none")
+	if p.FromID == "" && p.FromType != ContainmentTypeNone {
 		return &ValidationError{Field: "from_id", Message: "cannot be empty"}
 	}
 	if p.ToType == "" {
@@ -63,6 +65,11 @@ func (p *MovePayload) Validate() error {
 // isValidContainmentType checks if the type is a valid containment type.
 func isValidContainmentType(t string) bool {
 	return t == ContainmentTypeLocation || t == ContainmentTypeCharacter || t == ContainmentTypeObject
+}
+
+// isValidContainmentTypeOrNone checks if the type is a valid containment type or "none".
+func isValidContainmentTypeOrNone(t string) bool {
+	return isValidContainmentType(t) || t == ContainmentTypeNone
 }
 
 // ObjectGivePayload represents an object transfer between characters.

@@ -76,7 +76,7 @@ func TestContainment_Type(t *testing.T) {
 		{"location", world.Containment{LocationID: &locID}, "location"},
 		{"character", world.Containment{CharacterID: &charID}, "character"},
 		{"object", world.Containment{ObjectID: &objID}, "object"},
-		{"empty", world.Containment{}, ""},
+		{"empty", world.Containment{}, "none"},
 	}
 
 	for _, tt := range tests {

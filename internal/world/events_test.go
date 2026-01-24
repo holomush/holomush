@@ -287,6 +287,47 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		// No panic or error, just skips event emission
 	})
 
+	t.Run("emits event with from_type none for first-time placement", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: &mockAccessControlForEvents{allowAll: true},
+			EventEmitter:  emitter,
+		})
+
+		// Object with no prior containment (first-time placement)
+		existingObj := &world.Object{
+			ID:   objID,
+			Name: "Unplaced Object",
+			// All containment fields nil
+		}
+		to := world.Containment{LocationID: &toLocID}
+
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		require.NoError(t, err)
+
+		// Verify event was emitted with from_type "none"
+		require.Len(t, emitter.calls, 1)
+		call := emitter.calls[0]
+		assert.Equal(t, "location:"+toLocID.String(), call.Stream)
+		assert.Equal(t, "move", call.EventType)
+
+		var decoded world.MovePayload
+		err = json.Unmarshal(call.Payload, &decoded)
+		require.NoError(t, err)
+		assert.Equal(t, world.EntityTypeObject, decoded.EntityType)
+		assert.Equal(t, objID.String(), decoded.EntityID)
+		assert.Equal(t, world.ContainmentTypeNone, decoded.FromType)
+		assert.Equal(t, "", decoded.FromID)
+		assert.Equal(t, world.ContainmentTypeLocation, decoded.ToType)
+		assert.Equal(t, toLocID.String(), decoded.ToID)
+	})
+
 	t.Run("succeeds even when event emitter fails", func(t *testing.T) {
 		emitErr := errors.New("event bus unavailable")
 		emitter := &mockEventEmitter{err: emitErr}

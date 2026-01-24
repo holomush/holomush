@@ -181,6 +181,18 @@ func TestMovePayload_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid first-time placement (from none)",
+			payload: world.MovePayload{
+				EntityType: "object",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "none",
+				FromID:     "", // Empty is valid when FromType is "none"
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: false,
+		},
+		{
 			name: "invalid entity type",
 			payload: world.MovePayload{
 				EntityType: "invalid",
