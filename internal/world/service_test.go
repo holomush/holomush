@@ -100,6 +100,34 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		mockAC.AssertExpectations(t)
 	})
 
+	t.Run("preserves existing ID when already set", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		existingID := ulid.Make()
+		loc := &world.Location{
+			ID:          existingID,
+			Name:        "New Room",
+			Description: "A test room",
+			Type:        world.LocationTypePersistent,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		mockRepo.EXPECT().Create(ctx, mock.MatchedBy(func(l *world.Location) bool {
+			return l.ID == existingID
+		})).Return(nil)
+
+		err := svc.CreateLocation(ctx, subjectID, loc)
+		require.NoError(t, err)
+		assert.Equal(t, existingID, loc.ID, "pre-set ID should be preserved")
+		mockAC.AssertExpectations(t)
+	})
+
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
@@ -1588,6 +1616,66 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "visible_to", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	t.Run("accepts unlocked exit with invalid lock type", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			FromLocationID: fromLocID,
+			ToLocationID:   toLocID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+			LockType:       world.LockType("garbage"), // Invalid but should be ignored
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+
+		err := svc.CreateExit(ctx, subjectID, exit)
+		require.NoError(t, err, "unlocked exit with invalid lock type should succeed")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("accepts non-list visibility with invalid visible_to", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		// Create duplicate ULIDs in VisibleTo - invalid but should be ignored for VisibilityAll
+		duplicateID := ulid.Make()
+		exit := &world.Exit{
+			FromLocationID: fromLocID,
+			ToLocationID:   toLocID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll, // Not "list", so VisibleTo should be ignored
+			VisibleTo:      []ulid.ULID{duplicateID, duplicateID},
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+
+		err := svc.CreateExit(ctx, subjectID, exit)
+		require.NoError(t, err, "non-list visibility with invalid visible_to should succeed")
 		mockAC.AssertExpectations(t)
 	})
 }

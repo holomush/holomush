@@ -24,6 +24,7 @@ func TestValidateName(t *testing.T) {
 		{"name too long", strings.Repeat("a", MaxNameLength+1), true, "exceeds maximum length"},
 		{"max length name", strings.Repeat("a", MaxNameLength), false, ""},
 		{"unicode name", "日本語の名前", false, ""},
+		{"invalid UTF-8 bytes", "\xff\xfe", true, "must be valid UTF-8"},
 		{"control char", "name\x00with null", true, "cannot contain control characters"},
 		{"newline not allowed", "name\nwith newline", true, "cannot contain control characters"},
 	}
