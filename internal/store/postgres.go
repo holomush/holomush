@@ -38,6 +38,9 @@ var migration005SQL string
 //go:embed migrations/006_object_containment_constraint.sql
 var migration006SQL string
 
+//go:embed migrations/007_exit_self_reference_constraint.sql
+var migration007SQL string
+
 // ErrSystemInfoNotFound is returned when a system info key doesn't exist.
 var ErrSystemInfoNotFound = errors.New("system info key not found")
 
@@ -94,7 +97,7 @@ func (s *PostgresEventStore) Close() {
 
 // Migrate runs database migrations.
 func (s *PostgresEventStore) Migrate(ctx context.Context) error {
-	migrations := []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL}
+	migrations := []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL}
 	for i, sql := range migrations {
 		if _, err := s.pool.Exec(ctx, sql); err != nil {
 			return oops.With("operation", "run migration").With("migration_number", i+1).Wrap(err)

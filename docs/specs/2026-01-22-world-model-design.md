@@ -260,7 +260,7 @@ type ExitRepository interface {
     Delete(ctx context.Context, id ulid.ULID) error
     ListFromLocation(ctx context.Context, locationID ulid.ULID) ([]*Exit, error)
     FindByName(ctx context.Context, locationID ulid.ULID, name string) (*Exit, error)
-    FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*Exit, error)
+    FindBySimilarity(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*Exit, error)
 }
 
 // ObjectRepository manages objects and containment.
@@ -284,16 +284,25 @@ type Containment struct {
 
 // SceneRepository manages scene-specific operations.
 type SceneRepository interface {
-    AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role string) error
+    AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role ParticipantRole) error
     RemoveParticipant(ctx context.Context, sceneID, characterID ulid.ULID) error
     ListParticipants(ctx context.Context, sceneID ulid.ULID) ([]SceneParticipant, error)
     GetScenesFor(ctx context.Context, characterID ulid.ULID) ([]*Location, error)
 }
 
+// ParticipantRole represents a character's role in a scene.
+type ParticipantRole string
+
+const (
+    RoleOwner   ParticipantRole = "owner"
+    RoleMember  ParticipantRole = "member"
+    RoleInvited ParticipantRole = "invited"
+)
+
 // SceneParticipant represents a character's membership in a scene.
 type SceneParticipant struct {
     CharacterID ulid.ULID
-    Role        string // "owner", "member", "invited"
+    Role        ParticipantRole
 }
 ```
 
