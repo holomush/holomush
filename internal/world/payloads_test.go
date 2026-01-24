@@ -218,6 +218,19 @@ func TestMovePayload_Validate(t *testing.T) {
 			errMsg:  "entity_id",
 		},
 		{
+			name: "empty from type",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				// FromType intentionally empty
+				FromID: "01HQGXYZ0000000000000002",
+				ToType: "location",
+				ToID:   "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "from_type",
+		},
+		{
 			name: "invalid from type",
 			payload: world.MovePayload{
 				EntityType: "character",
@@ -241,6 +254,19 @@ func TestMovePayload_Validate(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "from_id",
+		},
+		{
+			name: "empty to type",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				// ToType intentionally empty
+				ToID: "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "to_type",
 		},
 		{
 			name: "invalid to type",
