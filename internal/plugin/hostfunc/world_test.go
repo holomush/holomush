@@ -144,6 +144,25 @@ func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world querier not configured")
 }
 
+func TestQueryRoom_Error(t *testing.T) {
+	roomID := ulid.Make()
+	querier := &mockWorldQuerier{err: errors.New("database error")}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`room, err = holomush.query_room("` + roomID.String() + `")`)
+	require.NoError(t, err)
+
+	room := L.GetGlobal("room")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, room.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Contains(t, errVal.String(), "database error")
+}
+
 func TestQueryRoom_RequiresCapability(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
@@ -259,6 +278,25 @@ func TestQueryCharacter_NotFound(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, character.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
+}
+
+func TestQueryCharacter_Error(t *testing.T) {
+	charID := ulid.Make()
+	querier := &mockWorldQuerier{err: errors.New("database error")}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`character, err = holomush.query_character("` + charID.String() + `")`)
+	require.NoError(t, err)
+
+	character := L.GetGlobal("character")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, character.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Contains(t, errVal.String(), "database error")
 }
 
 func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
