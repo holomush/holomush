@@ -33,24 +33,24 @@ var _ = Describe("SceneRepository", func() {
 
 	Describe("AddParticipant", func() {
 		It("adds character to scene with role", func() {
-			err := env.Scenes.AddParticipant(ctx, scene.ID, charID1, "owner")
+			err := env.Scenes.AddParticipant(ctx, scene.ID, charID1, world.RoleOwner)
 			Expect(err).NotTo(HaveOccurred())
 
 			participants, err := env.Scenes.ListParticipants(ctx, scene.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(participants).To(HaveLen(1))
 			Expect(participants[0].CharacterID).To(Equal(charID1))
-			Expect(participants[0].Role).To(Equal("owner"))
+			Expect(participants[0].Role).To(Equal(world.RoleOwner))
 		})
 
 		It("updates role if already participant", func() {
-			Expect(env.Scenes.AddParticipant(ctx, scene.ID, charID1, "member")).To(Succeed())
-			Expect(env.Scenes.AddParticipant(ctx, scene.ID, charID1, "owner")).To(Succeed())
+			Expect(env.Scenes.AddParticipant(ctx, scene.ID, charID1, world.RoleMember)).To(Succeed())
+			Expect(env.Scenes.AddParticipant(ctx, scene.ID, charID1, world.RoleOwner)).To(Succeed())
 
 			participants, err := env.Scenes.ListParticipants(ctx, scene.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(participants).To(HaveLen(1))
-			Expect(participants[0].Role).To(Equal("owner"))
+			Expect(participants[0].Role).To(Equal(world.RoleOwner))
 		})
 	})
 

@@ -135,12 +135,12 @@ var _ = Describe("Scene Management", func() {
 		})
 
 		It("adds participant with 'member' role by default", func() {
-			Expect(env.Scenes.AddParticipant(ctx, scene.ID, char1, "member")).To(Succeed())
+			Expect(env.Scenes.AddParticipant(ctx, scene.ID, char1, world.RoleMember)).To(Succeed())
 
 			participants, err := env.Scenes.ListParticipants(ctx, scene.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(participants).To(HaveLen(1))
-			Expect(participants[0].Role).To(Equal("member"))
+			Expect(participants[0].Role).To(Equal(world.RoleMember))
 		})
 
 		It("supports 'owner', 'member', 'invited' roles", func() {

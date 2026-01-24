@@ -7,6 +7,7 @@ package world_test
 
 import (
 	"context"
+	"errors"
 
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -149,9 +150,11 @@ var _ = Describe("ExitRepository", func() {
 			returnExit, _ := env.Exits.FindByName(ctx, room2.ID, "south")
 			_, _ = env.pool.Exec(ctx, "DELETE FROM exits WHERE id = $1", returnExit.ID.String())
 
-			// Deleting primary should not error
+			// Deleting primary returns cleanup result but not severe
 			err := env.Exits.Delete(ctx, exit.ID)
-			Expect(err).NotTo(HaveOccurred())
+			var cleanup *world.BidirectionalCleanupResult
+			Expect(errors.As(err, &cleanup)).To(BeTrue(), "expected BidirectionalCleanupResult")
+			Expect(cleanup.IsSevere()).To(BeFalse(), "missing return exit should not be severe")
 		})
 	})
 
