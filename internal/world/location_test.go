@@ -189,4 +189,15 @@ func TestLocation_EffectiveName(t *testing.T) {
 		}
 		assert.Equal(t, "Private Room", loc.EffectiveName(parent))
 	})
+
+	t.Run("shadows_id set but parent nil returns own name", func(t *testing.T) {
+		loc := &world.Location{
+			ID:        ulid.Make(),
+			Type:      world.LocationTypeScene,
+			ShadowsID: &parentID,
+			Name:      "",
+		}
+		// When parent is not loaded/passed, returns own (empty) name
+		assert.Equal(t, "", loc.EffectiveName(nil))
+	})
 }

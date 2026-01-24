@@ -256,6 +256,25 @@ func TestExit_ReverseExit(t *testing.T) {
 		assert.NotNil(t, reverse)
 		assert.Empty(t, reverse.Aliases, "reverse exit should not inherit aliases")
 	})
+
+	t.Run("reverse exit with non-serializable LockData returns nil LockData", func(t *testing.T) {
+		// LockData with a channel cannot be marshaled to JSON
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Bidirectional:  true,
+			ReturnName:     "south",
+			Locked:         true,
+			LockType:       world.LockTypeKey,
+			LockData:       map[string]any{"channel": make(chan int)},
+		}
+
+		reverse := exit.ReverseExit()
+		assert.NotNil(t, reverse, "reverse exit should still be created")
+		assert.Nil(t, reverse.LockData, "non-serializable LockData should result in nil")
+	})
 }
 
 func TestLockType_String(t *testing.T) {
