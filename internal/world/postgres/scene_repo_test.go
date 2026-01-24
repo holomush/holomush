@@ -107,6 +107,13 @@ func TestSceneRepository_AddParticipant(t *testing.T) {
 		assert.Len(t, participants, 1)
 		assert.Equal(t, world.RoleOwner, participants[0].Role)
 	})
+
+	t.Run("returns ErrNotFound for non-existent scene", func(t *testing.T) {
+		nonExistentSceneID := ulid.Make()
+		err := sceneRepo.AddParticipant(ctx, nonExistentSceneID, charID, world.RoleMember)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+	})
 }
 
 func TestSceneRepository_RemoveParticipant(t *testing.T) {
@@ -186,6 +193,14 @@ func TestSceneRepository_ListParticipants(t *testing.T) {
 		participants, err := sceneRepo.ListParticipants(ctx, emptyScene.ID)
 		require.NoError(t, err)
 		assert.Empty(t, participants)
+	})
+
+	t.Run("returns ErrNotFound for non-existent scene", func(t *testing.T) {
+		nonExistentSceneID := ulid.Make()
+		participants, err := sceneRepo.ListParticipants(ctx, nonExistentSceneID)
+		assert.Nil(t, participants)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestContainment_Validate(t *testing.T) {
@@ -208,6 +209,31 @@ func TestContainment_Validate_AllThreeSet(t *testing.T) {
 	err := containment.Validate()
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, world.ErrInvalidContainment)
+}
+
+func TestContainment_Validate_ErrorContext(t *testing.T) {
+	locID := ulid.Make()
+	charID := ulid.Make()
+
+	t.Run("no fields set provides context", func(t *testing.T) {
+		containment := world.Containment{}
+		err := containment.Validate()
+		require.Error(t, err)
+		errutil.AssertErrorContext(t, err, "location_set", false)
+		errutil.AssertErrorContext(t, err, "character_set", false)
+		errutil.AssertErrorContext(t, err, "object_set", false)
+		errutil.AssertErrorContext(t, err, "count", 0)
+	})
+
+	t.Run("multiple fields set provides context", func(t *testing.T) {
+		containment := world.Containment{LocationID: &locID, CharacterID: &charID}
+		err := containment.Validate()
+		require.Error(t, err)
+		errutil.AssertErrorContext(t, err, "location_set", true)
+		errutil.AssertErrorContext(t, err, "character_set", true)
+		errutil.AssertErrorContext(t, err, "object_set", false)
+		errutil.AssertErrorContext(t, err, "count", 2)
+	})
 }
 
 func TestObject_Validate(t *testing.T) {

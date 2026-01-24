@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestObjectRepository_CRUD(t *testing.T) {
@@ -254,6 +255,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
 
 	t.Run("update not found", func(t *testing.T) {
@@ -267,12 +269,14 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		err := repo.Update(ctx, obj)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := repo.Delete(ctx, ulid.Make())
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
 
 	t.Run("update with invalid containment - no location", func(t *testing.T) {
@@ -626,6 +630,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID})
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound, "should wrap ErrNotFound for missing container")
+		errutil.AssertErrorCode(t, err, "CONTAINER_NOT_FOUND")
 	})
 
 	t.Run("move to character", func(t *testing.T) {
@@ -726,6 +731,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &level3.ID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "max nesting depth")
+		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")
 	})
 
 	t.Run("move container with nested items exceeds depth fails", func(t *testing.T) {
@@ -786,6 +792,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerC.ID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "max nesting depth")
+		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")
 	})
 
 	t.Run("move creates circular containment fails", func(t *testing.T) {
@@ -816,6 +823,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, containerA.ID, world.Containment{ObjectID: &containerB.ID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circular containment")
+		errutil.AssertErrorCode(t, err, "CIRCULAR_CONTAINMENT")
 	})
 
 	t.Run("move object into itself fails", func(t *testing.T) {
@@ -834,6 +842,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, container.ID, world.Containment{ObjectID: &container.ID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "circular containment")
+		errutil.AssertErrorCode(t, err, "CIRCULAR_CONTAINMENT")
 	})
 
 	t.Run("move non-existent object fails", func(t *testing.T) {
@@ -841,6 +850,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		err := repo.Move(ctx, nonExistentID, world.Containment{LocationID: &loc1ID})
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
 
 	t.Run("move with multiple containment fields fails", func(t *testing.T) {
@@ -1077,5 +1087,6 @@ func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
 		err = repo.Move(ctx, container2.ID, world.Containment{ObjectID: &container.ID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "max nesting depth")
+		errutil.AssertErrorCode(t, err, "NESTING_DEPTH_EXCEEDED")
 	})
 }

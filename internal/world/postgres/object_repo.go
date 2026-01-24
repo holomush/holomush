@@ -43,7 +43,7 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 	`, id.String())
 	obj, err := scanObjectRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("id", id.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("OBJECT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "get object").With("id", id.String()).Wrap(err)
@@ -89,7 +89,7 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error 
 		return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", obj.ID.String()).Wrap(world.ErrNotFound)
+		return oops.Code("OBJECT_NOT_FOUND").With("id", obj.ID.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }
@@ -101,7 +101,7 @@ func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", id.String()).Wrap(world.ErrNotFound)
+		return oops.Code("OBJECT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
 	}
 	if !exists {
-		return oops.With("object_id", objectID.String()).Wrap(world.ErrNotFound)
+		return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 	}
 
 	// If moving to a container, verify the container exists and is actually a container
@@ -198,6 +198,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		`, to.ObjectID.String()).Scan(&isContainer)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.
+				Code("CONTAINER_NOT_FOUND").
 				With("operation", "move object").
 				With("object_id", objectID.String()).
 				With("container_id", to.ObjectID.String()).
@@ -238,7 +239,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("object_id", objectID.String()).Wrap(world.ErrNotFound)
+		return oops.Code("OBJECT_NOT_FOUND").With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -255,6 +256,7 @@ func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q que
 	// Self-containment check
 	if objectID == targetContainerID {
 		return oops.
+			Code("CIRCULAR_CONTAINMENT").
 			With("operation", "move object").
 			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).
@@ -283,6 +285,7 @@ func (r *ObjectRepository) checkCircularContainmentTx(ctx context.Context, q que
 
 	if isCircular {
 		return oops.
+			Code("CIRCULAR_CONTAINMENT").
 			With("operation", "move object").
 			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).
@@ -335,6 +338,7 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 	totalDepth := targetDepth + objectSubtreeDepth + 1
 	if totalDepth > r.maxNestingDepth {
 		return oops.
+			Code("NESTING_DEPTH_EXCEEDED").
 			With("operation", "move object").
 			With("object_id", objectID.String()).
 			With("container_id", targetContainerID.String()).

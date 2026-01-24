@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // createTestLocations creates two test locations for exit tests.
@@ -189,6 +190,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 	})
 
 	t.Run("update not found", func(t *testing.T) {
@@ -202,12 +204,14 @@ func TestExitRepository_CRUD(t *testing.T) {
 		err := repo.Update(ctx, exit)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := repo.Delete(ctx, ulid.Make())
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 	})
 }
 
@@ -290,6 +294,7 @@ func TestExitRepository_FindByName(t *testing.T) {
 			if tt.expectErr {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, world.ErrNotFound)
+				errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, exit.ID, got.ID)
@@ -400,12 +405,14 @@ func TestExitRepository_FindBySimilarity(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		searchTerm  string
-		threshold   float64
-		wantName    string
-		wantErr     bool
-		errContains string
+		name          string
+		searchTerm    string
+		threshold     float64
+		wantName      string
+		wantErr       bool
+		errContains   string
+		wantErrCode   string
+		wantNotFound  bool
 	}{
 		{
 			name:       "exact match",
@@ -443,18 +450,22 @@ func TestExitRepository_FindBySimilarity(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:        "below threshold - no match",
-			searchTerm:  "xyz",
-			threshold:   0.5,
-			wantErr:     true,
-			errContains: "not found",
+			name:         "below threshold - no match",
+			searchTerm:   "xyz",
+			threshold:    0.5,
+			wantErr:      true,
+			errContains:  "not found",
+			wantErrCode:  "EXIT_NOT_FOUND",
+			wantNotFound: true,
 		},
 		{
-			name:        "high threshold - no match",
-			searchTerm:  "nroth",
-			threshold:   0.9,
-			wantErr:     true,
-			errContains: "not found",
+			name:         "high threshold - no match",
+			searchTerm:   "nroth",
+			threshold:    0.9,
+			wantErr:      true,
+			errContains:  "not found",
+			wantErrCode:  "EXIT_NOT_FOUND",
+			wantNotFound: true,
 		},
 		{
 			name:        "invalid threshold - negative",
@@ -480,6 +491,10 @@ func TestExitRepository_FindBySimilarity(t *testing.T) {
 				require.Error(t, err)
 				if tt.errContains != "" {
 					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				if tt.wantNotFound {
+					assert.ErrorIs(t, err, world.ErrNotFound)
+					errutil.AssertErrorCode(t, err, tt.wantErrCode)
 				}
 				return
 			}

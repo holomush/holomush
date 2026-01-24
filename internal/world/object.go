@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // ErrInvalidContainment is returned when containment validation fails.
@@ -34,7 +35,12 @@ func (c *Containment) Validate() error {
 		count++
 	}
 	if count != 1 {
-		return ErrInvalidContainment
+		return oops.
+			With("location_set", c.LocationID != nil).
+			With("character_set", c.CharacterID != nil).
+			With("object_set", c.ObjectID != nil).
+			With("count", count).
+			Wrap(ErrInvalidContainment)
 	}
 	return nil
 }

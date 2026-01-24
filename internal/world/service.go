@@ -238,9 +238,10 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 				return oops.Code("EXIT_DELETE_FAILED").Wrapf(err, "delete exit %s", id)
 			}
 			// Non-severe: primary delete succeeded, return exit was just not found
-			slog.Debug("bidirectional exit cleanup notice",
+			slog.Info("bidirectional exit cleanup notice: return exit already deleted",
 				"exit_id", cleanupResult.ExitID.String(),
-				"message", cleanupResult.Error())
+				"to_location_id", cleanupResult.ToLocationID.String(),
+				"return_name", cleanupResult.ReturnName)
 			return nil
 		}
 		// Actual delete failure

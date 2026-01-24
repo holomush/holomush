@@ -35,7 +35,7 @@ func (r *ExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, er
 		FROM exits WHERE id = $1
 	`, id.String())
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("id", id.String()).Wrap(world.ErrNotFound)
+		return nil, oops.Code("EXIT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "get exit").With("id", id.String()).Wrap(err)
@@ -155,7 +155,7 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 		return oops.With("operation", "update exit").With("id", exit.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", exit.ID.String()).Wrap(world.ErrNotFound)
+		return oops.Code("EXIT_NOT_FOUND").With("id", exit.ID.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		FROM exits WHERE id = $1 FOR UPDATE
 	`, id.String())
 	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.With("id", id.String()).Wrap(world.ErrNotFound)
+		return oops.Code("EXIT_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return oops.With("operation", "get exit for delete").With("id", id.String()).Wrap(err)
@@ -313,7 +313,7 @@ func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, n
 		LIMIT 1
 	`, locationID.String(), name)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("location_id", locationID.String()).With("name", name).Wrap(world.ErrNotFound)
+		return nil, oops.Code("EXIT_NOT_FOUND").With("location_id", locationID.String()).With("name", name).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "find exit by name").With("location_id", locationID.String()).With("name", name).Wrap(err)
@@ -334,7 +334,7 @@ func (r *ExitRepository) findByNameTx(ctx context.Context, tx pgx.Tx, locationID
 		LIMIT 1
 	`, locationID.String(), name)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("location_id", locationID.String()).With("name", name).Wrap(world.ErrNotFound)
+		return nil, oops.Code("EXIT_NOT_FOUND").With("location_id", locationID.String()).With("name", name).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "find exit by name").With("location_id", locationID.String()).With("name", name).Wrap(err)
@@ -373,7 +373,7 @@ func (r *ExitRepository) FindBySimilarity(ctx context.Context, locationID ulid.U
 		LIMIT 1
 	`, locationID.String(), name, threshold)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("location_id", locationID.String()).With("name", name).With("threshold", threshold).Wrap(world.ErrNotFound)
+		return nil, oops.Code("EXIT_NOT_FOUND").With("location_id", locationID.String()).With("name", name).With("threshold", threshold).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "find exit by name fuzzy").With("location_id", locationID.String()).With("name", name).Wrap(err)

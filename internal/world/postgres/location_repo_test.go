@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // createTestCharacter creates a character in the database for testing.
@@ -227,6 +228,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
 
 	t.Run("update not found", func(t *testing.T) {
@@ -241,12 +243,14 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		err := repo.Update(ctx, loc)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := repo.Delete(ctx, ulid.Make())
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
 
 	// Validation tests removed: Repository expects pre-validated data.

@@ -7,6 +7,7 @@ package world_test
 
 import (
 	"context"
+	"errors"
 
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -82,7 +83,7 @@ var _ = Describe("ObjectRepository", func() {
 
 			err := env.Objects.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("not a container"))
+			Expect(errors.Is(err, world.ErrInvalidContainment)).To(BeTrue(), "expected ErrInvalidContainment")
 		})
 
 		It("allows moving to actual container", func() {

@@ -26,7 +26,19 @@ func NewSceneRepository(pool *pgxpool.Pool) *SceneRepository {
 
 // AddParticipant adds a character to a scene.
 func (r *SceneRepository) AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role world.ParticipantRole) error {
-	_, err := r.pool.Exec(ctx, `
+	// Check if the scene exists
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM locations WHERE id = $1 AND type = 'scene')`,
+		sceneID.String()).Scan(&exists)
+	if err != nil {
+		return oops.With("operation", "check scene exists").With("scene_id", sceneID.String()).Wrap(err)
+	}
+	if !exists {
+		return oops.With("scene_id", sceneID.String()).Wrap(world.ErrNotFound)
+	}
+
+	_, err = r.pool.Exec(ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (scene_id, character_id) DO UPDATE SET role = $3
@@ -64,6 +76,18 @@ func (r *SceneRepository) RemoveParticipant(ctx context.Context, sceneID, charac
 
 // ListParticipants returns all participants in a scene.
 func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULID) ([]world.SceneParticipant, error) {
+	// Check if the scene exists
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM locations WHERE id = $1 AND type = 'scene')`,
+		sceneID.String()).Scan(&exists)
+	if err != nil {
+		return nil, oops.With("operation", "check scene exists").With("scene_id", sceneID.String()).Wrap(err)
+	}
+	if !exists {
+		return nil, oops.With("scene_id", sceneID.String()).Wrap(world.ErrNotFound)
+	}
+
 	rows, err := r.pool.Query(ctx, `
 		SELECT character_id, role
 		FROM scene_participants
