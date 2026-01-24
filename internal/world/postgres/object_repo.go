@@ -194,7 +194,8 @@ const DefaultMaxNestingDepth = 3
 // - Target must be a valid container if moving to an object
 // - Max nesting depth is enforced (configurable via NewObjectRepositoryWithDepth)
 // - Circular containment is prevented
-// Uses a transaction to ensure atomicity between validation and update.
+// Uses a transaction with SELECT FOR UPDATE to ensure atomicity and prevent TOCTOU
+// vulnerabilities - both the object and container (if any) are locked for the duration.
 func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
 	// Validate containment
 	if err := to.Validate(); err != nil {
@@ -211,11 +212,24 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
 	}()
 
+	// Lock the object being moved to prevent concurrent move operations
+	var exists bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM objects WHERE id = $1 FOR UPDATE)
+	`, objectID.String()).Scan(&exists)
+	if err != nil {
+		return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
+	}
+	if !exists {
+		return oops.With("object_id", objectID.String()).Wrap(ErrNotFound)
+	}
+
 	// If moving to a container, verify the container exists and is actually a container
+	// FOR UPDATE locks the container row to prevent deletion/modification during this transaction
 	if to.ObjectID != nil {
 		var isContainer bool
 		err = tx.QueryRow(ctx, `
-			SELECT is_container FROM objects WHERE id = $1
+			SELECT is_container FROM objects WHERE id = $1 FOR UPDATE
 		`, to.ObjectID.String()).Scan(&isContainer)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.

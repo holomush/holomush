@@ -881,6 +881,62 @@ func TestObjectRepository_Move(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one")
 	})
+
+	t.Run("concurrent move to same container is serialized", func(t *testing.T) {
+		// This test verifies that SELECT FOR UPDATE prevents concurrent moves
+		// from racing. We start a transaction that locks the container, then
+		// verify that another Move() call blocks until the first transaction completes.
+		container := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Concurrent Test Container",
+			Description: "Container for concurrent test.",
+			LocationID:  &loc1ID,
+			IsContainer: true,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, container))
+		defer func() { _ = repo.Delete(ctx, container.ID) }()
+
+		item := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Concurrent Test Item",
+			Description: "Item for concurrent test.",
+			LocationID:  &loc1ID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, item))
+		defer func() { _ = repo.Delete(ctx, item.ID) }()
+
+		// Start a transaction that locks the container
+		tx, err := testPool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		// Lock the container row
+		var isContainer bool
+		err = tx.QueryRow(ctx, `SELECT is_container FROM objects WHERE id = $1 FOR UPDATE`, container.ID.String()).Scan(&isContainer)
+		require.NoError(t, err)
+
+		// Try to move the item with a short timeout - should block and timeout
+		shortCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+
+		err = repo.Move(shortCtx, item.ID, world.Containment{ObjectID: &container.ID})
+		// The move should fail due to context deadline because the container is locked
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+
+		// Rollback the blocking transaction
+		require.NoError(t, tx.Rollback(ctx))
+
+		// Now the move should succeed
+		err = repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
+		require.NoError(t, err)
+
+		got, err := repo.Get(ctx, item.ID)
+		require.NoError(t, err)
+		assert.Equal(t, container.ID, *got.ContainedInObjectID)
+	})
 }
 
 func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
