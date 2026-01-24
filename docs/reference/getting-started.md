@@ -269,14 +269,28 @@ task lint:markdown
 
 Current limitations that will be addressed in future phases:
 
-| Feature    | Current State              | Planned                  |
-| ---------- | -------------------------- | ------------------------ |
-| Accounts   | Single hardcoded test user | Full account system      |
-| Locations  | Single "The Void" room     | Multiple connected rooms |
-| Characters | Single test character      | Character creation       |
-| Movement   | Not implemented            | Exit-based navigation    |
-| Web client | Not implemented            | SvelteKit PWA            |
-| Plugins    | Proof-of-concept only      | Full WASM API            |
+| Feature    | Current State              | Planned              |
+| ---------- | -------------------------- | -------------------- |
+| Accounts   | Single hardcoded test user | Full account system  |
+| Characters | Single test character      | Character creation   |
+| Web client | Not implemented            | SvelteKit PWA        |
+| Plugins    | Proof-of-concept only      | Full WASM API        |
+| ABAC       | Defined but not integrated | Full access control  |
+| Scenes     | Schema only                | Scene room lifecycle |
+
+### Implemented Features
+
+The world model foundation is complete:
+
+| Feature   | Status      | Description                                   |
+| --------- | ----------- | --------------------------------------------- |
+| Locations | Implemented | Persistent, scene, and instance room types    |
+| Exits     | Implemented | Bidirectional exits with visibility and locks |
+| Objects   | Implemented | Containment (room, character, container)      |
+| Movement  | Implemented | Character/object movement via service layer   |
+| Events    | Implemented | move, object_create/destroy/use/examine/give  |
+
+See [World Model Design](../specs/2026-01-22-world-model-design.md) for details.
 
 ## Troubleshooting
 

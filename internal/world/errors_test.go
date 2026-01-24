@@ -147,8 +147,8 @@ func TestBidirectionalCleanupResult_Unwrap(t *testing.T) {
 
 func TestBidirectionalCleanupResult_IsSevere(t *testing.T) {
 	tests := []struct {
-		name      string
-		issueType world.CleanupIssueType
+		name       string
+		issueType  world.CleanupIssueType
 		wantSevere bool
 	}{
 		{"nil issue is not severe", "", false},

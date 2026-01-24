@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )

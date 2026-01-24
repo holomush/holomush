@@ -185,13 +185,26 @@ def handle_event():
 
 ## Event Types
 
-| Type     | Description               | Payload                   |
-| -------- | ------------------------- | ------------------------- |
-| `say`    | Character speech          | `{"message": "text"}`     |
-| `pose`   | Character action/emote    | `{"message": "text"}`     |
-| `arrive` | Character arrives at room | `{"character_id": "..."}` |
-| `leave`  | Character leaves room     | `{"character_id": "..."}` |
-| `system` | System-generated message  | `{"message": "text"}`     |
+### Communication Events
+
+| Type     | Description              | Payload               |
+| -------- | ------------------------ | --------------------- |
+| `say`    | Character speech         | `{"message": "text"}` |
+| `pose`   | Character action/emote   | `{"message": "text"}` |
+| `system` | System-generated message | `{"message": "text"}` |
+
+### World Events
+
+| Type             | Description                      | Payload Fields                                                                                   |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `move`           | Character or object moved        | `entity_type`, `entity_id`, `from_type`, `from_id`, `to_type`, `to_id`, `exit_id?`, `exit_name?` |
+| `object_create`  | Object created                   | See world model spec                                                                             |
+| `object_destroy` | Object destroyed                 | See world model spec                                                                             |
+| `object_use`     | Object used                      | See world model spec                                                                             |
+| `object_examine` | Object examined                  | See world model spec                                                                             |
+| `object_give`    | Object transferred between chars | `object_id`, `object_name`, `from_character_id`, `to_character_id`                               |
+
+See [World Model Design](../specs/2026-01-22-world-model-design.md) for complete payload specifications.
 
 ## Stream Patterns
 

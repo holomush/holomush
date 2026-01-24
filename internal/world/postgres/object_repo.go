@@ -18,7 +18,7 @@ import (
 
 // ObjectRepository implements world.ObjectRepository using PostgreSQL.
 type ObjectRepository struct {
-	pool           *pgxpool.Pool
+	pool            *pgxpool.Pool
 	maxNestingDepth int
 }
 
