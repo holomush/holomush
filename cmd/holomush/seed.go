@@ -63,7 +63,8 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 
 	// Seed starting location using a well-known ID for idempotency
 	// Using a fixed ID means duplicate inserts will fail with a constraint violation
-	startingLocID, err := ulid.Parse("01NEXUS00000000000000000000")
+	// ULID must be exactly 26 characters (Crockford's base32 alphabet)
+	startingLocID, err := ulid.Parse("01HZN3XS000000000000000000")
 	if err != nil {
 		return oops.Code("SEED_FAILED").With("operation", "parse seed location ID").Wrap(err)
 	}
