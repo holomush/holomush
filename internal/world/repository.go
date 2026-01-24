@@ -131,6 +131,15 @@ type CharacterRepository interface {
 	// Get retrieves a character by ID.
 	Get(ctx context.Context, id ulid.ULID) (*Character, error)
 
+	// Create persists a new character.
+	Create(ctx context.Context, char *Character) error
+
+	// Update modifies an existing character.
+	Update(ctx context.Context, char *Character) error
+
+	// Delete removes a character by ID.
+	Delete(ctx context.Context, id ulid.ULID) error
+
 	// GetByLocation retrieves all characters at a location.
 	GetByLocation(ctx context.Context, locationID ulid.ULID) ([]*Character, error)
 

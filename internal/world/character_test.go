@@ -65,4 +65,48 @@ func TestCharacter_Validate(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "name")
 	})
+
+	t.Run("valid description", func(t *testing.T) {
+		char := &world.Character{
+			Name:        "TestChar",
+			Description: "A brave adventurer.",
+			LocationID:  &locID,
+		}
+		require.NoError(t, char.Validate())
+	})
+
+	t.Run("empty description allowed", func(t *testing.T) {
+		char := &world.Character{
+			Name:        "TestChar",
+			Description: "",
+			LocationID:  &locID,
+		}
+		require.NoError(t, char.Validate())
+	})
+
+	t.Run("description exceeds max length", func(t *testing.T) {
+		longDesc := make([]byte, world.MaxDescriptionLength+1)
+		for i := range longDesc {
+			longDesc[i] = 'a'
+		}
+		char := &world.Character{
+			Name:        "TestChar",
+			Description: string(longDesc),
+			LocationID:  &locID,
+		}
+		err := char.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "description")
+	})
+
+	t.Run("description with control characters fails", func(t *testing.T) {
+		char := &world.Character{
+			Name:        "TestChar",
+			Description: "Has\x00null",
+			LocationID:  &locID,
+		}
+		err := char.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "description")
+	})
 }

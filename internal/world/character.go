@@ -11,14 +11,18 @@ import (
 
 // Character represents a player character in the world.
 type Character struct {
-	ID         ulid.ULID
-	PlayerID   ulid.ULID
-	Name       string
-	LocationID *ulid.ULID // Current location (nil if not in world)
-	CreatedAt  time.Time
+	ID          ulid.ULID
+	PlayerID    ulid.ULID
+	Name        string
+	Description string
+	LocationID  *ulid.ULID // Current location (nil if not in world)
+	CreatedAt   time.Time
 }
 
 // Validate checks that the character has required fields.
 func (c *Character) Validate() error {
-	return ValidateName(c.Name)
+	if err := ValidateName(c.Name); err != nil {
+		return err
+	}
+	return ValidateDescription(c.Description)
 }
