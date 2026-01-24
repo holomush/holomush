@@ -4,20 +4,21 @@ This section covers everything you need to build plugins and extend HoloMUSH.
 
 ## Overview
 
-HoloMUSH uses a WebAssembly (WASM) plugin system powered by [Extism](https://extism.org/).
-This allows you to write plugins in any language that compiles to WASM, including:
+HoloMUSH supports two plugin systems:
 
-- Python (via Extism PDK)
-- Rust
-- Go
-- AssemblyScript
-- C/C++
+| Type   | Language | Use Case                        | Performance |
+| ------ | -------- | ------------------------------- | ----------- |
+| Lua    | Lua 5.1  | Simple scripts, rapid iteration | Fast        |
+| Binary | Go       | Complex logic, external APIs    | Fastest     |
+
+Both plugin types use the same event-driven architecture: plugins subscribe to
+events and can emit new events in response.
 
 ## Getting Started
 
 1. **Understand the Architecture** - Learn how HoloMUSH components interact
-2. **Set Up Your Environment** - Install the plugin SDK for your language
-3. **Build Your First Plugin** - Follow the tutorial to create a simple command
+2. **Set Up Your Environment** - Clone the repository and build the server
+3. **Build Your First Plugin** - Follow the plugin guide to create a simple handler
 
 ## Documentation Sections
 
@@ -29,29 +30,17 @@ This allows you to write plugins in any language that compiles to WASM, includin
 
 ### Plugin Development
 
-- [Plugin Tutorial](plugins/tutorial.md) - Build your first plugin step by step
-- [Plugin API Reference](plugins/api.md) - Complete SDK documentation
+- [Plugin Guide](plugin-guide.md) - Complete guide to building plugins
 - [Host Functions](plugins/host-functions.md) - Functions available to plugins
 
 ### Advanced Topics
 
 - [ABAC Authorization](abac.md) - Attribute-based access control
 - [Testing Plugins](plugins/testing.md) - Unit and integration testing
-- [Performance](plugins/performance.md) - Optimization tips
-
-## Plugin Languages
-
-| Language | Status    | SDK                 |
-| -------- | --------- | ------------------- |
-| Python   | Supported | `extism-python-pdk` |
-| Rust     | Supported | `extism-pdk`        |
-| Go       | Planned   | -                   |
 
 ## Example Plugins
 
 The [`plugins/`](https://github.com/holomush/holomush/tree/main/plugins) directory
-contains example plugins demonstrating various capabilities:
+contains example plugins:
 
-- **echo** - Simple event echo for testing
-- **dice** - Random dice rolling commands
-- **weather** - Dynamic weather system
+- **echo-bot** - Echoes messages back (Lua)
