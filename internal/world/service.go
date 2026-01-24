@@ -139,7 +139,7 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 
 // CreateExit creates a new exit after checking write authorization.
 // The exit ID is generated if not set.
-// Returns a ValidationError if the name or aliases are invalid.
+// Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
 func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	if !s.accessControl.Check(ctx, subjectID, "write", "exit:*") {
 		return ErrPermissionDenied
@@ -157,6 +157,14 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 		if err := exit.LockType.Validate(); err != nil {
 			return err
 		}
+		if err := ValidateLockData(exit.LockData); err != nil {
+			return err
+		}
+	}
+	if exit.Visibility == VisibilityList {
+		if err := ValidateVisibleTo(exit.VisibleTo); err != nil {
+			return err
+		}
 	}
 	if exit.ID.IsZero() {
 		exit.ID = ulid.Make()
@@ -168,7 +176,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 }
 
 // UpdateExit updates an existing exit after checking write authorization.
-// Returns a ValidationError if the name, aliases, visibility, or lock type are invalid.
+// Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
 func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	resource := fmt.Sprintf("exit:%s", exit.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
@@ -185,6 +193,14 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	}
 	if exit.Locked {
 		if err := exit.LockType.Validate(); err != nil {
+			return err
+		}
+		if err := ValidateLockData(exit.LockData); err != nil {
+			return err
+		}
+	}
+	if exit.Visibility == VisibilityList {
+		if err := ValidateVisibleTo(exit.VisibleTo); err != nil {
 			return err
 		}
 	}
