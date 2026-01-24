@@ -405,14 +405,14 @@ func TestExitRepository_FindBySimilarity(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		searchTerm    string
-		threshold     float64
-		wantName      string
-		wantErr       bool
-		errContains   string
-		wantErrCode   string
-		wantNotFound  bool
+		name         string
+		searchTerm   string
+		threshold    float64
+		wantName     string
+		wantErr      bool
+		errContains  string
+		wantErrCode  string
+		wantNotFound bool
 	}{
 		{
 			name:       "exact match",

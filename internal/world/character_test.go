@@ -15,9 +15,11 @@ import (
 
 func TestCharacter_Validate(t *testing.T) {
 	locID := ulid.Make()
+	playerID := ulid.Make()
 
 	t.Run("valid character", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: &locID,
 		}
@@ -26,6 +28,7 @@ func TestCharacter_Validate(t *testing.T) {
 
 	t.Run("empty name fails", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:   playerID,
 			Name:       "",
 			LocationID: &locID,
 		}
@@ -36,6 +39,7 @@ func TestCharacter_Validate(t *testing.T) {
 
 	t.Run("nil location allowed", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:   playerID,
 			Name:       "TestChar",
 			LocationID: nil,
 		}
@@ -48,6 +52,7 @@ func TestCharacter_Validate(t *testing.T) {
 			longName[i] = 'a'
 		}
 		char := &world.Character{
+			PlayerID:   playerID,
 			Name:       string(longName),
 			LocationID: &locID,
 		}
@@ -58,6 +63,7 @@ func TestCharacter_Validate(t *testing.T) {
 
 	t.Run("name with control characters fails", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:   playerID,
 			Name:       "Test\x00Char",
 			LocationID: &locID,
 		}
@@ -68,6 +74,7 @@ func TestCharacter_Validate(t *testing.T) {
 
 	t.Run("valid description", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:    playerID,
 			Name:        "TestChar",
 			Description: "A brave adventurer.",
 			LocationID:  &locID,
@@ -77,6 +84,7 @@ func TestCharacter_Validate(t *testing.T) {
 
 	t.Run("empty description allowed", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:    playerID,
 			Name:        "TestChar",
 			Description: "",
 			LocationID:  &locID,
@@ -90,6 +98,7 @@ func TestCharacter_Validate(t *testing.T) {
 			longDesc[i] = 'a'
 		}
 		char := &world.Character{
+			PlayerID:    playerID,
 			Name:        "TestChar",
 			Description: string(longDesc),
 			LocationID:  &locID,
@@ -101,6 +110,7 @@ func TestCharacter_Validate(t *testing.T) {
 
 	t.Run("description with control characters fails", func(t *testing.T) {
 		char := &world.Character{
+			PlayerID:    playerID,
 			Name:        "TestChar",
 			Description: "Has\x00null",
 			LocationID:  &locID,
@@ -108,5 +118,25 @@ func TestCharacter_Validate(t *testing.T) {
 		err := char.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "description")
+	})
+
+	t.Run("zero player_id fails", func(t *testing.T) {
+		char := &world.Character{
+			Name:       "TestChar",
+			LocationID: &locID,
+			// PlayerID is zero value (not set)
+		}
+		err := char.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "player_id")
+	})
+
+	t.Run("valid player_id passes", func(t *testing.T) {
+		char := &world.Character{
+			PlayerID:   playerID,
+			Name:       "TestChar",
+			LocationID: &locID,
+		}
+		require.NoError(t, char.Validate())
 	})
 }

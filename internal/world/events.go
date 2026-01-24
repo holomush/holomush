@@ -18,20 +18,25 @@ type EventEmitter interface {
 
 // EmitMoveEvent emits a move event for character or object movement.
 // If emitter is nil, this is a no-op.
+// Returns a validation error if the payload is invalid.
 func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayload) error {
 	if emitter == nil {
 		return nil
 	}
 
+	if err := payload.Validate(); err != nil {
+		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", "move").Wrap(err)
+	}
+
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return oops.With("operation", "marshal move payload").Wrap(err)
+		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", "move").Wrap(err)
 	}
 
 	// Emit to destination location stream
 	stream := "location:" + payload.ToID
 	if err := emitter.Emit(ctx, stream, "move", data); err != nil {
-		return oops.With("stream", stream).With("event_type", "move").Wrap(err)
+		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "move").Wrap(err)
 	}
 	return nil
 }
@@ -53,7 +58,7 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return oops.With("operation", "marshal object create payload").Wrap(err)
+		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", "object_create").Wrap(err)
 	}
 
 	stream := "location:*" // Broadcast to all locations
@@ -61,7 +66,7 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 		stream = "location:" + obj.LocationID.String()
 	}
 	if err := emitter.Emit(ctx, stream, "object_create", data); err != nil {
-		return oops.With("stream", stream).With("event_type", "object_create").Wrap(err)
+		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "object_create").Wrap(err)
 	}
 	return nil
 }

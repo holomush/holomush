@@ -56,6 +56,23 @@ func TestEmitMoveEvent(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("returns error for invalid payload", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		payload := world.MovePayload{
+			EntityType: "", // Invalid: empty entity type
+			EntityID:   objID.String(),
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     fromLocID.String(),
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID.String(),
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "entity_type")
+		assert.Empty(t, emitter.calls, "should not emit invalid payload")
+	})
+
 	t.Run("emits event with correct stream and payload", func(t *testing.T) {
 		emitter := &mockEventEmitter{}
 		payload := world.MovePayload{

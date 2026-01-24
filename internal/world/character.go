@@ -21,6 +21,9 @@ type Character struct {
 
 // Validate checks that the character has required fields.
 func (c *Character) Validate() error {
+	if c.PlayerID.IsZero() {
+		return &ValidationError{Field: "player_id", Message: "cannot be zero"}
+	}
 	if err := ValidateName(c.Name); err != nil {
 		return err
 	}
