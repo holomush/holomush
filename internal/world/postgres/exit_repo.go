@@ -163,10 +163,10 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 }
 
 // Delete removes an exit by ID.
-// If bidirectional, also removes the return exit on a best-effort basis.
-// Returns *world.BidirectionalCleanupResult if the primary exit was deleted but
-// cleanup of the return exit encountered issues. Callers can check IsSevere()
-// to determine if the issue warrants logging/alerting.
+// If bidirectional, also removes the return exit atomically in a single transaction.
+// Returns *world.BidirectionalCleanupResult if cleanup of the return exit encountered
+// issues (e.g., return exit not found). Callers can check IsSevere() to determine
+// if the issue warrants logging/alerting.
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	// First, get the exit to check if it's bidirectional
 	exit, err := r.Get(ctx, id)
@@ -174,8 +174,18 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		return err
 	}
 
-	// Delete the exit
-	result, err := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, id.String())
+	// Use a transaction to ensure atomic deletion of bidirectional exits
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return oops.With("operation", "begin transaction").Wrap(err)
+	}
+	defer func() {
+		// Rollback is a no-op if tx was committed; error is safe to ignore
+		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
+	}()
+
+	// Delete the primary exit
+	result, err := tx.Exec(ctx, `DELETE FROM exits WHERE id = $1`, id.String())
 	if err != nil {
 		return oops.With("operation", "delete exit").With("id", id.String()).Wrap(err)
 	}
@@ -183,32 +193,34 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		return oops.With("id", id.String()).Wrap(ErrNotFound)
 	}
 
-	// If bidirectional, find and delete the return exit
+	// If bidirectional, find and delete the return exit within the same transaction
+	var cleanupResult *world.BidirectionalCleanupResult
 	if exit.Bidirectional && exit.ReturnName != "" {
-		cleanupResult := &world.BidirectionalCleanupResult{
+		cleanupResult = &world.BidirectionalCleanupResult{
 			ExitID:       id,
 			ToLocationID: exit.ToLocationID,
 			ReturnName:   exit.ReturnName,
 		}
 
-		returnExit, findErr := r.FindByName(ctx, exit.ToLocationID, exit.ReturnName)
+		returnExit, findErr := r.findByNameTx(ctx, tx, exit.ToLocationID, exit.ReturnName)
 		if findErr != nil {
 			// Distinguish between "not found" (acceptable) and actual errors
 			if errors.Is(findErr, ErrNotFound) {
+				// Return exit not found is not severe - may have been deleted already
 				cleanupResult.Issue = &world.CleanupIssue{
 					Type: world.CleanupReturnNotFound,
 				}
+				// Continue with commit - primary delete should still succeed
 			} else {
+				// Actual error - rollback
 				cleanupResult.Issue = &world.CleanupIssue{
 					Type: world.CleanupFindError,
 					Err:  findErr,
 				}
+				return cleanupResult
 			}
-			return cleanupResult
-		}
-
-		if returnExit != nil && returnExit.ToLocationID == exit.FromLocationID {
-			_, cleanupErr := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
+		} else if returnExit != nil && returnExit.ToLocationID == exit.FromLocationID {
+			_, cleanupErr := tx.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
 			if cleanupErr != nil {
 				cleanupResult.Issue = &world.CleanupIssue{
 					Type:         world.CleanupDeleteError,
@@ -217,7 +229,18 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 				}
 				return cleanupResult
 			}
+			// Clear cleanup result since return exit was successfully deleted
+			cleanupResult = nil
 		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.With("operation", "commit transaction").Wrap(err)
+	}
+
+	// Return informational cleanup result if return exit was not found
+	if cleanupResult != nil && cleanupResult.Issue != nil {
+		return cleanupResult
 	}
 
 	return nil
@@ -244,6 +267,27 @@ func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, n
 	// Use PostgreSQL LOWER() for case-insensitive matching
 	// For aliases, unnest and compare with LOWER() for consistent behavior
 	exit, err := r.scanExit(ctx, `
+		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		FROM exits
+		WHERE from_location_id = $1
+		  AND (LOWER(name) = LOWER($2) OR EXISTS (
+		    SELECT 1 FROM unnest(aliases) AS a WHERE LOWER(a) = LOWER($2)
+		  ))
+		LIMIT 1
+	`, locationID.String(), name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.With("location_id", locationID.String()).With("name", name).Wrap(ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "find exit by name").With("location_id", locationID.String()).With("name", name).Wrap(err)
+	}
+	return exit, nil
+}
+
+// findByNameTx finds an exit by name within a transaction.
+func (r *ExitRepository) findByNameTx(ctx context.Context, tx pgx.Tx, locationID ulid.ULID, name string) (*world.Exit, error) {
+	exit, err := r.scanExitTx(ctx, tx, `
 		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
 		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
 		FROM exits
@@ -349,7 +393,17 @@ func parseExitFromFields(f *exitScanFields, exit *world.Exit) error {
 // scanExit scans a single exit from a query.
 func (r *ExitRepository) scanExit(ctx context.Context, query string, args ...any) (*world.Exit, error) {
 	row := r.pool.QueryRow(ctx, query, args...)
+	return scanExitRow(row)
+}
 
+// scanExitTx scans a single exit from a query within a transaction.
+func (r *ExitRepository) scanExitTx(ctx context.Context, tx pgx.Tx, query string, args ...any) (*world.Exit, error) {
+	row := tx.QueryRow(ctx, query, args...)
+	return scanExitRow(row)
+}
+
+// scanExitRow scans a single exit from a row.
+func scanExitRow(row pgx.Row) (*world.Exit, error) {
 	var exit world.Exit
 	var f exitScanFields
 
