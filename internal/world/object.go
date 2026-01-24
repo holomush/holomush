@@ -99,8 +99,17 @@ func (o *Object) SetContainment(c Containment) error {
 	return nil
 }
 
-// Validate checks that the object has valid containment (exactly one location).
+// Validate validates the object's fields.
+// Returns a ValidationError if the name or description is invalid.
 func (o *Object) Validate() error {
+	if err := ValidateName(o.Name); err != nil {
+		return err
+	}
+	return ValidateDescription(o.Description)
+}
+
+// ValidateContainment checks that the object has valid containment (exactly one location).
+func (o *Object) ValidateContainment() error {
 	c := o.Containment()
 	return c.Validate()
 }

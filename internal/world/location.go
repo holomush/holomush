@@ -55,6 +55,18 @@ type Location struct {
 	ArchivedAt   *time.Time
 }
 
+// Validate validates the location's fields.
+// Returns a ValidationError if any field is invalid.
+func (l *Location) Validate() error {
+	if err := ValidateName(l.Name); err != nil {
+		return err
+	}
+	if err := ValidateDescription(l.Description); err != nil {
+		return err
+	}
+	return l.Type.Validate()
+}
+
 // EffectiveDescription returns the description to show, falling back to shadow if empty.
 // If this location shadows another and has an empty description, returns the parent's description.
 // The parent parameter should be the shadowed location, or nil if not shadowing.

@@ -88,6 +88,34 @@ type Exit struct {
 	CreatedAt      time.Time
 }
 
+// Validate validates the exit's fields.
+// Returns a ValidationError if any field is invalid.
+func (e *Exit) Validate() error {
+	if err := ValidateName(e.Name); err != nil {
+		return err
+	}
+	if err := ValidateAliases(e.Aliases); err != nil {
+		return err
+	}
+	if err := e.Visibility.Validate(); err != nil {
+		return err
+	}
+	if e.Locked {
+		if err := e.LockType.Validate(); err != nil {
+			return err
+		}
+		if err := ValidateLockData(e.LockData); err != nil {
+			return err
+		}
+	}
+	if e.Visibility == VisibilityList {
+		if err := ValidateVisibleTo(e.VisibleTo); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // MatchesName returns true if the given input matches the exit name or any alias.
 // Matching is case-insensitive.
 func (e *Exit) MatchesName(input string) bool {

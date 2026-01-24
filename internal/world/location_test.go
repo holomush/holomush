@@ -202,3 +202,41 @@ func TestLocation_EffectiveName(t *testing.T) {
 		assert.Equal(t, "", loc.EffectiveName(nil))
 	})
 }
+
+func TestLocation_Validate(t *testing.T) {
+	t.Run("valid location", func(t *testing.T) {
+		loc := &world.Location{
+			Name: "Town Square",
+			Type: world.LocationTypePersistent,
+		}
+		assert.NoError(t, loc.Validate())
+	})
+
+	t.Run("invalid name", func(t *testing.T) {
+		loc := &world.Location{
+			Name: "",
+			Type: world.LocationTypePersistent,
+		}
+		err := loc.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot be empty")
+	})
+
+	t.Run("invalid type", func(t *testing.T) {
+		loc := &world.Location{
+			Name: "Town Square",
+			Type: world.LocationType("invalid"),
+		}
+		err := loc.Validate()
+		assert.Error(t, err)
+	})
+
+	t.Run("valid with description", func(t *testing.T) {
+		loc := &world.Location{
+			Name:        "Town Square",
+			Type:        world.LocationTypePersistent,
+			Description: "A bustling town square.",
+		}
+		assert.NoError(t, loc.Validate())
+	})
+}

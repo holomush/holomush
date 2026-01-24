@@ -1777,6 +1777,40 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 	assert.Contains(t, err.Error(), "nil")
 }
 
+func TestWorldService_UpdateExit_NilInput(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockRepo := worldtest.NewMockExitRepository(t)
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+		ExitRepo:      mockRepo,
+	})
+
+	// Note: nil check happens before access check since we need the ID to build resource string
+	err := svc.UpdateExit(ctx, subjectID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWorldService_UpdateObject_NilInput(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockRepo := worldtest.NewMockObjectRepository(t)
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+		ObjectRepo:    mockRepo,
+	})
+
+	// Note: nil check happens before access check since we need the ID to build resource string
+	err := svc.UpdateObject(ctx, subjectID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
+
 // --- Nil Repository Tests ---
 
 func TestWorldService_NilLocationRepo(t *testing.T) {

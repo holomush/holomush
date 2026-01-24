@@ -85,13 +85,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if loc == nil {
 		return oops.Errorf("location is nil")
 	}
-	if err := ValidateName(loc.Name); err != nil {
-		return err
-	}
-	if err := ValidateDescription(loc.Description); err != nil {
-		return err
-	}
-	if err := loc.Type.Validate(); err != nil {
+	if err := loc.Validate(); err != nil {
 		return err
 	}
 	if loc.ID.IsZero() {
@@ -116,13 +110,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
 	}
-	if err := ValidateName(loc.Name); err != nil {
-		return err
-	}
-	if err := ValidateDescription(loc.Description); err != nil {
-		return err
-	}
-	if err := loc.Type.Validate(); err != nil {
+	if err := loc.Validate(); err != nil {
 		return err
 	}
 	if err := s.locationRepo.Update(ctx, loc); err != nil {
@@ -175,27 +163,8 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if exit == nil {
 		return oops.Errorf("exit is nil")
 	}
-	if err := ValidateName(exit.Name); err != nil {
+	if err := exit.Validate(); err != nil {
 		return err
-	}
-	if err := ValidateAliases(exit.Aliases); err != nil {
-		return err
-	}
-	if err := exit.Visibility.Validate(); err != nil {
-		return err
-	}
-	if exit.Locked {
-		if err := exit.LockType.Validate(); err != nil {
-			return err
-		}
-		if err := ValidateLockData(exit.LockData); err != nil {
-			return err
-		}
-	}
-	if exit.Visibility == VisibilityList {
-		if err := ValidateVisibleTo(exit.VisibleTo); err != nil {
-			return err
-		}
 	}
 	if exit.ID.IsZero() {
 		exit.ID = ulid.Make()
@@ -219,27 +188,8 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
 	}
-	if err := ValidateName(exit.Name); err != nil {
+	if err := exit.Validate(); err != nil {
 		return err
-	}
-	if err := ValidateAliases(exit.Aliases); err != nil {
-		return err
-	}
-	if err := exit.Visibility.Validate(); err != nil {
-		return err
-	}
-	if exit.Locked {
-		if err := exit.LockType.Validate(); err != nil {
-			return err
-		}
-		if err := ValidateLockData(exit.LockData); err != nil {
-			return err
-		}
-	}
-	if exit.Visibility == VisibilityList {
-		if err := ValidateVisibleTo(exit.VisibleTo); err != nil {
-			return err
-		}
 	}
 	if err := s.exitRepo.Update(ctx, exit); err != nil {
 		return oops.Wrapf(err, "update exit %s", exit.ID)
@@ -313,10 +263,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if obj == nil {
 		return oops.Errorf("object is nil")
 	}
-	if err := ValidateName(obj.Name); err != nil {
-		return err
-	}
-	if err := ValidateDescription(obj.Description); err != nil {
+	if err := obj.Validate(); err != nil {
 		return err
 	}
 	if obj.ID.IsZero() {
@@ -341,10 +288,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
 	}
-	if err := ValidateName(obj.Name); err != nil {
-		return err
-	}
-	if err := ValidateDescription(obj.Description); err != nil {
+	if err := obj.Validate(); err != nil {
 		return err
 	}
 	if err := s.objectRepo.Update(ctx, obj); err != nil {

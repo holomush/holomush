@@ -211,6 +211,32 @@ func TestContainment_Validate_AllThreeSet(t *testing.T) {
 }
 
 func TestObject_Validate(t *testing.T) {
+	t.Run("valid object", func(t *testing.T) {
+		obj := &world.Object{
+			Name: "Sword",
+		}
+		assert.NoError(t, obj.Validate())
+	})
+
+	t.Run("invalid name", func(t *testing.T) {
+		obj := &world.Object{
+			Name: "",
+		}
+		err := obj.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot be empty")
+	})
+
+	t.Run("valid with description", func(t *testing.T) {
+		obj := &world.Object{
+			Name:        "Sword",
+			Description: "A shiny blade.",
+		}
+		assert.NoError(t, obj.Validate())
+	})
+}
+
+func TestObject_ValidateContainment(t *testing.T) {
 	locID := ulid.Make()
 	charID := ulid.Make()
 
@@ -220,7 +246,7 @@ func TestObject_Validate(t *testing.T) {
 			Name:       "Sword",
 			LocationID: &locID,
 		}
-		assert.NoError(t, obj.Validate())
+		assert.NoError(t, obj.ValidateContainment())
 	})
 
 	t.Run("invalid object with no containment", func(t *testing.T) {
@@ -228,7 +254,7 @@ func TestObject_Validate(t *testing.T) {
 			ID:   ulid.Make(),
 			Name: "Orphan",
 		}
-		err := obj.Validate()
+		err := obj.ValidateContainment()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 	})
@@ -240,7 +266,7 @@ func TestObject_Validate(t *testing.T) {
 			LocationID:        &locID,
 			HeldByCharacterID: &charID,
 		}
-		err := obj.Validate()
+		err := obj.ValidateContainment()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 	})
