@@ -286,4 +286,32 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		require.NoError(t, err)
 		// No panic or error, just skips event emission
 	})
+
+	t.Run("succeeds even when event emitter fails", func(t *testing.T) {
+		emitErr := errors.New("event bus unavailable")
+		emitter := &mockEventEmitter{err: emitErr}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: &mockAccessControlForEvents{allowAll: true},
+			EventEmitter:  emitter,
+		})
+
+		existingObj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &fromLocID,
+		}
+		to := world.Containment{LocationID: &toLocID}
+
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+
+		// Operation should succeed despite event emission failure (fire-and-forget)
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		require.NoError(t, err)
+		// Verify the emitter was called (even though it failed)
+		require.Len(t, emitter.calls, 0, "emitter should have been called but failed before recording")
+	})
 }

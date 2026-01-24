@@ -28,6 +28,7 @@ type ServiceConfig struct {
 	ExitRepo      ExitRepository
 	ObjectRepo    ObjectRepository
 	SceneRepo     SceneRepository
+	CharacterRepo CharacterRepository
 	AccessControl AccessControl
 	EventEmitter  EventEmitter
 }
@@ -39,6 +40,7 @@ type Service struct {
 	exitRepo      ExitRepository
 	objectRepo    ObjectRepository
 	sceneRepo     SceneRepository
+	characterRepo CharacterRepository
 	accessControl AccessControl
 	eventEmitter  EventEmitter
 }
@@ -54,6 +56,7 @@ func NewService(cfg ServiceConfig) *Service {
 		exitRepo:      cfg.ExitRepo,
 		objectRepo:    cfg.ObjectRepo,
 		sceneRepo:     cfg.SceneRepo,
+		characterRepo: cfg.CharacterRepo,
 		accessControl: cfg.AccessControl,
 		eventEmitter:  cfg.EventEmitter,
 	}
