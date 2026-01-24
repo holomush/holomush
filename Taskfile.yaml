@@ -322,3 +322,22 @@ tasks:
     desc: Build snapshot locally (no publish, local arch only)
     cmds:
       - goreleaser build --snapshot --clean --single-target
+
+  # Documentation
+  docs:setup:
+    desc: Set up documentation development environment
+    dir: site
+    cmds:
+      - uv sync
+
+  docs:build:
+    desc: Build documentation site
+    dir: site
+    cmds:
+      - uv run zensical build
+
+  docs:serve:
+    desc: Start documentation dev server
+    dir: site
+    cmds:
+      - uv run zensical serve
