@@ -30,6 +30,33 @@ func TestLocationType_String(t *testing.T) {
 	}
 }
 
+func TestLocationType_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		locType world.LocationType
+		wantErr bool
+	}{
+		{"persistent is valid", world.LocationTypePersistent, false},
+		{"scene is valid", world.LocationTypeScene, false},
+		{"instance is valid", world.LocationTypeInstance, false},
+		{"empty string is invalid", world.LocationType(""), true},
+		{"arbitrary string is invalid", world.LocationType("dungeon"), true},
+		{"similar but wrong is invalid", world.LocationType("Persistent"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.locType.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, world.ErrInvalidLocationType)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestParseReplayPolicy(t *testing.T) {
 	tests := []struct {
 		name     string

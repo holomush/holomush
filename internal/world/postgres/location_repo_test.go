@@ -249,6 +249,42 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, postgres.ErrNotFound)
 	})
+
+	t.Run("create with invalid type fails", func(t *testing.T) {
+		loc := &world.Location{
+			ID:           ulid.Make(),
+			Type:         world.LocationType("dungeon"), // invalid type
+			Name:         "Bad Room",
+			Description:  "Should not be created.",
+			ReplayPolicy: "last:0",
+			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		}
+
+		err := repo.Create(ctx, loc)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
+	})
+
+	t.Run("update with invalid type fails", func(t *testing.T) {
+		// Create a valid location first
+		loc := &world.Location{
+			ID:           ulid.Make(),
+			Type:         world.LocationTypePersistent,
+			Name:         "Valid Room",
+			Description:  "A valid room.",
+			ReplayPolicy: "last:0",
+			CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		}
+		err := repo.Create(ctx, loc)
+		require.NoError(t, err)
+		defer func() { _ = repo.Delete(ctx, loc.ID) }()
+
+		// Try to update with invalid type
+		loc.Type = world.LocationType("invalid")
+		err = repo.Update(ctx, loc)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
+	})
 }
 
 func TestLocationRepository_ListByType(t *testing.T) {

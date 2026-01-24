@@ -64,6 +64,9 @@ func (r *LocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.Loca
 
 // Create persists a new location.
 func (r *LocationRepository) Create(ctx context.Context, loc *world.Location) error {
+	if err := loc.Type.Validate(); err != nil {
+		return oops.With("operation", "create location").With("type", loc.Type).Wrap(err)
+	}
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO locations (id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -77,6 +80,9 @@ func (r *LocationRepository) Create(ctx context.Context, loc *world.Location) er
 
 // Update modifies an existing location.
 func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) error {
+	if err := loc.Type.Validate(); err != nil {
+		return oops.With("operation", "update location").With("type", loc.Type).Wrap(err)
+	}
 	result, err := r.pool.Exec(ctx, `
 		UPDATE locations SET type = $2, shadows_id = $3, name = $4, description = $5,
 		owner_id = $6, replay_policy = $7, archived_at = $8

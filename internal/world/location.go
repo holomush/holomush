@@ -5,6 +5,7 @@
 package world
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,19 @@ const (
 // String returns the string representation of the location type.
 func (t LocationType) String() string {
 	return string(t)
+}
+
+// ErrInvalidLocationType indicates an unrecognized location type.
+var ErrInvalidLocationType = errors.New("invalid location type")
+
+// Validate checks that the location type is a recognized value.
+func (t LocationType) Validate() error {
+	switch t {
+	case LocationTypePersistent, LocationTypeScene, LocationTypeInstance:
+		return nil
+	default:
+		return ErrInvalidLocationType
+	}
 }
 
 // Location represents a room in the game world.
