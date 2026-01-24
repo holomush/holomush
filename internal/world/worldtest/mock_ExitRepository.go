@@ -178,6 +178,67 @@ func (_c *MockExitRepository_FindByName_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
+// FindByNameFuzzy provides a mock function with given fields: ctx, locationID, name, threshold
+func (_m *MockExitRepository) FindByNameFuzzy(ctx context.Context, locationID ulid.ULID, name string, threshold float64) (*world.Exit, error) {
+	ret := _m.Called(ctx, locationID, name, threshold)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindByNameFuzzy")
+	}
+
+	var r0 *world.Exit
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string, float64) (*world.Exit, error)); ok {
+		return rf(ctx, locationID, name, threshold)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string, float64) *world.Exit); ok {
+		r0 = rf(ctx, locationID, name, threshold)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*world.Exit)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, string, float64) error); ok {
+		r1 = rf(ctx, locationID, name, threshold)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockExitRepository_FindByNameFuzzy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindByNameFuzzy'
+type MockExitRepository_FindByNameFuzzy_Call struct {
+	*mock.Call
+}
+
+// FindByNameFuzzy is a helper method to define mock.On call
+//   - ctx context.Context
+//   - locationID ulid.ULID
+//   - name string
+//   - threshold float64
+func (_e *MockExitRepository_Expecter) FindByNameFuzzy(ctx interface{}, locationID interface{}, name interface{}, threshold interface{}) *MockExitRepository_FindByNameFuzzy_Call {
+	return &MockExitRepository_FindByNameFuzzy_Call{Call: _e.mock.On("FindByNameFuzzy", ctx, locationID, name, threshold)}
+}
+
+func (_c *MockExitRepository_FindByNameFuzzy_Call) Run(run func(ctx context.Context, locationID ulid.ULID, name string, threshold float64)) *MockExitRepository_FindByNameFuzzy_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(string), args[3].(float64))
+	})
+	return _c
+}
+
+func (_c *MockExitRepository_FindByNameFuzzy_Call) Return(_a0 *world.Exit, _a1 error) *MockExitRepository_FindByNameFuzzy_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockExitRepository_FindByNameFuzzy_Call) RunAndReturn(run func(context.Context, ulid.ULID, string, float64) (*world.Exit, error)) *MockExitRepository_FindByNameFuzzy_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function with given fields: ctx, id
 func (_m *MockExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, error) {
 	ret := _m.Called(ctx, id)
