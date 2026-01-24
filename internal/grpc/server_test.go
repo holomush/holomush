@@ -51,6 +51,17 @@ func (m *mockEventStore) LastEventID(ctx context.Context, stream string) (ulid.U
 	return ulid.ULID{}, core.ErrStreamEmpty
 }
 
+func (m *mockEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	eventCh := make(chan ulid.ULID)
+	errCh := make(chan error)
+	go func() {
+		<-ctx.Done()
+		close(eventCh)
+		close(errCh)
+	}()
+	return eventCh, errCh, nil
+}
+
 // mockAuthenticator provides authentication for testing.
 type mockAuthenticator struct {
 	authenticateFunc func(ctx context.Context, username, password string) (*AuthResult, error)

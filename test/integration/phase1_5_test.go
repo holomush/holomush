@@ -79,7 +79,7 @@ func setupTestEnv() (*testEnv, error) {
 
 	// Start PostgreSQL container
 	container, err := postgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:18-alpine",
 		postgres.WithDatabase("holomush_test"),
 		postgres.WithUsername("holomush"),
 		postgres.WithPassword("holomush"),

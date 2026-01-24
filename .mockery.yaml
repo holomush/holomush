@@ -33,3 +33,12 @@ packages:
     interfaces:
       KVStore:
       CapabilityChecker:
+  github.com/holomush/holomush/internal/world:
+    config:
+      dir: internal/world/worldtest
+      outpkg: worldtest
+    interfaces:
+      LocationRepository:
+      ExitRepository:
+      ObjectRepository:
+      SceneRepository:

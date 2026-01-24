@@ -45,15 +45,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Test data
+-- Test data (using valid ULIDs generated deterministically for reproducibility)
 INSERT INTO players (id, username, password_hash)
-VALUES ('01JTEST001PLAYER00000001', 'testuser', '$2a$10$N9qo8uLOickgx2ZMRZoMye')
+VALUES ('01KDVDNA00041061050R3GG28A', 'testuser', '$2a$10$N9qo8uLOickgx2ZMRZoMye')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO locations (id, name, description)
-VALUES ('01JTEST001LOCATN00000001', 'The Void', 'An empty expanse of nothing. This is where it all begins.')
+VALUES ('01KDVDNA001C60T3GF208H44RM', 'The Void', 'An empty expanse of nothing. This is where it all begins.')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO characters (id, player_id, name, location_id)
-VALUES ('01JTEST001CHRCTR00000001', '01JTEST001PLAYER00000001', 'TestChar', '01JTEST001LOCATN00000001')
+VALUES ('01KDVDNA002MB1E60S38DHR78Y', '01KDVDNA00041061050R3GG28A', 'TestChar', '01KDVDNA001C60T3GF208H44RM')
 ON CONFLICT (id) DO NOTHING;

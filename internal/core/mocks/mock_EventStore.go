@@ -191,6 +191,74 @@ func (_c *MockEventStore_Replay_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
+// Subscribe provides a mock function with given fields: ctx, stream
+func (_m *MockEventStore) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
+	ret := _m.Called(ctx, stream)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Subscribe")
+	}
+
+	var r0 <-chan ulid.ULID
+	var r1 <-chan error
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (<-chan ulid.ULID, <-chan error, error)); ok {
+		return rf(ctx, stream)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) <-chan ulid.ULID); ok {
+		r0 = rf(ctx, stream)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(<-chan ulid.ULID)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) <-chan error); ok {
+		r1 = rf(ctx, stream)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(<-chan error)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string) error); ok {
+		r2 = rf(ctx, stream)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockEventStore_Subscribe_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Subscribe'
+type MockEventStore_Subscribe_Call struct {
+	*mock.Call
+}
+
+// Subscribe is a helper method to define mock.On call
+//   - ctx context.Context
+//   - stream string
+func (_e *MockEventStore_Expecter) Subscribe(ctx interface{}, stream interface{}) *MockEventStore_Subscribe_Call {
+	return &MockEventStore_Subscribe_Call{Call: _e.mock.On("Subscribe", ctx, stream)}
+}
+
+func (_c *MockEventStore_Subscribe_Call) Run(run func(ctx context.Context, stream string)) *MockEventStore_Subscribe_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockEventStore_Subscribe_Call) Return(eventCh <-chan ulid.ULID, errCh <-chan error, err error) *MockEventStore_Subscribe_Call {
+	_c.Call.Return(eventCh, errCh, err)
+	return _c
+}
+
+func (_c *MockEventStore_Subscribe_Call) RunAndReturn(run func(context.Context, string) (<-chan ulid.ULID, <-chan error, error)) *MockEventStore_Subscribe_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockEventStore creates a new instance of MockEventStore. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockEventStore(t interface {
