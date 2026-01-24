@@ -29,6 +29,7 @@ type ServiceConfig struct {
 	ObjectRepo    ObjectRepository
 	SceneRepo     SceneRepository
 	AccessControl AccessControl
+	EventEmitter  EventEmitter
 }
 
 // Service provides authorized access to world model operations.
@@ -39,6 +40,7 @@ type Service struct {
 	objectRepo    ObjectRepository
 	sceneRepo     SceneRepository
 	accessControl AccessControl
+	eventEmitter  EventEmitter
 }
 
 // NewService creates a new Service with the given configuration.
@@ -53,6 +55,7 @@ func NewService(cfg ServiceConfig) *Service {
 		objectRepo:    cfg.ObjectRepo,
 		sceneRepo:     cfg.SceneRepo,
 		accessControl: cfg.AccessControl,
+		eventEmitter:  cfg.EventEmitter,
 	}
 }
 
@@ -359,12 +362,37 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	if err := to.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
+
+	// Get current containment for the move event
+	obj, err := s.objectRepo.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
+		}
+		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "get object %s", id)
+	}
+	from := obj.Containment()
+
 	if err := s.objectRepo.Move(ctx, id, to); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "move object %s", id)
 	}
+
+	// Emit move event (non-blocking - failures are logged but don't fail the operation)
+	payload := MovePayload{
+		EntityType: EntityTypeObject,
+		EntityID:   id.String(),
+		FromType:   from.Type(),
+		FromID:     from.ID().String(),
+		ToType:     to.Type(),
+		ToID:       to.ID().String(),
+	}
+	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
+		slog.Warn("failed to emit move event", "object_id", id.String(), "error", err)
+	}
+
 	return nil
 }
 

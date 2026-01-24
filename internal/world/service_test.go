@@ -680,9 +680,17 @@ func TestWorldService_MoveObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
+		fromLocID := ulid.Make()
 		to := world.Containment{LocationID: &locationID}
 
+		existingObj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &fromLocID,
+		}
+
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
 		err := svc.MoveObject(ctx, subjectID, objID, to)
@@ -736,9 +744,17 @@ func TestWorldService_MoveObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
+		fromLocID := ulid.Make()
 		to := world.Containment{LocationID: &locationID}
 
+		existingObj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &fromLocID,
+		}
+
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(errors.New("db error"))
 
 		err := svc.MoveObject(ctx, subjectID, objID, to)
@@ -2746,7 +2762,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
 	})
 
-	t.Run("MoveObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+	t.Run("MoveObject returns OBJECT_NOT_FOUND for ErrNotFound from Get", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
@@ -2756,6 +2772,31 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, objID).Return(nil, world.ErrNotFound)
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+
+	t.Run("MoveObject returns OBJECT_NOT_FOUND for ErrNotFound from Move", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		fromLocID := ulid.Make()
+		existingObj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &fromLocID,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(world.ErrNotFound)
 
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
@@ -2772,7 +2813,15 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
+		fromLocID := ulid.Make()
+		existingObj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &fromLocID,
+		}
+
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
