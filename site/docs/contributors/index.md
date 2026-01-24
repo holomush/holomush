@@ -54,14 +54,11 @@ of all kinds, from code to documentation to bug reports.
 
 HoloMUSH uses a spec-driven, test-first development approach:
 
-```text
-Spec (docs/specs/)
-    ↓
-Epic (tracked in beads)
-    ↓
-Implementation Plan (docs/plans/)
-    ↓
-Tasks with Tests
+```mermaid
+flowchart TB
+    A["Spec (docs/specs/)"] --> B["Epic (tracked in beads)"]
+    B --> C["Implementation Plan (docs/plans/)"]
+    C --> D["Tasks with Tests"]
 ```
 
 See [Development Principles](development.md#principles) for details.

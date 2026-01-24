@@ -5,62 +5,51 @@ dual protocol support (telnet + web), and extensibility through plugins.
 
 ## High-Level Overview
 
-```text
-                     ┌─────────────────────────────────────────────────────────────┐
-                     │                        HoloMUSH                             │
-                     │                                                             │
-┌─────────┐          │  ┌───────────────┐     ┌────────────────┐                   │
-│ Telnet  │◄────────►│  │ Telnet Adapter│     │ WebSocket      │◄────────────┐    │
-│ Clients │          │  └───────┬───────┘     │ Adapter        │             │    │
-└─────────┘          │          │             └────────┬───────┘             │    │
-                     │          │                      │                     │    │
-┌─────────┐          │          ▼                      ▼                     │    │
-│ SvelteKit│◄───────►│  ┌───────────────────────────────────────────┐        │    │
-│ PWA      │         │  │            Session Manager                │        │    │
-└─────────┘          │  │  - Connection lifecycle                   │        │    │
-                     │  │  - Reconnection support                   │        │    │
-                     │  │  - Character binding                      │        │    │
-                     │  └───────────────────┬───────────────────────┘        │    │
-                     │                      │                                 │    │
-                     │                      ▼                                 │    │
-                     │  ┌───────────────────────────────────────────┐        │    │
-                     │  │             Event Bus                     │        │    │
-                     │  │  - Pub/sub with ULID ordering             │        │    │
-                     │  │  - Stream isolation (location-based)      │        │    │
-                     │  │  - Plugin event delivery                  │        │    │
-                     │  └───────────────────┬───────────────────────┘        │    │
-                     │                      │                                 │    │
-                     │  ┌───────────────────┴───────────────────┐            │    │
-                     │  │                   │                   │            │    │
-                     │  ▼                   ▼                   ▼            │    │
-                     │  ┌──────────┐  ┌──────────┐  ┌────────────────┐       │    │
-                     │  │ World    │  │ Access   │  │ Plugin Host    │       │    │
-                     │  │ Engine   │  │ Control  │  │                │       │    │
-                     │  ├──────────┤  ├──────────┤  │ ┌────────────┐ │       │    │
-                     │  │Locations │  │ Roles &  │  │ │ Lua Runtime│ │       │    │
-                     │  │Exits     │  │ Policies │  │ │ (gopher-lua)│ │       │    │
-                     │  │Objects   │  │          │  │ └────────────┘ │       │    │
-                     │  │Characters│  │          │  │ ┌────────────┐ │       │    │
-                     │  └────┬─────┘  └────┬─────┘  │ │ go-plugin  │ │       │    │
-                     │       │             │        │ │ (gRPC)     │ │       │    │
-                     │       │             │        │ └────────────┘ │       │    │
-                     │       │             │        └────────────────┘       │    │
-                     │       ▼             ▼                                 │    │
-                     │  ┌───────────────────────────────────────────┐        │    │
-                     │  │           PostgreSQL                      │        │    │
-                     │  │  - Event store (append-only)              │        │    │
-                     │  │  - World state (locations, objects, etc)  │        │    │
-                     │  │  - Player accounts & sessions             │        │    │
-                     │  └───────────────────────────────────────────┘        │    │
-                     │                                                       │    │
-                     │  ┌───────────────────────────────────────────┐        │    │
-┌─────────┐          │  │           Control Plane (gRPC)            │◄───────┘    │
-│ Admin   │◄────────►│  │  - Server management                      │             │
-│ Tools   │          │  │  - Player administration                  │             │
-└─────────┘          │  │  - Plugin lifecycle                       │             │
-                     │  └───────────────────────────────────────────┘             │
-                     │                                                             │
-                     └─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Clients["External Clients"]
+        TC[Telnet Clients]
+        WC[SvelteKit PWA]
+        Admin[Admin Tools]
+    end
+
+    subgraph HoloMUSH["HoloMUSH Server"]
+        subgraph Gateway["Gateway Layer"]
+            TA[Telnet Adapter]
+            WS[WebSocket Adapter]
+        end
+
+        SM[Session Manager<br/><i>Connection lifecycle<br/>Reconnection support<br/>Character binding</i>]
+
+        EB[Event Bus<br/><i>Pub/sub with ULID ordering<br/>Stream isolation<br/>Plugin event delivery</i>]
+
+        subgraph Core["Core Services"]
+            WE[World Engine<br/><i>Locations, Exits<br/>Objects, Characters</i>]
+            AC[Access Control<br/><i>Roles & Policies</i>]
+            subgraph PH["Plugin Host"]
+                LUA[Lua Runtime<br/><i>gopher-lua</i>]
+                GP[Binary Plugins<br/><i>go-plugin / gRPC</i>]
+            end
+        end
+
+        CP[Control Plane<br/><i>Server management<br/>Player administration<br/>Plugin lifecycle</i>]
+
+        DB[(PostgreSQL<br/><i>Event store<br/>World state<br/>Accounts</i>)]
+    end
+
+    TC <--> TA
+    WC <--> WS
+    Admin <--> CP
+
+    TA --> SM
+    WS --> SM
+    SM --> EB
+    EB --> WE
+    EB --> AC
+    EB --> PH
+    WE --> DB
+    AC --> DB
+    CP --> DB
 ```
 
 ## Core Components
@@ -87,11 +76,13 @@ Events enable:
 
 Handles connection lifecycle with reconnection support:
 
-```text
-Connect → Authenticate → Select Character → Resume/Create Session → Disconnect
-                                                    ↑
-                                                    │
-                                        Reconnect ──┘
+```mermaid
+flowchart LR
+    A[Connect] --> B[Authenticate]
+    B --> C[Select Character]
+    C --> D[Resume/Create Session]
+    D --> E[Disconnect]
+    F[Reconnect] --> D
 ```
 
 Sessions persist across disconnects, allowing players to resume where they left off.
@@ -100,14 +91,13 @@ Sessions persist across disconnects, allowing players to resume where they left 
 
 Manages the virtual world structure:
 
-```text
-Location ◄──1:N──► Exit ──► Location
-    │
-    1:N
-    │
-Character ◄──1:N──► Object (inventory)
-    │
-Location ◄──1:N──► Object (in room)
+```mermaid
+erDiagram
+    Location ||--o{ Exit : "has"
+    Exit }o--|| Location : "leads to"
+    Location ||--o{ Character : "contains"
+    Character ||--o{ Object : "carries"
+    Location ||--o{ Object : "contains"
 ```
 
 | Entity        | Description                                   |
@@ -126,21 +116,22 @@ Two-tier architecture for extensibility:
 | **Lua Scripts** | gopher-lua       | Commands, simple behaviors   |
 | **Go Plugins**  | go-plugin (gRPC) | Complex systems (combat, AI) |
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                       Go Core                               │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────┐    ┌─────────────────────────┐     │
-│  │   Lua Runtime       │    │   go-plugin Host        │     │
-│  │   (gopher-lua)      │    │   (gRPC subprocess)     │     │
-│  │   - In-process      │    │   - Process isolated    │     │
-│  │   - ~40KB/instance  │    │   - Full language power │     │
-│  │   - Sandboxed       │    │   - External API access │     │
-│  └──────────┬──────────┘    └───────────┬─────────────┘     │
-└─────────────┼───────────────────────────┼───────────────────┘
-              │                           │
-        *.lua files                 plugin binaries
-        (drop in folder)            (per platform)
+```mermaid
+flowchart TB
+    subgraph GoCore["Go Core"]
+        subgraph Lua["Lua Runtime (gopher-lua)"]
+            L1["In-process"]
+            L2["~40KB/instance"]
+            L3["Sandboxed"]
+        end
+        subgraph GoPlugin["go-plugin Host (gRPC)"]
+            G1["Process isolated"]
+            G2["Full language power"]
+            G3["External API access"]
+        end
+    end
+    Lua --> LuaFiles["*.lua files<br/>(drop in folder)"]
+    GoPlugin --> Binaries["plugin binaries<br/>(per platform)"]
 ```
 
 Plugins declare capabilities and the host enforces them:
