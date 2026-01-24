@@ -59,6 +59,21 @@ func (c *Containment) Type() ContainmentType {
 	return ContainmentTypeNone
 }
 
+// InLocation creates a Containment for a location.
+func InLocation(id ulid.ULID) Containment {
+	return Containment{LocationID: &id}
+}
+
+// HeldByCharacter creates a Containment for a character.
+func HeldByCharacter(id ulid.ULID) Containment {
+	return Containment{CharacterID: &id}
+}
+
+// ContainedInObject creates a Containment for an object container.
+func ContainedInObject(id ulid.ULID) Containment {
+	return Containment{ObjectID: &id}
+}
+
 // ID returns the ID of the container (location, character, or object).
 func (c *Containment) ID() *ulid.ULID {
 	if c.LocationID != nil {

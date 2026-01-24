@@ -14,6 +14,42 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+func TestContainment_Constructors(t *testing.T) {
+	locID := ulid.Make()
+	charID := ulid.Make()
+	objID := ulid.Make()
+
+	t.Run("InLocation creates valid containment", func(t *testing.T) {
+		c := world.InLocation(locID)
+		require.NoError(t, c.Validate())
+		assert.Equal(t, world.ContainmentTypeLocation, c.Type())
+		assert.Equal(t, &locID, c.ID())
+		assert.Equal(t, &locID, c.LocationID)
+		assert.Nil(t, c.CharacterID)
+		assert.Nil(t, c.ObjectID)
+	})
+
+	t.Run("HeldByCharacter creates valid containment", func(t *testing.T) {
+		c := world.HeldByCharacter(charID)
+		require.NoError(t, c.Validate())
+		assert.Equal(t, world.ContainmentTypeCharacter, c.Type())
+		assert.Equal(t, &charID, c.ID())
+		assert.Nil(t, c.LocationID)
+		assert.Equal(t, &charID, c.CharacterID)
+		assert.Nil(t, c.ObjectID)
+	})
+
+	t.Run("ContainedInObject creates valid containment", func(t *testing.T) {
+		c := world.ContainedInObject(objID)
+		require.NoError(t, c.Validate())
+		assert.Equal(t, world.ContainmentTypeObject, c.Type())
+		assert.Equal(t, &objID, c.ID())
+		assert.Nil(t, c.LocationID)
+		assert.Nil(t, c.CharacterID)
+		assert.Equal(t, &objID, c.ObjectID)
+	})
+}
+
 func TestContainment_Validate(t *testing.T) {
 	locID := ulid.Make()
 	charID := ulid.Make()
