@@ -52,11 +52,11 @@ func TestEmitMoveEvent(t *testing.T) {
 	t.Run("nil emitter is a no-op", func(t *testing.T) {
 		payload := world.MovePayload{
 			EntityType: world.EntityTypeObject,
-			EntityID:   objID.String(),
+			EntityID:   objID,
 			FromType:   world.ContainmentTypeLocation,
-			FromID:     fromLocID.String(),
+			FromID:     &fromLocID,
 			ToType:     world.ContainmentTypeLocation,
-			ToID:       toLocID.String(),
+			ToID:       toLocID,
 		}
 
 		err := world.EmitMoveEvent(ctx, nil, payload)
@@ -67,11 +67,11 @@ func TestEmitMoveEvent(t *testing.T) {
 		emitter := &mockEventEmitter{}
 		payload := world.MovePayload{
 			EntityType: "", // Invalid: empty entity type
-			EntityID:   objID.String(),
+			EntityID:   objID,
 			FromType:   world.ContainmentTypeLocation,
-			FromID:     fromLocID.String(),
+			FromID:     &fromLocID,
 			ToType:     world.ContainmentTypeLocation,
-			ToID:       toLocID.String(),
+			ToID:       toLocID,
 		}
 
 		err := world.EmitMoveEvent(ctx, emitter, payload)
@@ -84,11 +84,11 @@ func TestEmitMoveEvent(t *testing.T) {
 		emitter := &mockEventEmitter{}
 		payload := world.MovePayload{
 			EntityType: world.EntityTypeObject,
-			EntityID:   objID.String(),
+			EntityID:   objID,
 			FromType:   world.ContainmentTypeLocation,
-			FromID:     fromLocID.String(),
+			FromID:     &fromLocID,
 			ToType:     world.ContainmentTypeLocation,
-			ToID:       toLocID.String(),
+			ToID:       toLocID,
 		}
 
 		err := world.EmitMoveEvent(ctx, emitter, payload)
@@ -110,11 +110,11 @@ func TestEmitMoveEvent(t *testing.T) {
 		emitter := &mockEventEmitter{err: emitErr}
 		payload := world.MovePayload{
 			EntityType: world.EntityTypeObject,
-			EntityID:   objID.String(),
+			EntityID:   objID,
 			FromType:   world.ContainmentTypeLocation,
-			FromID:     fromLocID.String(),
+			FromID:     &fromLocID,
 			ToType:     world.ContainmentTypeLocation,
-			ToID:       toLocID.String(),
+			ToID:       toLocID,
 		}
 
 		err := world.EmitMoveEvent(ctx, emitter, payload)
@@ -209,13 +209,16 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 
 func TestEmitObjectGiveEvent(t *testing.T) {
 	ctx := context.Background()
+	objID := ulid.Make()
+	fromCharID := ulid.Make()
+	toCharID := ulid.Make()
 
 	t.Run("nil emitter is a no-op", func(t *testing.T) {
 		payload := world.ObjectGivePayload{
-			ObjectID:        "obj-123",
+			ObjectID:        objID,
 			ObjectName:      "Sword",
-			FromCharacterID: "char-1",
-			ToCharacterID:   "char-2",
+			FromCharacterID: fromCharID,
+			ToCharacterID:   toCharID,
 		}
 
 		err := world.EmitObjectGiveEvent(ctx, nil, payload)
@@ -225,10 +228,10 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 	t.Run("emits event to character stream", func(t *testing.T) {
 		emitter := &mockEventEmitter{}
 		payload := world.ObjectGivePayload{
-			ObjectID:        "obj-123",
+			ObjectID:        objID,
 			ObjectName:      "Sword",
-			FromCharacterID: "char-1",
-			ToCharacterID:   "char-2",
+			FromCharacterID: fromCharID,
+			ToCharacterID:   toCharID,
 		}
 
 		err := world.EmitObjectGiveEvent(ctx, emitter, payload)
@@ -236,7 +239,7 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "character:char-2", call.Stream)
+		assert.Equal(t, "character:"+toCharID.String(), call.Stream)
 		assert.Equal(t, "object_give", call.EventType)
 
 		var decoded world.ObjectGivePayload
@@ -248,7 +251,7 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 	t.Run("returns error for invalid payload", func(t *testing.T) {
 		emitter := &mockEventEmitter{}
 		payload := world.ObjectGivePayload{
-			ObjectID: "", // Invalid - empty
+			// ObjectID is zero value - invalid
 		}
 
 		err := world.EmitObjectGiveEvent(ctx, emitter, payload)
@@ -260,10 +263,10 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 		emitErr := errors.New("emit failed")
 		emitter := &mockEventEmitter{err: emitErr}
 		payload := world.ObjectGivePayload{
-			ObjectID:        "obj-123",
+			ObjectID:        objID,
 			ObjectName:      "Sword",
-			FromCharacterID: "char-1",
-			ToCharacterID:   "char-2",
+			FromCharacterID: fromCharID,
+			ToCharacterID:   toCharID,
 		}
 
 		err := world.EmitObjectGiveEvent(ctx, emitter, payload)
@@ -322,11 +325,11 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		err = json.Unmarshal(call.Payload, &decoded)
 		require.NoError(t, err)
 		assert.Equal(t, world.EntityTypeObject, decoded.EntityType)
-		assert.Equal(t, objID.String(), decoded.EntityID)
+		assert.Equal(t, objID, decoded.EntityID)
 		assert.Equal(t, world.ContainmentTypeLocation, decoded.FromType)
-		assert.Equal(t, fromLocID.String(), decoded.FromID)
+		assert.Equal(t, &fromLocID, decoded.FromID)
 		assert.Equal(t, world.ContainmentTypeLocation, decoded.ToType)
-		assert.Equal(t, toLocID.String(), decoded.ToID)
+		assert.Equal(t, toLocID, decoded.ToID)
 	})
 
 	t.Run("works without event emitter configured", func(t *testing.T) {
@@ -387,11 +390,11 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		err = json.Unmarshal(call.Payload, &decoded)
 		require.NoError(t, err)
 		assert.Equal(t, world.EntityTypeObject, decoded.EntityType)
-		assert.Equal(t, objID.String(), decoded.EntityID)
+		assert.Equal(t, objID, decoded.EntityID)
 		assert.Equal(t, world.ContainmentTypeNone, decoded.FromType)
-		assert.Equal(t, "", decoded.FromID)
+		assert.Nil(t, decoded.FromID)
 		assert.Equal(t, world.ContainmentTypeLocation, decoded.ToType)
-		assert.Equal(t, toLocID.String(), decoded.ToID)
+		assert.Equal(t, toLocID, decoded.ToID)
 	})
 
 	t.Run("succeeds even when event emitter fails", func(t *testing.T) {

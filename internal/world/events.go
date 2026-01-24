@@ -34,7 +34,7 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 	}
 
 	// Emit to destination location stream
-	stream := "location:" + payload.ToID
+	stream := "location:" + payload.ToID.String()
 	if err := emitter.Emit(ctx, stream, "move", data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "move").Wrap(err)
 	}
@@ -93,7 +93,7 @@ func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload Obje
 	}
 
 	// Emit to the recipient character's stream
-	stream := "character:" + payload.ToCharacterID
+	stream := "character:" + payload.ToCharacterID.String()
 	if err := emitter.Emit(ctx, stream, "object_give", data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "object_give").Wrap(err)
 	}

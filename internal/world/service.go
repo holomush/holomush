@@ -386,11 +386,11 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	// Emit move event (non-blocking - failures are logged but don't fail the operation)
 	payload := MovePayload{
 		EntityType: EntityTypeObject,
-		EntityID:   id.String(),
+		EntityID:   id,
 		FromType:   from.Type(),
-		FromID:     ulidPtrToString(from.ID()),
+		FromID:     from.ID(), // Can be nil for first-time placements
 		ToType:     to.Type(),
-		ToID:       ulidPtrToString(to.ID()),
+		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
 		slog.Warn("failed to emit move event", "object_id", id.String(), "error", err)
@@ -458,10 +458,3 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 	return participants, nil
 }
 
-// ulidPtrToString safely converts a ULID pointer to string, returning empty string for nil.
-func ulidPtrToString(id *ulid.ULID) string {
-	if id == nil {
-		return ""
-	}
-	return id.String()
-}
