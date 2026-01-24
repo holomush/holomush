@@ -16,6 +16,30 @@ HoloMUSH is a modern MUSH platform with:
 
 ---
 
+## Documentation Structure
+
+| Directory     | Purpose                                      | Audience                |
+| ------------- | -------------------------------------------- | ----------------------- |
+| `site/docs/`  | Public documentation website (zensical)      | All users               |
+| `docs/plans/` | Implementation plans, in-progress work       | Contributors (internal) |
+| `docs/specs/` | Design specifications, architectural designs | Contributors (internal) |
+
+**Site documentation** (`site/docs/`) is organized by audience:
+
+- `contributors/` — For people contributing to the HoloMUSH codebase
+- `developers/` — For plugin developers building on HoloMUSH
+- `operators/` — For people running HoloMUSH servers
+
+**Build commands:**
+
+```bash
+task docs:setup   # Install documentation dependencies
+task docs:serve   # Start local dev server
+task docs:build   # Build static site
+```
+
+---
+
 ## ⚠️ Protected Branch Policy
 
 **`main` is a protected branch.** Direct commits to main are not allowed.
@@ -28,7 +52,7 @@ HoloMUSH is a modern MUSH platform with:
 | **MUST** use squash merge          | All PRs are squash merged to maintain clean history |
 | **MUST NOT** push directly to main | Branch protection enforces this                     |
 
-**See:** [Pull Request Guide](docs/reference/pull-request-guide.md) for the complete workflow.
+**See:** [Pull Request Guide](site/docs/contributors/pr-guide.md) for the complete workflow.
 
 ---
 
@@ -103,7 +127,7 @@ bd close <task-id>
 ### Code Review Requirement
 
 All tasks MUST be reviewed before completion. See
-[Pull Request Guide](docs/reference/pull-request-guide.md) for the complete workflow.
+[Pull Request Guide](site/docs/contributors/pr-guide.md) for the complete workflow.
 
 | Requirement                                | Description                                          |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -457,9 +481,13 @@ api/                 # Protocol definitions
   proto/             # Protobuf service definitions
 cmd/holomush/        # Server entry point
 docs/
-  plans/             # Implementation plans
-  reference/         # API documentation
-  specs/             # Specifications
+  plans/             # Implementation plans (internal, in-progress work)
+  specs/             # Design specifications (internal)
+site/                # Documentation website (zensical)
+  docs/
+    contributors/    # For codebase contributors
+    developers/      # For plugin developers
+    operators/       # For server operators
 internal/            # Private implementation
   control/           # Control plane (admin API)
   core/              # Event system, sessions, world engine
