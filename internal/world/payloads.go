@@ -3,38 +3,59 @@
 
 package world
 
-// MovePayload represents a move event for characters or objects.
-type MovePayload struct {
-	EntityType string `json:"entity_type"` // "character" | "object"
-	EntityID   string `json:"entity_id"`
-	FromType   string `json:"from_type"` // "location" | "character" | "object"
-	FromID     string `json:"from_id"`
-	ToType     string `json:"to_type"` // "location" | "character" | "object"
-	ToID       string `json:"to_id"`
-	ExitID     string `json:"exit_id,omitempty"`
-	ExitName   string `json:"exit_name,omitempty"`
-}
+// EntityType represents the type of entity being moved.
+type EntityType string
 
 // Valid entity types for move payloads.
 const (
-	EntityTypeCharacter = "character"
-	EntityTypeObject    = "object"
+	EntityTypeCharacter EntityType = "character"
+	EntityTypeObject    EntityType = "object"
 )
+
+// IsValid returns true if the entity type is a valid move entity.
+func (e EntityType) IsValid() bool {
+	return e == EntityTypeCharacter || e == EntityTypeObject
+}
+
+// ContainmentType represents where an entity is contained.
+type ContainmentType string
 
 // Valid containment types for move payloads.
 const (
-	ContainmentTypeLocation  = "location"
-	ContainmentTypeCharacter = "character"
-	ContainmentTypeObject    = "object"
-	ContainmentTypeNone      = "none" // Used for first-time placements (no prior containment)
+	ContainmentTypeLocation  ContainmentType = "location"
+	ContainmentTypeCharacter ContainmentType = "character"
+	ContainmentTypeObject    ContainmentType = "object"
+	ContainmentTypeNone      ContainmentType = "none" // Used for first-time placements (no prior containment)
 )
+
+// IsValid returns true if the containment type is a valid destination (not "none").
+func (c ContainmentType) IsValid() bool {
+	return c == ContainmentTypeLocation || c == ContainmentTypeCharacter || c == ContainmentTypeObject
+}
+
+// IsValidOrNone returns true if the containment type is valid or "none" (for sources).
+func (c ContainmentType) IsValidOrNone() bool {
+	return c.IsValid() || c == ContainmentTypeNone
+}
+
+// MovePayload represents a move event for characters or objects.
+type MovePayload struct {
+	EntityType EntityType      `json:"entity_type"` // "character" | "object"
+	EntityID   string          `json:"entity_id"`
+	FromType   ContainmentType `json:"from_type"` // "location" | "character" | "object" | "none"
+	FromID     string          `json:"from_id,omitempty"`
+	ToType     ContainmentType `json:"to_type"` // "location" | "character" | "object"
+	ToID       string          `json:"to_id"`
+	ExitID     string          `json:"exit_id,omitempty"`
+	ExitName   string          `json:"exit_name,omitempty"`
+}
 
 // Validate checks that the MovePayload has all required fields and valid values.
 func (p *MovePayload) Validate() error {
 	if p.EntityType == "" {
 		return &ValidationError{Field: "entity_type", Message: "cannot be empty"}
 	}
-	if p.EntityType != EntityTypeCharacter && p.EntityType != EntityTypeObject {
+	if !p.EntityType.IsValid() {
 		return &ValidationError{Field: "entity_type", Message: "must be 'character' or 'object'"}
 	}
 	if p.EntityID == "" {
@@ -43,7 +64,7 @@ func (p *MovePayload) Validate() error {
 	if p.FromType == "" {
 		return &ValidationError{Field: "from_type", Message: "cannot be empty"}
 	}
-	if !isValidContainmentTypeOrNone(p.FromType) {
+	if !p.FromType.IsValidOrNone() {
 		return &ValidationError{Field: "from_type", Message: "must be 'location', 'character', 'object', or 'none'"}
 	}
 	// FromID can be empty only for first-time placements (FromType == "none")
@@ -53,23 +74,13 @@ func (p *MovePayload) Validate() error {
 	if p.ToType == "" {
 		return &ValidationError{Field: "to_type", Message: "cannot be empty"}
 	}
-	if !isValidContainmentType(p.ToType) {
+	if !p.ToType.IsValid() {
 		return &ValidationError{Field: "to_type", Message: "must be 'location', 'character', or 'object'"}
 	}
 	if p.ToID == "" {
 		return &ValidationError{Field: "to_id", Message: "cannot be empty"}
 	}
 	return nil
-}
-
-// isValidContainmentType checks if the type is a valid containment type.
-func isValidContainmentType(t string) bool {
-	return t == ContainmentTypeLocation || t == ContainmentTypeCharacter || t == ContainmentTypeObject
-}
-
-// isValidContainmentTypeOrNone checks if the type is a valid containment type or "none".
-func isValidContainmentTypeOrNone(t string) bool {
-	return isValidContainmentType(t) || t == ContainmentTypeNone
 }
 
 // ObjectGivePayload represents an object transfer between characters.

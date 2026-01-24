@@ -74,3 +74,28 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 	}
 	return nil
 }
+
+// EmitObjectGiveEvent emits an object give event for transfers between characters.
+// If emitter is nil, this is a no-op.
+// Returns a validation error if the payload is invalid.
+func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload ObjectGivePayload) error {
+	if emitter == nil {
+		return nil
+	}
+
+	if err := payload.Validate(); err != nil {
+		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", "object_give").Wrap(err)
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", "object_give").Wrap(err)
+	}
+
+	// Emit to the recipient character's stream
+	stream := "character:" + payload.ToCharacterID
+	if err := emitter.Emit(ctx, stream, "object_give", data); err != nil {
+		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "object_give").Wrap(err)
+	}
+	return nil
+}

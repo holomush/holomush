@@ -417,6 +417,68 @@ func TestObjectGivePayload_Validate(t *testing.T) {
 	}
 }
 
+func TestEntityType_IsValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		et      world.EntityType
+		isValid bool
+	}{
+		{"character is valid", world.EntityTypeCharacter, true},
+		{"object is valid", world.EntityTypeObject, true},
+		{"empty is invalid", world.EntityType(""), false},
+		{"unknown is invalid", world.EntityType("unknown"), false},
+		{"location is invalid", world.EntityType("location"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.isValid, tt.et.IsValid())
+		})
+	}
+}
+
+func TestContainmentType_IsValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		ct      world.ContainmentType
+		isValid bool
+	}{
+		{"location is valid", world.ContainmentTypeLocation, true},
+		{"character is valid", world.ContainmentTypeCharacter, true},
+		{"object is valid", world.ContainmentTypeObject, true},
+		{"none is invalid for IsValid", world.ContainmentTypeNone, false},
+		{"empty is invalid", world.ContainmentType(""), false},
+		{"unknown is invalid", world.ContainmentType("unknown"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.isValid, tt.ct.IsValid())
+		})
+	}
+}
+
+func TestContainmentType_IsValidOrNone(t *testing.T) {
+	tests := []struct {
+		name    string
+		ct      world.ContainmentType
+		isValid bool
+	}{
+		{"location is valid", world.ContainmentTypeLocation, true},
+		{"character is valid", world.ContainmentTypeCharacter, true},
+		{"object is valid", world.ContainmentTypeObject, true},
+		{"none is valid for IsValidOrNone", world.ContainmentTypeNone, true},
+		{"empty is invalid", world.ContainmentType(""), false},
+		{"unknown is invalid", world.ContainmentType("unknown"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.isValid, tt.ct.IsValidOrNone())
+		})
+	}
+}
+
 func TestPayloads_RoundTrip(t *testing.T) {
 	t.Run("move payload round trip", func(t *testing.T) {
 		original := world.MovePayload{

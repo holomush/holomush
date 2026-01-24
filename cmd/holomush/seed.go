@@ -39,7 +39,8 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Add timeout to prevent indefinite hangs
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use cmd.Context() to respect SIGINT/SIGTERM signals
+	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 	defer cancel()
 
 	cmd.Println("Connecting to database...")

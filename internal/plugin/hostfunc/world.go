@@ -40,6 +40,10 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 		roomID := L.CheckString(1)
 		id, err := ulid.Parse(roomID)
 		if err != nil {
+			slog.Debug("query_room: invalid room ID format",
+				"plugin", pluginName,
+				"room_id", roomID,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("invalid room ID: " + err.Error()))
 			return 2
@@ -92,6 +96,10 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 		charID := L.CheckString(1)
 		id, err := ulid.Parse(charID)
 		if err != nil {
+			slog.Debug("query_character: invalid character ID format",
+				"plugin", pluginName,
+				"character_id", charID,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("invalid character ID: " + err.Error()))
 			return 2
@@ -145,6 +153,10 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 		roomID := L.CheckString(1)
 		id, err := ulid.Parse(roomID)
 		if err != nil {
+			slog.Debug("query_room_characters: invalid room ID format",
+				"plugin", pluginName,
+				"room_id", roomID,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("invalid room ID: " + err.Error()))
 			return 2

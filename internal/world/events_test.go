@@ -207,6 +207,72 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 	})
 }
 
+func TestEmitObjectGiveEvent(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("nil emitter is a no-op", func(t *testing.T) {
+		payload := world.ObjectGivePayload{
+			ObjectID:        "obj-123",
+			ObjectName:      "Sword",
+			FromCharacterID: "char-1",
+			ToCharacterID:   "char-2",
+		}
+
+		err := world.EmitObjectGiveEvent(ctx, nil, payload)
+		require.NoError(t, err)
+	})
+
+	t.Run("emits event to character stream", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		payload := world.ObjectGivePayload{
+			ObjectID:        "obj-123",
+			ObjectName:      "Sword",
+			FromCharacterID: "char-1",
+			ToCharacterID:   "char-2",
+		}
+
+		err := world.EmitObjectGiveEvent(ctx, emitter, payload)
+		require.NoError(t, err)
+
+		require.Len(t, emitter.calls, 1)
+		call := emitter.calls[0]
+		assert.Equal(t, "character:char-2", call.Stream)
+		assert.Equal(t, "object_give", call.EventType)
+
+		var decoded world.ObjectGivePayload
+		err = json.Unmarshal(call.Payload, &decoded)
+		require.NoError(t, err)
+		assert.Equal(t, payload, decoded)
+	})
+
+	t.Run("returns error for invalid payload", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		payload := world.ObjectGivePayload{
+			ObjectID: "", // Invalid - empty
+		}
+
+		err := world.EmitObjectGiveEvent(ctx, emitter, payload)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_PAYLOAD_INVALID")
+	})
+
+	t.Run("returns error when emitter fails", func(t *testing.T) {
+		emitErr := errors.New("emit failed")
+		emitter := &mockEventEmitter{err: emitErr}
+		payload := world.ObjectGivePayload{
+			ObjectID:        "obj-123",
+			ObjectName:      "Sword",
+			FromCharacterID: "char-1",
+			ToCharacterID:   "char-2",
+		}
+
+		err := world.EmitObjectGiveEvent(ctx, emitter, payload)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		assert.ErrorIs(t, err, emitErr)
+	})
+}
+
 // mockAccessControl is a test mock for AccessControl.
 type mockAccessControlForEvents struct {
 	allowAll bool
@@ -352,7 +418,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		// Operation should succeed despite event emission failure (fire-and-forget)
 		err := svc.MoveObject(ctx, subjectID, objID, to)
 		require.NoError(t, err)
-		// Verify the emitter was called (even though it failed)
-		require.Len(t, emitter.calls, 0, "emitter should have been called but failed before recording")
+		// When mockEventEmitter.err is set, it returns error before recording to calls slice
+		require.Len(t, emitter.calls, 0, "mock returns error before recording call")
 	})
 }

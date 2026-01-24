@@ -71,12 +71,12 @@ func TestContainment_Type(t *testing.T) {
 	tests := []struct {
 		name        string
 		containment world.Containment
-		expected    string
+		expected    world.ContainmentType
 	}{
-		{"location", world.Containment{LocationID: &locID}, "location"},
-		{"character", world.Containment{CharacterID: &charID}, "character"},
-		{"object", world.Containment{ObjectID: &objID}, "object"},
-		{"empty", world.Containment{}, "none"},
+		{"location", world.Containment{LocationID: &locID}, world.ContainmentTypeLocation},
+		{"character", world.Containment{CharacterID: &charID}, world.ContainmentTypeCharacter},
+		{"object", world.Containment{ObjectID: &objID}, world.ContainmentTypeObject},
+		{"empty", world.Containment{}, world.ContainmentTypeNone},
 	}
 
 	for _, tt := range tests {
