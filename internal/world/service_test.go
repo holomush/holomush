@@ -189,6 +189,27 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockAC.AssertExpectations(t)
 	})
+
+	t.Run("returns not found when location does not exist", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Update(ctx, loc).Return(world.ErrNotFound)
+
+		err := svc.UpdateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+		mockAC.AssertExpectations(t)
+	})
 }
 
 func TestWorldService_DeleteLocation(t *testing.T) {
@@ -402,6 +423,27 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns not found when exit does not exist", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(world.ErrNotFound)
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
 		mockAC.AssertExpectations(t)
 	})
 }
@@ -622,6 +664,27 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		err := svc.UpdateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns not found when object does not exist", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{ID: objID, Name: "sword", LocationID: &locationID}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(world.ErrNotFound)
+
+		err := svc.UpdateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 		mockAC.AssertExpectations(t)
 	})
 }

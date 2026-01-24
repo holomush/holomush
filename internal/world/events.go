@@ -43,9 +43,13 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 
 // EmitObjectCreateEvent emits an object creation event.
 // If emitter is nil, this is a no-op.
+// Returns an error if obj is nil.
 func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Object) error {
 	if emitter == nil {
 		return nil
+	}
+	if obj == nil {
+		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", "object_create").Errorf("object cannot be nil")
 	}
 
 	payload := map[string]string{

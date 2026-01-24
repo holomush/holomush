@@ -195,6 +195,16 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		assert.ErrorIs(t, err, emitErr)
 	})
+
+	t.Run("returns error when object is nil", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+
+		err := world.EmitObjectCreateEvent(ctx, emitter, nil)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_PAYLOAD_INVALID")
+		assert.Contains(t, err.Error(), "nil")
+		assert.Empty(t, emitter.calls, "should not emit when object is nil")
+	})
 }
 
 // mockAccessControl is a test mock for AccessControl.
