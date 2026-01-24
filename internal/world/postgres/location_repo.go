@@ -27,39 +27,18 @@ func NewLocationRepository(pool *pgxpool.Pool) *LocationRepository {
 
 // Get retrieves a location by ID.
 func (r *LocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.Location, error) {
-	var loc world.Location
-	var idStr string
-	var shadowsIDStr *string
-	var ownerIDStr *string
-
-	err := r.pool.QueryRow(ctx, `
+	row := r.pool.QueryRow(ctx, `
 		SELECT id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at
 		FROM locations WHERE id = $1
-	`, id.String()).Scan(
-		&idStr, &loc.Type, &shadowsIDStr, &loc.Name, &loc.Description,
-		&ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
-	)
+	`, id.String())
+	loc, err := scanLocationRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.With("id", id.String()).Wrap(ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "get location").With("id", id.String()).Wrap(err)
 	}
-
-	loc.ID, err = ulid.Parse(idStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse location id").With("id", idStr).Wrap(err)
-	}
-	loc.ShadowsID, err = parseOptionalULID(shadowsIDStr, "shadows_id")
-	if err != nil {
-		return nil, err
-	}
-	loc.OwnerID, err = parseOptionalULID(ownerIDStr, "owner_id")
-	if err != nil {
-		return nil, err
-	}
-
-	return &loc, nil
+	return loc, nil
 }
 
 // Create persists a new location.
@@ -138,32 +117,65 @@ func (r *LocationRepository) GetShadowedBy(ctx context.Context, id ulid.ULID) ([
 	return scanLocations(rows)
 }
 
+// locationScanFields holds intermediate scan values for location parsing.
+type locationScanFields struct {
+	idStr        string
+	shadowsIDStr *string
+	ownerIDStr   *string
+}
+
+// scanLocationRow scans a single location from a row.
+func scanLocationRow(row pgx.Row) (*world.Location, error) {
+	var loc world.Location
+	var f locationScanFields
+
+	err := row.Scan(
+		&f.idStr, &loc.Type, &f.shadowsIDStr, &loc.Name, &loc.Description,
+		&f.ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
+	)
+	if err != nil {
+		return nil, oops.With("operation", "scan location").Wrap(err)
+	}
+
+	if err := parseLocationFromFields(&f, &loc); err != nil {
+		return nil, err
+	}
+
+	return &loc, nil
+}
+
+// parseLocationFromFields converts scan fields to location fields.
+func parseLocationFromFields(f *locationScanFields, loc *world.Location) error {
+	var err error
+	loc.ID, err = ulid.Parse(f.idStr)
+	if err != nil {
+		return oops.With("operation", "parse location id").With("id", f.idStr).Wrap(err)
+	}
+	loc.ShadowsID, err = parseOptionalULID(f.shadowsIDStr, "shadows_id")
+	if err != nil {
+		return err
+	}
+	loc.OwnerID, err = parseOptionalULID(f.ownerIDStr, "owner_id")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func scanLocations(rows pgx.Rows) ([]*world.Location, error) {
 	locations := make([]*world.Location, 0)
 	for rows.Next() {
 		var loc world.Location
-		var idStr string
-		var shadowsIDStr, ownerIDStr *string
+		var f locationScanFields
 
 		if err := rows.Scan(
-			&idStr, &loc.Type, &shadowsIDStr, &loc.Name, &loc.Description,
-			&ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
+			&f.idStr, &loc.Type, &f.shadowsIDStr, &loc.Name, &loc.Description,
+			&f.ownerIDStr, &loc.ReplayPolicy, &loc.CreatedAt, &loc.ArchivedAt,
 		); err != nil {
 			return nil, oops.With("operation", "scan location").Wrap(err)
 		}
 
-		id, err := ulid.Parse(idStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse location id").With("id", idStr).Wrap(err)
-		}
-		loc.ID = id
-
-		loc.ShadowsID, err = parseOptionalULID(shadowsIDStr, "shadows_id")
-		if err != nil {
-			return nil, err
-		}
-		loc.OwnerID, err = parseOptionalULID(ownerIDStr, "owner_id")
-		if err != nil {
+		if err := parseLocationFromFields(&f, &loc); err != nil {
 			return nil, err
 		}
 

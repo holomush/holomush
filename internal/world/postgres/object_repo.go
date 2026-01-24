@@ -35,47 +35,19 @@ func NewObjectRepositoryWithDepth(pool *pgxpool.Pool, maxNestingDepth int) *Obje
 
 // Get retrieves an object by ID.
 func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object, error) {
-	var obj world.Object
-	var idStr string
-	var locationIDStr, heldByStr, containedInStr, ownerIDStr *string
-
-	err := r.pool.QueryRow(ctx, `
+	row := r.pool.QueryRow(ctx, `
 		SELECT id, name, description, location_id, held_by_character_id,
 		       contained_in_object_id, is_container, owner_id, created_at
 		FROM objects WHERE id = $1
-	`, id.String()).Scan(
-		&idStr, &obj.Name, &obj.Description, &locationIDStr, &heldByStr,
-		&containedInStr, &obj.IsContainer, &ownerIDStr, &obj.CreatedAt,
-	)
+	`, id.String())
+	obj, err := scanObjectRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.With("id", id.String()).Wrap(ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "get object").With("id", id.String()).Wrap(err)
 	}
-
-	obj.ID, err = ulid.Parse(idStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse object id").With("id", idStr).Wrap(err)
-	}
-	obj.LocationID, err = parseOptionalULID(locationIDStr, "location_id")
-	if err != nil {
-		return nil, err
-	}
-	obj.HeldByCharacterID, err = parseOptionalULID(heldByStr, "held_by_character_id")
-	if err != nil {
-		return nil, err
-	}
-	obj.ContainedInObjectID, err = parseOptionalULID(containedInStr, "contained_in_object_id")
-	if err != nil {
-		return nil, err
-	}
-	obj.OwnerID, err = parseOptionalULID(ownerIDStr, "owner_id")
-	if err != nil {
-		return nil, err
-	}
-
-	return &obj, nil
+	return obj, nil
 }
 
 // Create persists a new object.
@@ -383,39 +355,75 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 	return nil
 }
 
+// objectScanFields holds intermediate scan values for object parsing.
+type objectScanFields struct {
+	idStr         string
+	locationIDStr *string
+	heldByStr     *string
+	containedIn   *string
+	ownerIDStr    *string
+}
+
+// scanObjectRow scans a single object from a row.
+func scanObjectRow(row pgx.Row) (*world.Object, error) {
+	var obj world.Object
+	var f objectScanFields
+
+	err := row.Scan(
+		&f.idStr, &obj.Name, &obj.Description, &f.locationIDStr, &f.heldByStr,
+		&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &obj.CreatedAt,
+	)
+	if err != nil {
+		return nil, oops.With("operation", "scan object").Wrap(err)
+	}
+
+	if err := parseObjectFromFields(&f, &obj); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
+}
+
+// parseObjectFromFields converts scan fields to object fields.
+func parseObjectFromFields(f *objectScanFields, obj *world.Object) error {
+	var err error
+	obj.ID, err = ulid.Parse(f.idStr)
+	if err != nil {
+		return oops.With("operation", "parse object id").With("id", f.idStr).Wrap(err)
+	}
+	obj.LocationID, err = parseOptionalULID(f.locationIDStr, "location_id")
+	if err != nil {
+		return err
+	}
+	obj.HeldByCharacterID, err = parseOptionalULID(f.heldByStr, "held_by_character_id")
+	if err != nil {
+		return err
+	}
+	obj.ContainedInObjectID, err = parseOptionalULID(f.containedIn, "contained_in_object_id")
+	if err != nil {
+		return err
+	}
+	obj.OwnerID, err = parseOptionalULID(f.ownerIDStr, "owner_id")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func scanObjects(rows pgx.Rows) ([]*world.Object, error) {
 	objects := make([]*world.Object, 0)
 	for rows.Next() {
 		var obj world.Object
-		var idStr string
-		var locationIDStr, heldByStr, containedInStr, ownerIDStr *string
+		var f objectScanFields
 
 		if err := rows.Scan(
-			&idStr, &obj.Name, &obj.Description, &locationIDStr, &heldByStr,
-			&containedInStr, &obj.IsContainer, &ownerIDStr, &obj.CreatedAt,
+			&f.idStr, &obj.Name, &obj.Description, &f.locationIDStr, &f.heldByStr,
+			&f.containedIn, &obj.IsContainer, &f.ownerIDStr, &obj.CreatedAt,
 		); err != nil {
 			return nil, oops.With("operation", "scan object").Wrap(err)
 		}
 
-		var err error
-		obj.ID, err = ulid.Parse(idStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse object id").With("id", idStr).Wrap(err)
-		}
-		obj.LocationID, err = parseOptionalULID(locationIDStr, "location_id")
-		if err != nil {
-			return nil, err
-		}
-		obj.HeldByCharacterID, err = parseOptionalULID(heldByStr, "held_by_character_id")
-		if err != nil {
-			return nil, err
-		}
-		obj.ContainedInObjectID, err = parseOptionalULID(containedInStr, "contained_in_object_id")
-		if err != nil {
-			return nil, err
-		}
-		obj.OwnerID, err = parseOptionalULID(ownerIDStr, "owner_id")
-		if err != nil {
+		if err := parseObjectFromFields(&f, &obj); err != nil {
 			return nil, err
 		}
 
