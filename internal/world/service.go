@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -132,12 +133,32 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 }
 
 // DeleteExit deletes an exit after checking delete authorization.
+// For bidirectional exits, cleanup of the return exit is best-effort.
+// Cleanup issues are logged but don't cause the operation to fail.
 func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID) error {
 	resource := fmt.Sprintf("exit:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return ErrPermissionDenied
 	}
-	if err := s.exitRepo.Delete(ctx, id); err != nil {
+	err := s.exitRepo.Delete(ctx, id)
+	if err != nil {
+		// Check if this is a cleanup result (primary delete succeeded)
+		var cleanupResult *BidirectionalCleanupResult
+		if errors.As(err, &cleanupResult) {
+			// Log cleanup issues at appropriate level
+			if cleanupResult.IsSevere() {
+				slog.Error("bidirectional exit cleanup failed",
+					"exit_id", cleanupResult.ExitID.String(),
+					"error", cleanupResult.Error())
+			} else {
+				slog.Debug("bidirectional exit cleanup notice",
+					"exit_id", cleanupResult.ExitID.String(),
+					"message", cleanupResult.Error())
+			}
+			// Primary delete succeeded, don't propagate cleanup errors
+			return nil
+		}
+		// Actual delete failure
 		return oops.Wrapf(err, "delete exit %s", id)
 	}
 	return nil

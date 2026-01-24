@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -165,9 +164,9 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 
 // Delete removes an exit by ID.
 // If bidirectional, also removes the return exit on a best-effort basis.
-// Note: Return exit cleanup failures are logged at ERROR level but don't fail
-// the operation, as the primary delete succeeded. This avoids transactional
-// complexity while maintaining visibility of orphaned exits.
+// Returns *world.BidirectionalCleanupResult if the primary exit was deleted but
+// cleanup of the return exit encountered issues. Callers can check IsSevere()
+// to determine if the issue warrants logging/alerting.
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	// First, get the exit to check if it's bidirectional
 	exit, err := r.Get(ctx, id)
@@ -186,33 +185,37 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 
 	// If bidirectional, find and delete the return exit
 	if exit.Bidirectional && exit.ReturnName != "" {
+		cleanupResult := &world.BidirectionalCleanupResult{
+			ExitID:       id,
+			ToLocationID: exit.ToLocationID,
+			ReturnName:   exit.ReturnName,
+		}
+
 		returnExit, findErr := r.FindByName(ctx, exit.ToLocationID, exit.ReturnName)
 		if findErr != nil {
-			// Distinguish between "not found" (acceptable - may have been deleted) and actual errors
+			// Distinguish between "not found" (acceptable) and actual errors
 			if errors.Is(findErr, ErrNotFound) {
-				slog.Debug("return exit not found during bidirectional cleanup (may have been already deleted)",
-					"exit_id", id.String(),
-					"to_location_id", exit.ToLocationID.String(),
-					"return_name", exit.ReturnName)
-			} else {
-				// Actual database error - log at error level for visibility
-				slog.Error("failed to find return exit during bidirectional cleanup",
-					"exit_id", id.String(),
-					"to_location_id", exit.ToLocationID.String(),
-					"return_name", exit.ReturnName,
-					"error", findErr)
-			}
-		} else if returnExit != nil {
-			// Check that this is indeed the matching return exit
-			if returnExit.ToLocationID == exit.FromLocationID {
-				_, cleanupErr := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
-				if cleanupErr != nil {
-					// Delete failure leaves data inconsistent - log at error level
-					slog.Error("failed to delete return exit - orphaned exit remains in database",
-						"exit_id", id.String(),
-						"return_exit_id", returnExit.ID.String(),
-						"error", cleanupErr)
+				cleanupResult.Issue = &world.CleanupIssue{
+					Type: world.CleanupReturnNotFound,
 				}
+			} else {
+				cleanupResult.Issue = &world.CleanupIssue{
+					Type: world.CleanupFindError,
+					Err:  findErr,
+				}
+			}
+			return cleanupResult
+		}
+
+		if returnExit != nil && returnExit.ToLocationID == exit.FromLocationID {
+			_, cleanupErr := r.pool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
+			if cleanupErr != nil {
+				cleanupResult.Issue = &world.CleanupIssue{
+					Type:         world.CleanupDeleteError,
+					ReturnExitID: returnExit.ID,
+					Err:          cleanupErr,
+				}
+				return cleanupResult
 			}
 		}
 	}
