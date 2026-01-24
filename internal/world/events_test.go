@@ -6,11 +6,14 @@ package world_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/pkg/errutil"
 
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
@@ -19,6 +22,7 @@ import (
 // mockEventEmitter captures emitted events for testing.
 type mockEventEmitter struct {
 	calls []eventEmitCall
+	err   error // If set, Emit returns this error
 }
 
 type eventEmitCall struct {
@@ -28,6 +32,9 @@ type eventEmitCall struct {
 }
 
 func (m *mockEventEmitter) Emit(_ context.Context, stream, eventType string, payload []byte) error {
+	if m.err != nil {
+		return m.err
+	}
 	m.calls = append(m.calls, eventEmitCall{
 		Stream:    stream,
 		EventType: eventType,
@@ -97,6 +104,24 @@ func TestEmitMoveEvent(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, payload, decoded)
 	})
+
+	t.Run("returns error when emitter fails", func(t *testing.T) {
+		emitErr := errors.New("emit failed")
+		emitter := &mockEventEmitter{err: emitErr}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID.String(),
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     fromLocID.String(),
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID.String(),
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		assert.ErrorIs(t, err, emitErr)
+	})
 }
 
 func TestEmitObjectCreateEvent(t *testing.T) {
@@ -154,6 +179,21 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 		call := emitter.calls[0]
 		assert.Equal(t, "location:*", call.Stream)
 		assert.Equal(t, "object_create", call.EventType)
+	})
+
+	t.Run("returns error when emitter fails", func(t *testing.T) {
+		emitErr := errors.New("emit failed")
+		emitter := &mockEventEmitter{err: emitErr}
+		obj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &locID,
+		}
+
+		err := world.EmitObjectCreateEvent(ctx, emitter, obj)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		assert.ErrorIs(t, err, emitErr)
 	})
 }
 

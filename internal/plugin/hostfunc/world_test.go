@@ -47,6 +47,9 @@ func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ ulid.ULI
 	return m.characters, nil
 }
 
+// Compile-time interface check.
+var _ hostfunc.WorldQuerier = (*mockWorldQuerier)(nil)
+
 // mockEnforcerAllow allows all capabilities.
 type mockEnforcerAllow struct{}
 

@@ -36,7 +36,7 @@ func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Cha
 		return nil, oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
-		return nil, oops.With("operation", "get character").With("id", id.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_GET_FAILED").With("id", id.String()).Wrap(err)
 	}
 	return char, nil
 }
@@ -50,7 +50,7 @@ func (r *CharacterRepository) Create(ctx context.Context, char *world.Character)
 	`, char.ID.String(), char.PlayerID.String(), char.Name, char.Description,
 		ulidToStringPtr(char.LocationID), char.CreatedAt)
 	if err != nil {
-		return oops.With("operation", "create character").With("id", char.ID.String()).Wrap(err)
+		return oops.Code("CHARACTER_CREATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
 	return nil
 }
@@ -63,7 +63,7 @@ func (r *CharacterRepository) Update(ctx context.Context, char *world.Character)
 		WHERE id = $1
 	`, char.ID.String(), char.Name, char.Description, ulidToStringPtr(char.LocationID))
 	if err != nil {
-		return oops.With("operation", "update character").With("id", char.ID.String()).Wrap(err)
+		return oops.Code("CHARACTER_UPDATE_FAILED").With("id", char.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
 		return oops.Code("CHARACTER_NOT_FOUND").With("id", char.ID.String()).Wrap(world.ErrNotFound)
@@ -75,7 +75,7 @@ func (r *CharacterRepository) Update(ctx context.Context, char *world.Character)
 func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	result, err := r.pool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, id.String())
 	if err != nil {
-		return oops.With("operation", "delete character").With("id", id.String()).Wrap(err)
+		return oops.Code("CHARACTER_DELETE_FAILED").With("id", id.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
 		return oops.Code("CHARACTER_NOT_FOUND").With("id", id.String()).Wrap(world.ErrNotFound)
@@ -91,7 +91,7 @@ func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid
 		ORDER BY name
 	`, locationID.String())
 	if err != nil {
-		return nil, oops.With("operation", "get characters by location").With("location_id", locationID.String()).Wrap(err)
+		return nil, oops.Code("CHARACTER_QUERY_FAILED").With("location_id", locationID.String()).Wrap(err)
 	}
 	defer rows.Close()
 
@@ -104,7 +104,7 @@ func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ul
 		UPDATE characters SET location_id = $2 WHERE id = $1
 	`, characterID.String(), ulidToStringPtr(locationID))
 	if err != nil {
-		return oops.With("operation", "update character location").With("character_id", characterID.String()).Wrap(err)
+		return oops.Code("CHARACTER_MOVE_FAILED").With("character_id", characterID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
 		return oops.Code("CHARACTER_NOT_FOUND").With("character_id", characterID.String()).Wrap(world.ErrNotFound)
@@ -129,7 +129,7 @@ func scanCharacterRow(row pgx.Row) (*world.Character, error) {
 		&f.locationIDStr, &char.CreatedAt,
 	)
 	if err != nil {
-		return nil, oops.With("operation", "scan character").Wrap(err)
+		return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
 	}
 
 	if err := parseCharacterFromFields(&f, &char); err != nil {
@@ -144,11 +144,11 @@ func parseCharacterFromFields(f *characterScanFields, char *world.Character) err
 	var err error
 	char.ID, err = ulid.Parse(f.idStr)
 	if err != nil {
-		return oops.With("operation", "parse character id").With("id", f.idStr).Wrap(err)
+		return oops.Code("CHARACTER_PARSE_FAILED").With("field", "id").With("value", f.idStr).Wrap(err)
 	}
 	char.PlayerID, err = ulid.Parse(f.playerIDStr)
 	if err != nil {
-		return oops.With("operation", "parse player id").With("player_id", f.playerIDStr).Wrap(err)
+		return oops.Code("CHARACTER_PARSE_FAILED").With("field", "player_id").With("value", f.playerIDStr).Wrap(err)
 	}
 	char.LocationID, err = parseOptionalULID(f.locationIDStr, "location_id")
 	if err != nil {
@@ -167,7 +167,7 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 			&f.idStr, &f.playerIDStr, &char.Name, &char.Description,
 			&f.locationIDStr, &char.CreatedAt,
 		); err != nil {
-			return nil, oops.With("operation", "scan character").Wrap(err)
+			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(err)
 		}
 
 		if err := parseCharacterFromFields(&f, &char); err != nil {
@@ -178,7 +178,7 @@ func scanCharacters(rows pgx.Rows) ([]*world.Character, error) {
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, oops.With("operation", "iterate characters").Wrap(err)
+		return nil, oops.Code("CHARACTER_ITERATE_FAILED").Wrap(err)
 	}
 
 	return characters, nil
