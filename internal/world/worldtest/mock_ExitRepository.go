@@ -357,6 +357,66 @@ func (_c *MockExitRepository_ListFromLocation_Call) RunAndReturn(run func(contex
 	return _c
 }
 
+// ListVisibleExits provides a mock function with given fields: ctx, locationID, characterID
+func (_m *MockExitRepository) ListVisibleExits(ctx context.Context, locationID ulid.ULID, characterID ulid.ULID) ([]*world.Exit, error) {
+	ret := _m.Called(ctx, locationID, characterID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListVisibleExits")
+	}
+
+	var r0 []*world.Exit
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID) ([]*world.Exit, error)); ok {
+		return rf(ctx, locationID, characterID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID) []*world.Exit); ok {
+		r0 = rf(ctx, locationID, characterID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*world.Exit)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, ulid.ULID) error); ok {
+		r1 = rf(ctx, locationID, characterID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockExitRepository_ListVisibleExits_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListVisibleExits'
+type MockExitRepository_ListVisibleExits_Call struct {
+	*mock.Call
+}
+
+// ListVisibleExits is a helper method to define mock.On call
+//   - ctx context.Context
+//   - locationID ulid.ULID
+//   - characterID ulid.ULID
+func (_e *MockExitRepository_Expecter) ListVisibleExits(ctx interface{}, locationID interface{}, characterID interface{}) *MockExitRepository_ListVisibleExits_Call {
+	return &MockExitRepository_ListVisibleExits_Call{Call: _e.mock.On("ListVisibleExits", ctx, locationID, characterID)}
+}
+
+func (_c *MockExitRepository_ListVisibleExits_Call) Run(run func(ctx context.Context, locationID ulid.ULID, characterID ulid.ULID)) *MockExitRepository_ListVisibleExits_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockExitRepository_ListVisibleExits_Call) Return(_a0 []*world.Exit, _a1 error) *MockExitRepository_ListVisibleExits_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockExitRepository_ListVisibleExits_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID) ([]*world.Exit, error)) *MockExitRepository_ListVisibleExits_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function with given fields: ctx, exit
 func (_m *MockExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 	ret := _m.Called(ctx, exit)

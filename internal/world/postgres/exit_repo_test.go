@@ -531,3 +531,170 @@ func TestExitRepository_FindByNameFuzzy_BestMatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "doorway", got.Name)
 }
+
+// createTestLocationWithOwner creates a test location with an owner.
+// If ownerID is provided, the character must already exist in the database.
+func createTestLocationWithOwner(ctx context.Context, t *testing.T, name string, ownerID *ulid.ULID) ulid.ULID {
+	t.Helper()
+
+	locID := ulid.Make()
+	var ownerStr *string
+	if ownerID != nil {
+		s := ownerID.String()
+		ownerStr = &s
+	}
+
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, owner_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, locID.String(), name, "Test location", "persistent", "last:0", ownerStr, time.Now())
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM exits WHERE from_location_id = $1 OR to_location_id = $1`, locID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locID.String())
+	})
+
+	return locID
+}
+
+func TestExitRepository_ListVisibleExits(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+
+	// Create test characters (required for owner_id FK constraint)
+	ownerID := createTestCharacter(ctx, t, "Owner")
+	allowedCharID := createTestCharacter(ctx, t, "AllowedChar")
+	otherCharID := createTestCharacter(ctx, t, "OtherChar")
+
+	// Create location with owner
+	loc1ID := createTestLocationWithOwner(ctx, t, "Owned Room", &ownerID)
+	_, loc2ID := createTestLocations(ctx, t)
+
+	// Create exits with different visibility settings
+	publicExit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "public-door",
+		Visibility:     world.VisibilityAll,
+	}
+	ownerExit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "owner-door",
+		Visibility:     world.VisibilityOwner,
+	}
+	listExit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "list-door",
+		Visibility:     world.VisibilityList,
+		VisibleTo:      []ulid.ULID{allowedCharID},
+	}
+
+	for _, exit := range []*world.Exit{publicExit, ownerExit, listExit} {
+		err := repo.Create(ctx, exit)
+		require.NoError(t, err)
+	}
+
+	t.Run("owner sees all exits", func(t *testing.T) {
+		exits, err := repo.ListVisibleExits(ctx, loc1ID, ownerID)
+		require.NoError(t, err)
+		assert.Len(t, exits, 2) // public + owner exits (not list exit unless owner is in list)
+
+		names := make([]string, len(exits))
+		for i, e := range exits {
+			names[i] = e.Name
+		}
+		assert.Contains(t, names, "public-door")
+		assert.Contains(t, names, "owner-door")
+	})
+
+	t.Run("allowed char sees public and list exits", func(t *testing.T) {
+		exits, err := repo.ListVisibleExits(ctx, loc1ID, allowedCharID)
+		require.NoError(t, err)
+		assert.Len(t, exits, 2) // public + list exits
+
+		names := make([]string, len(exits))
+		for i, e := range exits {
+			names[i] = e.Name
+		}
+		assert.Contains(t, names, "public-door")
+		assert.Contains(t, names, "list-door")
+	})
+
+	t.Run("other char sees only public exit", func(t *testing.T) {
+		exits, err := repo.ListVisibleExits(ctx, loc1ID, otherCharID)
+		require.NoError(t, err)
+		assert.Len(t, exits, 1)
+		assert.Equal(t, "public-door", exits[0].Name)
+	})
+
+	t.Run("returns empty for non-existent location", func(t *testing.T) {
+		exits, err := repo.ListVisibleExits(ctx, ulid.Make(), otherCharID)
+		require.NoError(t, err)
+		assert.Empty(t, exits)
+	})
+}
+
+func TestExitRepository_ListVisibleExits_NoOwner(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+
+	charID := ulid.Make()
+
+	// Create location without owner
+	loc1ID := createTestLocationWithOwner(ctx, t, "Unowned Room", nil)
+	_, loc2ID := createTestLocations(ctx, t)
+
+	// Create owner-only exit
+	ownerExit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "owner-only",
+		Visibility:     world.VisibilityOwner,
+	}
+	publicExit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "public",
+		Visibility:     world.VisibilityAll,
+	}
+
+	err := repo.Create(ctx, ownerExit)
+	require.NoError(t, err)
+	err = repo.Create(ctx, publicExit)
+	require.NoError(t, err)
+
+	// When location has no owner, owner-only exits should be invisible to everyone
+	exits, err := repo.ListVisibleExits(ctx, loc1ID, charID)
+	require.NoError(t, err)
+	assert.Len(t, exits, 1)
+	assert.Equal(t, "public", exits[0].Name)
+}
+
+func TestExitRepository_ListVisibleExits_UnknownVisibility(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+
+	charID := ulid.Make()
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	// Insert exit with unknown visibility directly via SQL
+	exitID := ulid.Make()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO exits (id, from_location_id, to_location_id, name, visibility, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, exitID.String(), loc1ID.String(), loc2ID.String(), "mystery-door", "unknown", time.Now())
+	require.NoError(t, err)
+
+	// Unknown visibility should not be visible (fail-closed)
+	exits, err := repo.ListVisibleExits(ctx, loc1ID, charID)
+	require.NoError(t, err)
+	assert.Empty(t, exits)
+}

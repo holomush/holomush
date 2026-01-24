@@ -261,6 +261,38 @@ func (r *ExitRepository) ListFromLocation(ctx context.Context, locationID ulid.U
 	return r.scanExits(rows)
 }
 
+// ListVisibleExits returns exits from a location that are visible to a character.
+// The visibility check is atomic - joins with locations to get owner in a single query.
+// Visibility rules:
+//   - 'all': visible to everyone
+//   - 'owner': visible only to location owner
+//   - 'list': visible only to characters in visible_to array
+//   - unknown values: not visible (fail-closed for security)
+func (r *ExitRepository) ListVisibleExits(ctx context.Context, locationID, characterID ulid.ULID) ([]*world.Exit, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.id, e.from_location_id, e.to_location_id, e.name, e.aliases, e.bidirectional,
+		       e.return_name, e.visibility, e.visible_to, e.locked, e.lock_type, e.lock_data, e.created_at
+		FROM exits e
+		JOIN locations l ON e.from_location_id = l.id
+		WHERE e.from_location_id = $1
+		  AND (
+		    e.visibility = 'all'
+		    OR (e.visibility = 'owner' AND l.owner_id = $2)
+		    OR (e.visibility = 'list' AND $2 = ANY(e.visible_to))
+		  )
+		ORDER BY e.name
+	`, locationID.String(), characterID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list visible exits").
+			With("location_id", locationID.String()).
+			With("character_id", characterID.String()).
+			Wrap(err)
+	}
+	defer rows.Close()
+
+	return r.scanExits(rows)
+}
+
 // FindByName finds an exit by name or alias from a location.
 // Matching is case-insensitive for both name and aliases.
 func (r *ExitRepository) FindByName(ctx context.Context, locationID ulid.ULID, name string) (*world.Exit, error) {
