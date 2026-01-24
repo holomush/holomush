@@ -495,9 +495,9 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
-		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, "player").Return(nil)
+		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(nil)
 
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, "player")
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		require.NoError(t, err)
 		mockAC.AssertExpectations(t)
 	})
@@ -513,7 +513,7 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 
 		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
 
-		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, "player")
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockAC.AssertExpectations(t)
 	})
@@ -575,7 +575,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		})
 
 		expected := []world.SceneParticipant{
-			{CharacterID: charID, Role: "player"},
+			{CharacterID: charID, Role: world.RoleMember},
 		}
 
 		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)

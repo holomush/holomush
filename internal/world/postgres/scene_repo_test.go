@@ -88,24 +88,24 @@ func TestSceneRepository_AddParticipant(t *testing.T) {
 	})
 
 	t.Run("adds new participant", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, "member")
+		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, world.RoleMember)
 		require.NoError(t, err)
 
 		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
 		require.NoError(t, err)
 		assert.Len(t, participants, 1)
 		assert.Equal(t, charID, participants[0].CharacterID)
-		assert.Equal(t, "member", participants[0].Role)
+		assert.Equal(t, world.RoleMember, participants[0].Role)
 	})
 
 	t.Run("updates role on conflict", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, "owner")
+		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, world.RoleOwner)
 		require.NoError(t, err)
 
 		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
 		require.NoError(t, err)
 		assert.Len(t, participants, 1)
-		assert.Equal(t, "owner", participants[0].Role)
+		assert.Equal(t, world.RoleOwner, participants[0].Role)
 	})
 }
 
@@ -126,7 +126,7 @@ func TestSceneRepository_RemoveParticipant(t *testing.T) {
 	})
 
 	t.Run("removes existing participant", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, "member")
+		err := sceneRepo.AddParticipant(ctx, scene.ID, charID, world.RoleMember)
 		require.NoError(t, err)
 
 		err = sceneRepo.RemoveParticipant(ctx, scene.ID, charID)
@@ -167,9 +167,9 @@ func TestSceneRepository_ListParticipants(t *testing.T) {
 	})
 
 	t.Run("returns all participants", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene.ID, char1, "owner")
+		err := sceneRepo.AddParticipant(ctx, scene.ID, char1, world.RoleOwner)
 		require.NoError(t, err)
-		err = sceneRepo.AddParticipant(ctx, scene.ID, char2, "member")
+		err = sceneRepo.AddParticipant(ctx, scene.ID, char2, world.RoleMember)
 		require.NoError(t, err)
 
 		participants, err := sceneRepo.ListParticipants(ctx, scene.ID)
@@ -208,9 +208,9 @@ func TestSceneRepository_GetScenesFor(t *testing.T) {
 	})
 
 	t.Run("returns all scenes for character", func(t *testing.T) {
-		err := sceneRepo.AddParticipant(ctx, scene1.ID, charID, "member")
+		err := sceneRepo.AddParticipant(ctx, scene1.ID, charID, world.RoleMember)
 		require.NoError(t, err)
-		err = sceneRepo.AddParticipant(ctx, scene2.ID, charID, "owner")
+		err = sceneRepo.AddParticipant(ctx, scene2.ID, charID, world.RoleOwner)
 		require.NoError(t, err)
 
 		scenes, err := sceneRepo.GetScenesFor(ctx, charID)
@@ -249,7 +249,7 @@ func TestSceneRepository_GetScenesFor(t *testing.T) {
 			_ = locationRepo.Delete(ctx, removeScene.ID)
 		})
 
-		err = sceneRepo.AddParticipant(ctx, removeScene.ID, removeChar, "member")
+		err = sceneRepo.AddParticipant(ctx, removeScene.ID, removeChar, world.RoleMember)
 		require.NoError(t, err)
 		err = sceneRepo.RemoveParticipant(ctx, removeScene.ID, removeChar)
 		require.NoError(t, err)

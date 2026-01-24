@@ -205,7 +205,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 }
 
 // AddSceneParticipant adds a character to a scene after checking write authorization.
-func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role string) error {
+func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied

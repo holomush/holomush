@@ -25,12 +25,12 @@ func NewSceneRepository(pool *pgxpool.Pool) *SceneRepository {
 }
 
 // AddParticipant adds a character to a scene.
-func (r *SceneRepository) AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role string) error {
+func (r *SceneRepository) AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role world.ParticipantRole) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (scene_id, character_id) DO UPDATE SET role = $3
-	`, sceneID.String(), characterID.String(), role, time.Now())
+	`, sceneID.String(), characterID.String(), role.String(), time.Now())
 	if err != nil {
 		return oops.
 			With("operation", "add participant").
@@ -80,17 +80,18 @@ func (r *SceneRepository) ListParticipants(ctx context.Context, sceneID ulid.ULI
 
 	participants := make([]world.SceneParticipant, 0)
 	for rows.Next() {
-		var p world.SceneParticipant
-		var charIDStr string
-		if err := rows.Scan(&charIDStr, &p.Role); err != nil {
+		var charIDStr, roleStr string
+		if err := rows.Scan(&charIDStr, &roleStr); err != nil {
 			return nil, oops.With("operation", "scan participant").Wrap(err)
 		}
-		var err error
-		p.CharacterID, err = ulid.Parse(charIDStr)
+		charID, err := ulid.Parse(charIDStr)
 		if err != nil {
 			return nil, oops.With("operation", "parse character_id").With("character_id", charIDStr).Wrap(err)
 		}
-		participants = append(participants, p)
+		participants = append(participants, world.SceneParticipant{
+			CharacterID: charID,
+			Role:        world.ParticipantRole(roleStr),
+		})
 	}
 
 	if err := rows.Err(); err != nil {

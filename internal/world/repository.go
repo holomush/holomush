@@ -88,7 +88,7 @@ type ObjectRepository interface {
 // SceneRepository manages scene-specific operations.
 type SceneRepository interface {
 	// AddParticipant adds a character to a scene.
-	AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role string) error
+	AddParticipant(ctx context.Context, sceneID, characterID ulid.ULID, role ParticipantRole) error
 
 	// RemoveParticipant removes a character from a scene.
 	RemoveParticipant(ctx context.Context, sceneID, characterID ulid.ULID) error
@@ -103,5 +103,5 @@ type SceneRepository interface {
 // SceneParticipant represents a character's membership in a scene.
 type SceneParticipant struct {
 	CharacterID ulid.ULID
-	Role        string // "owner", "member", "invited"
+	Role        ParticipantRole
 }

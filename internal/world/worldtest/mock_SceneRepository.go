@@ -25,7 +25,7 @@ func (_m *MockSceneRepository) EXPECT() *MockSceneRepository_Expecter {
 }
 
 // AddParticipant provides a mock function with given fields: ctx, sceneID, characterID, role
-func (_m *MockSceneRepository) AddParticipant(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID, role string) error {
+func (_m *MockSceneRepository) AddParticipant(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID, role world.ParticipantRole) error {
 	ret := _m.Called(ctx, sceneID, characterID, role)
 
 	if len(ret) == 0 {
@@ -33,7 +33,7 @@ func (_m *MockSceneRepository) AddParticipant(ctx context.Context, sceneID ulid.
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID, string) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID, world.ParticipantRole) error); ok {
 		r0 = rf(ctx, sceneID, characterID, role)
 	} else {
 		r0 = ret.Error(0)
@@ -51,14 +51,14 @@ type MockSceneRepository_AddParticipant_Call struct {
 //   - ctx context.Context
 //   - sceneID ulid.ULID
 //   - characterID ulid.ULID
-//   - role string
+//   - role world.ParticipantRole
 func (_e *MockSceneRepository_Expecter) AddParticipant(ctx interface{}, sceneID interface{}, characterID interface{}, role interface{}) *MockSceneRepository_AddParticipant_Call {
 	return &MockSceneRepository_AddParticipant_Call{Call: _e.mock.On("AddParticipant", ctx, sceneID, characterID, role)}
 }
 
-func (_c *MockSceneRepository_AddParticipant_Call) Run(run func(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID, role string)) *MockSceneRepository_AddParticipant_Call {
+func (_c *MockSceneRepository_AddParticipant_Call) Run(run func(ctx context.Context, sceneID ulid.ULID, characterID ulid.ULID, role world.ParticipantRole)) *MockSceneRepository_AddParticipant_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID), args[3].(string))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID), args[3].(world.ParticipantRole))
 	})
 	return _c
 }
@@ -68,7 +68,7 @@ func (_c *MockSceneRepository_AddParticipant_Call) Return(_a0 error) *MockSceneR
 	return _c
 }
 
-func (_c *MockSceneRepository_AddParticipant_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID, string) error) *MockSceneRepository_AddParticipant_Call {
+func (_c *MockSceneRepository_AddParticipant_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID, world.ParticipantRole) error) *MockSceneRepository_AddParticipant_Call {
 	_c.Call.Return(run)
 	return _c
 }
