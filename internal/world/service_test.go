@@ -1711,8 +1711,10 @@ func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 	subjectID := "char:" + ulid.Make().String()
 
 	mockAC := &mockAccessControl{}
+	mockRepo := worldtest.NewMockLocationRepository(t)
 	svc := world.NewService(world.ServiceConfig{
 		AccessControl: mockAC,
+		LocationRepo:  mockRepo,
 	})
 
 	mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
@@ -1727,12 +1729,13 @@ func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 	subjectID := "char:" + ulid.Make().String()
 
 	mockAC := &mockAccessControl{}
+	mockRepo := worldtest.NewMockLocationRepository(t)
 	svc := world.NewService(world.ServiceConfig{
 		AccessControl: mockAC,
+		LocationRepo:  mockRepo,
 	})
 
-	// Note: Access check happens before nil check with specific resource
-	// For nil input, we can't build resource string, so check must come first
+	// Note: nil check happens before access check since we need the ID to build resource string
 	err := svc.UpdateLocation(ctx, subjectID, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
@@ -1743,8 +1746,10 @@ func TestWorldService_CreateExit_NilInput(t *testing.T) {
 	subjectID := "char:" + ulid.Make().String()
 
 	mockAC := &mockAccessControl{}
+	mockRepo := worldtest.NewMockExitRepository(t)
 	svc := world.NewService(world.ServiceConfig{
 		AccessControl: mockAC,
+		ExitRepo:      mockRepo,
 	})
 
 	mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
@@ -1759,8 +1764,10 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 	subjectID := "char:" + ulid.Make().String()
 
 	mockAC := &mockAccessControl{}
+	mockRepo := worldtest.NewMockObjectRepository(t)
 	svc := world.NewService(world.ServiceConfig{
 		AccessControl: mockAC,
+		ObjectRepo:    mockRepo,
 	})
 
 	mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
@@ -1768,4 +1775,145 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 	err := svc.CreateObject(ctx, subjectID, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
+}
+
+// --- Nil Repository Tests ---
+
+func TestWorldService_NilLocationRepo(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	locID := ulid.Make()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+		// LocationRepo intentionally nil
+	})
+
+	t.Run("GetLocation returns error", func(t *testing.T) {
+		_, err := svc.GetLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("CreateLocation returns error", func(t *testing.T) {
+		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("UpdateLocation returns error", func(t *testing.T) {
+		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("DeleteLocation returns error", func(t *testing.T) {
+		err := svc.DeleteLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+}
+
+func TestWorldService_NilExitRepo(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	exitID := ulid.Make()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+		// ExitRepo intentionally nil
+	})
+
+	t.Run("GetExit returns error", func(t *testing.T) {
+		_, err := svc.GetExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("CreateExit returns error", func(t *testing.T) {
+		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("UpdateExit returns error", func(t *testing.T) {
+		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("DeleteExit returns error", func(t *testing.T) {
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+}
+
+func TestWorldService_NilObjectRepo(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	objID := ulid.Make()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+		// ObjectRepo intentionally nil
+	})
+
+	t.Run("GetObject returns error", func(t *testing.T) {
+		_, err := svc.GetObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("CreateObject returns error", func(t *testing.T) {
+		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "item"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("UpdateObject returns error", func(t *testing.T) {
+		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "item"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("DeleteObject returns error", func(t *testing.T) {
+		err := svc.DeleteObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+}
+
+func TestWorldService_NilSceneRepo(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+		// SceneRepo intentionally nil
+	})
+
+	t.Run("AddSceneParticipant returns error", func(t *testing.T) {
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("RemoveSceneParticipant returns error", func(t *testing.T) {
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
+
+	t.Run("ListSceneParticipants returns error", func(t *testing.T) {
+		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not configured")
+	})
 }

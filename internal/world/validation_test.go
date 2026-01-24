@@ -58,6 +58,7 @@ func TestValidateDescription(t *testing.T) {
 		{"unicode description", "日本語の説明", false, ""},
 		{"newline allowed", "line1\nline2", false, ""},
 		{"tab allowed", "column1\tcolumn2", false, ""},
+		{"invalid UTF-8 bytes", "\xff\xfe", true, "must be valid UTF-8"},
 		{"control char", "desc\x00with null", true, "cannot contain control characters"},
 	}
 

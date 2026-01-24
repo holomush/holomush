@@ -89,6 +89,7 @@ func TestDefaultReplayPolicy(t *testing.T) {
 		{"persistent", world.LocationTypePersistent, "last:0"},
 		{"scene", world.LocationTypeScene, "last:-1"},
 		{"instance", world.LocationTypeInstance, "last:0"},
+		{"unknown type defaults to no replay", world.LocationType("unknown"), "last:0"},
 	}
 
 	for _, tt := range tests {

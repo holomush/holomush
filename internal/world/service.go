@@ -58,6 +58,9 @@ func NewService(cfg ServiceConfig) *Service {
 
 // GetLocation retrieves a location by ID after checking read authorization.
 func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*Location, error) {
+	if s.locationRepo == nil {
+		return nil, oops.Errorf("location repository not configured")
+	}
 	resource := fmt.Sprintf("location:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
 		return nil, ErrPermissionDenied
@@ -73,6 +76,9 @@ func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULI
 // The location ID is generated if not set.
 // Returns a ValidationError if the name or description is invalid.
 func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Location) error {
+	if s.locationRepo == nil {
+		return oops.Errorf("location repository not configured")
+	}
 	if !s.accessControl.Check(ctx, subjectID, "write", "location:*") {
 		return ErrPermissionDenied
 	}
@@ -100,6 +106,9 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 // UpdateLocation updates an existing location after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
 func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Location) error {
+	if s.locationRepo == nil {
+		return oops.Errorf("location repository not configured")
+	}
 	if loc == nil {
 		return oops.Errorf("location is nil")
 	}
@@ -124,6 +133,9 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 
 // DeleteLocation deletes a location after checking delete authorization.
 func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
+	if s.locationRepo == nil {
+		return oops.Errorf("location repository not configured")
+	}
 	resource := fmt.Sprintf("location:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return ErrPermissionDenied
@@ -136,6 +148,9 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 
 // GetExit retrieves an exit by ID after checking read authorization.
 func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (*Exit, error) {
+	if s.exitRepo == nil {
+		return nil, oops.Errorf("exit repository not configured")
+	}
 	resource := fmt.Sprintf("exit:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
 		return nil, ErrPermissionDenied
@@ -151,6 +166,9 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 // The exit ID is generated if not set.
 // Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
 func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
+	if s.exitRepo == nil {
+		return oops.Errorf("exit repository not configured")
+	}
 	if !s.accessControl.Check(ctx, subjectID, "write", "exit:*") {
 		return ErrPermissionDenied
 	}
@@ -191,6 +209,9 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 // UpdateExit updates an existing exit after checking write authorization.
 // Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
 func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
+	if s.exitRepo == nil {
+		return oops.Errorf("exit repository not configured")
+	}
 	if exit == nil {
 		return oops.Errorf("exit is nil")
 	}
@@ -231,6 +252,9 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 // Non-severe cleanup issues (return not found) are logged but don't fail the operation.
 // Severe cleanup issues (find/delete errors) cause a full rollback - the operation fails.
 func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID) error {
+	if s.exitRepo == nil {
+		return oops.Errorf("exit repository not configured")
+	}
 	resource := fmt.Sprintf("exit:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return ErrPermissionDenied
@@ -262,6 +286,9 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 
 // GetObject retrieves an object by ID after checking read authorization.
 func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error) {
+	if s.objectRepo == nil {
+		return nil, oops.Errorf("object repository not configured")
+	}
 	resource := fmt.Sprintf("object:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
 		return nil, ErrPermissionDenied
@@ -277,6 +304,9 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 // The object ID is generated if not set.
 // Returns a ValidationError if the name or description is invalid.
 func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Object) error {
+	if s.objectRepo == nil {
+		return oops.Errorf("object repository not configured")
+	}
 	if !s.accessControl.Check(ctx, subjectID, "write", "object:*") {
 		return ErrPermissionDenied
 	}
@@ -301,6 +331,9 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 // UpdateObject updates an existing object after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
 func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Object) error {
+	if s.objectRepo == nil {
+		return oops.Errorf("object repository not configured")
+	}
 	if obj == nil {
 		return oops.Errorf("object is nil")
 	}
@@ -322,6 +355,9 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 
 // DeleteObject deletes an object after checking delete authorization.
 func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
+	if s.objectRepo == nil {
+		return oops.Errorf("object repository not configured")
+	}
 	resource := fmt.Sprintf("object:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return ErrPermissionDenied
@@ -335,6 +371,9 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 // AddSceneParticipant adds a character to a scene after checking write authorization.
 // Returns ErrInvalidParticipantRole if the role is not valid.
 func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {
+	if s.sceneRepo == nil {
+		return oops.Errorf("scene repository not configured")
+	}
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
@@ -350,6 +389,9 @@ func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sce
 
 // RemoveSceneParticipant removes a character from a scene after checking write authorization.
 func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID) error {
+	if s.sceneRepo == nil {
+		return oops.Errorf("scene repository not configured")
+	}
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
@@ -362,6 +404,9 @@ func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, 
 
 // ListSceneParticipants lists all participants in a scene after checking read authorization.
 func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, sceneID ulid.ULID) ([]SceneParticipant, error) {
+	if s.sceneRepo == nil {
+		return nil, oops.Errorf("scene repository not configured")
+	}
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
 		return nil, ErrPermissionDenied
