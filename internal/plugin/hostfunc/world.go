@@ -5,6 +5,7 @@ package hostfunc
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
@@ -25,9 +26,11 @@ type WorldQuerier interface {
 }
 
 // queryRoomFn returns a Lua function that queries room information.
-func (f *Functions) queryRoomFn(_ string) lua.LGFunction {
+func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.world == nil {
+			slog.Error("query_room called but world querier unavailable",
+				"plugin", pluginName)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("world querier not configured"))
 			return 2
@@ -46,6 +49,10 @@ func (f *Functions) queryRoomFn(_ string) lua.LGFunction {
 
 		loc, err := f.world.GetLocation(ctx, id)
 		if err != nil {
+			slog.Error("query_room failed",
+				"plugin", pluginName,
+				"room_id", roomID,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2
@@ -65,9 +72,11 @@ func (f *Functions) queryRoomFn(_ string) lua.LGFunction {
 }
 
 // queryCharacterFn returns a Lua function that queries character information.
-func (f *Functions) queryCharacterFn(_ string) lua.LGFunction {
+func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.world == nil {
+			slog.Error("query_character called but world querier unavailable",
+				"plugin", pluginName)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("world querier not configured"))
 			return 2
@@ -86,6 +95,10 @@ func (f *Functions) queryCharacterFn(_ string) lua.LGFunction {
 
 		char, err := f.world.GetCharacter(ctx, id)
 		if err != nil {
+			slog.Error("query_character failed",
+				"plugin", pluginName,
+				"character_id", charID,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2
@@ -106,9 +119,11 @@ func (f *Functions) queryCharacterFn(_ string) lua.LGFunction {
 }
 
 // queryRoomCharactersFn returns a Lua function that queries characters in a room.
-func (f *Functions) queryRoomCharactersFn(_ string) lua.LGFunction {
+func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.world == nil {
+			slog.Error("query_room_characters called but world querier unavailable",
+				"plugin", pluginName)
 			L.Push(lua.LNil)
 			L.Push(lua.LString("world querier not configured"))
 			return 2
@@ -127,6 +142,10 @@ func (f *Functions) queryRoomCharactersFn(_ string) lua.LGFunction {
 
 		chars, err := f.world.GetCharactersByLocation(ctx, id)
 		if err != nil {
+			slog.Error("query_room_characters failed",
+				"plugin", pluginName,
+				"room_id", roomID,
+				"error", err)
 			L.Push(lua.LNil)
 			L.Push(lua.LString(err.Error()))
 			return 2

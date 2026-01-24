@@ -258,6 +258,24 @@ func TestQueryCharacter_NotFound(t *testing.T) {
 	assert.Equal(t, lua.LTString, errVal.Type())
 }
 
+func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
+	// No world querier provided
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`character, err = holomush.query_character("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	character := L.GetGlobal("character")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, character.Type(), "expected nil character")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Contains(t, errVal.String(), "world querier not configured")
+}
+
 func TestQueryCharacter_RequiresCapability(t *testing.T) {
 	charID := ulid.Make()
 	char := &world.Character{
@@ -383,6 +401,24 @@ func TestQueryRoomCharacters_Error(t *testing.T) {
 	assert.Equal(t, lua.LTNil, characters.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
 	assert.Contains(t, errVal.String(), "database error")
+}
+
+func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
+	// No world querier provided
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`characters, err = holomush.query_room_characters("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	characters := L.GetGlobal("characters")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, characters.Type(), "expected nil characters")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Contains(t, errVal.String(), "world querier not configured")
 }
 
 func TestQueryRoomCharacters_RequiresCapability(t *testing.T) {
