@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/core"
+	
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
@@ -24,7 +24,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 	repo := postgres.NewObjectRepository(testPool)
 
 	// Create a test location for object containment
-	locationID := core.NewULID()
+	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Test Location', 'A test location', 'persistent', 'last:0', NOW())
@@ -36,7 +36,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("create and get", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Test Sword",
 			Description: "A shiny test sword.",
 			LocationID:  &locationID,
@@ -61,7 +61,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("create with invalid containment - no location", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Invalid Object",
 			Description: "Has no containment set.",
 			// No LocationID, HeldByCharacterID, or ContainedInObjectID set
@@ -75,7 +75,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Original Name",
 			Description: "Original description.",
 			LocationID:  &locationID,
@@ -104,8 +104,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("update with owner_id", func(t *testing.T) {
 		// Create a character to be the owner
-		charID := core.NewULID()
-		playerID := core.NewULID()
+		charID := ulid.Make()
+		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
 			INSERT INTO players (id, username, password_hash, created_at)
 			VALUES ($1, $2, 'testhash', NOW())
@@ -118,7 +118,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Object For Owner Test",
 			Description: "An object.",
 			LocationID:  &locationID,
@@ -147,8 +147,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("update change containment to held_by", func(t *testing.T) {
 		// Create a character to hold the object
-		charID := core.NewULID()
-		playerID := core.NewULID()
+		charID := ulid.Make()
+		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
 			INSERT INTO players (id, username, password_hash, created_at)
 			VALUES ($1, $2, 'testhash', NOW())
@@ -161,7 +161,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		require.NoError(t, err)
 
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Object To Hold",
 			Description: "An object.",
 			LocationID:  &locationID,
@@ -193,7 +193,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 	t.Run("update change containment to container", func(t *testing.T) {
 		// Create a container object
 		container := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Container",
 			Description: "A container.",
 			LocationID:  &locationID,
@@ -205,7 +205,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 		// Create an object to put in the container
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Object To Contain",
 			Description: "An object.",
 			LocationID:  &locationID,
@@ -234,7 +234,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("delete", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "To Delete",
 			Description: "Will be deleted.",
 			LocationID:  &locationID,
@@ -259,7 +259,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("update not found", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Nonexistent",
 			Description: "Does not exist.",
 			LocationID:  &locationID,
@@ -278,7 +278,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 
 	t.Run("update with invalid containment - no location", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Valid Object",
 			Description: "Initially valid.",
 			LocationID:  &locationID,
@@ -306,7 +306,7 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 	repo := postgres.NewObjectRepository(testPool)
 
 	// Create a test location
-	locationID := core.NewULID()
+	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Test Location 2', 'Another test location', 'persistent', 'last:0', NOW())
@@ -318,14 +318,14 @@ func TestObjectRepository_ListAtLocation(t *testing.T) {
 
 	// Create objects at location
 	obj1 := &world.Object{
-		ID:          core.NewULID(),
+		ID:          ulid.Make(),
 		Name:        "Object 1",
 		Description: "First object.",
 		LocationID:  &locationID,
 		CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
 	}
 	obj2 := &world.Object{
-		ID:          core.NewULID(),
+		ID:          ulid.Make(),
 		Name:        "Object 2",
 		Description: "Second object.",
 		LocationID:  &locationID,
@@ -357,7 +357,7 @@ func TestObjectRepository_ListAtLocation_Empty(t *testing.T) {
 	repo := postgres.NewObjectRepository(testPool)
 
 	// Create an empty location
-	emptyLocationID := core.NewULID()
+	emptyLocationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Empty Location', 'No objects here', 'persistent', 'last:0', NOW())
@@ -379,7 +379,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	repo := postgres.NewObjectRepository(testPool)
 
 	// Create a test location first
-	locationID := core.NewULID()
+	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Char Location', 'Location for character', 'persistent', 'last:0', NOW())
@@ -390,7 +390,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	}()
 
 	// Create a test player first with unique username
-	playerID := core.NewULID()
+	playerID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO players (id, username, password_hash, created_at)
 		VALUES ($1, $2, 'testhash', NOW())
@@ -401,7 +401,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	}()
 
 	// Create a test character
-	characterID := core.NewULID()
+	characterID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, location_id, created_at)
 		VALUES ($1, $2, 'Test Character', $3, NOW())
@@ -413,7 +413,7 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 
 	// Create objects held by character
 	obj := &world.Object{
-		ID:                core.NewULID(),
+		ID:                ulid.Make(),
 		Name:              "Held Object",
 		Description:       "Object held by character.",
 		HeldByCharacterID: &characterID,
@@ -436,7 +436,7 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 	repo := postgres.NewObjectRepository(testPool)
 
 	// Create a test location
-	locationID := core.NewULID()
+	locationID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Container Location', 'Location for container test', 'persistent', 'last:0', NOW())
@@ -448,7 +448,7 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 
 	// Create a container object
 	container := &world.Object{
-		ID:          core.NewULID(),
+		ID:          ulid.Make(),
 		Name:        "Chest",
 		Description: "A wooden chest.",
 		LocationID:  &locationID,
@@ -462,7 +462,7 @@ func TestObjectRepository_ListContainedIn(t *testing.T) {
 
 	// Create object inside container
 	item := &world.Object{
-		ID:                  core.NewULID(),
+		ID:                  ulid.Make(),
 		Name:                "Gold Coin",
 		Description:         "A shiny gold coin.",
 		ContainedInObjectID: &container.ID,
@@ -484,8 +484,8 @@ func TestObjectRepository_Move(t *testing.T) {
 	repo := postgres.NewObjectRepository(testPool)
 
 	// Create two test locations
-	loc1ID := core.NewULID()
-	loc2ID := core.NewULID()
+	loc1ID := ulid.Make()
+	loc2ID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Location 1', 'First location', 'persistent', 'last:0', NOW()),
@@ -498,7 +498,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move to location", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Movable Object",
 			Description: "Can be moved.",
 			LocationID:  &loc1ID,
@@ -523,7 +523,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move to container", func(t *testing.T) {
 		container := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Box",
 			Description: "A box.",
 			LocationID:  &loc1ID,
@@ -536,7 +536,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		}()
 
 		item := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Key",
 			Description: "A small key.",
 			LocationID:  &loc1ID,
@@ -561,7 +561,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move to non-container fails", func(t *testing.T) {
 		nonContainer := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Rock",
 			Description: "A rock.",
 			LocationID:  &loc1ID,
@@ -574,7 +574,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		}()
 
 		item := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Pebble",
 			Description: "A small pebble.",
 			LocationID:  &loc1ID,
@@ -593,7 +593,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("invalid containment fails", func(t *testing.T) {
 		obj := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Test Object",
 			Description: "Test.",
 			LocationID:  &loc1ID,
@@ -611,7 +611,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move to non-existent container fails", func(t *testing.T) {
 		item := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Lost Item",
 			Description: "Item looking for container.",
 			LocationID:  &loc1ID,
@@ -623,7 +623,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		}()
 
 		// Try to move to a container that doesn't exist
-		nonExistentID := core.NewULID()
+		nonExistentID := ulid.Make()
 		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "container object not found")
@@ -631,7 +631,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move to character", func(t *testing.T) {
 		// Create a test player first
-		playerID := core.NewULID()
+		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
 			INSERT INTO players (id, username, password_hash, created_at)
 			VALUES ($1, $2, 'testhash', NOW())
@@ -642,7 +642,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		}()
 
 		// Create a test character
-		characterID := core.NewULID()
+		characterID := ulid.Make()
 		_, err = testPool.Exec(ctx, `
 			INSERT INTO characters (id, player_id, name, location_id, created_at)
 			VALUES ($1, $2, 'Move Test Character', $3, NOW())
@@ -653,7 +653,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		}()
 
 		item := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Portable Item",
 			Description: "Can be picked up.",
 			LocationID:  &loc1ID,
@@ -681,7 +681,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		// level1 -> level2 -> level3 -> item (should fail to add level4)
 
 		level1 := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Level1 Container",
 			Description: "Top level container.",
 			LocationID:  &loc1ID,
@@ -692,7 +692,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		defer func() { _ = repo.Delete(ctx, level1.ID) }()
 
 		level2 := &world.Object{
-			ID:                  core.NewULID(),
+			ID:                  ulid.Make(),
 			Name:                "Level2 Container",
 			Description:         "Second level container.",
 			ContainedInObjectID: &level1.ID,
@@ -703,7 +703,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		defer func() { _ = repo.Delete(ctx, level2.ID) }()
 
 		level3 := &world.Object{
-			ID:                  core.NewULID(),
+			ID:                  ulid.Make(),
 			Name:                "Level3 Container",
 			Description:         "Third level container.",
 			ContainedInObjectID: &level2.ID,
@@ -715,7 +715,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 		// Try to add an item at level 4 - should fail (exceeds max depth of 3)
 		item := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Deep Item",
 			Description: "Too deep.",
 			LocationID:  &loc1ID,
@@ -739,7 +739,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 		// Container A in room with an item inside
 		containerA := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Container A with item",
 			Description: "Has an item inside.",
 			LocationID:  &loc1ID,
@@ -750,7 +750,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
 
 		itemA := &world.Object{
-			ID:                  core.NewULID(),
+			ID:                  ulid.Make(),
 			Name:                "Item in Container A",
 			Description:         "Nested item.",
 			ContainedInObjectID: &containerA.ID,
@@ -761,7 +761,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 		// Container B in room containing Container C
 		containerB := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Container B",
 			Description: "Top level.",
 			LocationID:  &loc1ID,
@@ -772,7 +772,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		defer func() { _ = repo.Delete(ctx, containerB.ID) }()
 
 		containerC := &world.Object{
-			ID:                  core.NewULID(),
+			ID:                  ulid.Make(),
 			Name:                "Container C",
 			Description:         "Inside B.",
 			ContainedInObjectID: &containerB.ID,
@@ -792,7 +792,7 @@ func TestObjectRepository_Move(t *testing.T) {
 	t.Run("move creates circular containment fails", func(t *testing.T) {
 		// Create container A containing container B
 		containerA := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Container A",
 			Description: "First container.",
 			LocationID:  &loc1ID,
@@ -803,7 +803,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		defer func() { _ = repo.Delete(ctx, containerA.ID) }()
 
 		containerB := &world.Object{
-			ID:                  core.NewULID(),
+			ID:                  ulid.Make(),
 			Name:                "Container B",
 			Description:         "Second container inside A.",
 			ContainedInObjectID: &containerA.ID,
@@ -821,7 +821,7 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move object into itself fails", func(t *testing.T) {
 		container := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Self Container",
 			Description: "Cannot contain itself.",
 			LocationID:  &loc1ID,
@@ -838,7 +838,7 @@ func TestObjectRepository_Move(t *testing.T) {
 	})
 
 	t.Run("move non-existent object fails", func(t *testing.T) {
-		nonExistentID := core.NewULID()
+		nonExistentID := ulid.Make()
 		err := repo.Move(ctx, nonExistentID, world.Containment{LocationID: &loc1ID})
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, postgres.ErrNotFound)
@@ -846,8 +846,8 @@ func TestObjectRepository_Move(t *testing.T) {
 
 	t.Run("move with multiple containment fields fails", func(t *testing.T) {
 		// Create a character for the test
-		charID := core.NewULID()
-		playerID := core.NewULID()
+		charID := ulid.Make()
+		playerID := ulid.Make()
 		_, err := testPool.Exec(ctx, `
 			INSERT INTO players (id, username, password_hash, created_at)
 			VALUES ($1, $2, 'testhash', NOW())
@@ -864,7 +864,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		}()
 
 		item := &world.Object{
-			ID:          core.NewULID(),
+			ID:          ulid.Make(),
 			Name:        "Multi Containment Item",
 			Description: "Item for testing invalid containment.",
 			LocationID:  &loc1ID,

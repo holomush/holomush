@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/core"
+	
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
@@ -23,8 +23,8 @@ import (
 func createTestLocations(ctx context.Context, t *testing.T) (ulid.ULID, ulid.ULID) {
 	t.Helper()
 
-	loc1ID := core.NewULID()
-	loc2ID := core.NewULID()
+	loc1ID := ulid.Make()
+	loc2ID := ulid.Make()
 
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
@@ -56,7 +56,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		loc1ID, loc2ID := createTestLocations(ctx, t)
 
 		exit := &world.Exit{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "north",
@@ -82,7 +82,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		loc1ID, loc2ID := createTestLocations(ctx, t)
 
 		exit := &world.Exit{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "east",
@@ -109,7 +109,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		loc1ID, loc2ID := createTestLocations(ctx, t)
 
 		exit := &world.Exit{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "south",
@@ -135,7 +135,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		loc1ID, loc2ID := createTestLocations(ctx, t)
 
 		exit := &world.Exit{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "west",
@@ -157,7 +157,7 @@ func TestExitRepository_CRUD(t *testing.T) {
 		loc1ID, loc2ID := createTestLocations(ctx, t)
 
 		exit := &world.Exit{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "up",
@@ -220,7 +220,7 @@ func TestExitRepository_ListFromLocation(t *testing.T) {
 	// Create multiple exits from the same location
 	exits := []*world.Exit{
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "alpha",
@@ -228,7 +228,7 @@ func TestExitRepository_ListFromLocation(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		},
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "beta",
@@ -258,7 +258,7 @@ func TestExitRepository_FindByName(t *testing.T) {
 	loc1ID, loc2ID := createTestLocations(ctx, t)
 
 	exit := &world.Exit{
-		ID:             core.NewULID(),
+		ID:             ulid.Make(),
 		FromLocationID: loc1ID,
 		ToLocationID:   loc2ID,
 		Name:           "north",
@@ -305,7 +305,7 @@ func TestExitRepository_WithLockData(t *testing.T) {
 	loc1ID, loc2ID := createTestLocations(ctx, t)
 
 	exit := &world.Exit{
-		ID:             core.NewULID(),
+		ID:             ulid.Make(),
 		FromLocationID: loc1ID,
 		ToLocationID:   loc2ID,
 		Name:           "locked-door",
@@ -335,11 +335,11 @@ func TestExitRepository_WithVisibleToList(t *testing.T) {
 	repo := postgres.NewExitRepository(testPool)
 	loc1ID, loc2ID := createTestLocations(ctx, t)
 
-	charID1 := core.NewULID()
-	charID2 := core.NewULID()
+	charID1 := ulid.Make()
+	charID2 := ulid.Make()
 
 	exit := &world.Exit{
-		ID:             core.NewULID(),
+		ID:             ulid.Make(),
 		FromLocationID: loc1ID,
 		ToLocationID:   loc2ID,
 		Name:           "secret-door",
@@ -367,7 +367,7 @@ func TestExitRepository_FindByNameFuzzy(t *testing.T) {
 	// Create exits with various names for fuzzy matching tests
 	exits := []*world.Exit{
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "north",
@@ -376,7 +376,7 @@ func TestExitRepository_FindByNameFuzzy(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		},
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "northeast",
@@ -385,7 +385,7 @@ func TestExitRepository_FindByNameFuzzy(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		},
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "south",
@@ -499,7 +499,7 @@ func TestExitRepository_FindByNameFuzzy_BestMatch(t *testing.T) {
 	// Create exits with similar names to test best match selection
 	exits := []*world.Exit{
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "door",
@@ -507,7 +507,7 @@ func TestExitRepository_FindByNameFuzzy_BestMatch(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		},
 		{
-			ID:             core.NewULID(),
+			ID:             ulid.Make(),
 			FromLocationID: loc1ID,
 			ToLocationID:   loc2ID,
 			Name:           "doorway",

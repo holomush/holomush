@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/core"
+	
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
@@ -22,9 +22,9 @@ import (
 // createTestCharacter creates a character in the database for testing.
 func createTestCharacter(ctx context.Context, t *testing.T, name string) ulid.ULID {
 	t.Helper()
-	charID := core.NewULID()
+	charID := ulid.Make()
 	// First create a test player
-	playerID := core.NewULID()
+	playerID := ulid.Make()
 	_, err := testPool.Exec(ctx, `
 		INSERT INTO players (id, username, password_hash, created_at)
 		VALUES ($1, $2, 'testhash', NOW())
@@ -32,7 +32,7 @@ func createTestCharacter(ctx context.Context, t *testing.T, name string) ulid.UL
 	require.NoError(t, err)
 
 	// Create a test location for the character
-	locationID := core.NewULID()
+	locationID := ulid.Make()
 	_, err = testPool.Exec(ctx, `
 		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
 		VALUES ($1, 'Test Loc', 'Test', 'persistent', 'last:0', NOW())
@@ -61,7 +61,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 
 	t.Run("create and get", func(t *testing.T) {
 		loc := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypePersistent,
 			Name:         "Test Room",
 			Description:  "A test room for testing.",
@@ -87,7 +87,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 		// Create a valid character to use as owner
 		ownerID := createTestCharacter(ctx, t, "SceneOwner")
 		loc := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypeScene,
 			Name:         "Private Scene",
 			Description:  "A private scene.",
@@ -110,7 +110,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		loc := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypePersistent,
 			Name:         "Original Name",
 			Description:  "Original description.",
@@ -138,7 +138,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 	t.Run("update with shadows_id", func(t *testing.T) {
 		// Create a parent location to shadow
 		parent := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypePersistent,
 			Name:         "Parent Location",
 			Description:  "The parent.",
@@ -150,7 +150,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 
 		// Create a scene without shadows_id
 		scene := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypeScene,
 			Name:         "Scene Without Shadow",
 			Description:  "A scene.",
@@ -180,7 +180,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 
 		// Create a location without owner
 		loc := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypeScene,
 			Name:         "Scene Without Owner",
 			Description:  "A scene.",
@@ -206,7 +206,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 
 	t.Run("delete", func(t *testing.T) {
 		loc := &world.Location{
-			ID:           core.NewULID(),
+			ID:           ulid.Make(),
 			Type:         world.LocationTypePersistent,
 			Name:         "To Delete",
 			Description:  "Will be deleted.",
@@ -257,7 +257,7 @@ func TestLocationRepository_ListByType(t *testing.T) {
 
 	// Create test locations
 	persistent := &world.Location{
-		ID:           core.NewULID(),
+		ID:           ulid.Make(),
 		Type:         world.LocationTypePersistent,
 		Name:         "Persistent Room",
 		Description:  "A persistent room.",
@@ -266,7 +266,7 @@ func TestLocationRepository_ListByType(t *testing.T) {
 	}
 
 	scene := &world.Location{
-		ID:           core.NewULID(),
+		ID:           ulid.Make(),
 		Type:         world.LocationTypeScene,
 		Name:         "Test Scene",
 		Description:  "A scene.",
@@ -326,7 +326,7 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 
 	// Create parent location
 	parent := &world.Location{
-		ID:           core.NewULID(),
+		ID:           ulid.Make(),
 		Type:         world.LocationTypePersistent,
 		Name:         "Parent Room",
 		Description:  "A parent room.",
@@ -337,7 +337,7 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 
 	// Create scene that shadows parent
 	scene := &world.Location{
-		ID:           core.NewULID(),
+		ID:           ulid.Make(),
 		Type:         world.LocationTypeScene,
 		ShadowsID:    &parent.ID,
 		Name:         "Shadow Scene",
