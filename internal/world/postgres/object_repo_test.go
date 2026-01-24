@@ -69,8 +69,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		}
 
 		err := repo.Create(ctx, obj)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+		// Validation is handled at service layer; database constraint is defense-in-depth
+		assert.Error(t, err, "database check constraint should reject object with no containment")
 	})
 
 	t.Run("update", func(t *testing.T) {
@@ -293,8 +293,8 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		obj.HeldByCharacterID = nil
 		obj.ContainedInObjectID = nil
 		err = repo.Update(ctx, obj)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+		// Validation is handled at service layer; database constraint is defense-in-depth
+		assert.Error(t, err, "database check constraint should reject object with no containment")
 
 		// Cleanup
 		_ = repo.Delete(ctx, obj.ID)
