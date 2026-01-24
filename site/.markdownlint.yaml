@@ -1,0 +1,40 @@
+# markdownlint configuration for Zensical documentation
+# Extends root config with adjustments for Zensical syntax
+
+default: true
+
+# Line length - disabled for prose
+MD013: false
+
+# Allow multiple headings with same content
+MD024:
+  siblings_only: true
+
+# Allow inline HTML
+MD033: false
+
+# Allow bare URLs
+MD034: false
+
+# Allow emphasis as pseudo-headings
+MD036: false
+
+# Fenced code blocks should have a language specified
+MD040: true
+
+# First line should be a top-level heading
+MD041: true
+
+# Disabled - too noisy
+MD044: false
+
+# Allow trailing punctuation in headings
+MD026:
+  punctuation: ".,;:!,;:"
+
+# Code block style - allow both fenced and indented (needed for Zensical tabs)
+MD046: false
+
+# Code fence style
+MD048:
+  style: backtick
