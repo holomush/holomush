@@ -143,6 +143,27 @@ func TestBidirectionalCleanupResult_Unwrap(t *testing.T) {
 		}
 		assert.True(t, errors.Is(result, sentinelErr))
 	})
+
+	t.Run("errors.As detects BidirectionalCleanupResult", func(t *testing.T) {
+		// This test verifies the documented pattern for callers:
+		//   var cleanupErr *world.BidirectionalCleanupResult
+		//   if errors.As(err, &cleanupErr) { ... }
+		result := &world.BidirectionalCleanupResult{
+			ExitID:       ulid.Make(),
+			ToLocationID: ulid.Make(),
+			ReturnName:   "south",
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupReturnNotFound,
+			},
+		}
+
+		// errors.As should detect the type
+		var cleanupErr *world.BidirectionalCleanupResult
+		assert.True(t, errors.As(result, &cleanupErr),
+			"errors.As should detect *BidirectionalCleanupResult")
+		assert.Equal(t, result.ReturnName, cleanupErr.ReturnName)
+		assert.False(t, cleanupErr.IsSevere())
+	})
 }
 
 func TestBidirectionalCleanupResult_IsSevere(t *testing.T) {

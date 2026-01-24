@@ -201,7 +201,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 				With("operation", "move object").
 				With("object_id", objectID.String()).
 				With("container_id", to.ObjectID.String()).
-				Errorf("container object not found")
+				Wrap(world.ErrNotFound)
 		}
 		if err != nil {
 			return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
@@ -211,7 +211,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 				With("operation", "move object").
 				With("object_id", objectID.String()).
 				With("container_id", to.ObjectID.String()).
-				Errorf("target object is not a container")
+				Wrap(world.ErrInvalidContainment)
 		}
 
 		// Check for circular containment: object cannot be placed inside itself

@@ -44,9 +44,21 @@ type ExitRepository interface {
 
 	// Delete removes an exit by ID.
 	// If bidirectional, deletes the return exit atomically in a single transaction.
-	// For non-severe issues (return exit not found), the primary delete proceeds.
-	// For severe issues (find error, delete error), the entire operation is rolled back.
-	// Returns *BidirectionalCleanupResult when cleanup encounters issues.
+	//
+	// When the primary exit deletion succeeds but return exit cleanup has issues,
+	// returns a *BidirectionalCleanupResult (which implements error). Callers can
+	// type-assert to access cleanup details:
+	//
+	//     var cleanupErr *world.BidirectionalCleanupResult
+	//     if errors.As(err, &cleanupErr) && !cleanupErr.IsSevere() {
+	//         // Non-severe: return exit already deleted, operation succeeded
+	//     }
+	//
+	// Returns:
+	//   - nil on success
+	//   - ErrNotFound if exit doesn't exist
+	//   - *BidirectionalCleanupResult for partial cleanup issues
+	//   - Other errors for database failures
 	Delete(ctx context.Context, id ulid.ULID) error
 
 	// ListFromLocation returns all exits from a location.

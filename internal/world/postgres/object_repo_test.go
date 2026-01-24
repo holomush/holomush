@@ -587,7 +587,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		// Try to move pebble into rock (should fail)
 		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonContainer.ID})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not a container")
+		assert.ErrorIs(t, err, world.ErrInvalidContainment, "should wrap ErrInvalidContainment for non-container target")
 	})
 
 	t.Run("invalid containment fails", func(t *testing.T) {
@@ -625,7 +625,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		nonExistentID := ulid.Make()
 		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &nonExistentID})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "container object not found")
+		assert.ErrorIs(t, err, world.ErrNotFound, "should wrap ErrNotFound for missing container")
 	})
 
 	t.Run("move to character", func(t *testing.T) {

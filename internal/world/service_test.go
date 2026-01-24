@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // mockAccessControl is a test mock for access.AccessControl.
@@ -2092,5 +2093,863 @@ func TestWorldService_NilSceneRepo(t *testing.T) {
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not configured")
+	})
+}
+
+// --- Error Code Tests ---
+// These tests verify that service layer methods return proper oops error codes
+// as required for API boundaries (see CLAUDE.md).
+
+func TestService_ErrorCodes_Location(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("GetLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, locID).Return(nil, world.ErrNotFound)
+
+		_, err := svc.GetLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+	})
+
+	t.Run("GetLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(false)
+
+		_, err := svc.GetLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+	})
+
+	t.Run("GetLocation returns LOCATION_GET_FAILED for other errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, locID).Return(nil, errors.New("db connection failed"))
+
+		_, err := svc.GetLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_GET_FAILED")
+	})
+
+	t.Run("CreateLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(false)
+
+		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+	})
+
+	t.Run("CreateLocation returns LOCATION_INVALID for validation errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+
+		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_INVALID")
+	})
+
+	t.Run("CreateLocation returns LOCATION_CREATE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_CREATE_FAILED")
+	})
+
+	t.Run("UpdateLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(false)
+
+		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+	})
+
+	t.Run("UpdateLocation returns LOCATION_INVALID for validation errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+
+		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_INVALID")
+	})
+
+	t.Run("UpdateLocation returns LOCATION_UPDATE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_UPDATE_FAILED")
+	})
+
+	t.Run("DeleteLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(false)
+
+		err := svc.DeleteLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+	})
+
+	t.Run("DeleteLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Delete(ctx, locID).Return(world.ErrNotFound)
+
+		err := svc.DeleteLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+	})
+
+	t.Run("DeleteLocation returns LOCATION_DELETE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		mockRepo.EXPECT().Delete(ctx, locID).Return(errors.New("db error"))
+
+		err := svc.DeleteLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
+	})
+}
+
+func TestService_ErrorCodes_Exit(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("GetExit returns EXIT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, exitID).Return(nil, world.ErrNotFound)
+
+		_, err := svc.GetExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+	})
+
+	t.Run("GetExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(false)
+
+		_, err := svc.GetExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+	})
+
+	t.Run("GetExit returns EXIT_GET_FAILED for other errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, exitID).Return(nil, errors.New("db error"))
+
+		_, err := svc.GetExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_GET_FAILED")
+	})
+
+	t.Run("CreateExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(false)
+
+		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+	})
+
+	t.Run("CreateExit returns EXIT_INVALID for validation errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+
+		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "", FromLocationID: fromLocID, ToLocationID: toLocID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_INVALID")
+	})
+
+	t.Run("CreateExit returns EXIT_CREATE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_CREATE_FAILED")
+	})
+
+	t.Run("UpdateExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(false)
+
+		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+	})
+
+	t.Run("UpdateExit returns EXIT_INVALID for validation errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+
+		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: ""})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_INVALID")
+	})
+
+	t.Run("UpdateExit returns EXIT_UPDATE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_UPDATE_FAILED")
+	})
+
+	t.Run("DeleteExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(false)
+
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+	})
+
+	t.Run("DeleteExit returns EXIT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		mockRepo.EXPECT().Delete(ctx, exitID).Return(world.ErrNotFound)
+
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+	})
+
+	t.Run("DeleteExit returns EXIT_DELETE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		mockRepo.EXPECT().Delete(ctx, exitID).Return(errors.New("db error"))
+
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_DELETE_FAILED")
+	})
+}
+
+func TestService_ErrorCodes_Object(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	locationID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("GetObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, objID).Return(nil, world.ErrNotFound)
+
+		_, err := svc.GetObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+
+	t.Run("GetObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(false)
+
+		_, err := svc.GetObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+	})
+
+	t.Run("GetObject returns OBJECT_GET_FAILED for other errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, objID).Return(nil, errors.New("db error"))
+
+		_, err := svc.GetObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_GET_FAILED")
+	})
+
+	t.Run("CreateObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(false)
+
+		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "sword", LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+	})
+
+	t.Run("CreateObject returns OBJECT_INVALID for validation errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+
+		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "", LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
+	})
+
+	t.Run("CreateObject returns OBJECT_CREATE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "sword", LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_CREATE_FAILED")
+	})
+
+	t.Run("UpdateObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
+
+		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "sword", LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+	})
+
+	t.Run("UpdateObject returns OBJECT_INVALID for validation errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+
+		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "", LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
+	})
+
+	t.Run("UpdateObject returns OBJECT_UPDATE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "sword", LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_UPDATE_FAILED")
+	})
+
+	t.Run("DeleteObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(false)
+
+		err := svc.DeleteObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+	})
+
+	t.Run("DeleteObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Delete(ctx, objID).Return(world.ErrNotFound)
+
+		err := svc.DeleteObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+
+	t.Run("DeleteObject returns OBJECT_DELETE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Delete(ctx, objID).Return(errors.New("db error"))
+
+		err := svc.DeleteObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
+	})
+
+	t.Run("MoveObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+	})
+
+	t.Run("MoveObject returns OBJECT_INVALID for invalid containment", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
+	})
+
+	t.Run("MoveObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(world.ErrNotFound)
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
+	})
+
+	t.Run("MoveObject returns OBJECT_MOVE_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(errors.New("db error"))
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_MOVE_FAILED")
+	})
+}
+
+func TestService_ErrorCodes_Scene(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("AddSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
+	})
+
+	t.Run("AddSceneParticipant returns SCENE_INVALID for invalid role", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.ParticipantRole("invalid"))
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_INVALID")
+	})
+
+	t.Run("AddSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		mockRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(world.ErrNotFound)
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+	})
+
+	t.Run("AddSceneParticipant returns SCENE_ADD_PARTICIPANT_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		mockRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(errors.New("db error"))
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ADD_PARTICIPANT_FAILED")
+	})
+
+	t.Run("RemoveSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
+	})
+
+	t.Run("RemoveSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(world.ErrNotFound)
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+	})
+
+	t.Run("RemoveSceneParticipant returns SCENE_REMOVE_PARTICIPANT_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(errors.New("db error"))
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_REMOVE_PARTICIPANT_FAILED")
+	})
+
+	t.Run("ListSceneParticipants returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(false)
+
+		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
+	})
+
+	t.Run("ListSceneParticipants returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, world.ErrNotFound)
+
+		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+	})
+
+	t.Run("ListSceneParticipants returns SCENE_LIST_PARTICIPANTS_FAILED for repo errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo:     mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, errors.New("db error"))
+
+		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_LIST_PARTICIPANTS_FAILED")
 	})
 }
