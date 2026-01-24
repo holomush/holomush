@@ -8,6 +8,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -420,5 +421,18 @@ func TestExit_Validate(t *testing.T) {
 		err := exit.Validate()
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "duplicate")
+	})
+
+	t.Run("rejects self-referential exit", func(t *testing.T) {
+		locID := ulid.Make()
+		exit := &world.Exit{
+			FromLocationID: locID,
+			ToLocationID:   locID, // same as from
+			Name:           "loop",
+			Visibility:     world.VisibilityAll,
+		}
+		err := exit.Validate()
+		require.Error(t, err, "expected error for self-referential exit")
+		assert.Contains(t, err.Error(), "self-referential")
 	})
 }

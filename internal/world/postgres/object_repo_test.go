@@ -254,7 +254,7 @@ func TestObjectRepository_CRUD(t *testing.T) {
 	t.Run("get not found", func(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("update not found", func(t *testing.T) {
@@ -267,13 +267,13 @@ func TestObjectRepository_CRUD(t *testing.T) {
 		}
 		err := repo.Update(ctx, obj)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := repo.Delete(ctx, ulid.Make())
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("update with invalid containment - no location", func(t *testing.T) {
@@ -841,7 +841,7 @@ func TestObjectRepository_Move(t *testing.T) {
 		nonExistentID := ulid.Make()
 		err := repo.Move(ctx, nonExistentID, world.Containment{LocationID: &loc1ID})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("move with multiple containment fields fails", func(t *testing.T) {

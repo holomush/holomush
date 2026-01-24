@@ -57,7 +57,7 @@ func (r *SceneRepository) RemoveParticipant(ctx context.Context, sceneID, charac
 		return oops.
 			With("scene_id", sceneID.String()).
 			With("character_id", characterID.String()).
-			Wrap(ErrNotFound)
+			Wrap(world.ErrNotFound)
 	}
 	return nil
 }

@@ -43,7 +43,7 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 	`, id.String())
 	obj, err := scanObjectRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("id", id.String()).Wrap(ErrNotFound)
+		return nil, oops.With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "get object").With("id", id.String()).Wrap(err)
@@ -53,7 +53,8 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 
 // Create persists a new object.
 func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error {
-	// Validate containment: object must be in exactly one place
+	// Validate object fields (name, description)
+	// Note: containment is validated by database constraint (check_single_containment)
 	if err := obj.Validate(); err != nil {
 		return oops.With("operation", "create object").With("object_id", obj.ID.String()).Wrap(err)
 	}
@@ -77,7 +78,8 @@ func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error 
 
 // Update modifies an existing object.
 func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error {
-	// Validate containment: object must be in exactly one place
+	// Validate object fields (name, description)
+	// Note: containment is validated by database constraint (check_single_containment)
 	if err := obj.Validate(); err != nil {
 		return oops.With("operation", "update object").With("object_id", obj.ID.String()).Wrap(err)
 	}
@@ -97,7 +99,7 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error 
 		return oops.With("operation", "update object").With("id", obj.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", obj.ID.String()).Wrap(ErrNotFound)
+		return oops.With("id", obj.ID.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }
@@ -109,7 +111,7 @@ func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", id.String()).Wrap(ErrNotFound)
+		return oops.With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }
@@ -194,7 +196,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		return oops.With("operation", "lock object").With("object_id", objectID.String()).Wrap(err)
 	}
 	if !exists {
-		return oops.With("object_id", objectID.String()).Wrap(ErrNotFound)
+		return oops.With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 	}
 
 	// If moving to a container, verify the container exists and is actually a container
@@ -246,7 +248,7 @@ func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to worl
 		return oops.With("operation", "move object").With("object_id", objectID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("object_id", objectID.String()).Wrap(ErrNotFound)
+		return oops.With("object_id", objectID.String()).Wrap(world.ErrNotFound)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

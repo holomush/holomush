@@ -33,7 +33,7 @@ func (r *LocationRepository) Get(ctx context.Context, id ulid.ULID) (*world.Loca
 	`, id.String())
 	loc, err := scanLocationRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.With("id", id.String()).Wrap(ErrNotFound)
+		return nil, oops.With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "get location").With("id", id.String()).Wrap(err)
@@ -72,7 +72,7 @@ func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) er
 		return oops.With("operation", "update location").With("id", loc.ID.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", loc.ID.String()).Wrap(ErrNotFound)
+		return oops.With("id", loc.ID.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }
@@ -84,7 +84,7 @@ func (r *LocationRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		return oops.With("operation", "delete location").With("id", id.String()).Wrap(err)
 	}
 	if result.RowsAffected() == 0 {
-		return oops.With("id", id.String()).Wrap(ErrNotFound)
+		return oops.With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 	return nil
 }

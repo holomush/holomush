@@ -141,7 +141,7 @@ func TestSceneRepository_RemoveParticipant(t *testing.T) {
 		nonExistentID := ulid.Make()
 		err := sceneRepo.RemoveParticipant(ctx, scene.ID, nonExistentID)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 }
 

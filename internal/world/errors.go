@@ -13,6 +13,9 @@ import (
 // ErrNotFound is returned when a requested entity does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrSelfReferentialExit is returned when an exit's from and to locations are the same.
+var ErrSelfReferentialExit = errors.New("self-referential exit: from and to locations cannot be the same")
+
 // CleanupIssueType identifies the type of issue during bidirectional exit cleanup.
 type CleanupIssueType string
 

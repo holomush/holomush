@@ -90,6 +90,7 @@ type Exit struct {
 
 // Validate validates the exit's fields.
 // Returns a ValidationError if any field is invalid.
+// Returns ErrSelfReferentialExit if from and to locations are the same.
 func (e *Exit) Validate() error {
 	if err := ValidateName(e.Name); err != nil {
 		return err
@@ -99,6 +100,10 @@ func (e *Exit) Validate() error {
 	}
 	if err := e.Visibility.Validate(); err != nil {
 		return err
+	}
+	// Check for self-referential exit (same from and to location)
+	if !e.FromLocationID.IsZero() && e.FromLocationID == e.ToLocationID {
+		return ErrSelfReferentialExit
 	}
 	if e.Locked {
 		if err := e.LockType.Validate(); err != nil {

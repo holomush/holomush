@@ -227,7 +227,7 @@ func TestLocationRepository_CRUD(t *testing.T) {
 	t.Run("get not found", func(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("update not found", func(t *testing.T) {
@@ -241,13 +241,13 @@ func TestLocationRepository_CRUD(t *testing.T) {
 
 		err := repo.Update(ctx, loc)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("delete not found", func(t *testing.T) {
 		err := repo.Delete(ctx, ulid.Make())
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, postgres.ErrNotFound)
+		assert.ErrorIs(t, err, world.ErrNotFound)
 	})
 
 	t.Run("create with invalid type fails", func(t *testing.T) {
