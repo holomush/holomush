@@ -17,12 +17,20 @@ import (
 
 // ObjectRepository implements world.ObjectRepository using PostgreSQL.
 type ObjectRepository struct {
-	pool *pgxpool.Pool
+	pool           *pgxpool.Pool
+	maxNestingDepth int
 }
 
 // NewObjectRepository creates a new ObjectRepository.
+// Uses DefaultMaxNestingDepth for nesting limit.
 func NewObjectRepository(pool *pgxpool.Pool) *ObjectRepository {
-	return &ObjectRepository{pool: pool}
+	return &ObjectRepository{pool: pool, maxNestingDepth: DefaultMaxNestingDepth}
+}
+
+// NewObjectRepositoryWithDepth creates a new ObjectRepository with a custom max nesting depth.
+// Use this for games that need different containment depth limits.
+func NewObjectRepositoryWithDepth(pool *pgxpool.Pool, maxNestingDepth int) *ObjectRepository {
+	return &ObjectRepository{pool: pool, maxNestingDepth: maxNestingDepth}
 }
 
 // Get retrieves an object by ID.
@@ -184,7 +192,7 @@ const DefaultMaxNestingDepth = 3
 // Move changes an object's containment.
 // Validates containment and enforces business rules:
 // - Target must be a valid container if moving to an object
-// - Max nesting depth is enforced (see DefaultMaxNestingDepth)
+// - Max nesting depth is enforced (configurable via NewObjectRepositoryWithDepth)
 // - Circular containment is prevented
 // Uses a transaction to ensure atomicity between validation and update.
 func (r *ObjectRepository) Move(ctx context.Context, objectID ulid.ULID, to world.Containment) error {
@@ -346,7 +354,7 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 	}
 
 	totalDepth := targetDepth + objectSubtreeDepth + 1
-	if totalDepth > DefaultMaxNestingDepth {
+	if totalDepth > r.maxNestingDepth {
 		return oops.
 			With("operation", "move object").
 			With("object_id", objectID.String()).
@@ -354,7 +362,7 @@ func (r *ObjectRepository) checkNestingDepthTx(ctx context.Context, q querier, o
 			With("target_depth", targetDepth).
 			With("object_subtree_depth", objectSubtreeDepth).
 			With("total_depth", totalDepth).
-			With("max_depth", DefaultMaxNestingDepth).
+			With("max_depth", r.maxNestingDepth).
 			Errorf("max nesting depth exceeded")
 	}
 

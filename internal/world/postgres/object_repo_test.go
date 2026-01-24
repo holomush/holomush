@@ -882,3 +882,145 @@ func TestObjectRepository_Move(t *testing.T) {
 		assert.Contains(t, err.Error(), "exactly one")
 	})
 }
+
+func TestObjectRepository_CustomMaxNestingDepth(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a test location
+	locID := ulid.Make()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
+		VALUES ($1, 'Depth Test Location', 'For depth testing', 'persistent', 'last:0', NOW())
+	`, locID.String())
+	require.NoError(t, err)
+	defer func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locID.String())
+	}()
+
+	t.Run("depth 5 allows deeper nesting", func(t *testing.T) {
+		// Use custom depth of 5
+		repo := postgres.NewObjectRepositoryWithDepth(testPool, 5)
+
+		// Create containers nested 4 deep, then add item (total 5) - should succeed
+		level1 := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Deep1",
+			Description: "Level 1",
+			LocationID:  &locID,
+			IsContainer: true,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, level1))
+		defer func() { _ = repo.Delete(ctx, level1.ID) }()
+
+		level2 := &world.Object{
+			ID:                  ulid.Make(),
+			Name:                "Deep2",
+			Description:         "Level 2",
+			ContainedInObjectID: &level1.ID,
+			IsContainer:         true,
+			CreatedAt:           time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, level2))
+		defer func() { _ = repo.Delete(ctx, level2.ID) }()
+
+		level3 := &world.Object{
+			ID:                  ulid.Make(),
+			Name:                "Deep3",
+			Description:         "Level 3",
+			ContainedInObjectID: &level2.ID,
+			IsContainer:         true,
+			CreatedAt:           time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, level3))
+		defer func() { _ = repo.Delete(ctx, level3.ID) }()
+
+		level4 := &world.Object{
+			ID:                  ulid.Make(),
+			Name:                "Deep4",
+			Description:         "Level 4",
+			ContainedInObjectID: &level3.ID,
+			IsContainer:         true,
+			CreatedAt:           time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, level4))
+		defer func() { _ = repo.Delete(ctx, level4.ID) }()
+
+		// Move item to level4 (depth 5) - should succeed with custom depth
+		item := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Deep Item",
+			Description: "At depth 5",
+			LocationID:  &locID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, item))
+		defer func() { _ = repo.Delete(ctx, item.ID) }()
+
+		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &level4.ID})
+		require.NoError(t, err) // Should succeed with depth 5
+
+		// Verify the item is at level4
+		got, err := repo.Get(ctx, item.ID)
+		require.NoError(t, err)
+		assert.NotNil(t, got.ContainedInObjectID)
+		assert.Equal(t, level4.ID, *got.ContainedInObjectID)
+	})
+
+	t.Run("depth 2 allows only shallow nesting", func(t *testing.T) {
+		// Use custom depth of 2 (container + one item, no nested containers)
+		repo := postgres.NewObjectRepositoryWithDepth(testPool, 2)
+
+		container := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Single Container",
+			Description: "Top level only",
+			LocationID:  &locID,
+			IsContainer: true,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, container))
+		defer func() { _ = repo.Delete(ctx, container.ID) }()
+
+		item := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Item",
+			Description: "Goes in container",
+			LocationID:  &locID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, item))
+		defer func() { _ = repo.Delete(ctx, item.ID) }()
+
+		// Moving item to container (total depth 2) should succeed
+		err := repo.Move(ctx, item.ID, world.Containment{ObjectID: &container.ID})
+		require.NoError(t, err)
+
+		// But adding another layer would fail
+		container2 := &world.Object{
+			ID:          ulid.Make(),
+			Name:        "Nested Container",
+			Description: "Should fail to nest",
+			LocationID:  &locID,
+			IsContainer: true,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, container2))
+		defer func() { _ = repo.Delete(ctx, container2.ID) }()
+
+		anotherItem := &world.Object{
+			ID:                  ulid.Make(),
+			Name:                "Nested Item",
+			Description:         "In container2",
+			ContainedInObjectID: &container2.ID,
+			CreatedAt:           time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, anotherItem))
+		defer func() { _ = repo.Delete(ctx, anotherItem.ID) }()
+
+		// Move container2 (with item inside) into container - would create depth 3, should fail
+		err = repo.Move(ctx, container2.ID, world.Containment{ObjectID: &container.ID})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "max nesting depth")
+	})
+}
