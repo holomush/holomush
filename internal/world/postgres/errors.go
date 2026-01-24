@@ -3,7 +3,8 @@
 
 package postgres
 
-import "errors"
+import "github.com/holomush/holomush/internal/world"
 
-// ErrNotFound is returned when an entity is not found.
-var ErrNotFound = errors.New("not found")
+// ErrNotFound is an alias to world.ErrNotFound for package compatibility.
+// Consumers should use world.ErrNotFound directly.
+var ErrNotFound = world.ErrNotFound

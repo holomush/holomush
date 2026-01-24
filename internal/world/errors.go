@@ -4,10 +4,14 @@
 package world
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/oklog/ulid/v2"
 )
+
+// ErrNotFound is returned when a requested entity does not exist.
+var ErrNotFound = errors.New("not found")
 
 // CleanupIssueType identifies the type of issue during bidirectional exit cleanup.
 type CleanupIssueType string

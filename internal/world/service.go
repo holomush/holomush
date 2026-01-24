@@ -42,7 +42,11 @@ type Service struct {
 }
 
 // NewService creates a new Service with the given configuration.
+// Panics if AccessControl is nil, as it is required for all operations.
 func NewService(cfg ServiceConfig) *Service {
+	if cfg.AccessControl == nil {
+		panic("world.NewService: AccessControl is required")
+	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
 		exitRepo:      cfg.ExitRepo,
@@ -72,6 +76,9 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if !s.accessControl.Check(ctx, subjectID, "write", "location:*") {
 		return ErrPermissionDenied
 	}
+	if loc == nil {
+		return oops.Errorf("location is nil")
+	}
 	if err := ValidateName(loc.Name); err != nil {
 		return err
 	}
@@ -93,6 +100,9 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 // UpdateLocation updates an existing location after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
 func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Location) error {
+	if loc == nil {
+		return oops.Errorf("location is nil")
+	}
 	resource := fmt.Sprintf("location:%s", loc.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
@@ -144,6 +154,9 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if !s.accessControl.Check(ctx, subjectID, "write", "exit:*") {
 		return ErrPermissionDenied
 	}
+	if exit == nil {
+		return oops.Errorf("exit is nil")
+	}
 	if err := ValidateName(exit.Name); err != nil {
 		return err
 	}
@@ -178,6 +191,9 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 // UpdateExit updates an existing exit after checking write authorization.
 // Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
 func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
+	if exit == nil {
+		return oops.Errorf("exit is nil")
+	}
 	resource := fmt.Sprintf("exit:%s", exit.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
@@ -264,6 +280,9 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if !s.accessControl.Check(ctx, subjectID, "write", "object:*") {
 		return ErrPermissionDenied
 	}
+	if obj == nil {
+		return oops.Errorf("object is nil")
+	}
 	if err := ValidateName(obj.Name); err != nil {
 		return err
 	}
@@ -282,6 +301,9 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 // UpdateObject updates an existing object after checking write authorization.
 // Returns a ValidationError if the name or description is invalid.
 func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Object) error {
+	if obj == nil {
+		return oops.Errorf("object is nil")
+	}
 	resource := fmt.Sprintf("object:%s", obj.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied

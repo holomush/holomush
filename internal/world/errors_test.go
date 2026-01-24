@@ -171,3 +171,14 @@ func TestBidirectionalCleanupResult_IsSevere(t *testing.T) {
 		})
 	}
 }
+
+func TestErrNotFound_ExportedFromWorldPackage(t *testing.T) {
+	// Verify ErrNotFound is exported and usable from world package
+	assert.NotNil(t, world.ErrNotFound)
+	assert.Equal(t, "not found", world.ErrNotFound.Error())
+
+	// Verify errors.Is works for wrapped errors
+	wrappedErr := errors.New("get location: not found")
+	assert.False(t, errors.Is(wrappedErr, world.ErrNotFound),
+		"unrelated error should not match ErrNotFound")
+}

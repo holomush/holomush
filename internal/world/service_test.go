@@ -1681,3 +1681,91 @@ func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 		mockAC.AssertExpectations(t)
 	})
 }
+
+// --- NewService Validation Tests ---
+
+func TestNewService_RequiresAccessControl(t *testing.T) {
+	t.Run("panics when AccessControl is nil", func(t *testing.T) {
+		assert.Panics(t, func() {
+			world.NewService(world.ServiceConfig{
+				AccessControl: nil,
+			})
+		})
+	})
+
+	t.Run("succeeds with AccessControl provided", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		assert.NotPanics(t, func() {
+			svc := world.NewService(world.ServiceConfig{
+				AccessControl: mockAC,
+			})
+			assert.NotNil(t, svc)
+		})
+	})
+}
+
+// --- Nil Input Tests ---
+
+func TestWorldService_CreateLocation_NilInput(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+
+	err := svc.CreateLocation(ctx, subjectID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+	})
+
+	// Note: Access check happens before nil check with specific resource
+	// For nil input, we can't build resource string, so check must come first
+	err := svc.UpdateLocation(ctx, subjectID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWorldService_CreateExit_NilInput(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+
+	err := svc.CreateExit(ctx, subjectID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWorldService_CreateObject_NilInput(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	svc := world.NewService(world.ServiceConfig{
+		AccessControl: mockAC,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+
+	err := svc.CreateObject(ctx, subjectID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
