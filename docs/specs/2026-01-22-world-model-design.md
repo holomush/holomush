@@ -316,6 +316,9 @@ location:<id>              # Specific room
 location:*                 # All rooms
 location:type:scene        # All scenes
 
+# Scenes (participant operations)
+scene:<id>                 # Scene participant operations
+
 # Exits
 exit:<id>                  # Specific exit
 exit:from:<location_id>    # All exits from a location

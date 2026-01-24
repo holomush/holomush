@@ -437,4 +437,15 @@ func TestExit_Validate(t *testing.T) {
 		require.Error(t, err, "expected error for self-referential exit")
 		assert.Contains(t, err.Error(), "self-referential")
 	})
+
+	t.Run("zero location IDs pass validation (repository enforces NOT NULL)", func(t *testing.T) {
+		// Exit validation allows zero IDs for flexibility (e.g., builder pattern).
+		// Database NOT NULL constraints enforce that IDs are set on insert.
+		exit := &world.Exit{
+			// FromLocationID and ToLocationID both zero
+			Name:       "north",
+			Visibility: world.VisibilityAll,
+		}
+		assert.NoError(t, exit.Validate(), "exit with zero location IDs should pass validation")
+	})
 }

@@ -137,6 +137,248 @@ func TestMovePayload_OmitEmptyFields(t *testing.T) {
 	assert.NotContains(t, string(data), "exit_name")
 }
 
+func TestMovePayload_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload world.MovePayload
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid character move",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid object move to character",
+			payload: world.MovePayload{
+				EntityType: "object",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "character",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid object move to container",
+			payload: world.MovePayload{
+				EntityType: "object",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "character",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "object",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid entity type",
+			payload: world.MovePayload{
+				EntityType: "invalid",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "entity_type",
+		},
+		{
+			name: "empty entity type",
+			payload: world.MovePayload{
+				EntityID: "01HQGXYZ0000000000000001",
+				FromType: "location",
+				FromID:   "01HQGXYZ0000000000000002",
+				ToType:   "location",
+				ToID:     "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "entity_type",
+		},
+		{
+			name: "empty entity ID",
+			payload: world.MovePayload{
+				EntityType: "character",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "entity_id",
+		},
+		{
+			name: "invalid from type",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "invalid",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "from_type",
+		},
+		{
+			name: "empty from ID",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "from_id",
+		},
+		{
+			name: "invalid to type",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "invalid",
+				ToID:       "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "to_type",
+		},
+		{
+			name: "empty to ID",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "location",
+			},
+			wantErr: true,
+			errMsg:  "to_id",
+		},
+		{
+			name: "character move with exit (valid)",
+			payload: world.MovePayload{
+				EntityType: "character",
+				EntityID:   "01HQGXYZ0000000000000001",
+				FromType:   "location",
+				FromID:     "01HQGXYZ0000000000000002",
+				ToType:     "location",
+				ToID:       "01HQGXYZ0000000000000003",
+				ExitID:     "01HQGXYZ0000000000000004",
+				ExitName:   "north",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.payload.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestObjectGivePayload_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload world.ObjectGivePayload
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid give",
+			payload: world.ObjectGivePayload{
+				ObjectID:        "01HQGXYZ0000000000000001",
+				ObjectName:      "Sword",
+				FromCharacterID: "01HQGXYZ0000000000000002",
+				ToCharacterID:   "01HQGXYZ0000000000000003",
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty object ID",
+			payload: world.ObjectGivePayload{
+				ObjectName:      "Sword",
+				FromCharacterID: "01HQGXYZ0000000000000002",
+				ToCharacterID:   "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "object_id",
+		},
+		{
+			name: "empty object name",
+			payload: world.ObjectGivePayload{
+				ObjectID:        "01HQGXYZ0000000000000001",
+				FromCharacterID: "01HQGXYZ0000000000000002",
+				ToCharacterID:   "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "object_name",
+		},
+		{
+			name: "empty from character ID",
+			payload: world.ObjectGivePayload{
+				ObjectID:      "01HQGXYZ0000000000000001",
+				ObjectName:    "Sword",
+				ToCharacterID: "01HQGXYZ0000000000000003",
+			},
+			wantErr: true,
+			errMsg:  "from_character_id",
+		},
+		{
+			name: "empty to character ID",
+			payload: world.ObjectGivePayload{
+				ObjectID:        "01HQGXYZ0000000000000001",
+				ObjectName:      "Sword",
+				FromCharacterID: "01HQGXYZ0000000000000002",
+			},
+			wantErr: true,
+			errMsg:  "to_character_id",
+		},
+		{
+			name: "self give not allowed",
+			payload: world.ObjectGivePayload{
+				ObjectID:        "01HQGXYZ0000000000000001",
+				ObjectName:      "Sword",
+				FromCharacterID: "01HQGXYZ0000000000000002",
+				ToCharacterID:   "01HQGXYZ0000000000000002",
+			},
+			wantErr: true,
+			errMsg:  "to_character_id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.payload.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestPayloads_RoundTrip(t *testing.T) {
 	t.Run("move payload round trip", func(t *testing.T) {
 		original := world.MovePayload{

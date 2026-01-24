@@ -58,6 +58,7 @@ func TestValidateDescription(t *testing.T) {
 		{"unicode description", "日本語の説明", false, ""},
 		{"newline allowed", "line1\nline2", false, ""},
 		{"tab allowed", "column1\tcolumn2", false, ""},
+		{"carriage return allowed", "line1\rline2", false, ""},
 		{"invalid UTF-8 bytes", "\xff\xfe", true, "must be valid UTF-8"},
 		{"control char", "desc\x00with null", true, "cannot contain control characters"},
 	}
@@ -89,6 +90,7 @@ func TestValidateAliases(t *testing.T) {
 		{"empty alias", []string{"n", ""}, true, "cannot be empty"},
 		{"alias too long", []string{strings.Repeat("a", MaxAliasLength+1)}, true, "exceeds maximum length"},
 		{"control char in alias", []string{"n\x00"}, true, "cannot contain control characters"},
+		{"invalid UTF-8 in alias", []string{"\xff\xfe"}, true, "must be valid UTF-8"},
 	}
 
 	// Fill the "too many aliases" test case with valid values
