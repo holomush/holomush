@@ -78,6 +78,9 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if err := ValidateDescription(loc.Description); err != nil {
 		return err
 	}
+	if err := loc.Type.Validate(); err != nil {
+		return err
+	}
 	if loc.ID.IsZero() {
 		loc.ID = ulid.Make()
 	}
@@ -88,10 +91,20 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 }
 
 // UpdateLocation updates an existing location after checking write authorization.
+// Returns a ValidationError if the name or description is invalid.
 func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Location) error {
 	resource := fmt.Sprintf("location:%s", loc.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
+	}
+	if err := ValidateName(loc.Name); err != nil {
+		return err
+	}
+	if err := ValidateDescription(loc.Description); err != nil {
+		return err
+	}
+	if err := loc.Type.Validate(); err != nil {
+		return err
 	}
 	if err := s.locationRepo.Update(ctx, loc); err != nil {
 		return oops.Wrapf(err, "update location %s", loc.ID)
@@ -137,6 +150,14 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if err := ValidateAliases(exit.Aliases); err != nil {
 		return err
 	}
+	if err := exit.Visibility.Validate(); err != nil {
+		return err
+	}
+	if exit.Locked {
+		if err := exit.LockType.Validate(); err != nil {
+			return err
+		}
+	}
 	if exit.ID.IsZero() {
 		exit.ID = ulid.Make()
 	}
@@ -147,10 +168,25 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 }
 
 // UpdateExit updates an existing exit after checking write authorization.
+// Returns a ValidationError if the name, aliases, visibility, or lock type are invalid.
 func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	resource := fmt.Sprintf("exit:%s", exit.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
+	}
+	if err := ValidateName(exit.Name); err != nil {
+		return err
+	}
+	if err := ValidateAliases(exit.Aliases); err != nil {
+		return err
+	}
+	if err := exit.Visibility.Validate(); err != nil {
+		return err
+	}
+	if exit.Locked {
+		if err := exit.LockType.Validate(); err != nil {
+			return err
+		}
 	}
 	if err := s.exitRepo.Update(ctx, exit); err != nil {
 		return oops.Wrapf(err, "update exit %s", exit.ID)
@@ -226,10 +262,17 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 }
 
 // UpdateObject updates an existing object after checking write authorization.
+// Returns a ValidationError if the name or description is invalid.
 func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Object) error {
 	resource := fmt.Sprintf("object:%s", obj.ID.String())
 	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
 		return ErrPermissionDenied
+	}
+	if err := ValidateName(obj.Name); err != nil {
+		return err
+	}
+	if err := ValidateDescription(obj.Description); err != nil {
+		return err
 	}
 	if err := s.objectRepo.Update(ctx, obj); err != nil {
 		return oops.Wrapf(err, "update object %s", obj.ID)

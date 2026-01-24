@@ -133,7 +133,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		loc := &world.Location{ID: locID, Name: "Updated Room"}
+		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
 		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
 		mockRepo.EXPECT().Update(ctx, loc).Return(nil)
@@ -281,6 +281,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 			FromLocationID: fromLocID,
 			ToLocationID:   toLocID,
 			Name:           "north",
+			Visibility:     world.VisibilityAll,
 		}
 
 		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
@@ -327,7 +328,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		exit := &world.Exit{ID: exitID, Name: "north updated"}
+		exit := &world.Exit{ID: exitID, Name: "north updated", Visibility: world.VisibilityAll}
 
 		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil)
@@ -346,7 +347,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		exit := &world.Exit{ID: exitID, Name: "north"}
+		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
 		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(false)
 
@@ -364,7 +365,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		exit := &world.Exit{ID: exitID, Name: "north"}
+		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
 		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(errors.New("db error"))
@@ -1007,6 +1008,7 @@ func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 			FromLocationID: fromLocID,
 			ToLocationID:   toLocID,
 			Name:           "north",
+			Visibility:     world.VisibilityAll,
 		}
 
 		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
@@ -1210,6 +1212,259 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 		// Should still succeed since primary delete worked, but severe issue is logged
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+// --- Update Method Validation Tests ---
+
+func TestWorldService_UpdateLocation_Validation(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		loc := &world.Location{
+			ID:   locID,
+			Name: "", // Empty name
+			Type: world.LocationTypePersistent,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+
+		err := svc.UpdateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("rejects invalid location type", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		loc := &world.Location{
+			ID:   locID,
+			Name: "Valid Name",
+			Type: world.LocationType("invalid"),
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+
+		err := svc.UpdateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_UpdateExit_Validation(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			ID:   exitID,
+			Name: "", // Empty name
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("rejects invalid visibility", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			ID:         exitID,
+			Name:       "north",
+			Visibility: world.Visibility("invalid"),
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidVisibility)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("rejects invalid lock type when locked", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			ID:         exitID,
+			Name:       "north",
+			Visibility: world.VisibilityAll,
+			Locked:     true,
+			LockType:   world.LockType("invalid"),
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLockType)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_UpdateObject_Validation(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{
+			ID:   objID,
+			Name: "", // Empty name
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+
+		err := svc.UpdateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+
+		var validationErr *world.ValidationError
+		assert.True(t, errors.As(err, &validationErr))
+		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+// --- Create Method Extended Validation Tests ---
+
+func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("rejects invalid location type", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		loc := &world.Location{
+			Name: "Valid Name",
+			Type: world.LocationType("invalid"),
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+
+		err := svc.CreateLocation(ctx, subjectID, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	t.Run("rejects invalid visibility", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			FromLocationID: fromLocID,
+			ToLocationID:   toLocID,
+			Name:           "north",
+			Visibility:     world.Visibility("invalid"),
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+
+		err := svc.CreateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidVisibility)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("rejects invalid lock type when locked", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{
+			FromLocationID: fromLocID,
+			ToLocationID:   toLocID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         true,
+			LockType:       world.LockType("invalid"),
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+
+		err := svc.CreateExit(ctx, subjectID, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLockType)
 		mockAC.AssertExpectations(t)
 	})
 }
