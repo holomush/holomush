@@ -43,8 +43,10 @@ type ExitRepository interface {
 	Update(ctx context.Context, exit *Exit) error
 
 	// Delete removes an exit by ID.
-	// If bidirectional, attempts to remove the return exit (best-effort).
-	// Returns *BidirectionalCleanupResult if cleanup encounters issues (caller should check IsSevere()).
+	// If bidirectional, deletes the return exit atomically in a single transaction.
+	// For non-severe issues (return exit not found), the primary delete proceeds.
+	// For severe issues (find error, delete error), the entire operation is rolled back.
+	// Returns *BidirectionalCleanupResult when cleanup encounters issues.
 	Delete(ctx context.Context, id ulid.ULID) error
 
 	// ListFromLocation returns all exits from a location.

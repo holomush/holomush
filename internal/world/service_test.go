@@ -1183,7 +1183,7 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 	exitID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
 
-	t.Run("handles severe cleanup error for bidirectional exit", func(t *testing.T) {
+	t.Run("propagates severe cleanup error for bidirectional exit", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
@@ -1206,13 +1206,14 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
 		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
 
-		// Should still succeed since primary delete worked, but severe issue is logged
+		// Severe error means the entire operation was rolled back - return error
 		err := svc.DeleteExit(ctx, subjectID, exitID)
-		assert.NoError(t, err)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "delete exit")
 		mockAC.AssertExpectations(t)
 	})
 
-	t.Run("handles delete error cleanup for bidirectional exit", func(t *testing.T) {
+	t.Run("propagates delete error cleanup for bidirectional exit", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
@@ -1237,9 +1238,10 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
 		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
 
-		// Should still succeed since primary delete worked, but severe issue is logged
+		// Severe error means the entire operation was rolled back - return error
 		err := svc.DeleteExit(ctx, subjectID, exitID)
-		assert.NoError(t, err)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "delete exit")
 		mockAC.AssertExpectations(t)
 	})
 }

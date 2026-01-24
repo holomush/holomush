@@ -161,10 +161,11 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 }
 
 // Delete removes an exit by ID.
-// If bidirectional, also removes the return exit atomically in a single transaction.
-// Returns *world.BidirectionalCleanupResult if cleanup of the return exit encountered
-// issues (e.g., return exit not found). Callers can check IsSevere() to determine
-// if the issue warrants logging/alerting.
+// If bidirectional, deletes the return exit atomically in a single transaction.
+// For non-severe issues (return exit not found), the primary delete proceeds.
+// For severe issues (find error, delete error), the entire operation is rolled back
+// and the returned BidirectionalCleanupResult indicates the primary delete did NOT complete.
+// Callers can check IsSevere() to determine the severity of the issue.
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	// First, get the exit to check if it's bidirectional
 	exit, err := r.Get(ctx, id)

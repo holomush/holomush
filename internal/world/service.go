@@ -211,8 +211,9 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 }
 
 // DeleteExit deletes an exit after checking delete authorization.
-// For bidirectional exits, cleanup of the return exit is best-effort.
-// Cleanup issues are logged but don't cause the operation to fail.
+// For bidirectional exits, the return exit is deleted atomically.
+// Non-severe cleanup issues (return not found) are logged but don't fail the operation.
+// Severe cleanup issues (find/delete errors) cause a full rollback - the operation fails.
 func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID) error {
 	resource := fmt.Sprintf("exit:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
@@ -220,20 +221,21 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	}
 	err := s.exitRepo.Delete(ctx, id)
 	if err != nil {
-		// Check if this is a cleanup result (primary delete succeeded)
+		// Check if this is a cleanup result from bidirectional exit handling
 		var cleanupResult *BidirectionalCleanupResult
 		if errors.As(err, &cleanupResult) {
 			// Log cleanup issues at appropriate level
 			if cleanupResult.IsSevere() {
-				slog.Error("bidirectional exit cleanup failed",
+				// Severe: operation was rolled back, primary delete did NOT complete
+				slog.Error("bidirectional exit delete rolled back",
 					"exit_id", cleanupResult.ExitID.String(),
 					"error", cleanupResult.Error())
-			} else {
-				slog.Debug("bidirectional exit cleanup notice",
-					"exit_id", cleanupResult.ExitID.String(),
-					"message", cleanupResult.Error())
+				return oops.Wrapf(err, "delete exit %s", id)
 			}
-			// Primary delete succeeded, don't propagate cleanup errors
+			// Non-severe: primary delete succeeded, return exit was just not found
+			slog.Debug("bidirectional exit cleanup notice",
+				"exit_id", cleanupResult.ExitID.String(),
+				"message", cleanupResult.Error())
 			return nil
 		}
 		// Actual delete failure
