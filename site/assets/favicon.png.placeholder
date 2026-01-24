@@ -1,0 +1,17 @@
+# Favicon Placeholder
+
+This file indicates that a favicon.png is needed for the HoloMUSH documentation site.
+
+## Requirements:
+- Format: PNG
+- Size: 32x32 or 64x64 pixels
+- Background: Transparent preferred
+- Name: favicon.png (remove this .placeholder suffix)
+
+## Usage:
+1. Create a favicon (often a simplified/smaller version of the logo)
+2. Save as favicon.png in this directory
+3. Delete this placeholder file
+
+The favicon is referenced in zensical.toml:
+  favicon = "assets/favicon.png"
