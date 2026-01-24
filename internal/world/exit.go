@@ -6,6 +6,8 @@ package world
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -28,6 +30,19 @@ func (v Visibility) String() string {
 	return string(v)
 }
 
+// ErrInvalidVisibility indicates an unrecognized visibility value.
+var ErrInvalidVisibility = errors.New("invalid visibility")
+
+// Validate checks that the visibility is a recognized value.
+func (v Visibility) Validate() error {
+	switch v {
+	case VisibilityAll, VisibilityOwner, VisibilityList:
+		return nil
+	default:
+		return ErrInvalidVisibility
+	}
+}
+
 // LockType identifies how an exit is locked.
 type LockType string
 
@@ -41,6 +56,19 @@ const (
 // String returns the string representation of the lock type.
 func (l LockType) String() string {
 	return string(l)
+}
+
+// ErrInvalidLockType indicates an unrecognized lock type.
+var ErrInvalidLockType = errors.New("invalid lock type")
+
+// Validate checks that the lock type is a recognized value.
+func (l LockType) Validate() error {
+	switch l {
+	case LockTypeKey, LockTypePassword, LockTypeCondition:
+		return nil
+	default:
+		return ErrInvalidLockType
+	}
 }
 
 // Exit represents a connection between two locations.
@@ -120,19 +148,25 @@ func (e *Exit) ReverseExit() *Exit {
 
 // deepCopyLockData creates a true deep copy of LockData, including nested maps/slices.
 // Uses JSON round-trip which handles arbitrary nested structures in map[string]any.
-// Returns nil if input is nil or if marshaling fails (defensive).
+// Returns nil if input is nil. Logs errors and returns nil if marshaling fails.
 func deepCopyLockData(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
 	}
 	data, err := json.Marshal(src)
 	if err != nil {
-		// Should not happen with valid map[string]any, but be defensive
+		// Log the error - this indicates data corruption or invalid types in LockData
+		slog.Error("deepCopyLockData: failed to marshal lock data",
+			"error", err,
+			"keys", len(src))
 		return nil
 	}
 	var dst map[string]any
 	if err := json.Unmarshal(data, &dst); err != nil {
-		// Should not happen with valid JSON, but be defensive
+		// Log the error - this should not happen with valid JSON from Marshal
+		slog.Error("deepCopyLockData: failed to unmarshal lock data",
+			"error", err,
+			"json_length", len(data))
 		return nil
 	}
 	return dst

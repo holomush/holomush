@@ -6,6 +6,7 @@ package world
 
 import (
 	"errors"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -81,12 +82,21 @@ func (l *Location) EffectiveName(parent *Location) string {
 // ParseReplayPolicy extracts the count from "last:N" format.
 // Returns the parsed integer N, or 0 if the format is invalid.
 // By convention: -1 means unlimited replay, 0 means no replay, positive N means last N events.
+// Only strings with "last:" prefix are parsed; all others return 0 with a warning log.
 func ParseReplayPolicy(policy string) int {
 	if !strings.HasPrefix(policy, "last:") {
+		if policy != "" {
+			slog.Warn("ParseReplayPolicy: invalid format, defaulting to 0",
+				"policy", policy,
+				"expected", "last:N")
+		}
 		return 0
 	}
 	n, err := strconv.Atoi(strings.TrimPrefix(policy, "last:"))
 	if err != nil {
+		slog.Warn("ParseReplayPolicy: failed to parse count, defaulting to 0",
+			"policy", policy,
+			"error", err)
 		return 0
 	}
 	return n

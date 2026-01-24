@@ -313,6 +313,69 @@ func TestWorldService_CreateExit(t *testing.T) {
 	})
 }
 
+func TestWorldService_UpdateExit(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("updates exit when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{ID: exitID, Name: "north updated"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil)
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		require.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{ID: exitID, Name: "north"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(false)
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		exit := &world.Exit{ID: exitID, Name: "north"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Update(ctx, exit).Return(errors.New("db error"))
+
+		err := svc.UpdateExit(ctx, subjectID, exit)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+}
+
 func TestWorldService_DeleteExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
@@ -348,6 +411,34 @@ func TestWorldService_DeleteExit(t *testing.T) {
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("handles cleanup result for bidirectional exit", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		toLocationID := ulid.Make()
+		cleanupResult := &world.BidirectionalCleanupResult{
+			ExitID:       exitID,
+			ToLocationID: toLocationID,
+			ReturnName:   "south",
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupReturnNotFound,
+			},
+		}
+
+		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
+
+		// Should succeed since primary delete worked
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		assert.NoError(t, err)
 		mockAC.AssertExpectations(t)
 	})
 }
@@ -436,6 +527,69 @@ func TestWorldService_CreateObject(t *testing.T) {
 
 		err := svc.CreateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_UpdateObject(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("updates object when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{ID: objID, Name: "sword updated"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil)
+
+		err := svc.UpdateObject(ctx, subjectID, obj)
+		require.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{ID: objID, Name: "sword"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
+
+		err := svc.UpdateObject(ctx, subjectID, obj)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{ID: objID, Name: "sword"}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Update(ctx, obj).Return(errors.New("db error"))
+
+		err := svc.UpdateObject(ctx, subjectID, obj)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
 		mockAC.AssertExpectations(t)
 	})
 }

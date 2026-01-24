@@ -132,6 +132,18 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	return nil
 }
 
+// UpdateExit updates an existing exit after checking write authorization.
+func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
+	resource := fmt.Sprintf("exit:%s", exit.ID.String())
+	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
+		return ErrPermissionDenied
+	}
+	if err := s.exitRepo.Update(ctx, exit); err != nil {
+		return oops.Wrapf(err, "update exit %s", exit.ID)
+	}
+	return nil
+}
+
 // DeleteExit deletes an exit after checking delete authorization.
 // For bidirectional exits, cleanup of the return exit is best-effort.
 // Cleanup issues are logged but don't cause the operation to fail.
@@ -188,6 +200,18 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	}
 	if err := s.objectRepo.Create(ctx, obj); err != nil {
 		return oops.Wrapf(err, "create object %s", obj.ID)
+	}
+	return nil
+}
+
+// UpdateObject updates an existing object after checking write authorization.
+func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Object) error {
+	resource := fmt.Sprintf("object:%s", obj.ID.String())
+	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
+		return ErrPermissionDenied
+	}
+	if err := s.objectRepo.Update(ctx, obj); err != nil {
+		return oops.Wrapf(err, "update object %s", obj.ID)
 	}
 	return nil
 }

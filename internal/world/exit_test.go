@@ -275,3 +275,57 @@ func TestLockType_String(t *testing.T) {
 		})
 	}
 }
+
+func TestVisibility_Validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		visibility world.Visibility
+		wantErr    bool
+	}{
+		{"all is valid", world.VisibilityAll, false},
+		{"owner is valid", world.VisibilityOwner, false},
+		{"list is valid", world.VisibilityList, false},
+		{"empty string is invalid", world.Visibility(""), true},
+		{"arbitrary string is invalid", world.Visibility("public"), true},
+		{"similar but wrong is invalid", world.Visibility("All"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.visibility.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, world.ErrInvalidVisibility)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestLockType_Validate(t *testing.T) {
+	tests := []struct {
+		name     string
+		lockType world.LockType
+		wantErr  bool
+	}{
+		{"key is valid", world.LockTypeKey, false},
+		{"password is valid", world.LockTypePassword, false},
+		{"condition is valid", world.LockTypeCondition, false},
+		{"empty string is invalid", world.LockType(""), true},
+		{"arbitrary string is invalid", world.LockType("magic"), true},
+		{"similar but wrong is invalid", world.LockType("Key"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.lockType.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, world.ErrInvalidLockType)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
