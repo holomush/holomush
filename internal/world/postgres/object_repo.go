@@ -52,13 +52,8 @@ func (r *ObjectRepository) Get(ctx context.Context, id ulid.ULID) (*world.Object
 }
 
 // Create persists a new object.
+// Callers must validate the object before calling this method.
 func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error {
-	// Validate object fields (name, description)
-	// Note: containment is validated by database constraint (check_single_containment)
-	if err := obj.Validate(); err != nil {
-		return oops.With("operation", "create object").With("object_id", obj.ID.String()).Wrap(err)
-	}
-
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO objects (id, name, description, location_id, held_by_character_id,
 		                     contained_in_object_id, is_container, owner_id, created_at)
@@ -77,13 +72,8 @@ func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error 
 }
 
 // Update modifies an existing object.
+// Callers must validate the object before calling this method.
 func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error {
-	// Validate object fields (name, description)
-	// Note: containment is validated by database constraint (check_single_containment)
-	if err := obj.Validate(); err != nil {
-		return oops.With("operation", "update object").With("object_id", obj.ID.String()).Wrap(err)
-	}
-
 	result, err := r.pool.Exec(ctx, `
 		UPDATE objects SET name = $2, description = $3, location_id = $4,
 		       held_by_character_id = $5, contained_in_object_id = $6,
