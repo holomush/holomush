@@ -125,3 +125,15 @@ type SceneParticipant struct {
 	CharacterID ulid.ULID
 	Role        ParticipantRole
 }
+
+// CharacterRepository defines operations for character persistence.
+type CharacterRepository interface {
+	// Get retrieves a character by ID.
+	Get(ctx context.Context, id ulid.ULID) (*Character, error)
+
+	// GetByLocation retrieves all characters at a location.
+	GetByLocation(ctx context.Context, locationID ulid.ULID) ([]*Character, error)
+
+	// UpdateLocation moves a character to a new location.
+	UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID) error
+}
