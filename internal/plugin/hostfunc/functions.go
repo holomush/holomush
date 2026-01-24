@@ -35,19 +35,34 @@ type CapabilityChecker interface {
 type Functions struct {
 	kvStore  KVStore
 	enforcer CapabilityChecker
+	world    WorldQuerier
+}
+
+// Option configures Functions.
+type Option func(*Functions)
+
+// WithWorldQuerier sets the world querier for world query functions.
+func WithWorldQuerier(w WorldQuerier) Option {
+	return func(f *Functions) {
+		f.world = w
+	}
 }
 
 // New creates host functions with dependencies.
 // Panics if enforcer is nil (required dependency).
 // KVStore may be nil; KV functions will return errors if called.
-func New(kv KVStore, enforcer CapabilityChecker) *Functions {
+func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
 	if enforcer == nil {
 		panic("hostfunc.New: enforcer cannot be nil")
 	}
-	return &Functions{
+	f := &Functions{
 		kvStore:  kv,
 		enforcer: enforcer,
 	}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
 }
 
 // Register adds host functions to a Lua state.
@@ -64,6 +79,11 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "kv_get", ls.NewFunction(f.wrap(pluginName, "kv.read", f.kvGetFn(pluginName))))
 	ls.SetField(mod, "kv_set", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvSetFn(pluginName))))
 	ls.SetField(mod, "kv_delete", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvDeleteFn(pluginName))))
+
+	// World queries (capability required)
+	ls.SetField(mod, "query_room", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.queryRoomFn(pluginName))))
+	ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
+	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
 
 	ls.SetGlobal("holomush", mod)
 }
