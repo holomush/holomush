@@ -46,6 +46,19 @@ func TestCharacter_Validate(t *testing.T) {
 		require.NoError(t, char.Validate())
 	})
 
+	t.Run("name at exactly max length passes", func(t *testing.T) {
+		exactName := make([]byte, world.MaxNameLength)
+		for i := range exactName {
+			exactName[i] = 'a'
+		}
+		char := &world.Character{
+			PlayerID:   playerID,
+			Name:       string(exactName),
+			LocationID: &locID,
+		}
+		require.NoError(t, char.Validate())
+	})
+
 	t.Run("name exceeds max length", func(t *testing.T) {
 		longName := make([]byte, world.MaxNameLength+1)
 		for i := range longName {
@@ -87,6 +100,20 @@ func TestCharacter_Validate(t *testing.T) {
 			PlayerID:    playerID,
 			Name:        "TestChar",
 			Description: "",
+			LocationID:  &locID,
+		}
+		require.NoError(t, char.Validate())
+	})
+
+	t.Run("description at exactly max length passes", func(t *testing.T) {
+		exactDesc := make([]byte, world.MaxDescriptionLength)
+		for i := range exactDesc {
+			exactDesc[i] = 'a'
+		}
+		char := &world.Character{
+			PlayerID:    playerID,
+			Name:        "TestChar",
+			Description: string(exactDesc),
 			LocationID:  &locID,
 		}
 		require.NoError(t, char.Validate())
