@@ -664,6 +664,103 @@ func TestWorldService_DeleteObject(t *testing.T) {
 	})
 }
 
+func TestWorldService_MoveObject(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+	locationID := ulid.Make()
+
+	t.Run("moves object when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		to := world.Containment{LocationID: &locationID}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		require.NoError(t, err)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		to := world.Containment{LocationID: &locationID}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
+
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error for invalid containment", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		// Empty containment is invalid
+		to := world.Containment{}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		to := world.Containment{LocationID: &locationID}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(errors.New("db error"))
+
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when object repository not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+
+		svc := world.NewService(world.ServiceConfig{
+			AccessControl: mockAC,
+		})
+
+		to := world.Containment{LocationID: &locationID}
+
+		err := svc.MoveObject(ctx, subjectID, objID, to)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "object repository not configured")
+	})
+}
+
 func TestWorldService_AddSceneParticipant(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()

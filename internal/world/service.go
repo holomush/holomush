@@ -318,6 +318,25 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	return nil
 }
 
+// MoveObject moves an object to a new containment after checking write authorization.
+// Returns ErrInvalidContainment if the target containment is invalid.
+func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
+	if s.objectRepo == nil {
+		return oops.Errorf("object repository not configured")
+	}
+	resource := fmt.Sprintf("object:%s", id.String())
+	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
+		return ErrPermissionDenied
+	}
+	if err := to.Validate(); err != nil {
+		return err
+	}
+	if err := s.objectRepo.Move(ctx, id, to); err != nil {
+		return oops.Wrapf(err, "move object %s", id)
+	}
+	return nil
+}
+
 // AddSceneParticipant adds a character to a scene after checking write authorization.
 // Returns ErrInvalidParticipantRole if the role is not valid.
 func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {
