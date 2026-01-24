@@ -266,6 +266,9 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if err := obj.Validate(); err != nil {
 		return err
 	}
+	if err := obj.ValidateContainment(); err != nil {
+		return err
+	}
 	if obj.ID.IsZero() {
 		obj.ID = ulid.Make()
 	}
@@ -289,6 +292,9 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 		return ErrPermissionDenied
 	}
 	if err := obj.Validate(); err != nil {
+		return err
+	}
+	if err := obj.ValidateContainment(); err != nil {
 		return err
 	}
 	if err := s.objectRepo.Update(ctx, obj); err != nil {

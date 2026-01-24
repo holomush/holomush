@@ -518,6 +518,7 @@ func TestWorldService_GetObject(t *testing.T) {
 func TestWorldService_CreateObject(t *testing.T) {
 	ctx := context.Background()
 	subjectID := "char:" + ulid.Make().String()
+	locationID := ulid.Make()
 
 	t.Run("creates object when authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
@@ -528,7 +529,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{Name: "sword"}
+		obj := &world.Object{Name: "sword", LocationID: &locationID}
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
 		mockObjRepo.EXPECT().Create(ctx, mock.MatchedBy(func(o *world.Object) bool {
@@ -550,7 +551,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{Name: "sword"}
+		obj := &world.Object{Name: "sword", LocationID: &locationID}
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(false)
 
@@ -563,6 +564,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 func TestWorldService_UpdateObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
+	locationID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
 
 	t.Run("updates object when authorized", func(t *testing.T) {
@@ -574,7 +576,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword updated"}
+		obj := &world.Object{ID: objID, Name: "sword updated", LocationID: &locationID}
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil)
@@ -593,7 +595,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword"}
+		obj := &world.Object{ID: objID, Name: "sword", LocationID: &locationID}
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
@@ -611,7 +613,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword"}
+		obj := &world.Object{ID: objID, Name: "sword", LocationID: &locationID}
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(errors.New("db error"))
@@ -911,6 +913,27 @@ func TestWorldService_CreateObject_Validation(t *testing.T) {
 		assert.Equal(t, "name", validationErr.Field)
 		mockAC.AssertExpectations(t)
 	})
+
+	t.Run("rejects object without containment", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{
+			Name: "orphan", // Valid name but no containment
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+
+		err := svc.CreateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
+		mockAC.AssertExpectations(t)
+	})
 }
 
 func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
@@ -1077,6 +1100,7 @@ func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
 func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := "char:" + ulid.Make().String()
+	locationID := ulid.Make()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
@@ -1087,7 +1111,7 @@ func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{Name: "sword"}
+		obj := &world.Object{Name: "sword", LocationID: &locationID}
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
 		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
@@ -1409,6 +1433,28 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("rejects object without containment", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		obj := &world.Object{
+			ID:   objID,
+			Name: "orphan", // Valid name but no containment
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+
+		err := svc.UpdateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidContainment)
 		mockAC.AssertExpectations(t)
 	})
 }
