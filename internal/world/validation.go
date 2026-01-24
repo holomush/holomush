@@ -4,6 +4,7 @@
 package world
 
 import (
+	"encoding/json"
 	"fmt"
 	"unicode"
 	"unicode/utf8"
@@ -108,7 +109,8 @@ func ValidateVisibleTo(visibleTo []ulid.ULID) error {
 }
 
 // ValidateLockData checks that lock data is valid.
-// Must have reasonable number of keys, keys must be valid identifiers.
+// Must have reasonable number of keys, keys must be valid identifiers,
+// and values must be JSON-serializable (for deep copy in ReverseExit).
 func ValidateLockData(lockData map[string]any) error {
 	if lockData == nil {
 		return nil
@@ -123,6 +125,10 @@ func ValidateLockData(lockData map[string]any) error {
 		if !isValidIdentifier(key) {
 			return &ValidationError{Field: "lock_data", Message: fmt.Sprintf("key %q is not a valid identifier", key)}
 		}
+	}
+	// Verify JSON-serializable (required for deep copy in ReverseExit)
+	if _, err := json.Marshal(lockData); err != nil {
+		return &ValidationError{Field: "lock_data", Message: "not JSON-serializable: " + err.Error()}
 	}
 	return nil
 }

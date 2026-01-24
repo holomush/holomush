@@ -167,12 +167,6 @@ func (r *ExitRepository) Update(ctx context.Context, exit *world.Exit) error {
 // and the returned BidirectionalCleanupResult indicates the primary delete did NOT complete.
 // Callers can check IsSevere() to determine the severity of the issue.
 func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	// First, get the exit to check if it's bidirectional
-	exit, err := r.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-
 	// Use a transaction to ensure atomic deletion of bidirectional exits
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -183,13 +177,24 @@ func (r *ExitRepository) Delete(ctx context.Context, id ulid.ULID) error {
 		_ = tx.Rollback(ctx) //nolint:errcheck // Rollback error after commit is meaningless
 	}()
 
+	// Get the exit with FOR UPDATE to prevent TOCTOU issues
+	// Lock the row before checking bidirectional flag and deleting
+	exit, err := r.scanExitTx(ctx, tx, `
+		SELECT id, from_location_id, to_location_id, name, aliases, bidirectional,
+		       return_name, visibility, visible_to, locked, lock_type, lock_data, created_at
+		FROM exits WHERE id = $1 FOR UPDATE
+	`, id.String())
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.With("id", id.String()).Wrap(world.ErrNotFound)
+	}
+	if err != nil {
+		return oops.With("operation", "get exit for delete").With("id", id.String()).Wrap(err)
+	}
+
 	// Delete the primary exit
-	result, err := tx.Exec(ctx, `DELETE FROM exits WHERE id = $1`, id.String())
+	_, err = tx.Exec(ctx, `DELETE FROM exits WHERE id = $1`, id.String())
 	if err != nil {
 		return oops.With("operation", "delete exit").With("id", id.String()).Wrap(err)
-	}
-	if result.RowsAffected() == 0 {
-		return oops.With("id", id.String()).Wrap(world.ErrNotFound)
 	}
 
 	// If bidirectional, find and delete the return exit within the same transaction

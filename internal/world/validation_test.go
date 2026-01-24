@@ -190,6 +190,22 @@ func TestValidateLockData(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("non-serializable value rejected", func(t *testing.T) {
+		// Channels cannot be JSON-serialized
+		lockData := map[string]any{"channel": make(chan int)}
+		err := ValidateLockData(lockData)
+		require.Error(t, err, "lock data with non-serializable values should be rejected")
+		assert.Contains(t, err.Error(), "not JSON-serializable")
+	})
+
+	t.Run("function value rejected", func(t *testing.T) {
+		// Functions cannot be JSON-serialized
+		lockData := map[string]any{"func": func() {}}
+		err := ValidateLockData(lockData)
+		require.Error(t, err, "lock data with function values should be rejected")
+		assert.Contains(t, err.Error(), "not JSON-serializable")
+	})
 }
 
 func TestIsValidIdentifier(t *testing.T) {
