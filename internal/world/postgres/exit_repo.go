@@ -6,9 +6,7 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -408,7 +406,7 @@ func parseExitFromFields(f *exitScanFields, exit *world.Exit) error {
 		exit.ReturnName = *f.returnName
 	}
 	exit.Visibility = world.Visibility(f.visibilityStr)
-	exit.VisibleTo, err = stringsToULIDs(f.visibleToStrs)
+	exit.VisibleTo, err = stringsToULIDs(f.visibleToStrs, "visible_to")
 	if err != nil {
 		return err
 	}
@@ -484,66 +482,8 @@ func (r *ExitRepository) scanExits(rows pgx.Rows) ([]*world.Exit, error) {
 
 // Helper functions
 
-func ulidsToStrings(ids []ulid.ULID) []string {
-	if len(ids) == 0 {
-		return nil
-	}
-	strs := make([]string, len(ids))
-	for i, id := range ids {
-		strs[i] = id.String()
-	}
-	return strs
-}
-
-func stringsToULIDs(strs []string) ([]ulid.ULID, error) {
-	if len(strs) == 0 {
-		return nil, nil
-	}
-	ids := make([]ulid.ULID, 0, len(strs))
-	for _, s := range strs {
-		trimmed := strings.TrimSpace(s)
-		id, err := ulid.Parse(trimmed)
-		if err != nil {
-			return nil, oops.With("operation", "parse visible_to ulid").
-				With("value", trimmed).
-				Wrap(err)
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
-}
-
-func nullableString(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 func nullableLockType(lt world.LockType) *string {
 	return nullableString(string(lt))
-}
-
-func marshalLockData(data map[string]any) ([]byte, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-	b, err := json.Marshal(data)
-	if err != nil {
-		return nil, oops.With("operation", "marshal lock data").Wrap(err)
-	}
-	return b, nil
-}
-
-func unmarshalLockData(data []byte) (map[string]any, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-	var result map[string]any
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, oops.With("operation", "unmarshal lock data").Wrap(err)
-	}
-	return result, nil
 }
 
 // Compile-time interface check.
