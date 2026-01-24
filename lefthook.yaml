@@ -46,7 +46,7 @@ pre-commit:
 
     lint-yaml:
       glob: "*.{yaml,yml}"
-      run: yamllint {staged_files}
+      run: yamlfmt -lint {staged_files}
 
     lint-actions:
       glob: ".github/workflows/*.{yaml,yml}"

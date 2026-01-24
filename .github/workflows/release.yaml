@@ -264,7 +264,7 @@ jobs:
           echo "✓ Container signature verified"
 
       - name: Release verification complete
-        run: |
+        run: |-
           echo "✓ All release artifacts are properly signed and attested"
           echo "  - Binary checksums: signed with Cosign"
           echo "  - Container images: signed with Cosign"

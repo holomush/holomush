@@ -34,13 +34,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: [
-        "CMD",
-        "wget",
-        "-q",
-        "--spider",
-        "http://localhost:9100/healthz/readiness",
-      ]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9100/healthz/readiness"]
       interval: 2s
       timeout: 5s
       retries: 10
@@ -59,13 +53,7 @@ services:
       core:
         condition: service_healthy
     healthcheck:
-      test: [
-        "CMD",
-        "wget",
-        "-q",
-        "--spider",
-        "http://localhost:9101/healthz/readiness",
-      ]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9101/healthz/readiness"]
       interval: 2s
       timeout: 5s
       retries: 5

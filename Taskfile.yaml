@@ -104,61 +104,61 @@ tasks:
     desc: Check SPDX license headers
     cmds:
       - |
-          set -euo pipefail
+        set -euo pipefail
 
-          # Directories to check
-          DIRS="api cmd internal pkg plugins scripts"
+        # Directories to check
+        DIRS="api cmd internal pkg plugins scripts"
 
-          # Verify directories exist
-          EXISTING_DIRS=""
-          for dir in $DIRS; do
-            if [[ -d "$dir" ]]; then
-              EXISTING_DIRS="$EXISTING_DIRS $dir"
-            else
-              echo "WARNING: Directory '$dir' does not exist, skipping"
-            fi
-          done
-
-          if [[ -z "$EXISTING_DIRS" ]]; then
-            echo "ERROR: No directories found to check"
-            exit 1
+        # Verify directories exist
+        EXISTING_DIRS=""
+        for dir in $DIRS; do
+          if [[ -d "$dir" ]]; then
+            EXISTING_DIRS="$EXISTING_DIRS $dir"
+          else
+            echo "WARNING: Directory '$dir' does not exist, skipping"
           fi
+        done
 
-          command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
-          addlicense -check -f LICENSE_HEADER \
-            -ignore '**/*.pb.go' \
-            -ignore 'vendor/**' \
-            $EXISTING_DIRS
+        if [[ -z "$EXISTING_DIRS" ]]; then
+          echo "ERROR: No directories found to check"
+          exit 1
+        fi
+
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense -check -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' \
+          -ignore 'vendor/**' \
+          $EXISTING_DIRS
 
   license:add:
     desc: Add missing SPDX license headers
     cmds:
       - |
-          set -euo pipefail
+        set -euo pipefail
 
-          # Directories to add headers to
-          DIRS="api cmd internal pkg plugins scripts"
+        # Directories to add headers to
+        DIRS="api cmd internal pkg plugins scripts"
 
-          # Verify directories exist
-          EXISTING_DIRS=""
-          for dir in $DIRS; do
-            if [[ -d "$dir" ]]; then
-              EXISTING_DIRS="$EXISTING_DIRS $dir"
-            else
-              echo "WARNING: Directory '$dir' does not exist, skipping"
-            fi
-          done
-
-          if [[ -z "$EXISTING_DIRS" ]]; then
-            echo "ERROR: No directories found to process"
-            exit 1
+        # Verify directories exist
+        EXISTING_DIRS=""
+        for dir in $DIRS; do
+          if [[ -d "$dir" ]]; then
+            EXISTING_DIRS="$EXISTING_DIRS $dir"
+          else
+            echo "WARNING: Directory '$dir' does not exist, skipping"
           fi
+        done
 
-          command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
-          addlicense -f LICENSE_HEADER \
-            -ignore '**/*.pb.go' \
-            -ignore 'vendor/**' \
-            $EXISTING_DIRS
+        if [[ -z "$EXISTING_DIRS" ]]; then
+          echo "ERROR: No directories found to process"
+          exit 1
+        fi
+
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' \
+          -ignore 'vendor/**' \
+          $EXISTING_DIRS
 
   lint:
     desc: Run all linters
@@ -179,9 +179,9 @@ tasks:
       - markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.beads" "#.git" "#.worktrees" "#dist" "#.claude"
 
   lint:yaml:
-    desc: Lint YAML files
+    desc: Check YAML formatting
     cmds:
-      - uvx yamllint .
+      - yamlfmt -lint .
 
   lint:actions:
     desc: Lint GitHub Actions workflows
@@ -193,6 +193,7 @@ tasks:
     desc: Format all files
     cmds:
       - task: fmt:go
+      - task: fmt:yaml
       - task: fmt:dprint
 
   fmt:go:
@@ -204,6 +205,11 @@ tasks:
     desc: Format with dprint
     cmds:
       - dprint fmt
+
+  fmt:yaml:
+    desc: Format YAML files
+    cmds:
+      - yamlfmt .
 
   fmt:check:
     desc: Check formatting without modifying
@@ -230,50 +236,50 @@ tasks:
     desc: Create a new spec document
     cmds:
       - |
-          DATE=$(date +%Y-%m-%d)
-          read -p "Spec name (e.g., event-system): " NAME
-          FILE="docs/specs/${DATE}-${NAME}.md"
-          cat > "$FILE" << 'EOF'
-          # {{.NAME}} Specification
+        DATE=$(date +%Y-%m-%d)
+        read -p "Spec name (e.g., event-system): " NAME
+        FILE="docs/specs/${DATE}-${NAME}.md"
+        cat > "$FILE" << 'EOF'
+        # {{.NAME}} Specification
 
-          **Status:** Draft
-          **Date:** {{.DATE}}
-          **Version:** 0.1.0
+        **Status:** Draft
+        **Date:** {{.DATE}}
+        **Version:** 0.1.0
 
-          ## Overview
+        ## Overview
 
-          ## Requirements
+        ## Requirements
 
-          ## Non-Goals
+        ## Non-Goals
 
-          ## Design
+        ## Design
 
-          ## Open Questions
-          EOF
-          echo "Created: $FILE"
+        ## Open Questions
+        EOF
+        echo "Created: $FILE"
 
   plan:
     desc: Create a new plan document
     cmds:
       - |
-          DATE=$(date +%Y-%m-%d)
-          read -p "Plan name (e.g., phase-1-implementation): " NAME
-          FILE="docs/plans/${DATE}-${NAME}.md"
-          cat > "$FILE" << 'EOF'
-          # {{.NAME}} Plan
+        DATE=$(date +%Y-%m-%d)
+        read -p "Plan name (e.g., phase-1-implementation): " NAME
+        FILE="docs/plans/${DATE}-${NAME}.md"
+        cat > "$FILE" << 'EOF'
+        # {{.NAME}} Plan
 
-          **Status:** Draft
-          **Date:** {{.DATE}}
+        **Status:** Draft
+        **Date:** {{.DATE}}
 
-          ## Overview
+        ## Overview
 
-          ## Tasks
+        ## Tasks
 
-          ## Dependencies
+        ## Dependencies
 
-          ## Risks
-          EOF
-          echo "Created: $FILE"
+        ## Risks
+        EOF
+        echo "Created: $FILE"
 
   # Cleanup
   clean:
@@ -287,13 +293,11 @@ tasks:
   tools:
     desc: Install development tools
     cmds:
-      - brew install golangci-lint gofumpt lefthook actionlint goreleaser \
-        dprint cocogitto markdownlint-cli \
-        binaryen
+      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto markdownlint-cli yamlfmt binaryen
       - brew install steveyegge/beads/bd
       - curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
       - 'echo "Tools installed. Run lefthook install to set up git hooks."'
-      - 'echo "Note: Use uvx yamllint to run yamllint (no install needed)"'
+      - 'echo "Note: yamlfmt handles both formatting and linting of YAML files"'
 
   # Git hooks
   hooks:install:
