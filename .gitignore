@@ -65,3 +65,7 @@ dist/
 # worktrees
 .worktrees/
 .task/
+
+# Documentation site
+site/build/
+site/.venv/
