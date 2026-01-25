@@ -184,11 +184,12 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if exit == nil {
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
 	}
-	if err := exit.Validate(); err != nil {
-		return oops.Code("EXIT_INVALID").Wrap(err)
-	}
+	// Assign ID before validation so Validate() doesn't reject zero ID
 	if exit.ID.IsZero() {
 		exit.ID = ulid.Make()
+	}
+	if err := exit.Validate(); err != nil {
+		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
 	if err := s.exitRepo.Create(ctx, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
@@ -262,6 +263,22 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	return nil
 }
 
+// GetExitsByLocation retrieves all exits from a location after checking read authorization.
+func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Exit, error) {
+	if s.exitRepo == nil {
+		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
+	}
+	resource := fmt.Sprintf("location:%s", locationID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return nil, oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	exits, err := s.exitRepo.ListFromLocation(ctx, locationID)
+	if err != nil {
+		return nil, oops.Code("EXIT_LIST_FAILED").Wrapf(err, "list exits from location %s", locationID)
+	}
+	return exits, nil
+}
+
 // GetObject retrieves an object by ID after checking read authorization.
 func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error) {
 	if s.objectRepo == nil {
@@ -294,14 +311,15 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if obj == nil {
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
 	}
+	// Assign ID before validation so Validate() doesn't reject zero ID
+	if obj.ID.IsZero() {
+		obj.ID = ulid.Make()
+	}
 	if err := obj.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
-	}
-	if obj.ID.IsZero() {
-		obj.ID = ulid.Make()
 	}
 	if err := s.objectRepo.Create(ctx, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)

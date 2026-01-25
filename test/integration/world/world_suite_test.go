@@ -150,16 +150,22 @@ func createTestExit(fromID, toID ulid.ULID, name string) *world.Exit {
 }
 
 func createTestObject(name, description string, containment world.Containment) *world.Object {
-	return &world.Object{
-		ID:                  core.NewULID(),
-		Name:                name,
-		Description:         description,
-		LocationID:          containment.LocationID,
-		HeldByCharacterID:   containment.CharacterID,
-		ContainedInObjectID: containment.ObjectID,
-		IsContainer:         false,
-		CreatedAt:           time.Now(),
+	var opt world.ContainmentOption
+	switch {
+	case containment.LocationID != nil:
+		opt = world.InLocation(*containment.LocationID)
+	case containment.CharacterID != nil:
+		opt = world.HeldBy(*containment.CharacterID)
+	case containment.ObjectID != nil:
+		opt = world.InContainer(*containment.ObjectID)
+	default:
+		Fail("createTestObject requires exactly one containment option")
 	}
+
+	obj, err := world.NewObjectWithID(core.NewULID(), name, opt)
+	Expect(err).NotTo(HaveOccurred(), "failed to create test object")
+	obj.Description = description
+	return obj
 }
 
 // createTestCharacterID creates a real character in the database for testing.

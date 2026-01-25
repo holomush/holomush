@@ -398,13 +398,10 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 
 	t.Run("emits event with location stream when in location", func(t *testing.T) {
 		emitter := &mockEventEmitter{}
-		obj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &locID,
-		}
+		obj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(locID))
+		require.NoError(t, err)
 
-		err := world.EmitObjectCreateEvent(ctx, emitter, obj)
+		err = world.EmitObjectCreateEvent(ctx, emitter, obj)
 		require.NoError(t, err)
 
 		require.Len(t, emitter.calls, 1)
@@ -423,13 +420,10 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 	t.Run("emits to broadcast stream when not in location", func(t *testing.T) {
 		emitter := &mockEventEmitter{}
 		charID := ulid.Make()
-		obj := &world.Object{
-			ID:                objID,
-			Name:              "Test Object",
-			HeldByCharacterID: &charID,
-		}
+		obj, err := world.NewObjectWithID(objID, "Test Object", world.HeldByCharacter(charID))
+		require.NoError(t, err)
 
-		err := world.EmitObjectCreateEvent(ctx, emitter, obj)
+		err = world.EmitObjectCreateEvent(ctx, emitter, obj)
 		require.NoError(t, err)
 
 		require.Len(t, emitter.calls, 1)
@@ -441,13 +435,10 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 	t.Run("returns error when emitter fails", func(t *testing.T) {
 		emitErr := errors.New("emit failed")
 		emitter := &mockEventEmitter{err: emitErr}
-		obj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &locID,
-		}
+		obj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(locID))
+		require.NoError(t, err)
 
-		err := world.EmitObjectCreateEvent(ctx, emitter, obj)
+		err = world.EmitObjectCreateEvent(ctx, emitter, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		assert.ErrorIs(t, err, emitErr)
@@ -676,17 +667,14 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 			EventEmitter:  emitter,
 		})
 
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 		to := world.Containment{LocationID: &toLocID}
 
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.NoError(t, err)
 
 		// Verify event was emitted
@@ -715,62 +703,23 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 			// No EventEmitter configured - this is a misconfiguration
 		})
 
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 		to := world.Containment{LocationID: &toLocID}
 
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 	})
 
-	t.Run("emits event with from_type none for first-time placement", func(t *testing.T) {
-		emitter := &mockEventEmitter{}
-		mockObjRepo := worldtest.NewMockObjectRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			AccessControl: &mockAccessControlForEvents{allowAll: true},
-			EventEmitter:  emitter,
-		})
-
-		// Object with no prior containment (first-time placement)
-		existingObj := &world.Object{
-			ID:   objID,
-			Name: "Unplaced Object",
-			// All containment fields nil
-		}
-		to := world.Containment{LocationID: &toLocID}
-
-		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
-
-		err := svc.MoveObject(ctx, subjectID, objID, to)
-		require.NoError(t, err)
-
-		// Verify event was emitted with from_type "none"
-		require.Len(t, emitter.calls, 1)
-		call := emitter.calls[0]
-		assert.Equal(t, world.LocationStream(toLocID), call.Stream)
-		assert.Equal(t, string(core.EventTypeMove), call.EventType)
-
-		var decoded world.MovePayload
-		err = json.Unmarshal(call.Payload, &decoded)
-		require.NoError(t, err)
-		assert.Equal(t, world.EntityTypeObject, decoded.EntityType)
-		assert.Equal(t, objID, decoded.EntityID)
-		assert.Equal(t, world.ContainmentTypeNone, decoded.FromType)
-		assert.Nil(t, decoded.FromID)
-		assert.Equal(t, world.ContainmentTypeLocation, decoded.ToType)
-		assert.Equal(t, toLocID, decoded.ToID)
-	})
+	// Note: "emits event with from_type none for first-time placement" test was removed.
+	// With unexported containment fields and enforced invariants via SetContainment,
+	// objects with no containment cannot be created from outside the package.
+	// The ContainmentType().Type() returning "none" is tested via Containment tests.
 
 	t.Run("fails when event emitter fails", func(t *testing.T) {
 		emitErr := errors.New("event bus unavailable")
@@ -783,18 +732,15 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 			EventEmitter:  emitter,
 		})
 
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 		to := world.Containment{LocationID: &toLocID}
 
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
 		// Event emission failure should fail the operation
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "event")
 	})

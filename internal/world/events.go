@@ -150,8 +150,8 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 		"object_id":   obj.ID.String(),
 		"object_name": obj.Name,
 	}
-	if obj.LocationID != nil {
-		payload["location_id"] = obj.LocationID.String()
+	if obj.LocationID() != nil {
+		payload["location_id"] = obj.LocationID().String()
 	}
 
 	data, err := json.Marshal(payload)
@@ -160,8 +160,8 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 	}
 
 	stream := BroadcastLocationStream() // Broadcast to all locations
-	if obj.LocationID != nil {
-		stream = LocationStream(*obj.LocationID)
+	if obj.LocationID() != nil {
+		stream = LocationStream(*obj.LocationID())
 	}
 	if err := emitWithRetry(ctx, emitter, stream, eventType, "object", obj.ID.String(), data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)

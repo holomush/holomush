@@ -19,6 +19,27 @@ type Character struct {
 	CreatedAt   time.Time
 }
 
+// NewCharacter creates a new Character with a generated ID.
+// The character is validated before being returned.
+func NewCharacter(playerID ulid.ULID, name string) (*Character, error) {
+	return NewCharacterWithID(ulid.Make(), playerID, name)
+}
+
+// NewCharacterWithID creates a new Character with the provided ID.
+// The character is validated before being returned.
+func NewCharacterWithID(id, playerID ulid.ULID, name string) (*Character, error) {
+	c := &Character{
+		ID:        id,
+		PlayerID:  playerID,
+		Name:      name,
+		CreatedAt: time.Now(),
+	}
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 // Validate checks that the character has required fields.
 func (c *Character) Validate() error {
 	if c.ID.IsZero() {

@@ -40,9 +40,9 @@ var _ = Describe("Object Handling", func() {
 
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.LocationID).To(BeNil())
-			Expect(got.HeldByCharacterID).NotTo(BeNil())
-			Expect(*got.HeldByCharacterID).To(Equal(charID))
+			Expect(got.LocationID()).To(BeNil())
+			Expect(got.HeldByCharacterID()).NotTo(BeNil())
+			Expect(*got.HeldByCharacterID()).To(Equal(charID))
 		})
 	})
 
@@ -56,9 +56,9 @@ var _ = Describe("Object Handling", func() {
 
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.HeldByCharacterID).To(BeNil())
-			Expect(got.LocationID).NotTo(BeNil())
-			Expect(*got.LocationID).To(Equal(room.ID))
+			Expect(got.HeldByCharacterID()).To(BeNil())
+			Expect(got.LocationID()).NotTo(BeNil())
+			Expect(*got.LocationID()).To(Equal(room.ID))
 		})
 	})
 
@@ -81,8 +81,8 @@ var _ = Describe("Object Handling", func() {
 
 				got, err := env.Objects.Get(ctx, item.ID)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(got.ContainedInObjectID).NotTo(BeNil())
-				Expect(*got.ContainedInObjectID).To(Equal(container.ID))
+				Expect(got.ContainedInObjectID()).NotTo(BeNil())
+				Expect(*got.ContainedInObjectID()).To(Equal(container.ID))
 			})
 
 			It("fails when target is not a container", func() {
@@ -128,8 +128,8 @@ var _ = Describe("Object Handling", func() {
 
 				got, err := env.Objects.Get(ctx, item.ID)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(got.ContainedInObjectID).To(BeNil())
-				Expect(got.HeldByCharacterID).NotTo(BeNil())
+				Expect(got.ContainedInObjectID()).To(BeNil())
+				Expect(got.HeldByCharacterID()).NotTo(BeNil())
 			})
 		})
 
@@ -178,9 +178,9 @@ var _ = Describe("Object Handling", func() {
 
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.LocationID).To(BeNil())
-			Expect(got.HeldByCharacterID).NotTo(BeNil())
-			Expect(got.ContainedInObjectID).To(BeNil())
+			Expect(got.LocationID()).To(BeNil())
+			Expect(got.HeldByCharacterID()).NotTo(BeNil())
+			Expect(got.ContainedInObjectID()).To(BeNil())
 		})
 
 		It("clears previous containment when moving", func() {
@@ -197,8 +197,8 @@ var _ = Describe("Object Handling", func() {
 
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ContainedInObjectID).To(BeNil())
-			Expect(got.LocationID).NotTo(BeNil())
+			Expect(got.ContainedInObjectID()).To(BeNil())
+			Expect(got.LocationID()).NotTo(BeNil())
 		})
 	})
 })

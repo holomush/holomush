@@ -74,6 +74,16 @@ func ContainedInObject(id ulid.ULID) Containment {
 	return Containment{ObjectID: &id}
 }
 
+// HeldBy is a shorthand for HeldByCharacter.
+func HeldBy(id ulid.ULID) Containment {
+	return HeldByCharacter(id)
+}
+
+// InContainer is a shorthand for ContainedInObject.
+func InContainer(id ulid.ULID) Containment {
+	return ContainedInObject(id)
+}
+
 // ID returns the ID of the container (location, character, or object).
 func (c *Containment) ID() *ulid.ULID {
 	if c.LocationID != nil {
@@ -90,20 +100,57 @@ type Object struct {
 	ID                  ulid.ULID
 	Name                string
 	Description         string
-	LocationID          *ulid.ULID
-	HeldByCharacterID   *ulid.ULID
-	ContainedInObjectID *ulid.ULID
+	locationID          *ulid.ULID // unexported: use SetContainment/LocationID()
+	heldByCharacterID   *ulid.ULID // unexported: use SetContainment/HeldByCharacterID()
+	containedInObjectID *ulid.ULID // unexported: use SetContainment/ContainedInObjectID()
 	IsContainer         bool
 	OwnerID             *ulid.ULID
 	CreatedAt           time.Time
 }
 
+// LocationID returns the location ID if the object is in a location, or nil.
+func (o *Object) LocationID() *ulid.ULID { return o.locationID }
+
+// HeldByCharacterID returns the character ID if the object is held, or nil.
+func (o *Object) HeldByCharacterID() *ulid.ULID { return o.heldByCharacterID }
+
+// ContainedInObjectID returns the container object ID if contained, or nil.
+func (o *Object) ContainedInObjectID() *ulid.ULID { return o.containedInObjectID }
+
+// NewObject creates a new Object with a generated ID.
+// The object is validated before being returned.
+// Containment specifies where the object is located (required).
+func NewObject(name string, containment Containment) (*Object, error) {
+	return NewObjectWithID(ulid.Make(), name, containment)
+}
+
+// NewObjectWithID creates a new Object with the provided ID.
+// The object is validated before being returned.
+// Containment specifies where the object is located (required).
+func NewObjectWithID(id ulid.ULID, name string, containment Containment) (*Object, error) {
+	o := &Object{
+		ID:                  id,
+		Name:                name,
+		locationID:          containment.LocationID,
+		heldByCharacterID:   containment.CharacterID,
+		containedInObjectID: containment.ObjectID,
+		CreatedAt:           time.Now(),
+	}
+	if err := o.Validate(); err != nil {
+		return nil, err
+	}
+	if err := o.ValidateContainment(); err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
 // Containment returns the current containment of this object.
 func (o *Object) Containment() Containment {
 	return Containment{
-		LocationID:  o.LocationID,
-		CharacterID: o.HeldByCharacterID,
-		ObjectID:    o.ContainedInObjectID,
+		LocationID:  o.locationID,
+		CharacterID: o.heldByCharacterID,
+		ObjectID:    o.containedInObjectID,
 	}
 }
 
@@ -114,15 +161,18 @@ func (o *Object) SetContainment(c Containment) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	o.LocationID = c.LocationID
-	o.HeldByCharacterID = c.CharacterID
-	o.ContainedInObjectID = c.ObjectID
+	o.locationID = c.LocationID
+	o.heldByCharacterID = c.CharacterID
+	o.containedInObjectID = c.ObjectID
 	return nil
 }
 
 // Validate validates the object's fields.
-// Returns a ValidationError if the name or description is invalid.
+// Returns a ValidationError if the ID is zero, or if name or description is invalid.
 func (o *Object) Validate() error {
+	if o.ID.IsZero() {
+		return &ValidationError{Field: "id", Message: "cannot be zero"}
+	}
 	if err := ValidateName(o.Name); err != nil {
 		return err
 	}

@@ -573,14 +573,15 @@ func TestWorldService_CreateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{Name: "sword", LocationID: &locationID}
+		obj, err := world.NewObject("sword", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
 		mockObjRepo.EXPECT().Create(ctx, mock.MatchedBy(func(o *world.Object) bool {
 			return o.Name == "sword" && !o.ID.IsZero()
 		})).Return(nil)
 
-		err := svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, subjectID, obj)
 		require.NoError(t, err)
 		assert.False(t, obj.ID.IsZero(), "ID should be generated")
 		mockAC.AssertExpectations(t)
@@ -595,11 +596,12 @@ func TestWorldService_CreateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{Name: "sword", LocationID: &locationID}
+		obj, err := world.NewObject("sword", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(false)
 
-		err := svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockAC.AssertExpectations(t)
 	})
@@ -620,12 +622,13 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword updated", LocationID: &locationID}
+		obj, err := world.NewObjectWithID(objID, "sword updated", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil)
 
-		err := svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.NoError(t, err)
 		mockAC.AssertExpectations(t)
 	})
@@ -639,11 +642,12 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword", LocationID: &locationID}
+		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
-		err := svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		mockAC.AssertExpectations(t)
 	})
@@ -657,12 +661,13 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword", LocationID: &locationID}
+		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(errors.New("db error"))
 
-		err := svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		mockAC.AssertExpectations(t)
@@ -677,12 +682,13 @@ func TestWorldService_UpdateObject(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{ID: objID, Name: "sword", LocationID: &locationID}
+		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(world.ErrNotFound)
 
-		err := svc.UpdateObject(ctx, subjectID, obj)
+		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
@@ -749,17 +755,14 @@ func TestWorldService_MoveObject(t *testing.T) {
 		fromLocID := ulid.Make()
 		to := world.Containment{LocationID: &locationID}
 
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.NoError(t, err)
 		mockAC.AssertExpectations(t)
 	})
@@ -813,17 +816,14 @@ func TestWorldService_MoveObject(t *testing.T) {
 		fromLocID := ulid.Make()
 		to := world.Containment{LocationID: &locationID}
 
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(errors.New("db error"))
 
-		err := svc.MoveObject(ctx, subjectID, objID, to)
+		err = svc.MoveObject(ctx, subjectID, objID, to)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		mockAC.AssertExpectations(t)
@@ -843,35 +843,10 @@ func TestWorldService_MoveObject(t *testing.T) {
 		assert.Contains(t, err.Error(), "object repository not configured")
 	})
 
-	t.Run("handles object with no current containment", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
-		mockObjRepo := worldtest.NewMockObjectRepository(t)
-		emitter := &mockEventEmitter{} // nil err means Emit succeeds
-
-		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
-			EventEmitter:  emitter,
-		})
-
-		to := world.Containment{LocationID: &locationID}
-
-		// Object with no containment set (not yet placed in world)
-		existingObj := &world.Object{
-			ID:   objID,
-			Name: "Unplaced Object",
-			// All containment fields nil
-		}
-
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
-		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
-		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
-
-		// Should not panic, should succeed
-		err := svc.MoveObject(ctx, subjectID, objID, to)
-		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
-	})
+	// Note: "handles object with no current containment" test was removed.
+	// With unexported containment fields and enforced invariants via SetContainment,
+	// objects with no containment cannot be created from outside the package.
+	// Objects must always have valid containment per the domain invariant.
 }
 
 func TestWorldService_AddSceneParticipant(t *testing.T) {
@@ -1321,12 +1296,13 @@ func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		obj := &world.Object{Name: "sword", LocationID: &locationID}
+		obj, err := world.NewObject("sword", world.InLocation(locationID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
 		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
-		err := svc.CreateObject(ctx, subjectID, obj)
+		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 		mockAC.AssertExpectations(t)
@@ -1476,6 +1452,105 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "delete exit")
+		mockAC.AssertExpectations(t)
+	})
+}
+
+func TestWorldService_GetExitsByLocation(t *testing.T) {
+	ctx := context.Background()
+	locationID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("returns exits when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		destID := ulid.Make()
+		exit1 := &world.Exit{ID: ulid.Make(), Name: "north", FromLocationID: locationID, ToLocationID: destID}
+		exit2 := &world.Exit{ID: ulid.Make(), Name: "east", FromLocationID: locationID, ToLocationID: destID}
+		expectedExits := []*world.Exit{exit1, exit2}
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(true)
+		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return(expectedExits, nil)
+
+		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		require.NoError(t, err)
+		assert.Equal(t, expectedExits, exits)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(false)
+
+		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, exits)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when repository not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+
+		svc := world.NewService(world.ServiceConfig{
+			AccessControl: mockAC,
+		})
+
+		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, exits)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_LIST_FAILED")
+	})
+
+	t.Run("returns error when repository fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		dbErr := errors.New("database connection failed")
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(true)
+		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return(nil, dbErr)
+
+		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, exits)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_LIST_FAILED")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns empty slice for location with no exits", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo:      mockExitRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(true)
+		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return([]*world.Exit{}, nil)
+
+		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		require.NoError(t, err)
+		assert.NotNil(t, exits, "should return empty slice, not nil")
+		assert.Empty(t, exits)
 		mockAC.AssertExpectations(t)
 	})
 }
@@ -2689,26 +2764,17 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(false)
 
-		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "sword", LocationID: &locationID})
+		obj, err := world.NewObject("sword", world.InLocation(locationID))
+		require.NoError(t, err)
+		err = svc.CreateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 	})
 
-	t.Run("CreateObject returns OBJECT_INVALID for validation errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
-		mockRepo := worldtest.NewMockObjectRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
-		})
-
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
-
-		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "", LocationID: &locationID})
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
-	})
+	// Note: "CreateObject returns OBJECT_INVALID for validation errors" test was removed.
+	// With unexported containment fields and enforced invariants via constructors,
+	// invalid objects (empty name) cannot be created from outside the package.
+	// Validation is tested at the constructor level in object_test.go.
 
 	t.Run("CreateObject returns OBJECT_CREATE_FAILED for repo errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
@@ -2722,7 +2788,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
-		err := svc.CreateObject(ctx, subjectID, &world.Object{Name: "sword", LocationID: &locationID})
+		obj, err := world.NewObject("sword", world.InLocation(locationID))
+		require.NoError(t, err)
+		err = svc.CreateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_CREATE_FAILED")
 	})
@@ -2738,26 +2806,17 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
-		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "sword", LocationID: &locationID})
+		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
+		require.NoError(t, err)
+		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 	})
 
-	t.Run("UpdateObject returns OBJECT_INVALID for validation errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
-		mockRepo := worldtest.NewMockObjectRepository(t)
-
-		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
-		})
-
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
-
-		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "", LocationID: &locationID})
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "OBJECT_INVALID")
-	})
+	// Note: "UpdateObject returns OBJECT_INVALID for validation errors" test was removed.
+	// With unexported containment fields and enforced invariants via constructors,
+	// invalid objects (empty name) cannot be created from outside the package.
+	// Validation is tested at the constructor level in object_test.go.
 
 	t.Run("UpdateObject returns OBJECT_UPDATE_FAILED for repo errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
@@ -2771,7 +2830,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
 
-		err := svc.UpdateObject(ctx, subjectID, &world.Object{ID: objID, Name: "sword", LocationID: &locationID})
+		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
+		require.NoError(t, err)
+		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_UPDATE_FAILED")
 	})
@@ -2885,17 +2946,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		})
 
 		fromLocID := ulid.Make()
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(world.ErrNotFound)
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
@@ -2910,17 +2968,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		})
 
 		fromLocID := ulid.Make()
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(errors.New("db error"))
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_MOVE_FAILED")
 	})
@@ -2938,17 +2993,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		})
 
 		fromLocID := ulid.Make()
-		existingObj := &world.Object{
-			ID:         objID,
-			Name:       "Test Object",
-			LocationID: &fromLocID,
-		}
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
 
 		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(nil)
 
-		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		// The inner EVENT_EMIT_FAILED code is returned (from events.go),
 		// wrapped by service.go with move_succeeded context

@@ -286,14 +286,14 @@ func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 		L.SetField(object, "is_container", lua.LBool(obj.IsContainer))
 
 		// Optional fields - only set if non-nil
-		if obj.LocationID != nil {
-			L.SetField(object, "location_id", lua.LString(obj.LocationID.String()))
+		if obj.LocationID() != nil {
+			L.SetField(object, "location_id", lua.LString(obj.LocationID().String()))
 		}
-		if obj.HeldByCharacterID != nil {
-			L.SetField(object, "held_by_character_id", lua.LString(obj.HeldByCharacterID.String()))
+		if obj.HeldByCharacterID() != nil {
+			L.SetField(object, "held_by_character_id", lua.LString(obj.HeldByCharacterID().String()))
 		}
-		if obj.ContainedInObjectID != nil {
-			L.SetField(object, "contained_in_object_id", lua.LString(obj.ContainedInObjectID.String()))
+		if obj.ContainedInObjectID() != nil {
+			L.SetField(object, "contained_in_object_id", lua.LString(obj.ContainedInObjectID().String()))
 		}
 		if obj.OwnerID != nil {
 			L.SetField(object, "owner_id", lua.LString(obj.OwnerID.String()))

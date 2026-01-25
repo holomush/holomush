@@ -366,6 +366,7 @@ func TestLockType_Validate(t *testing.T) {
 func TestExit_Validate(t *testing.T) {
 	t.Run("valid exit", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 		}
@@ -374,6 +375,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("invalid name", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "",
 			Visibility: world.VisibilityAll,
 		}
@@ -384,6 +386,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("invalid visibility", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.Visibility("invalid"),
 		}
@@ -393,6 +396,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("locked requires valid lock type", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 			Locked:     true,
@@ -404,6 +408,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("locked with valid lock type", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 			Locked:     true,
@@ -416,6 +421,7 @@ func TestExit_Validate(t *testing.T) {
 	t.Run("visibility list requires valid visible_to", func(t *testing.T) {
 		id1 := ulid.Make()
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityList,
 			VisibleTo:  []ulid.ULID{id1, id1}, // duplicate
@@ -428,6 +434,7 @@ func TestExit_Validate(t *testing.T) {
 	t.Run("rejects self-referential exit", func(t *testing.T) {
 		locID := ulid.Make()
 		exit := &world.Exit{
+			ID:             ulid.Make(),
 			FromLocationID: locID,
 			ToLocationID:   locID, // same as from
 			Name:           "loop",
@@ -442,10 +449,108 @@ func TestExit_Validate(t *testing.T) {
 		// Exit validation allows zero IDs for flexibility (e.g., builder pattern).
 		// Database NOT NULL constraints enforce that IDs are set on insert.
 		exit := &world.Exit{
+			ID: ulid.Make(),
 			// FromLocationID and ToLocationID both zero
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 		}
 		assert.NoError(t, exit.Validate(), "exit with zero location IDs should pass validation")
+	})
+
+	t.Run("zero id fails", func(t *testing.T) {
+		exit := &world.Exit{
+			// ID is zero value (not set)
+			Name:       "north",
+			Visibility: world.VisibilityAll,
+		}
+		err := exit.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "id")
+	})
+}
+
+func TestNewExit(t *testing.T) {
+	fromID := ulid.Make()
+	toID := ulid.Make()
+
+	t.Run("valid construction succeeds", func(t *testing.T) {
+		exit, err := world.NewExit(fromID, toID, "north")
+		require.NoError(t, err)
+		assert.NotNil(t, exit)
+		assert.False(t, exit.ID.IsZero(), "ID should be generated")
+		assert.Equal(t, fromID, exit.FromLocationID)
+		assert.Equal(t, toID, exit.ToLocationID)
+		assert.Equal(t, "north", exit.Name)
+		assert.Equal(t, world.VisibilityAll, exit.Visibility, "should default to VisibilityAll")
+		assert.False(t, exit.CreatedAt.IsZero(), "CreatedAt should be set")
+	})
+
+	t.Run("empty name fails with validation error", func(t *testing.T) {
+		exit, err := world.NewExit(fromID, toID, "")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("self-referential exit fails", func(t *testing.T) {
+		exit, err := world.NewExit(fromID, fromID, "loop")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrSelfReferentialExit)
+	})
+
+	t.Run("generates unique IDs", func(t *testing.T) {
+		exit1, err1 := world.NewExit(fromID, toID, "north")
+		require.NoError(t, err1)
+		exit2, err2 := world.NewExit(fromID, toID, "south")
+		require.NoError(t, err2)
+		assert.NotEqual(t, exit1.ID, exit2.ID, "IDs should be unique")
+	})
+}
+
+func TestNewExitWithID(t *testing.T) {
+	fromID := ulid.Make()
+	toID := ulid.Make()
+	exitID := ulid.Make()
+
+	t.Run("valid construction succeeds", func(t *testing.T) {
+		exit, err := world.NewExitWithID(exitID, fromID, toID, "north")
+		require.NoError(t, err)
+		assert.NotNil(t, exit)
+		assert.Equal(t, exitID, exit.ID, "ID should match provided ID")
+		assert.Equal(t, fromID, exit.FromLocationID)
+		assert.Equal(t, toID, exit.ToLocationID)
+		assert.Equal(t, "north", exit.Name)
+		assert.Equal(t, world.VisibilityAll, exit.Visibility, "should default to VisibilityAll")
+		assert.False(t, exit.CreatedAt.IsZero(), "CreatedAt should be set")
+	})
+
+	t.Run("empty name fails with validation error", func(t *testing.T) {
+		exit, err := world.NewExitWithID(exitID, fromID, toID, "")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("self-referential exit fails", func(t *testing.T) {
+		exit, err := world.NewExitWithID(exitID, fromID, fromID, "loop")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrSelfReferentialExit)
+	})
+
+	t.Run("zero ID fails with validation error", func(t *testing.T) {
+		var zeroID ulid.ULID
+		exit, err := world.NewExitWithID(zeroID, fromID, toID, "north")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "id")
+	})
+
+	t.Run("uses provided ID exactly", func(t *testing.T) {
+		specificID := ulid.Make()
+		exit, err := world.NewExitWithID(specificID, fromID, toID, "north")
+		require.NoError(t, err)
+		assert.Equal(t, specificID, exit.ID)
 	})
 }

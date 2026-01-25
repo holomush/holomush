@@ -203,3 +203,85 @@ func TestCharacter_Validate(t *testing.T) {
 		require.NoError(t, char.Validate())
 	})
 }
+
+func TestNewCharacter(t *testing.T) {
+	playerID := ulid.Make()
+
+	t.Run("valid construction succeeds", func(t *testing.T) {
+		char, err := world.NewCharacter(playerID, "Hero")
+		require.NoError(t, err)
+		assert.NotNil(t, char)
+		assert.False(t, char.ID.IsZero(), "ID should be generated")
+		assert.Equal(t, playerID, char.PlayerID)
+		assert.Equal(t, "Hero", char.Name)
+		assert.False(t, char.CreatedAt.IsZero(), "CreatedAt should be set")
+	})
+
+	t.Run("empty name fails with validation error", func(t *testing.T) {
+		char, err := world.NewCharacter(playerID, "")
+		assert.Nil(t, char)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("zero PlayerID fails with validation error", func(t *testing.T) {
+		var zeroID ulid.ULID
+		char, err := world.NewCharacter(zeroID, "Hero")
+		assert.Nil(t, char)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "player_id")
+	})
+
+	t.Run("generates unique IDs", func(t *testing.T) {
+		char1, err1 := world.NewCharacter(playerID, "Hero1")
+		require.NoError(t, err1)
+		char2, err2 := world.NewCharacter(playerID, "Hero2")
+		require.NoError(t, err2)
+		assert.NotEqual(t, char1.ID, char2.ID, "IDs should be unique")
+	})
+}
+
+func TestNewCharacterWithID(t *testing.T) {
+	playerID := ulid.Make()
+	charID := ulid.Make()
+
+	t.Run("valid construction succeeds", func(t *testing.T) {
+		char, err := world.NewCharacterWithID(charID, playerID, "Hero")
+		require.NoError(t, err)
+		assert.NotNil(t, char)
+		assert.Equal(t, charID, char.ID, "ID should match provided ID")
+		assert.Equal(t, playerID, char.PlayerID)
+		assert.Equal(t, "Hero", char.Name)
+		assert.False(t, char.CreatedAt.IsZero(), "CreatedAt should be set")
+	})
+
+	t.Run("empty name fails with validation error", func(t *testing.T) {
+		char, err := world.NewCharacterWithID(charID, playerID, "")
+		assert.Nil(t, char)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("zero PlayerID fails with validation error", func(t *testing.T) {
+		var zeroID ulid.ULID
+		char, err := world.NewCharacterWithID(charID, zeroID, "Hero")
+		assert.Nil(t, char)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "player_id")
+	})
+
+	t.Run("zero ID fails with validation error", func(t *testing.T) {
+		var zeroID ulid.ULID
+		char, err := world.NewCharacterWithID(zeroID, playerID, "Hero")
+		assert.Nil(t, char)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "id")
+	})
+
+	t.Run("uses provided ID exactly", func(t *testing.T) {
+		specificID := ulid.Make()
+		char, err := world.NewCharacterWithID(specificID, playerID, "Hero")
+		require.NoError(t, err)
+		assert.Equal(t, specificID, char.ID)
+	})
+}

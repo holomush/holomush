@@ -2,6 +2,18 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package world contains the world model domain types and logic.
+//
+// For creating domain objects (Character, Object, Exit, Location), prefer using
+// constructor functions (NewX or NewXWithID) over direct struct initialization.
+// Constructors ensure validation and proper initialization of required fields.
+//
+// Example:
+//
+//	// Preferred: use constructor
+//	char, err := world.NewCharacter(playerID, "Hero")
+//
+//	// Avoid: direct initialization (bypasses validation)
+//	char := &world.Character{Name: "Hero", PlayerID: playerID} // Missing ID, CreatedAt
 package world
 
 import (
@@ -88,10 +100,38 @@ type Exit struct {
 	CreatedAt      time.Time
 }
 
+// NewExit creates a new Exit with a generated ID.
+// The exit is validated before being returned.
+// Visibility defaults to VisibilityAll.
+func NewExit(fromLocationID, toLocationID ulid.ULID, name string) (*Exit, error) {
+	return NewExitWithID(ulid.Make(), fromLocationID, toLocationID, name)
+}
+
+// NewExitWithID creates a new Exit with the provided ID.
+// The exit is validated before being returned.
+// Visibility defaults to VisibilityAll.
+func NewExitWithID(id, fromLocationID, toLocationID ulid.ULID, name string) (*Exit, error) {
+	e := &Exit{
+		ID:             id,
+		FromLocationID: fromLocationID,
+		ToLocationID:   toLocationID,
+		Name:           name,
+		Visibility:     VisibilityAll,
+		CreatedAt:      time.Now(),
+	}
+	if err := e.Validate(); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
 // Validate validates the exit's fields.
 // Returns a ValidationError if any field is invalid.
 // Returns ErrSelfReferentialExit if from and to locations are the same.
 func (e *Exit) Validate() error {
+	if e.ID.IsZero() {
+		return &ValidationError{Field: "id", Message: "cannot be zero"}
+	}
 	if err := ValidateName(e.Name); err != nil {
 		return err
 	}

@@ -289,13 +289,9 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 
 	t.Run("returns object and passes correct subject ID", func(t *testing.T) {
 		locID := ulid.Make()
-		expectedObj := &world.Object{
-			ID:          objID,
-			Name:        "Magic Sword",
-			Description: "A glowing blade of ancient power.",
-			LocationID:  &locID,
-			IsContainer: false,
-		}
+		expectedObj, err := world.NewObjectWithID(objID, "Magic Sword", world.InLocation(locID))
+		require.NoError(t, err)
+		expectedObj.Description = "A glowing blade of ancient power."
 		svc := &mockWorldService{object: expectedObj}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "inventory-plugin")
 

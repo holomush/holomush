@@ -634,14 +634,10 @@ func TestQueryObject(t *testing.T) {
 	objID := ulid.Make()
 	locID := ulid.Make()
 	ownerID := ulid.Make()
-	obj := &world.Object{
-		ID:          objID,
-		Name:        "Magic Sword",
-		Description: "A glowing blade of ancient power.",
-		LocationID:  &locID,
-		IsContainer: false,
-		OwnerID:     &ownerID,
-	}
+	obj, err := world.NewObjectWithID(objID, "Magic Sword", world.InLocation(locID))
+	require.NoError(t, err)
+	obj.Description = "A glowing blade of ancient power."
+	obj.OwnerID = &ownerID
 
 	querier := &mockWorldQuerier{object: obj}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
@@ -650,7 +646,7 @@ func TestQueryObject(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	err = L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
 
 	// Check err is nil
@@ -674,13 +670,10 @@ func TestQueryObject(t *testing.T) {
 func TestQueryObject_WithContainer(t *testing.T) {
 	objID := ulid.Make()
 	containerID := ulid.Make()
-	obj := &world.Object{
-		ID:                  objID,
-		Name:                "Gold Coins",
-		Description:         "A pile of shiny gold coins.",
-		ContainedInObjectID: &containerID,
-		IsContainer:         true,
-	}
+	obj, err := world.NewObjectWithID(objID, "Gold Coins", world.ContainedInObject(containerID))
+	require.NoError(t, err)
+	obj.Description = "A pile of shiny gold coins."
+	obj.IsContainer = true
 
 	querier := &mockWorldQuerier{object: obj}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
@@ -689,7 +682,7 @@ func TestQueryObject_WithContainer(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	err = L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
 
 	objVal := L.GetGlobal("obj")
@@ -704,13 +697,9 @@ func TestQueryObject_WithContainer(t *testing.T) {
 func TestQueryObject_HeldByCharacter(t *testing.T) {
 	objID := ulid.Make()
 	charID := ulid.Make()
-	obj := &world.Object{
-		ID:                objID,
-		Name:              "Magic Sword",
-		Description:       "A glowing blade.",
-		HeldByCharacterID: &charID,
-		IsContainer:       false,
-	}
+	obj, err := world.NewObjectWithID(objID, "Magic Sword", world.HeldByCharacter(charID))
+	require.NoError(t, err)
+	obj.Description = "A glowing blade."
 
 	querier := &mockWorldQuerier{object: obj}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
@@ -719,7 +708,7 @@ func TestQueryObject_HeldByCharacter(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	err = L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.NoError(t, err)
 
 	objVal := L.GetGlobal("obj")
