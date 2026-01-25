@@ -93,6 +93,49 @@ func runMigrateDownLogic(out io.Writer, migrator MigratorIface, all bool) error 
 	return nil
 }
 
+// runMigrateStatusLogic handles the migrate status logic with output.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateStatusLogic(out io.Writer, migrator MigratorIface) error {
+	version, dirty, err := migrator.Version()
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "Current version: %d\n", version)
+	if dirty {
+		fmt.Fprintln(out, "Status: DIRTY (migration failed, manual intervention required)")
+		fmt.Fprintln(out, "Use 'holomush migrate force VERSION' to reset")
+	} else {
+		fmt.Fprintln(out, "Status: OK")
+	}
+	return nil
+}
+
+// runMigrateVersionLogic handles the migrate version logic with output.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateVersionLogic(out io.Writer, migrator MigratorIface) error {
+	version, _, err := migrator.Version()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, version)
+	return nil
+}
+
+// runMigrateForceLogic handles the migrate force logic with output.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateForceLogic(out io.Writer, migrator MigratorIface, version int) error {
+	fmt.Fprintf(out, "Forcing version to %d...\n", version)
+	if err := migrator.Force(version); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Version forced successfully")
+	return nil
+}
+
 // NewMigrateCmd creates the migrate subcommand.
 func NewMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -200,17 +243,8 @@ func newMigrateStatusCmd() *cobra.Command {
 				}
 			}()
 
-			version, dirty, err := migrator.Version()
-			if err != nil {
+			if err := runMigrateStatusLogic(cmd.OutOrStdout(), migrator); err != nil {
 				return oops.With("command", "migrate status").Wrap(err)
-			}
-
-			cmd.Printf("Current version: %d\n", version)
-			if dirty {
-				cmd.Println("Status: DIRTY (migration failed, manual intervention required)")
-				cmd.Println("Use 'holomush migrate force VERSION' to reset")
-			} else {
-				cmd.Println("Status: OK")
 			}
 			return nil
 		},
@@ -237,12 +271,9 @@ func newMigrateVersionCmd() *cobra.Command {
 				}
 			}()
 
-			version, _, err := migrator.Version()
-			if err != nil {
+			if err := runMigrateVersionLogic(cmd.OutOrStdout(), migrator); err != nil {
 				return oops.With("command", "migrate version").Wrap(err)
 			}
-
-			cmd.Println(version)
 			return nil
 		},
 	}
@@ -284,12 +315,9 @@ func newMigrateForceCmd() *cobra.Command {
 				}
 			}()
 
-			cmd.Printf("Forcing version to %d...\n", version)
-			if err := migrator.Force(version); err != nil {
+			if err := runMigrateForceLogic(cmd.OutOrStdout(), migrator, version); err != nil {
 				return oops.With("command", "migrate force").Wrap(err)
 			}
-
-			cmd.Println("Version forced successfully")
 			return nil
 		},
 	}

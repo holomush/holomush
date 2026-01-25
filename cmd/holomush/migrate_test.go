@@ -27,8 +27,13 @@ type migrateLogicMock struct {
 	stepsErr              error
 	versionErr            error
 	closeErr              error
+	forceErr              error
+	forceCalled           bool
+	forceVersion          int
 	versionAfterMigration uint
 	versionCallCount      int
+	// versionFunc allows custom Version behavior for testing warning paths
+	versionFunc func() (uint, bool, error)
 }
 
 func (m *migrateLogicMock) Up() error {
@@ -62,11 +67,16 @@ func (m *migrateLogicMock) Steps(n int) error {
 
 func (m *migrateLogicMock) Version() (uint, bool, error) {
 	m.versionCallCount++
+	if m.versionFunc != nil {
+		return m.versionFunc()
+	}
 	return m.version, m.dirty, m.versionErr
 }
 
-func (m *migrateLogicMock) Force(_ int) error {
-	return nil
+func (m *migrateLogicMock) Force(version int) error {
+	m.forceCalled = true
+	m.forceVersion = version
+	return m.forceErr
 }
 
 func (m *migrateLogicMock) Close() error {
@@ -311,4 +321,147 @@ func TestGetDatabaseURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Status command tests
+
+func TestMigrateStatusLogic_Clean(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 7, dirty: false}
+
+	err := runMigrateStatusLogic(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Current version: 7")
+	assert.Contains(t, output, "Status: OK")
+	assert.NotContains(t, output, "DIRTY")
+}
+
+func TestMigrateStatusLogic_Dirty(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 5, dirty: true}
+
+	err := runMigrateStatusLogic(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Current version: 5")
+	assert.Contains(t, output, "Status: DIRTY")
+	assert.Contains(t, output, "manual intervention required")
+	assert.Contains(t, output, "migrate force VERSION")
+}
+
+func TestMigrateStatusLogic_Error(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{versionErr: errors.New("connection failed")}
+
+	err := runMigrateStatusLogic(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connection failed")
+}
+
+// Version command tests
+
+func TestMigrateVersionLogic_Success(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 12}
+
+	err := runMigrateVersionLogic(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Equal(t, "12\n", output)
+}
+
+func TestMigrateVersionLogic_Error(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{versionErr: errors.New("db unreachable")}
+
+	err := runMigrateVersionLogic(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db unreachable")
+}
+
+// Force command tests
+
+func TestMigrateForceLogic_Success(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{}
+
+	err := runMigrateForceLogic(&buf, mock, 5)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Forcing version to 5...")
+	assert.Contains(t, output, "Version forced successfully")
+	assert.True(t, mock.forceCalled)
+	assert.Equal(t, 5, mock.forceVersion)
+}
+
+func TestMigrateForceLogic_Error(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{forceErr: errors.New("invalid version")}
+
+	err := runMigrateForceLogic(&buf, mock, -5)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid version")
+	output := buf.String()
+	assert.Contains(t, output, "Forcing version to -5...")
+	assert.NotContains(t, output, "successfully")
+}
+
+// Version warning path tests
+
+func TestMigrateUpLogic_VersionErrorAfter(t *testing.T) {
+	var buf bytes.Buffer
+	callCount := 0
+	mock := &migrateLogicMock{
+		version:               3,
+		versionAfterMigration: 5,
+		versionFunc: func() (uint, bool, error) {
+			callCount++
+			if callCount == 1 {
+				return 3, false, nil // before migration
+			}
+			return 0, false, errors.New("connection lost")
+		},
+	}
+
+	err := runMigrateUpLogic(&buf, mock)
+
+	// Should not error - warning is printed instead
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Warning")
+	assert.Contains(t, output, "Check status")
+	assert.True(t, mock.upCalled)
+}
+
+func TestMigrateDownLogic_VersionErrorAfter(t *testing.T) {
+	var buf bytes.Buffer
+	callCount := 0
+	mock := &migrateLogicMock{
+		version:               5,
+		versionAfterMigration: 4,
+		versionFunc: func() (uint, bool, error) {
+			callCount++
+			if callCount == 1 {
+				return 5, false, nil // before rollback
+			}
+			return 0, false, errors.New("connection lost")
+		},
+	}
+
+	err := runMigrateDownLogic(&buf, mock, false)
+
+	// Should not error - warning is printed instead
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Warning")
+	assert.Contains(t, output, "Check status")
+	assert.True(t, mock.stepsCalled)
 }
