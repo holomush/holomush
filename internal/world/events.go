@@ -44,7 +44,7 @@ type EventEmitter interface {
 }
 
 // emitWithRetry wraps an emit call with retry logic using exponential backoff.
-// Uses exponential backoff starting at 50ms, max 3 retries.
+// Uses exponential backoff starting at 50ms, up to 3 retries (4 total attempts).
 func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType string, data []byte) error {
 	// Create new backoff for each call - backoffs are stateful and track retry count
 	backoff := retry.WithMaxRetries(3, retry.NewExponential(50*time.Millisecond))
