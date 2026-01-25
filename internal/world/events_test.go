@@ -43,6 +43,29 @@ func (m *mockEventEmitter) Emit(_ context.Context, stream, eventType string, pay
 	return nil
 }
 
+// retryCountingEmitter fails a specified number of times before succeeding.
+type retryCountingEmitter struct {
+	failCount   int // Number of times to fail before succeeding
+	attempts    int // Tracks how many attempts were made
+	calls       []eventEmitCall
+	failErr     error
+	lastPayload []byte
+}
+
+func (m *retryCountingEmitter) Emit(_ context.Context, stream, eventType string, payload []byte) error {
+	m.attempts++
+	m.lastPayload = payload
+	if m.attempts <= m.failCount {
+		return m.failErr
+	}
+	m.calls = append(m.calls, eventEmitCall{
+		Stream:    stream,
+		EventType: eventType,
+		Payload:   payload,
+	})
+	return nil
+}
+
 func TestEmitMoveEvent(t *testing.T) {
 	ctx := context.Background()
 	fromLocID := ulid.Make()
@@ -105,7 +128,7 @@ func TestEmitMoveEvent(t *testing.T) {
 		assert.Equal(t, payload, decoded)
 	})
 
-	t.Run("returns error when emitter fails", func(t *testing.T) {
+	t.Run("returns error when emitter fails after retries", func(t *testing.T) {
 		emitErr := errors.New("emit failed")
 		emitter := &mockEventEmitter{err: emitErr}
 		payload := world.MovePayload{
@@ -121,6 +144,48 @@ func TestEmitMoveEvent(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		assert.ErrorIs(t, err, emitErr)
+	})
+
+	t.Run("retries on transient failure and succeeds", func(t *testing.T) {
+		transientErr := errors.New("connection reset")
+		emitter := &retryCountingEmitter{
+			failCount: 2, // Fail twice, succeed on third attempt
+			failErr:   transientErr,
+		}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.NoError(t, err, "should succeed after retries")
+		assert.Equal(t, 3, emitter.attempts, "should have made 3 attempts (2 failures + 1 success)")
+		require.Len(t, emitter.calls, 1, "should have recorded 1 successful call")
+	})
+
+	t.Run("gives up after max retries", func(t *testing.T) {
+		persistentErr := errors.New("service unavailable")
+		emitter := &retryCountingEmitter{
+			failCount: 10, // Always fail (more than max retries)
+			failErr:   persistentErr,
+		}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.Error(t, err, "should fail after max retries")
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		assert.Equal(t, 4, emitter.attempts, "should have made 4 attempts (initial + 3 retries)")
 	})
 }
 
@@ -397,7 +462,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		assert.Equal(t, toLocID, decoded.ToID)
 	})
 
-	t.Run("succeeds even when event emitter fails", func(t *testing.T) {
+	t.Run("fails when event emitter fails", func(t *testing.T) {
 		emitErr := errors.New("event bus unavailable")
 		emitter := &mockEventEmitter{err: emitErr}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -418,10 +483,9 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
-		// Operation should succeed despite event emission failure (fire-and-forget)
+		// Event emission failure should fail the operation
 		err := svc.MoveObject(ctx, subjectID, objID, to)
-		require.NoError(t, err)
-		// When mockEventEmitter.err is set, it returns error before recording to calls slice
-		require.Len(t, emitter.calls, 0, "mock returns error before recording call")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "event")
 	})
 }

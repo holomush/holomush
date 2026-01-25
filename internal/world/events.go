@@ -6,14 +6,33 @@ package world
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/samber/oops"
+	"github.com/sethvargo/go-retry"
 )
 
 // EventEmitter publishes world events.
 type EventEmitter interface {
 	// Emit publishes an event to the given stream.
 	Emit(ctx context.Context, stream string, eventType string, payload []byte) error
+}
+
+// emitWithRetry wraps an emit call with retry logic using exponential backoff.
+// Uses exponential backoff starting at 50ms, max 3 retries.
+func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType string, data []byte) error {
+	// Create new backoff for each call - backoffs are stateful and track retry count
+	backoff := retry.WithMaxRetries(3, retry.NewExponential(50*time.Millisecond))
+	if err := retry.Do(ctx, backoff, func(ctx context.Context) error {
+		if err := emitter.Emit(ctx, stream, eventType, data); err != nil {
+			// Mark error as retryable
+			return retry.RetryableError(err)
+		}
+		return nil
+	}); err != nil {
+		return oops.Wrapf(err, "emit event after retries")
+	}
+	return nil
 }
 
 // EmitMoveEvent emits a move event for character or object movement.
@@ -33,9 +52,9 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", "move").Wrap(err)
 	}
 
-	// Emit to destination location stream
+	// Emit to destination location stream with retry
 	stream := "location:" + payload.ToID.String()
-	if err := emitter.Emit(ctx, stream, "move", data); err != nil {
+	if err := emitWithRetry(ctx, emitter, stream, "move", data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "move").Wrap(err)
 	}
 	return nil
@@ -69,7 +88,7 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 	if obj.LocationID != nil {
 		stream = "location:" + obj.LocationID.String()
 	}
-	if err := emitter.Emit(ctx, stream, "object_create", data); err != nil {
+	if err := emitWithRetry(ctx, emitter, stream, "object_create", data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "object_create").Wrap(err)
 	}
 	return nil
@@ -92,9 +111,9 @@ func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload Obje
 		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", "object_give").Wrap(err)
 	}
 
-	// Emit to the recipient character's stream
+	// Emit to the recipient character's stream with retry
 	stream := "character:" + payload.ToCharacterID.String()
-	if err := emitter.Emit(ctx, stream, "object_give", data); err != nil {
+	if err := emitWithRetry(ctx, emitter, stream, "object_give", data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", "object_give").Wrap(err)
 	}
 	return nil

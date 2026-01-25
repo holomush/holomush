@@ -383,7 +383,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "move object %s", id)
 	}
 
-	// Emit move event (non-blocking - failures are logged but don't fail the operation)
+	// Emit move event - failures are propagated to the caller
 	payload := MovePayload{
 		EntityType: EntityTypeObject,
 		EntityID:   id,
@@ -393,11 +393,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		slog.Warn("failed to emit move event",
-			"object_id", id.String(),
-			"from_type", from.Type(),
-			"to_type", to.Type(),
-			"error", err)
+		return oops.Code("OBJECT_MOVE_FAILED").With("object_id", id.String()).Wrapf(err, "emit move event")
 	}
 
 	return nil
