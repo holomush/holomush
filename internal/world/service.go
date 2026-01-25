@@ -173,7 +173,10 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 
 // CreateExit creates a new exit after checking write authorization.
 // The exit ID is generated if not set.
-// Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
+//
+// Returns a ValidationError if the id, name, aliases, visibility, lock type,
+// lock data, or visible_to are invalid.
+// Returns ErrSelfReferentialExit if from and to locations are the same.
 func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
@@ -198,7 +201,10 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 }
 
 // UpdateExit updates an existing exit after checking write authorization.
-// Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
+//
+// Returns a ValidationError if the id, name, aliases, visibility, lock type,
+// lock data, or visible_to are invalid.
+// Returns ErrSelfReferentialExit if from and to locations are the same.
 func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_UPDATE_FAILED").Errorf("exit repository not configured")
