@@ -56,7 +56,8 @@ func (m *Migrator) Up() error {
 	return nil
 }
 
-// Down rolls back all migrations to version 0.
+// Down rolls back all migrations to version 0, effectively removing all schema objects.
+// WARNING: This is a destructive operation that drops all tables and data.
 func (m *Migrator) Down() error {
 	if err := m.m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return oops.Code("MIGRATION_DOWN_FAILED").Wrap(err)
@@ -73,6 +74,8 @@ func (m *Migrator) Steps(n int) error {
 }
 
 // Version returns the current migration version and dirty state.
+// A dirty state indicates a migration failed partway through and requires manual intervention.
+// Returns version 0 with dirty=false if no migrations have been applied.
 func (m *Migrator) Version() (version uint, dirty bool, err error) {
 	version, dirty, err = m.m.Version()
 	if errors.Is(err, migrate.ErrNilVersion) {
@@ -85,6 +88,8 @@ func (m *Migrator) Version() (version uint, dirty bool, err error) {
 }
 
 // Force sets the migration version without running migrations.
+// Use only for recovering from a dirty state after manually fixing the database.
+// WARNING: Setting an incorrect version can corrupt database state tracking.
 func (m *Migrator) Force(version int) error {
 	if err := m.m.Force(version); err != nil {
 		return oops.Code("MIGRATION_FORCE_FAILED").With("version", version).Wrap(err)

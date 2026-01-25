@@ -53,8 +53,8 @@ For development, create new migration files:
 go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 # Create migration files
-task migrate:create -- add_player_email
-# Creates: 000008_add_player_email.up.sql and 000008_add_player_email.down.sql
+task migrate:create -- descriptive_name
+# Creates: NNNNNN_descriptive_name.up.sql and NNNNNN_descriptive_name.down.sql
 ```
 
 **Migration file conventions:**

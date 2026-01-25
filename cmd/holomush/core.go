@@ -456,7 +456,7 @@ func runAutoMigration(databaseURL string, factory func(string) (Migrator, error)
 	}
 	defer func() {
 		if closeErr := migrator.Close(); closeErr != nil {
-			slog.Warn("error closing migrator", "error", closeErr)
+			slog.Warn("error closing migrator", "error", closeErr, "note", "connection may leak")
 		}
 	}()
 

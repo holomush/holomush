@@ -177,7 +177,7 @@ func newMigrateUpCmd() *cobra.Command {
 			}
 			defer func() {
 				if closeErr := migrator.Close(); closeErr != nil {
-					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
 				}
 			}()
 
@@ -208,7 +208,7 @@ func newMigrateDownCmd() *cobra.Command {
 			}
 			defer func() {
 				if closeErr := migrator.Close(); closeErr != nil {
-					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
 				}
 			}()
 
@@ -239,7 +239,7 @@ func newMigrateStatusCmd() *cobra.Command {
 			}
 			defer func() {
 				if closeErr := migrator.Close(); closeErr != nil {
-					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
 				}
 			}()
 
@@ -267,7 +267,7 @@ func newMigrateVersionCmd() *cobra.Command {
 			}
 			defer func() {
 				if closeErr := migrator.Close(); closeErr != nil {
-					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
 				}
 			}()
 
@@ -311,7 +311,7 @@ func newMigrateForceCmd() *cobra.Command {
 			}
 			defer func() {
 				if closeErr := migrator.Close(); closeErr != nil {
-					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
 				}
 			}()
 
