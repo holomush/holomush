@@ -61,8 +61,8 @@ type WorldQuerier interface {
 	// GetCharacter retrieves a character by ID.
 	GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error)
 
-	// GetCharactersByLocation retrieves all characters at a location.
-	GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error)
+	// GetCharactersByLocation retrieves characters at a location with pagination.
+	GetCharactersByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
 
 	// GetObject retrieves an object by ID.
 	GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
@@ -190,6 +190,10 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 }
 
 // queryRoomCharactersFn returns a Lua function that queries characters in a room.
+// Lua signature: query_room_characters(room_id, [opts])
+// opts is an optional table with:
+//   - limit: max results (default: 100)
+//   - offset: number of results to skip (default: 0)
 func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
@@ -213,6 +217,18 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
+		// Parse optional pagination options from second argument
+		opts := world.ListOptions{}
+		if L.GetTop() >= 2 && L.Get(2).Type() == lua.LTTable {
+			optsTable := L.ToTable(2)
+			if limitVal := optsTable.RawGetString("limit"); limitVal.Type() == lua.LTNumber {
+				opts.Limit = int(lua.LVAsNumber(limitVal))
+			}
+			if offsetVal := optsTable.RawGetString("offset"); offsetVal.Type() == lua.LTNumber {
+				opts.Offset = int(lua.LVAsNumber(offsetVal))
+			}
+		}
+
 		// Inherit context from Lua state if available, otherwise use Background
 		parentCtx := L.Context()
 		if parentCtx == nil {
@@ -223,7 +239,7 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 
 		// Create adapter for this plugin's authorization
 		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-		chars, err := adapter.GetCharactersByLocation(ctx, id)
+		chars, err := adapter.GetCharactersByLocation(ctx, id, opts)
 		if err != nil {
 			if errors.Is(err, world.ErrNotFound) {
 				slog.Debug("query_room_characters: room not found",

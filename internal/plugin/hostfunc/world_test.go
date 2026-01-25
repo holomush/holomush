@@ -42,7 +42,7 @@ func (m *mockWorldQuerier) GetCharacter(_ context.Context, _ ulid.ULID) (*world.
 	return m.character, nil
 }
 
-func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ ulid.ULID) ([]*world.Character, error) {
+func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -720,6 +720,14 @@ func TestQueryObject_HeldByCharacter(t *testing.T) {
 	assert.Equal(t, "character", tbl.RawGetString("containment_type").String())
 }
 
+// TestQueryObject_NilOptionalFields tests the host function's defensive handling of nil
+// optional fields when returning object data to Lua plugins.
+//
+// NOTE: This test intentionally creates an Object with invalid state (no containment set)
+// to verify the host function gracefully handles nil containment fields. In production,
+// objects are always created via NewObjectWithID() which requires containment, so this
+// invalid state should never occur. This test ensures plugins won't crash if they somehow
+// receive an object in an unexpected state.
 func TestQueryObject_NilOptionalFields(t *testing.T) {
 	objID := ulid.Make()
 	obj := &world.Object{
@@ -727,7 +735,8 @@ func TestQueryObject_NilOptionalFields(t *testing.T) {
 		Name:        "Simple Object",
 		Description: "Nothing special.",
 		IsContainer: false,
-		// All optional pointer fields are nil
+		// Intentionally leaving containment unset to test defensive nil handling.
+		// This is NOT a valid production state - see function comment above.
 	}
 
 	querier := &mockWorldQuerier{object: obj}
@@ -909,7 +918,7 @@ func (m *contextAwareWorldQuerier) GetCharacter(ctx context.Context, _ ulid.ULID
 	return &world.Character{ID: ulid.Make(), Name: "Test"}, nil
 }
 
-func (m *contextAwareWorldQuerier) GetCharactersByLocation(ctx context.Context, _ ulid.ULID) ([]*world.Character, error) {
+func (m *contextAwareWorldQuerier) GetCharactersByLocation(ctx context.Context, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	if m.ctxChan != nil {
 		select {
 		case m.ctxChan <- ctx:

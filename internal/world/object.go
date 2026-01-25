@@ -18,6 +18,11 @@ var ErrInvalidContainment = errors.New("object must be in exactly one place")
 // Exactly one field must be set; use the factory functions [InLocation],
 // [HeldByCharacter], or [ContainedInObject] to construct valid instances.
 //
+// # Zero Value Warning
+//
+// The zero value Containment{} is INVALID and will fail validation.
+// Always use the factory functions to construct Containment values.
+//
 // # Design Decision
 //
 // This type uses a struct with explicit validation rather than a sealed interface
@@ -25,12 +30,13 @@ var ErrInvalidContainment = errors.New("object must be in exactly one place")
 // compile time, the struct approach was chosen because:
 //
 //   - Simpler API for callers (direct field access vs method calls)
-//   - No breaking changes to existing code using Containment{}
+//   - Factory functions provide safe construction for external callers
 //   - Validation catches misuse at runtime with clear error messages
-//   - Factory functions already provide safe construction
+//   - Go convention: many stdlib types have invalid zero values (time.Time{}, etc.)
 //
-// Callers SHOULD use the factory functions rather than constructing Containment
-// directly to avoid validation errors.
+// Fields are public to allow repository code to hydrate objects directly from
+// database queries without going through factories. Application code SHOULD use
+// the factory functions to avoid validation errors.
 type Containment struct {
 	LocationID  *ulid.ULID
 	CharacterID *ulid.ULID

@@ -177,9 +177,9 @@ func (_c *MockCharacterRepository_Get_Call) RunAndReturn(run func(context.Contex
 	return _c
 }
 
-// GetByLocation provides a mock function with given fields: ctx, locationID
-func (_m *MockCharacterRepository) GetByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error) {
-	ret := _m.Called(ctx, locationID)
+// GetByLocation provides a mock function with given fields: ctx, locationID, opts
+func (_m *MockCharacterRepository) GetByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
+	ret := _m.Called(ctx, locationID, opts)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByLocation")
@@ -187,19 +187,19 @@ func (_m *MockCharacterRepository) GetByLocation(ctx context.Context, locationID
 
 	var r0 []*world.Character
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) ([]*world.Character, error)); ok {
-		return rf(ctx, locationID)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, world.ListOptions) ([]*world.Character, error)); ok {
+		return rf(ctx, locationID, opts)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) []*world.Character); ok {
-		r0 = rf(ctx, locationID)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, world.ListOptions) []*world.Character); ok {
+		r0 = rf(ctx, locationID, opts)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*world.Character)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
-		r1 = rf(ctx, locationID)
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, world.ListOptions) error); ok {
+		r1 = rf(ctx, locationID, opts)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -215,13 +215,14 @@ type MockCharacterRepository_GetByLocation_Call struct {
 // GetByLocation is a helper method to define mock.On call
 //   - ctx context.Context
 //   - locationID ulid.ULID
-func (_e *MockCharacterRepository_Expecter) GetByLocation(ctx interface{}, locationID interface{}) *MockCharacterRepository_GetByLocation_Call {
-	return &MockCharacterRepository_GetByLocation_Call{Call: _e.mock.On("GetByLocation", ctx, locationID)}
+//   - opts world.ListOptions
+func (_e *MockCharacterRepository_Expecter) GetByLocation(ctx interface{}, locationID interface{}, opts interface{}) *MockCharacterRepository_GetByLocation_Call {
+	return &MockCharacterRepository_GetByLocation_Call{Call: _e.mock.On("GetByLocation", ctx, locationID, opts)}
 }
 
-func (_c *MockCharacterRepository_GetByLocation_Call) Run(run func(ctx context.Context, locationID ulid.ULID)) *MockCharacterRepository_GetByLocation_Call {
+func (_c *MockCharacterRepository_GetByLocation_Call) Run(run func(ctx context.Context, locationID ulid.ULID, opts world.ListOptions)) *MockCharacterRepository_GetByLocation_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID))
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(world.ListOptions))
 	})
 	return _c
 }
@@ -231,7 +232,7 @@ func (_c *MockCharacterRepository_GetByLocation_Call) Return(_a0 []*world.Charac
 	return _c
 }
 
-func (_c *MockCharacterRepository_GetByLocation_Call) RunAndReturn(run func(context.Context, ulid.ULID) ([]*world.Character, error)) *MockCharacterRepository_GetByLocation_Call {
+func (_c *MockCharacterRepository_GetByLocation_Call) RunAndReturn(run func(context.Context, ulid.ULID, world.ListOptions) ([]*world.Character, error)) *MockCharacterRepository_GetByLocation_Call {
 	_c.Call.Return(run)
 	return _c
 }

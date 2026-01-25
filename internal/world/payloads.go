@@ -175,6 +175,12 @@ func (p *ExaminePayload) Validate() error {
 }
 
 // NewExaminePayload creates a validated ExaminePayload.
+//
+// Parameters:
+//   - characterID: The character performing the examine action (who is looking)
+//   - targetType: What type of thing is being examined (location, object, or character)
+//   - targetID: The ID of the thing being examined
+//   - locationID: Where the examine action is taking place (for event routing)
 func NewExaminePayload(
 	characterID ulid.ULID,
 	targetType TargetType,
@@ -213,6 +219,15 @@ func (p *ObjectGivePayload) Validate() error {
 }
 
 // NewObjectGivePayload creates a validated ObjectGivePayload.
+//
+// Parameters:
+//   - objectID: The object being transferred
+//   - fromCharacterID: The character giving the object (must own/hold it)
+//   - toCharacterID: The character receiving the object (must not equal fromCharacterID)
+//   - objectName: Display name of the object (for event messages)
+//
+// Note: Take care not to swap fromCharacterID and toCharacterID - the validation
+// checks that they differ but cannot detect if they are reversed.
 func NewObjectGivePayload(
 	objectID, fromCharacterID, toCharacterID ulid.ULID,
 	objectName string,

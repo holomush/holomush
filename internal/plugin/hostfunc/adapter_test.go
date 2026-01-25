@@ -46,7 +46,7 @@ func (m *mockWorldService) GetCharacter(_ context.Context, subjectID string, _ u
 	return m.character, nil
 }
 
-func (m *mockWorldService) GetCharactersByLocation(_ context.Context, subjectID string, _ ulid.ULID) ([]*world.Character, error) {
+func (m *mockWorldService) GetCharactersByLocation(_ context.Context, subjectID string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	m.capturedSubjectID = subjectID
 	if m.err != nil {
 		return nil, m.err
@@ -227,7 +227,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		svc := &mockWorldService{characters: expectedChars}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "presence-plugin")
 
-		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+		chars, err := adapter.GetCharactersByLocation(ctx, locID, world.ListOptions{})
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
@@ -238,7 +238,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		svc := &mockWorldService{characters: []*world.Character{}}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
 
-		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+		chars, err := adapter.GetCharactersByLocation(ctx, locID, world.ListOptions{})
 
 		require.NoError(t, err)
 		assert.Empty(t, chars)
@@ -251,7 +251,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		svc := &mockWorldService{characters: nil, err: nil}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
 
-		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+		chars, err := adapter.GetCharactersByLocation(ctx, locID, world.ListOptions{})
 
 		require.NoError(t, err)
 		assert.NotNil(t, chars, "nil slice should be normalized to empty slice")
@@ -263,7 +263,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		svc := &mockWorldService{err: expectedErr}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
 
-		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+		chars, err := adapter.GetCharactersByLocation(ctx, locID, world.ListOptions{})
 
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, expectedErr)
@@ -274,7 +274,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		svc := &mockWorldService{err: expectedErr}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "loc-plugin")
 
-		_, err := adapter.GetCharactersByLocation(ctx, locID)
+		_, err := adapter.GetCharactersByLocation(ctx, locID, world.ListOptions{})
 
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
@@ -356,7 +356,7 @@ func (m *blockingMockWorldService) GetCharacter(ctx context.Context, _ string, _
 	return nil, ctx.Err()
 }
 
-func (m *blockingMockWorldService) GetCharactersByLocation(ctx context.Context, _ string, _ ulid.ULID) ([]*world.Character, error) {
+func (m *blockingMockWorldService) GetCharactersByLocation(ctx context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
@@ -411,7 +411,7 @@ func TestWorldQuerierAdapter_ContextTimeout(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 		defer cancel()
 
-		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+		chars, err := adapter.GetCharactersByLocation(ctx, locID, world.ListOptions{})
 
 		assert.Nil(t, chars)
 		require.Error(t, err)

@@ -18,7 +18,7 @@ import (
 type WorldService interface {
 	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
 	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
-	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Character, error)
+	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
 	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
 }
 
@@ -107,11 +107,11 @@ func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*
 	return char, nil
 }
 
-// GetCharactersByLocation retrieves all characters at a location with plugin authorization.
+// GetCharactersByLocation retrieves characters at a location with pagination and plugin authorization.
 // Returns errors with code PLUGIN_QUERY_FAILED on failure.
 // If the service returns nil, normalizes to empty slice for consistency.
-func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error) {
-	chars, err := a.service.GetCharactersByLocation(ctx, a.SubjectID(), locationID)
+func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
+	chars, err := a.service.GetCharactersByLocation(ctx, a.SubjectID(), locationID, opts)
 	if err != nil {
 		return nil, oops.Code("PLUGIN_QUERY_FAILED").
 			With("plugin", a.pluginName).

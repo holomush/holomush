@@ -40,6 +40,20 @@ func NewCharacterWithID(id, playerID ulid.ULID, name string) (*Character, error)
 	return c, nil
 }
 
+// SetLocationID updates the character's current location.
+// If id is non-nil, it must be a valid (non-zero) ULID.
+//
+// Note: Direct field access to LocationID is acceptable for repository
+// hydration from the database and read-only access. This setter should
+// be used by application code that modifies the location to ensure validation.
+func (c *Character) SetLocationID(id *ulid.ULID) error {
+	if id != nil && id.IsZero() {
+		return &ValidationError{Field: "location_id", Message: "cannot be zero"}
+	}
+	c.LocationID = id
+	return nil
+}
+
 // Validate checks that the character has required fields.
 func (c *Character) Validate() error {
 	if c.ID.IsZero() {

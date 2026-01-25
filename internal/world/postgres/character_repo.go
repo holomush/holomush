@@ -83,13 +83,18 @@ func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	return nil
 }
 
-// GetByLocation retrieves all characters at a location.
-func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error) {
+// GetByLocation retrieves characters at a location with pagination.
+func (r *CharacterRepository) GetByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = world.DefaultLimit
+	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, player_id, name, description, location_id, created_at
 		FROM characters WHERE location_id = $1
 		ORDER BY name
-	`, locationID.String())
+		LIMIT $2 OFFSET $3
+	`, locationID.String(), limit, opts.Offset)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").With("location_id", locationID.String()).Wrap(err)
 	}

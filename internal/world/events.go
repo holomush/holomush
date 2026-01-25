@@ -39,6 +39,27 @@ func BroadcastLocationStream() string {
 }
 
 // EventEmitter publishes world events.
+//
+// # Design Note: Raw Interface vs Typed Events
+//
+// This interface uses raw string/[]byte parameters rather than a typed Event
+// interface (e.g., Event.Stream(), Event.Type(), Event.Payload()). This is
+// intentional for several reasons:
+//
+//  1. Type safety at call sites: The EmitX helper functions (EmitMoveEvent,
+//     EmitExamineEvent, etc.) provide compile-time type safety where it matters.
+//     Service code calls these typed helpers, not the raw Emit method directly.
+//
+//  2. Implementation flexibility: The raw interface allows adapters (like
+//     EventStoreAdapter) to construct events with implementation-specific details
+//     (IDs, timestamps, actors) without being constrained by an Event interface.
+//
+//  3. Minimal abstraction: Events are stored as JSON blobs. Adding an Event
+//     interface would be an abstraction over []byte that provides no additional
+//     safety beyond what the EmitX helpers already provide.
+//
+// If callers bypass EmitX helpers and call Emit directly, they take on
+// responsibility for correct stream/eventType/payload construction.
 type EventEmitter interface {
 	// Emit publishes an event to the given stream.
 	Emit(ctx context.Context, stream string, eventType string, payload []byte) error

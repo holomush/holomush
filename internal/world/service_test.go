@@ -3329,9 +3329,9 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		expectedChars := []*world.Character{char1, char2}
 
 		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
-		mockRepo.EXPECT().GetByLocation(ctx, locationID).Return(expectedChars, nil)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
 		mockAC.AssertExpectations(t)
@@ -3348,7 +3348,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(false)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
@@ -3362,7 +3362,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 			AccessControl: mockAC,
 		})
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
@@ -3379,9 +3379,9 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		dbErr := errors.New("database connection failed")
 		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
-		mockRepo.EXPECT().GetByLocation(ctx, locationID).Return(nil, dbErr)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(nil, dbErr)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
@@ -3398,11 +3398,32 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
-		mockRepo.EXPECT().GetByLocation(ctx, locationID).Return([]*world.Character{}, nil)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return([]*world.Character{}, nil)
 
-		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		require.NoError(t, err)
 		assert.Empty(t, chars)
+	})
+
+	t.Run("passes pagination options to repository", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		opts := world.ListOptions{Limit: 10, Offset: 5}
+		expectedChars := []*world.Character{{ID: ulid.Make(), Name: "Char1"}}
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID, opts).Return(expectedChars, nil)
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, opts)
+		require.NoError(t, err)
+		assert.Equal(t, expectedChars, chars)
+		mockAC.AssertExpectations(t)
 	})
 }
 

@@ -37,10 +37,11 @@ type testEnv struct {
 	eventStore *store.PostgresEventStore
 
 	// Repositories
-	Locations *worldpg.LocationRepository
-	Exits     *worldpg.ExitRepository
-	Objects   *worldpg.ObjectRepository
-	Scenes    *worldpg.SceneRepository
+	Locations  *worldpg.LocationRepository
+	Exits      *worldpg.ExitRepository
+	Objects    *worldpg.ObjectRepository
+	Scenes     *worldpg.SceneRepository
+	Characters *worldpg.CharacterRepository
 }
 
 var env *testEnv
@@ -109,6 +110,7 @@ func setupWorldTestEnv() (*testEnv, error) {
 		Exits:      worldpg.NewExitRepository(pool),
 		Objects:    worldpg.NewObjectRepository(pool),
 		Scenes:     worldpg.NewSceneRepository(pool),
+		Characters: worldpg.NewCharacterRepository(pool),
 	}, nil
 }
 
@@ -150,19 +152,7 @@ func createTestExit(fromID, toID ulid.ULID, name string) *world.Exit {
 }
 
 func createTestObject(name, description string, containment world.Containment) *world.Object {
-	var opt world.ContainmentOption
-	switch {
-	case containment.LocationID != nil:
-		opt = world.InLocation(*containment.LocationID)
-	case containment.CharacterID != nil:
-		opt = world.HeldBy(*containment.CharacterID)
-	case containment.ObjectID != nil:
-		opt = world.InContainer(*containment.ObjectID)
-	default:
-		Fail("createTestObject requires exactly one containment option")
-	}
-
-	obj, err := world.NewObjectWithID(core.NewULID(), name, opt)
+	obj, err := world.NewObjectWithID(core.NewULID(), name, containment)
 	Expect(err).NotTo(HaveOccurred(), "failed to create test object")
 	obj.Description = description
 	return obj

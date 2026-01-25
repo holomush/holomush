@@ -461,8 +461,8 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	return char, nil
 }
 
-// GetCharactersByLocation retrieves all characters at a location after checking read authorization.
-func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Character, error) {
+// GetCharactersByLocation retrieves characters at a location with pagination after checking read authorization.
+func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
@@ -470,7 +470,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
 		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	chars, err := s.characterRepo.GetByLocation(ctx, locationID)
+	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Wrapf(err, "get characters by location %s", locationID)
 	}

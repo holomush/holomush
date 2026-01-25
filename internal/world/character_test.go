@@ -241,6 +241,81 @@ func TestNewCharacter(t *testing.T) {
 	})
 }
 
+func TestCharacter_SetLocationID(t *testing.T) {
+	tests := []struct {
+		name       string
+		locationID *ulid.ULID
+		wantErr    bool
+		errField   string
+	}{
+		{
+			name:       "nil location succeeds",
+			locationID: nil,
+			wantErr:    false,
+		},
+		{
+			name:       "valid non-nil ULID succeeds",
+			locationID: func() *ulid.ULID { id := ulid.Make(); return &id }(),
+			wantErr:    false,
+		},
+		{
+			name:       "zero ULID fails",
+			locationID: func() *ulid.ULID { var id ulid.ULID; return &id }(),
+			wantErr:    true,
+			errField:   "location_id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			char, err := world.NewCharacter(ulid.Make(), "TestChar")
+			require.NoError(t, err)
+
+			err = char.SetLocationID(tt.locationID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				var validationErr *world.ValidationError
+				require.ErrorAs(t, err, &validationErr)
+				assert.Equal(t, tt.errField, validationErr.Field)
+			} else {
+				require.NoError(t, err)
+				if tt.locationID == nil {
+					assert.Nil(t, char.LocationID)
+				} else {
+					require.NotNil(t, char.LocationID)
+					assert.Equal(t, *tt.locationID, *char.LocationID)
+				}
+			}
+		})
+	}
+}
+
+func TestCharacter_SetLocationID_UpdatesField(t *testing.T) {
+	char, err := world.NewCharacter(ulid.Make(), "TestChar")
+	require.NoError(t, err)
+	assert.Nil(t, char.LocationID, "LocationID should be nil initially")
+
+	// Set to a valid location
+	locID := ulid.Make()
+	err = char.SetLocationID(&locID)
+	require.NoError(t, err)
+	require.NotNil(t, char.LocationID)
+	assert.Equal(t, locID, *char.LocationID)
+
+	// Change to a different location
+	newLocID := ulid.Make()
+	err = char.SetLocationID(&newLocID)
+	require.NoError(t, err)
+	require.NotNil(t, char.LocationID)
+	assert.Equal(t, newLocID, *char.LocationID)
+
+	// Set back to nil
+	err = char.SetLocationID(nil)
+	require.NoError(t, err)
+	assert.Nil(t, char.LocationID)
+}
+
 func TestNewCharacterWithID(t *testing.T) {
 	playerID := ulid.Make()
 	charID := ulid.Make()

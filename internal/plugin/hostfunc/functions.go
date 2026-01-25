@@ -87,8 +87,8 @@ func (p *passthroughWorldService) GetCharacter(ctx context.Context, _ string, id
 	return char, nil
 }
 
-func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _ string, locationID ulid.ULID) ([]*world.Character, error) {
-	chars, err := p.querier.GetCharactersByLocation(ctx, locationID)
+func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _ string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
+	chars, err := p.querier.GetCharactersByLocation(ctx, locationID, opts)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
 	}

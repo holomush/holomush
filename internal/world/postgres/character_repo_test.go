@@ -124,7 +124,7 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 	repo := postgres.NewCharacterRepository(testPool)
 
 	t.Run("returns empty slice for location with no characters", func(t *testing.T) {
-		chars, err := repo.GetByLocation(ctx, ulid.Make())
+		chars, err := repo.GetByLocation(ctx, ulid.Make(), world.ListOptions{})
 		require.NoError(t, err)
 		assert.Empty(t, chars)
 	})
@@ -158,7 +158,7 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 			_ = repo.Delete(ctx, char2.ID)
 		})
 
-		chars, err := repo.GetByLocation(ctx, locationID)
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{})
 		require.NoError(t, err)
 		assert.Len(t, chars, 2)
 
@@ -168,6 +168,82 @@ func TestCharacterRepository_GetByLocation(t *testing.T) {
 			names[i] = c.Name
 		}
 		assert.Equal(t, []string{"Alice", "Bob"}, names)
+	})
+}
+
+func TestCharacterRepository_GetByLocation_Pagination(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	// Create test data: 5 characters at same location
+	playerID := createTestPlayer(ctx, t)
+	locationID := createTestLocation(ctx, t)
+
+	charNames := []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}
+	charIDs := make([]ulid.ULID, len(charNames))
+
+	for i, name := range charNames {
+		charIDs[i] = ulid.Make()
+		char := &world.Character{
+			ID:          charIDs[i],
+			PlayerID:    playerID,
+			Name:        name,
+			Description: name + " description",
+			LocationID:  &locationID,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+		require.NoError(t, repo.Create(ctx, char))
+	}
+
+	t.Cleanup(func() {
+		for _, id := range charIDs {
+			_ = repo.Delete(ctx, id)
+		}
+	})
+
+	t.Run("limit restricts results", func(t *testing.T) {
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{Limit: 2})
+		require.NoError(t, err)
+		assert.Len(t, chars, 2)
+		// Results are ordered by name, so first 2 should be Alice, Bob
+		assert.Equal(t, "Alice", chars[0].Name)
+		assert.Equal(t, "Bob", chars[1].Name)
+	})
+
+	t.Run("offset skips results", func(t *testing.T) {
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{Limit: 2, Offset: 2})
+		require.NoError(t, err)
+		assert.Len(t, chars, 2)
+		// Skip Alice, Bob; get Charlie, Diana
+		assert.Equal(t, "Charlie", chars[0].Name)
+		assert.Equal(t, "Diana", chars[1].Name)
+	})
+
+	t.Run("offset beyond results returns empty", func(t *testing.T) {
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{Offset: 100})
+		require.NoError(t, err)
+		assert.Empty(t, chars)
+	})
+
+	t.Run("partial page returns remaining results", func(t *testing.T) {
+		// Offset 4, limit 10 should return only Eve (1 result)
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{Limit: 10, Offset: 4})
+		require.NoError(t, err)
+		assert.Len(t, chars, 1)
+		assert.Equal(t, "Eve", chars[0].Name)
+	})
+
+	t.Run("zero limit uses default", func(t *testing.T) {
+		// With 5 characters, default limit (100) returns all
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{Limit: 0})
+		require.NoError(t, err)
+		assert.Len(t, chars, 5)
+	})
+
+	t.Run("empty ListOptions uses defaults", func(t *testing.T) {
+		chars, err := repo.GetByLocation(ctx, locationID, world.ListOptions{})
+		require.NoError(t, err)
+		assert.Len(t, chars, 5)
 	})
 }
 
