@@ -6,6 +6,7 @@ package hostfunc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
@@ -13,6 +14,27 @@ import (
 
 	"github.com/holomush/holomush/internal/world"
 )
+
+// sanitizeErrorForPlugin converts internal errors to safe messages for plugins.
+// It maps known error types to user-friendly messages and logs internal errors
+// at ERROR level for operators while returning a generic message to plugins.
+func sanitizeErrorForPlugin(pluginName, entityType, entityID string, err error) string {
+	if errors.Is(err, world.ErrNotFound) {
+		return fmt.Sprintf("%s not found", entityType)
+	}
+	if errors.Is(err, world.ErrPermissionDenied) {
+		return "access denied"
+	}
+	// Log full error for operators, return generic message to plugin.
+	// The oops error contains full context including stack traces which
+	// should not be exposed to plugins.
+	slog.Error("internal error in plugin query",
+		"plugin", pluginName,
+		"entity_type", entityType,
+		"entity_id", entityID,
+		"error", err)
+	return "internal error"
+}
 
 // WorldQuerier provides read access to world data.
 type WorldQuerier interface {
@@ -64,14 +86,9 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 				slog.Debug("query_room: room not found",
 					"plugin", pluginName,
 					"room_id", roomID)
-			} else {
-				slog.Error("query_room failed",
-					"plugin", pluginName,
-					"room_id", roomID,
-					"error", err)
 			}
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "room", roomID, err)))
 			return 2
 		}
 
@@ -123,14 +140,9 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 				slog.Debug("query_character: character not found",
 					"plugin", pluginName,
 					"character_id", charID)
-			} else {
-				slog.Error("query_character failed",
-					"plugin", pluginName,
-					"character_id", charID,
-					"error", err)
 			}
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "character", charID, err)))
 			return 2
 		}
 
@@ -185,14 +197,9 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 				slog.Debug("query_room_characters: room not found",
 					"plugin", pluginName,
 					"room_id", roomID)
-			} else {
-				slog.Error("query_room_characters failed",
-					"plugin", pluginName,
-					"room_id", roomID,
-					"error", err)
 			}
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "room", roomID, err)))
 			return 2
 		}
 
@@ -248,14 +255,9 @@ func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 				slog.Debug("query_object: object not found",
 					"plugin", pluginName,
 					"object_id", objID)
-			} else {
-				slog.Error("query_object failed",
-					"plugin", pluginName,
-					"object_id", objID,
-					"error", err)
 			}
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "object", objID, err)))
 			return 2
 		}
 

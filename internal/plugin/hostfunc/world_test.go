@@ -132,6 +132,7 @@ func TestQueryRoom_NotFound(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, room.Type(), "expected nil room for not found")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Equal(t, "room not found", errVal.String(), "expected sanitized error message")
 }
 
 func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
@@ -152,9 +153,10 @@ func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
-func TestQueryRoom_Error(t *testing.T) {
+func TestQueryRoom_InternalError(t *testing.T) {
 	roomID := ulid.Make()
-	querier := &mockWorldQuerier{err: errors.New("database error")}
+	// Internal error should be sanitized - plugin should not see "database error"
+	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
 
 	L := lua.NewState()
@@ -168,7 +170,28 @@ func TestQueryRoom_Error(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, room.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Contains(t, errVal.String(), "database error")
+	// Should return sanitized message, not the actual error
+	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message, not internal details")
+	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+}
+
+func TestQueryRoom_PermissionDenied(t *testing.T) {
+	roomID := ulid.Make()
+	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`room, err = holomush.query_room("` + roomID.String() + `")`)
+	require.NoError(t, err)
+
+	room := L.GetGlobal("room")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, room.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
 func TestQueryRoom_RequiresCapability(t *testing.T) {
@@ -291,11 +314,13 @@ func TestQueryCharacter_NotFound(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, character.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "character not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryCharacter_Error(t *testing.T) {
+func TestQueryCharacter_InternalError(t *testing.T) {
 	charID := ulid.Make()
-	querier := &mockWorldQuerier{err: errors.New("database error")}
+	// Internal error should be sanitized - plugin should not see "database error"
+	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
 
 	L := lua.NewState()
@@ -309,7 +334,27 @@ func TestQueryCharacter_Error(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, character.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Contains(t, errVal.String(), "database error")
+	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message")
+	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+}
+
+func TestQueryCharacter_PermissionDenied(t *testing.T) {
+	charID := ulid.Make()
+	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`character, err = holomush.query_character("` + charID.String() + `")`)
+	require.NoError(t, err)
+
+	character := L.GetGlobal("character")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, character.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
 func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
@@ -438,9 +483,9 @@ func TestQueryRoomCharacters_InvalidID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid room ID")
 }
 
-func TestQueryRoomCharacters_Error(t *testing.T) {
+func TestQueryRoomCharacters_NotFound(t *testing.T) {
 	roomID := ulid.Make()
-	querier := &mockWorldQuerier{err: errors.New("database error")}
+	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
 
 	L := lua.NewState()
@@ -454,7 +499,47 @@ func TestQueryRoomCharacters_Error(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, characters.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Contains(t, errVal.String(), "database error")
+	assert.Equal(t, "room not found", errVal.String(), "expected sanitized error message")
+}
+
+func TestQueryRoomCharacters_InternalError(t *testing.T) {
+	roomID := ulid.Make()
+	// Internal error should be sanitized - plugin should not see "database error"
+	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	require.NoError(t, err)
+
+	characters := L.GetGlobal("characters")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, characters.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message")
+	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+}
+
+func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
+	roomID := ulid.Make()
+	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	require.NoError(t, err)
+
+	characters := L.GetGlobal("characters")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, characters.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
 func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
@@ -627,11 +712,13 @@ func TestQueryObject_NotFound(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, objVal.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "object not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryObject_Error(t *testing.T) {
+func TestQueryObject_InternalError(t *testing.T) {
 	objID := ulid.Make()
-	querier := &mockWorldQuerier{err: errors.New("database error")}
+	// Internal error should be sanitized - plugin should not see "database error"
+	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
 	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
 
 	L := lua.NewState()
@@ -645,7 +732,27 @@ func TestQueryObject_Error(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, objVal.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Contains(t, errVal.String(), "database error")
+	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message")
+	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+}
+
+func TestQueryObject_PermissionDenied(t *testing.T) {
+	objID := ulid.Make()
+	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, objVal.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
 func TestQueryObject_NoQuerierConfigured(t *testing.T) {
