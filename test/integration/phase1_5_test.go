@@ -100,13 +100,23 @@ func setupTestEnv() (*testEnv, error) {
 		return nil, err
 	}
 
-	// Create and migrate store
-	env.store, err = store.NewPostgresEventStore(ctx, connStr)
+	// Run migrations using the new Migrator
+	migrator, err := store.NewMigrator(connStr)
 	if err != nil {
+		_ = container.Terminate(ctx)
 		return nil, err
 	}
+	if err := migrator.Up(); err != nil {
+		_ = migrator.Close()
+		_ = container.Terminate(ctx)
+		return nil, err
+	}
+	_ = migrator.Close()
 
-	if err := env.store.Migrate(ctx); err != nil {
+	// Create event store
+	env.store, err = store.NewPostgresEventStore(ctx, connStr)
+	if err != nil {
+		_ = container.Terminate(ctx)
 		return nil, err
 	}
 

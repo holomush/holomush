@@ -150,6 +150,7 @@ func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
 	// Error from golang-migrate parsing
 	assert.Contains(t, err.Error(), "invalid", "Error should mention invalid URL")
 }
+
 // Status command tests are now in status_test.go
 
 func TestUnknownCommand(t *testing.T) {

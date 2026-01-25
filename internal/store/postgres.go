@@ -19,10 +19,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 )
 
-
-//go:embed migrations/008_character_description_nullable_location.sql
-var migration008SQL string
-
 // ErrSystemInfoNotFound is returned when a system info key doesn't exist.
 var ErrSystemInfoNotFound = errors.New("system info key not found")
 

@@ -691,7 +691,6 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 	}
 }
 
-
 func TestPostgresEventStore_Close(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err, "failed to create mock")
