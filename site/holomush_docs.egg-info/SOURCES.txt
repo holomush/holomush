@@ -1,6 +1,0 @@
-pyproject.toml
-holomush_docs.egg-info/PKG-INFO
-holomush_docs.egg-info/SOURCES.txt
-holomush_docs.egg-info/dependency_links.txt
-holomush_docs.egg-info/requires.txt
-holomush_docs.egg-info/top_level.txt
