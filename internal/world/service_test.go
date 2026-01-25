@@ -847,6 +847,34 @@ func TestWorldService_MoveObject(t *testing.T) {
 	// With unexported containment fields and enforced invariants via SetContainment,
 	// objects with no containment cannot be created from outside the package.
 	// Objects must always have valid containment per the domain invariant.
+
+	t.Run("returns error when event emitter fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+			EventEmitter:  emitter,
+		})
+
+		fromLocID := ulid.Make()
+		to := world.Containment{LocationID: &locationID}
+
+		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
+		require.NoError(t, err)
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
+		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
+
+		err = svc.MoveObject(ctx, subjectID, objID, to)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		errutil.AssertErrorContext(t, err, "move_succeeded", true)
+		mockAC.AssertExpectations(t)
+	})
 }
 
 func TestWorldService_AddSceneParticipant(t *testing.T) {
