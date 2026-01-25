@@ -69,8 +69,13 @@ func (p *MovePayload) Validate() error {
 	if !p.FromType.IsValidOrNone() {
 		return &ValidationError{Field: "from_type", Message: "must be 'location', 'character', 'object', or 'none'"}
 	}
-	// FromID can be nil only for first-time placements (FromType == "none")
-	if p.FromID == nil && p.FromType != ContainmentTypeNone {
+	// FromID must be nil for first-time placements (FromType == "none")
+	// and must be non-nil otherwise
+	if p.FromType == ContainmentTypeNone {
+		if p.FromID != nil {
+			return &ValidationError{Field: "from_id", Message: "must be nil when from_type is 'none'"}
+		}
+	} else if p.FromID == nil {
 		return &ValidationError{Field: "from_id", Message: "cannot be nil"}
 	}
 	if p.ToType == "" {

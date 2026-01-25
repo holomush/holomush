@@ -212,6 +212,21 @@ func TestMovePayload_Validate(t *testing.T) {
 		require.NoError(t, payload.Validate())
 	})
 
+	t.Run("non-nil from ID with none from type is invalid", func(t *testing.T) {
+		// If FromType is "none" (first-time placement), FromID must be nil
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   entityID,
+			FromType:   world.ContainmentTypeNone,
+			FromID:     &fromID, // Invalid: should be nil when FromType is "none"
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toID,
+		}
+		err := payload.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "from_id")
+	})
+
 	t.Run("invalid entity type", func(t *testing.T) {
 		payload := world.MovePayload{
 			EntityType: "invalid",
