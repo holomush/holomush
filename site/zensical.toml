@@ -1,7 +1,7 @@
 [project]
-site_name = "HoloMUSH Documentation"
-site_url = "https://docs.holomush.dev"
-site_description = "Modern MUSH platform with WASM plugins"
+site_name = "HoloMUSH"
+site_url = "https://holomush.dev"
+site_description = "Modern MUSH platform with Lua & Go plugins"
 site_author = "HoloMUSH Contributors"
 copyright = "© 2026 HoloMUSH Contributors • Apache-2.0"
 

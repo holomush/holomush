@@ -1,45 +1,87 @@
-# HoloMUSH Documentation
+# HoloMUSH
 
-Welcome to HoloMUSH, a modern MUSH platform built for the future of text-based
-virtual worlds.
+**A modern platform for text-based virtual worlds**
 
-## What is HoloMUSH?
+Build immersive MUSHes with a high-performance Go server, flexible plugin system,
+and modern connectivity.
 
-HoloMUSH combines the rich tradition of MUSH (Multi-User Shared Hallucination)
-with modern technology:
+[Get Started →](operators/installation.md){ .md-button .md-button--primary }
 
-- **Go Core** - High-performance server with event-oriented architecture
-- **WASM Plugins** - Extend functionality with WebAssembly plugins in any language
-- **Dual Protocol** - Connect via classic telnet or modern web client
-- **PostgreSQL Backend** - Reliable, scalable data storage
+---
 
-## Choose Your Path
+## Features
 
-### Developers
+<div class="grid cards" markdown>
 
-Build plugins and extend HoloMUSH with the WASM plugin system.
+- :material-language-go: **Go Core**
 
-[Plugin Development](developers/index.md)
+  ---
 
-### Operators
+  High-performance server with event-driven architecture
 
-Deploy, configure, and run your own HoloMUSH server.
+- :material-puzzle: **Lua & Go Plugins**
 
-[Operations Guide](operators/index.md)
+  ---
 
-### Contributors
+  Lightweight Lua scripts or powerful Go extensions
 
-Join the community and help build HoloMUSH.
+- :material-transit-connection-variant: **Dual Protocol**
 
-[Contributing](contributors/index.md)
+  ---
 
-## Quick Links
+  Classic telnet + modern web client
 
-- [Architecture Overview](developers/architecture.md) - Understand how HoloMUSH works
-- [Getting Started](operators/quickstart.md) - Run your first HoloMUSH server
-- [Plugin Tutorial](developers/plugins/tutorial.md) - Build your first plugin
+- :material-database: **PostgreSQL Backend**
+
+  ---
+
+  Reliable, scalable data storage
+
+</div>
+
+---
 
 ## Project Status
 
-HoloMUSH is under active development. See the [roadmap](contributors/roadmap.md)
-for planned features and the [changelog](changelog.md) for recent updates.
+!!! warning "Active Development"
+
+    HoloMUSH is being built in the open. Star us on
+    [GitHub](https://github.com/holomush/holomush) to follow progress.
+
+---
+
+## Choose Your Path
+
+<div class="grid cards" markdown>
+
+- :material-code-braces: **Developers**
+
+  ---
+
+  Build plugins and extend HoloMUSH with Lua scripts or Go extensions.
+
+  [:octicons-arrow-right-24: Plugin Development](developers/index.md)
+
+- :material-server: **Operators**
+
+  ---
+
+  Deploy, configure, and run your own HoloMUSH server.
+
+  [:octicons-arrow-right-24: Operations Guide](operators/index.md)
+
+- :material-account-group: **Contributors**
+
+  ---
+
+  Join the community and help build HoloMUSH.
+
+  [:octicons-arrow-right-24: Contributing](contributors/index.md)
+
+</div>
+
+---
+
+## Community
+
+- [:fontawesome-brands-github: GitHub](https://github.com/holomush/holomush)
