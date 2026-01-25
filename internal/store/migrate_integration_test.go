@@ -25,7 +25,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	// Start PostgreSQL container
 	pgContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
@@ -104,7 +104,7 @@ func TestMigrator_DirtyStateRecovery(t *testing.T) {
 
 	// Start PostgreSQL container
 	pgContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
@@ -177,7 +177,7 @@ func TestMigrator_ConcurrentUp(t *testing.T) {
 
 	// Start PostgreSQL container
 	pgContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),

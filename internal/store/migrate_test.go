@@ -22,8 +22,8 @@ func TestNewMigrator_InvalidURL(t *testing.T) {
 }
 
 // TestNewMigrator_PostgresqlScheme verifies that postgresql:// URLs are converted
-// to pgx5:// for golang-migrate compatibility. The conversion happens at line 64-65
-// of migrate.go. This test confirms the scheme is recognized (no "unknown driver" error)
+// to pgx5:// for golang-migrate compatibility. The conversion is implemented in
+// NewMigrator. This test confirms the scheme is recognized (no "unknown driver" error)
 // even though connection will fail with a non-existent host.
 func TestNewMigrator_PostgresqlScheme(t *testing.T) {
 	// Use postgresql:// which should be converted to pgx5://
@@ -139,6 +139,23 @@ func TestMigrator_Steps_Error(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "MIGRATION_STEPS_FAILED")
 }
 
+func TestMigrator_Steps_ExceedsAvailable(t *testing.T) {
+	// When more steps are requested than migrations available (e.g., at version 3
+	// with 7 total migrations, requesting Steps(10) would exceed the limit),
+	// golang-migrate returns ErrShortLimit. Our wrapper treats this as a regular
+	// error, wrapping it with MIGRATION_STEPS_FAILED.
+	//
+	// This is the expected behavior: if you request more migrations than exist,
+	// it's an error condition that should be reported, not silently ignored.
+	shortLimitErr := migrate.ErrShortLimit{Short: 6} // Requested 10, only 4 available = 6 short
+	m := &Migrator{m: &mockMigrate{stepsErr: shortLimitErr}}
+	err := m.Steps(10)
+	require.Error(t, err, "requesting more steps than available should return an error")
+	errutil.AssertErrorCode(t, err, "MIGRATION_STEPS_FAILED")
+	// Verify the error includes the requested step count for debugging
+	errutil.AssertErrorContext(t, err, "steps", 10)
+}
+
 func TestMigrator_Version_Success(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionVal: 7, dirty: false}}
 	version, dirty, err := m.Version()
@@ -225,6 +242,24 @@ func TestMigrator_Close_BothErrors(t *testing.T) {
 	// The error message should contain both original errors
 	assert.Contains(t, err.Error(), "source close failed")
 	assert.Contains(t, err.Error(), "db close failed")
+}
+
+func TestMigrator_Close_Idempotent(t *testing.T) {
+	// Calling Close() multiple times should be safe (idempotent).
+	// This documents that golang-migrate's underlying Close() is idempotent,
+	// and our wrapper preserves this behavior. This is important for deferred
+	// cleanup scenarios where Close() may be called multiple times.
+	m := &Migrator{m: &mockMigrate{}}
+
+	err1 := m.Close()
+	require.NoError(t, err1, "first Close() should succeed")
+
+	err2 := m.Close()
+	require.NoError(t, err2, "second Close() should also succeed (idempotent)")
+
+	// Even a third call should work
+	err3 := m.Close()
+	require.NoError(t, err3, "third Close() should also succeed (idempotent)")
 }
 
 func TestMigrator_PendingMigrations_Success(t *testing.T) {

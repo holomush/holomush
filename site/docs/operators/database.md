@@ -5,7 +5,7 @@ setup, migrations, and maintenance.
 
 ## Prerequisites
 
-- PostgreSQL 14 or later
+- PostgreSQL 18 or later
 - A database user with CREATE privileges
 - The `pg_trgm` extension (for fuzzy search)
 

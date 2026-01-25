@@ -244,6 +244,14 @@ func runMigrateForceLogic(out io.Writer, migrator migrator, version int) error {
 
 // NewMigrateCmd creates the migrate subcommand.
 // When invoked without a subcommand, it defaults to running "migrate up".
+//
+// Design note: Each subcommand has similar boilerplate (getDatabaseURL, NewMigrator,
+// defer Close). This was intentionally not extracted into a helper because:
+// 1. Explicit code is more readable and each command is self-contained
+// 2. Error wrapping includes command-specific context
+// 3. Commands have subtle differences (dry-run, all flag) that complicate extraction
+// 4. ~15 lines of duplication is acceptable for CLI commands
+// This was evaluated in PR #43 review and deemed acceptable.
 func NewMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",

@@ -101,7 +101,7 @@ import (
 var migrationsFS embed.FS
 
 type Migrator struct {
-    m *migrate.Migrate
+    m *migrate.Migrate  // Note: Implementation uses migrateIface interface for testability
 }
 
 func NewMigrator(databaseURL string) (*Migrator, error)

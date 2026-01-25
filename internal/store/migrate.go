@@ -191,6 +191,11 @@ func loadMigrationVersions() ([]uint, error) {
 		var version uint
 		if _, err := fmt.Sscanf(name, "%06d", &version); err != nil {
 			// Intentionally skip malformed files rather than failing - see function doc above.
+			// Note: Using global slog is acceptable here because:
+			// 1. This runs once at init time via sync.Once (not per-request)
+			// 2. Malformed files are prevented by compile-time test validation
+			// 3. Adding logger DI would require threading it through multiple layers
+			// Logger DI was evaluated and deemed unnecessary complexity (PR #43 review).
 			slog.Warn("migration file name doesn't match expected format, skipping",
 				"filename", name,
 				"expected_format", "NNNNNN_name.up.sql",
