@@ -296,6 +296,75 @@ func TestObject_Validate(t *testing.T) {
 		}
 		assert.NoError(t, obj.Validate())
 	})
+
+	t.Run("name at exactly max length passes", func(t *testing.T) {
+		exactName := make([]byte, world.MaxNameLength)
+		for i := range exactName {
+			exactName[i] = 'a'
+		}
+		obj := &world.Object{
+			Name: string(exactName),
+		}
+		require.NoError(t, obj.Validate())
+	})
+
+	t.Run("name exceeds max length", func(t *testing.T) {
+		longName := make([]byte, world.MaxNameLength+1)
+		for i := range longName {
+			longName[i] = 'a'
+		}
+		obj := &world.Object{
+			Name: string(longName),
+		}
+		err := obj.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("name with control characters fails", func(t *testing.T) {
+		obj := &world.Object{
+			Name: "Sword\x00",
+		}
+		err := obj.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("description at exactly max length passes", func(t *testing.T) {
+		exactDesc := make([]byte, world.MaxDescriptionLength)
+		for i := range exactDesc {
+			exactDesc[i] = 'a'
+		}
+		obj := &world.Object{
+			Name:        "Sword",
+			Description: string(exactDesc),
+		}
+		require.NoError(t, obj.Validate())
+	})
+
+	t.Run("description exceeds max length", func(t *testing.T) {
+		longDesc := make([]byte, world.MaxDescriptionLength+1)
+		for i := range longDesc {
+			longDesc[i] = 'a'
+		}
+		obj := &world.Object{
+			Name:        "Sword",
+			Description: string(longDesc),
+		}
+		err := obj.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "description")
+	})
+
+	t.Run("description with control characters fails", func(t *testing.T) {
+		obj := &world.Object{
+			Name:        "Sword",
+			Description: "A shiny\x00blade",
+		}
+		err := obj.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "description")
+	})
 }
 
 func TestObject_ValidateContainment(t *testing.T) {
