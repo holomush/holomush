@@ -90,6 +90,38 @@ func (p *MovePayload) Validate() error {
 	return nil
 }
 
+// NewMovePayload creates a validated MovePayload for entity movement.
+// Use NewFirstPlacement instead when the entity has no prior containment (from_type="none").
+func NewMovePayload(
+	entityType EntityType,
+	entityID ulid.ULID,
+	fromType ContainmentType, fromID *ulid.ULID,
+	toType ContainmentType, toID ulid.ULID,
+) (*MovePayload, error) {
+	p := &MovePayload{
+		EntityType: entityType,
+		EntityID:   entityID,
+		FromType:   fromType,
+		FromID:     fromID,
+		ToType:     toType,
+		ToID:       toID,
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// NewFirstPlacement creates a validated MovePayload for first-time entity placement.
+// Sets FromType to "none" and FromID to nil.
+func NewFirstPlacement(
+	entityType EntityType,
+	entityID ulid.ULID,
+	toType ContainmentType, toID ulid.ULID,
+) (*MovePayload, error) {
+	return NewMovePayload(entityType, entityID, ContainmentTypeNone, nil, toType, toID)
+}
+
 // ObjectGivePayload represents an object transfer between characters.
 type ObjectGivePayload struct {
 	ObjectID        ulid.ULID `json:"object_id"`
@@ -142,6 +174,24 @@ func (p *ExaminePayload) Validate() error {
 	return nil
 }
 
+// NewExaminePayload creates a validated ExaminePayload.
+func NewExaminePayload(
+	characterID ulid.ULID,
+	targetType TargetType,
+	targetID, locationID ulid.ULID,
+) (*ExaminePayload, error) {
+	p := &ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		LocationID:  locationID,
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 // Validate checks that the ObjectGivePayload has all required fields and valid values.
 func (p *ObjectGivePayload) Validate() error {
 	if p.ObjectID.IsZero() {
@@ -160,4 +210,21 @@ func (p *ObjectGivePayload) Validate() error {
 		return &ValidationError{Field: "to_character_id", Message: "cannot give object to self"}
 	}
 	return nil
+}
+
+// NewObjectGivePayload creates a validated ObjectGivePayload.
+func NewObjectGivePayload(
+	objectID, fromCharacterID, toCharacterID ulid.ULID,
+	objectName string,
+) (*ObjectGivePayload, error) {
+	p := &ObjectGivePayload{
+		ObjectID:        objectID,
+		ObjectName:      objectName,
+		FromCharacterID: fromCharacterID,
+		ToCharacterID:   toCharacterID,
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return p, nil
 }

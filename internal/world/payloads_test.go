@@ -607,6 +607,218 @@ func TestTargetType_IsValid(t *testing.T) {
 	}
 }
 
+func TestNewMovePayload(t *testing.T) {
+	t.Run("creates valid move payload", func(t *testing.T) {
+		entityID := ulid.Make()
+		fromID := ulid.Make()
+		toID := ulid.Make()
+
+		p, err := world.NewMovePayload(
+			world.EntityTypeCharacter,
+			entityID,
+			world.ContainmentTypeLocation, &fromID,
+			world.ContainmentTypeLocation, toID,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, world.EntityTypeCharacter, p.EntityType)
+		assert.Equal(t, entityID, p.EntityID)
+		assert.Equal(t, world.ContainmentTypeLocation, p.FromType)
+		assert.Equal(t, fromID, *p.FromID)
+		assert.Equal(t, world.ContainmentTypeLocation, p.ToType)
+		assert.Equal(t, toID, p.ToID)
+	})
+
+	t.Run("returns error for zero entity ID", func(t *testing.T) {
+		fromID := ulid.Make()
+		toID := ulid.Make()
+		_, err := world.NewMovePayload(
+			world.EntityTypeCharacter,
+			ulid.ULID{},
+			world.ContainmentTypeLocation, &fromID,
+			world.ContainmentTypeLocation, toID,
+		)
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "entity_id", ve.Field)
+	})
+
+	t.Run("returns error for invalid entity type", func(t *testing.T) {
+		_, err := world.NewMovePayload(
+			world.EntityType("invalid"),
+			ulid.Make(),
+			world.ContainmentTypeLocation, ptrULID(ulid.Make()),
+			world.ContainmentTypeLocation, ulid.Make(),
+		)
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "entity_type", ve.Field)
+	})
+
+	t.Run("returns error for zero to_id", func(t *testing.T) {
+		_, err := world.NewMovePayload(
+			world.EntityTypeObject,
+			ulid.Make(),
+			world.ContainmentTypeLocation, ptrULID(ulid.Make()),
+			world.ContainmentTypeLocation, ulid.ULID{},
+		)
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "to_id", ve.Field)
+	})
+}
+
+func TestNewFirstPlacement(t *testing.T) {
+	t.Run("creates valid first placement payload", func(t *testing.T) {
+		entityID := ulid.Make()
+		toID := ulid.Make()
+
+		p, err := world.NewFirstPlacement(
+			world.EntityTypeObject,
+			entityID,
+			world.ContainmentTypeLocation, toID,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, world.ContainmentTypeNone, p.FromType)
+		assert.Nil(t, p.FromID)
+		assert.Equal(t, world.ContainmentTypeLocation, p.ToType)
+		assert.Equal(t, toID, p.ToID)
+	})
+
+	t.Run("returns error for invalid entity type", func(t *testing.T) {
+		entityID := ulid.Make()
+		toID := ulid.Make()
+		_, err := world.NewFirstPlacement(
+			world.EntityType("invalid"),
+			entityID,
+			world.ContainmentTypeLocation, toID,
+		)
+		require.Error(t, err)
+	})
+
+	t.Run("returns error for zero entity ID", func(t *testing.T) {
+		_, err := world.NewFirstPlacement(
+			world.EntityTypeCharacter,
+			ulid.ULID{},
+			world.ContainmentTypeLocation, ulid.Make(),
+		)
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "entity_id", ve.Field)
+	})
+}
+
+func TestNewExaminePayload(t *testing.T) {
+	t.Run("creates valid examine payload", func(t *testing.T) {
+		charID := ulid.Make()
+		targetID := ulid.Make()
+		locID := ulid.Make()
+
+		p, err := world.NewExaminePayload(charID, world.TargetTypeLocation, targetID, locID)
+		require.NoError(t, err)
+		assert.Equal(t, charID, p.CharacterID)
+		assert.Equal(t, world.TargetTypeLocation, p.TargetType)
+		assert.Equal(t, targetID, p.TargetID)
+		assert.Equal(t, locID, p.LocationID)
+	})
+
+	t.Run("returns error for zero character ID", func(t *testing.T) {
+		_, err := world.NewExaminePayload(ulid.ULID{}, world.TargetTypeLocation, ulid.Make(), ulid.Make())
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "character_id", ve.Field)
+	})
+
+	t.Run("returns error for invalid target type", func(t *testing.T) {
+		_, err := world.NewExaminePayload(ulid.Make(), world.TargetType("invalid"), ulid.Make(), ulid.Make())
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "target_type", ve.Field)
+	})
+
+	t.Run("returns error for zero target ID", func(t *testing.T) {
+		_, err := world.NewExaminePayload(ulid.Make(), world.TargetTypeCharacter, ulid.ULID{}, ulid.Make())
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "target_id", ve.Field)
+	})
+
+	t.Run("returns error for zero location ID", func(t *testing.T) {
+		_, err := world.NewExaminePayload(ulid.Make(), world.TargetTypeObject, ulid.Make(), ulid.ULID{})
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "location_id", ve.Field)
+	})
+}
+
+func TestNewObjectGivePayload(t *testing.T) {
+	t.Run("creates valid object give payload", func(t *testing.T) {
+		objID := ulid.Make()
+		fromID := ulid.Make()
+		toID := ulid.Make()
+
+		p, err := world.NewObjectGivePayload(objID, fromID, toID, "sword")
+		require.NoError(t, err)
+		assert.Equal(t, objID, p.ObjectID)
+		assert.Equal(t, fromID, p.FromCharacterID)
+		assert.Equal(t, toID, p.ToCharacterID)
+		assert.Equal(t, "sword", p.ObjectName)
+	})
+
+	t.Run("returns error when giving to self", func(t *testing.T) {
+		charID := ulid.Make()
+		_, err := world.NewObjectGivePayload(ulid.Make(), charID, charID, "sword")
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "to_character_id", ve.Field)
+	})
+
+	t.Run("returns error for zero object ID", func(t *testing.T) {
+		_, err := world.NewObjectGivePayload(ulid.ULID{}, ulid.Make(), ulid.Make(), "sword")
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "object_id", ve.Field)
+	})
+
+	t.Run("returns error for empty object name", func(t *testing.T) {
+		_, err := world.NewObjectGivePayload(ulid.Make(), ulid.Make(), ulid.Make(), "")
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "object_name", ve.Field)
+	})
+
+	t.Run("returns error for zero from character ID", func(t *testing.T) {
+		_, err := world.NewObjectGivePayload(ulid.Make(), ulid.ULID{}, ulid.Make(), "sword")
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "from_character_id", ve.Field)
+	})
+
+	t.Run("returns error for zero to character ID", func(t *testing.T) {
+		_, err := world.NewObjectGivePayload(ulid.Make(), ulid.Make(), ulid.ULID{}, "sword")
+		require.Error(t, err)
+		var ve *world.ValidationError
+		require.ErrorAs(t, err, &ve)
+		assert.Equal(t, "to_character_id", ve.Field)
+	})
+}
+
+// ptrULID returns a pointer to the given ULID.
+func ptrULID(id ulid.ULID) *ulid.ULID {
+	return &id
+}
+
 func TestExaminePayload_Validate(t *testing.T) {
 	charID := ulid.Make()
 	targetID := ulid.Make()
