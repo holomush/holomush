@@ -97,11 +97,12 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if loc == nil {
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
 	}
-	if err := loc.Validate(); err != nil {
-		return oops.Code("LOCATION_INVALID").Wrap(err)
-	}
+	// Assign ID before validation since Validate() now requires non-zero ID
 	if loc.ID.IsZero() {
 		loc.ID = ulid.Make()
+	}
+	if err := loc.Validate(); err != nil {
+		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
 	if err := s.locationRepo.Create(ctx, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)

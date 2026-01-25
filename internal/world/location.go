@@ -55,9 +55,35 @@ type Location struct {
 	ArchivedAt   *time.Time
 }
 
+// NewLocation creates a new Location with a generated ID.
+// The location is validated before being returned.
+func NewLocation(name, description string, locType LocationType) (*Location, error) {
+	return NewLocationWithID(ulid.Make(), name, description, locType)
+}
+
+// NewLocationWithID creates a new Location with the provided ID.
+// The location is validated before being returned.
+func NewLocationWithID(id ulid.ULID, name, description string, locType LocationType) (*Location, error) {
+	l := &Location{
+		ID:           id,
+		Name:         name,
+		Description:  description,
+		Type:         locType,
+		ReplayPolicy: DefaultReplayPolicy(locType),
+		CreatedAt:    time.Now(),
+	}
+	if err := l.Validate(); err != nil {
+		return nil, err
+	}
+	return l, nil
+}
+
 // Validate validates the location's fields.
 // Returns a ValidationError if any field is invalid.
 func (l *Location) Validate() error {
+	if l.ID.IsZero() {
+		return &ValidationError{Field: "id", Message: "cannot be zero"}
+	}
 	if err := ValidateName(l.Name); err != nil {
 		return err
 	}
