@@ -1,18 +1,8 @@
 # Documentation Guidelines
 
-This document provides guidelines for creating and maintaining documentation in the HoloMUSH project.
+Guidelines for creating and maintaining documentation in the HoloMUSH project.
 
-## RFC2119 Keywords
-
-Documentation uses RFC2119 keywords to indicate requirement levels:
-
-| Keyword        | Meaning                                    |
-| -------------- | ------------------------------------------ |
-| **MUST**       | Absolute requirement                       |
-| **MUST NOT**   | Absolute prohibition                       |
-| **SHOULD**     | Recommended, may ignore with justification |
-| **SHOULD NOT** | Not recommended                            |
-| **MAY**        | Optional                                   |
+For RFC2119 keyword definitions, see the root `CLAUDE.md`.
 
 ## File Naming
 
@@ -114,14 +104,6 @@ Specs define requirements. They MUST include:
 3. **Non-goals** to clarify scope
 
 Naming: `YYYY-MM-DD-<feature-name>.md`
-
-### Reference (`docs/reference/`)
-
-Reference docs provide API and usage information. They SHOULD include:
-
-1. **Overview** with quick start
-2. **API reference** with all functions/types
-3. **Examples** with working code
 
 ## Nested Code Blocks
 
