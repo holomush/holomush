@@ -559,4 +559,177 @@ func TestPayloads_RoundTrip(t *testing.T) {
 		// Should be identical
 		assert.Equal(t, original, restored)
 	})
+
+	t.Run("examine payload round trip", func(t *testing.T) {
+		charID := ulid.Make()
+		targetID := ulid.Make()
+		locID := ulid.Make()
+
+		original := world.ExaminePayload{
+			CharacterID: charID,
+			TargetType:  world.TargetTypeObject,
+			TargetID:    targetID,
+			TargetName:  "Mysterious Chest",
+			LocationID:  locID,
+		}
+
+		// Marshal to JSON
+		jsonData, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		// Unmarshal back
+		var restored world.ExaminePayload
+		err = json.Unmarshal(jsonData, &restored)
+		require.NoError(t, err)
+
+		// Should be identical
+		assert.Equal(t, original, restored)
+	})
+}
+
+func TestTargetType_IsValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		tt      world.TargetType
+		isValid bool
+	}{
+		{"location is valid", world.TargetTypeLocation, true},
+		{"object is valid", world.TargetTypeObject, true},
+		{"character is valid", world.TargetTypeCharacter, true},
+		{"empty is invalid", world.TargetType(""), false},
+		{"random is invalid", world.TargetType("random"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.isValid, tt.tt.IsValid())
+		})
+	}
+}
+
+func TestExaminePayload_Validate(t *testing.T) {
+	charID := ulid.Make()
+	targetID := ulid.Make()
+	locID := ulid.Make()
+
+	tests := []struct {
+		name      string
+		payload   world.ExaminePayload
+		wantErr   bool
+		wantField string
+	}{
+		{
+			name: "valid examine location",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeLocation,
+				TargetID:    targetID,
+				TargetName:  "Town Square",
+				LocationID:  locID,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid examine object",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeObject,
+				TargetID:    targetID,
+				TargetName:  "Wooden Chest",
+				LocationID:  locID,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid examine character",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeCharacter,
+				TargetID:    targetID,
+				TargetName:  "Mysterious Stranger",
+				LocationID:  locID,
+			},
+			wantErr: false,
+		},
+		{
+			name: "zero character_id fails",
+			payload: world.ExaminePayload{
+				CharacterID: ulid.ULID{},
+				TargetType:  world.TargetTypeObject,
+				TargetID:    targetID,
+				LocationID:  locID,
+			},
+			wantErr:   true,
+			wantField: "character_id",
+		},
+		{
+			name: "empty target_type fails",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  "",
+				TargetID:    targetID,
+				LocationID:  locID,
+			},
+			wantErr:   true,
+			wantField: "target_type",
+		},
+		{
+			name: "invalid target_type fails",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetType("invalid"),
+				TargetID:    targetID,
+				LocationID:  locID,
+			},
+			wantErr:   true,
+			wantField: "target_type",
+		},
+		{
+			name: "zero target_id fails",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeObject,
+				TargetID:    ulid.ULID{},
+				LocationID:  locID,
+			},
+			wantErr:   true,
+			wantField: "target_id",
+		},
+		{
+			name: "zero location_id fails",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeObject,
+				TargetID:    targetID,
+				LocationID:  ulid.ULID{},
+			},
+			wantErr:   true,
+			wantField: "location_id",
+		},
+		{
+			name: "empty target_name allowed",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeObject,
+				TargetID:    targetID,
+				TargetName:  "",
+				LocationID:  locID,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.payload.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				var validationErr *world.ValidationError
+				require.ErrorAs(t, err, &validationErr)
+				assert.Equal(t, tt.wantField, validationErr.Field)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

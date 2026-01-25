@@ -98,6 +98,50 @@ type ObjectGivePayload struct {
 	ToCharacterID   ulid.ULID `json:"to_character_id"`
 }
 
+// TargetType represents the type of entity being examined.
+type TargetType string
+
+// Valid target types for examine payloads.
+const (
+	TargetTypeLocation  TargetType = "location"
+	TargetTypeObject    TargetType = "object"
+	TargetTypeCharacter TargetType = "character"
+)
+
+// IsValid returns true if the target type is valid.
+func (t TargetType) IsValid() bool {
+	return t == TargetTypeLocation || t == TargetTypeObject || t == TargetTypeCharacter
+}
+
+// ExaminePayload represents an examine/look event.
+type ExaminePayload struct {
+	CharacterID ulid.ULID  `json:"character_id"` // Who is looking
+	TargetType  TargetType `json:"target_type"`  // "location" | "object" | "character"
+	TargetID    ulid.ULID  `json:"target_id"`    // What is being looked at
+	TargetName  string     `json:"target_name"`  // Name of target (for logging)
+	LocationID  ulid.ULID  `json:"location_id"`  // Where the look is happening
+}
+
+// Validate checks that the ExaminePayload has all required fields and valid values.
+func (p *ExaminePayload) Validate() error {
+	if p.CharacterID.IsZero() {
+		return &ValidationError{Field: "character_id", Message: "cannot be zero"}
+	}
+	if p.TargetType == "" {
+		return &ValidationError{Field: "target_type", Message: "cannot be empty"}
+	}
+	if !p.TargetType.IsValid() {
+		return &ValidationError{Field: "target_type", Message: "must be 'location', 'object', or 'character'"}
+	}
+	if p.TargetID.IsZero() {
+		return &ValidationError{Field: "target_id", Message: "cannot be zero"}
+	}
+	if p.LocationID.IsZero() {
+		return &ValidationError{Field: "location_id", Message: "cannot be zero"}
+	}
+	return nil
+}
+
 // Validate checks that the ObjectGivePayload has all required fields and valid values.
 func (p *ObjectGivePayload) Validate() error {
 	if p.ObjectID.IsZero() {

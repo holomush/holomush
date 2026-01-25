@@ -385,6 +385,119 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 	})
 }
 
+func TestEmitExamineEvent(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	targetID := ulid.Make()
+	locID := ulid.Make()
+
+	t.Run("nil emitter is a no-op", func(t *testing.T) {
+		payload := world.ExaminePayload{
+			CharacterID: charID,
+			TargetType:  world.TargetTypeObject,
+			TargetID:    targetID,
+			TargetName:  "Chest",
+			LocationID:  locID,
+		}
+
+		err := world.EmitExamineEvent(ctx, nil, payload)
+		require.NoError(t, err)
+	})
+
+	t.Run("emits event to location stream", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		payload := world.ExaminePayload{
+			CharacterID: charID,
+			TargetType:  world.TargetTypeObject,
+			TargetID:    targetID,
+			TargetName:  "Chest",
+			LocationID:  locID,
+		}
+
+		err := world.EmitExamineEvent(ctx, emitter, payload)
+		require.NoError(t, err)
+
+		require.Len(t, emitter.calls, 1)
+		call := emitter.calls[0]
+		assert.Equal(t, world.LocationStream(locID), call.Stream)
+		assert.Equal(t, string(core.EventTypeObjectExamine), call.EventType)
+
+		var decoded world.ExaminePayload
+		err = json.Unmarshal(call.Payload, &decoded)
+		require.NoError(t, err)
+		assert.Equal(t, payload, decoded)
+	})
+
+	t.Run("emits event for examining location", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		payload := world.ExaminePayload{
+			CharacterID: charID,
+			TargetType:  world.TargetTypeLocation,
+			TargetID:    locID,
+			TargetName:  "Town Square",
+			LocationID:  locID,
+		}
+
+		err := world.EmitExamineEvent(ctx, emitter, payload)
+		require.NoError(t, err)
+
+		require.Len(t, emitter.calls, 1)
+		var decoded world.ExaminePayload
+		err = json.Unmarshal(emitter.calls[0].Payload, &decoded)
+		require.NoError(t, err)
+		assert.Equal(t, world.TargetTypeLocation, decoded.TargetType)
+	})
+
+	t.Run("emits event for examining character", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		otherCharID := ulid.Make()
+		payload := world.ExaminePayload{
+			CharacterID: charID,
+			TargetType:  world.TargetTypeCharacter,
+			TargetID:    otherCharID,
+			TargetName:  "Mysterious Stranger",
+			LocationID:  locID,
+		}
+
+		err := world.EmitExamineEvent(ctx, emitter, payload)
+		require.NoError(t, err)
+
+		require.Len(t, emitter.calls, 1)
+		var decoded world.ExaminePayload
+		err = json.Unmarshal(emitter.calls[0].Payload, &decoded)
+		require.NoError(t, err)
+		assert.Equal(t, world.TargetTypeCharacter, decoded.TargetType)
+	})
+
+	t.Run("returns error for invalid payload", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		payload := world.ExaminePayload{
+			// CharacterID is zero value - invalid
+		}
+
+		err := world.EmitExamineEvent(ctx, emitter, payload)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_PAYLOAD_INVALID")
+	})
+
+	t.Run("returns error when emitter fails", func(t *testing.T) {
+		emitErr := errors.New("emit failed")
+		emitter := &mockEventEmitter{err: emitErr}
+		payload := world.ExaminePayload{
+			CharacterID: charID,
+			TargetType:  world.TargetTypeObject,
+			TargetID:    targetID,
+			TargetName:  "Chest",
+			LocationID:  locID,
+		}
+
+		err := world.EmitExamineEvent(ctx, emitter, payload)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		assert.ErrorIs(t, err, emitErr)
+	})
+}
+
 // mockAccessControl is a test mock for AccessControl.
 type mockAccessControlForEvents struct {
 	allowAll bool

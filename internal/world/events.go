@@ -141,6 +141,37 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 	return nil
 }
 
+// EmitExamineEvent emits an examine/look event when a character looks at something.
+// If emitter is nil, this is a no-op.
+// Returns a validation error if the payload is invalid.
+func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload ExaminePayload) error {
+	if emitter == nil {
+		slog.Debug("event emitter nil, skipping event",
+			"event_type", core.EventTypeObjectExamine,
+			"character_id", payload.CharacterID.String(),
+			"target_type", payload.TargetType,
+			"target_id", payload.TargetID.String())
+		return nil
+	}
+
+	eventType := string(core.EventTypeObjectExamine)
+	if err := payload.Validate(); err != nil {
+		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", eventType).Wrap(err)
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", eventType).Wrap(err)
+	}
+
+	// Emit to the location stream where the examine is happening
+	stream := LocationStream(payload.LocationID)
+	if err := emitWithRetry(ctx, emitter, stream, eventType, data); err != nil {
+		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)
+	}
+	return nil
+}
+
 // EmitObjectGiveEvent emits an object give event for transfers between characters.
 // If emitter is nil, this is a no-op.
 // Returns a validation error if the payload is invalid.
