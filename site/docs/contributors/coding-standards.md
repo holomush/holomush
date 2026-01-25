@@ -256,12 +256,19 @@ api/                 # Protocol definitions (protobuf)
 cmd/holomush/        # Server entry point
 docs/
   plans/             # Implementation plans
-  specs/             # Specifications
-  reference/         # API documentation
+  specs/             # Design specifications
 internal/            # Private implementation
-  core/              # Event system, sessions, world engine
-  store/             # PostgreSQL implementations
+  core/              # Event system, sessions
+  grpc/              # gRPC server implementation
+  logging/           # Structured logging setup
+  observability/     # Metrics and health endpoints
   plugin/            # Plugin host (Lua & Go)
+  store/             # PostgreSQL implementations
+  telnet/            # Telnet protocol adapter
+  tls/               # TLS certificate management
+  web/               # WebSocket adapter
+  world/             # World engine, characters, rooms
+  xdg/               # XDG base directory support
 pkg/                 # Public plugin API
 plugins/             # Core plugins (Lua for customization, Go for performance)
 scripts/             # Build and utility scripts
@@ -287,9 +294,7 @@ type EventStore interface {
 
 ```go
 type AccessControl interface {
-    Check(ctx context.Context, subject Subject, action string, resource Resource) (bool, error)
-    Grant(ctx context.Context, subject Subject, capability string) error
-    Revoke(ctx context.Context, subject Subject, capability string) error
+    Check(ctx context.Context, subject, action, resource string) bool
 }
 ```
 
