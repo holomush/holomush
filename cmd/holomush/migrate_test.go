@@ -34,6 +34,11 @@ type migrateLogicMock struct {
 	versionCallCount      int
 	// versionFunc allows custom Version behavior for testing warning paths
 	versionFunc func() (uint, bool, error)
+	// pending/applied migrations for dry-run tests
+	pendingMigrations []uint
+	appliedMigrations []uint
+	pendingErr        error
+	appliedErr        error
 }
 
 func (m *migrateLogicMock) Up() error {
@@ -81,6 +86,20 @@ func (m *migrateLogicMock) Force(version int) error {
 
 func (m *migrateLogicMock) Close() error {
 	return m.closeErr
+}
+
+func (m *migrateLogicMock) PendingMigrations() ([]uint, error) {
+	if m.pendingErr != nil {
+		return nil, m.pendingErr
+	}
+	return m.pendingMigrations, nil
+}
+
+func (m *migrateLogicMock) AppliedMigrations() ([]uint, error) {
+	if m.appliedErr != nil {
+		return nil, m.appliedErr
+	}
+	return m.appliedMigrations, nil
 }
 
 func TestMigrateUpLogic_AlreadyAtLatest(t *testing.T) {
@@ -219,22 +238,22 @@ func TestParseForceVersion(t *testing.T) {
 			wantErrCode: "INVALID_VERSION",
 		},
 		{
-			name:        "float parses as integer (Sscanf stops at dot)",
+			name:        "float returns error (strict parsing)",
 			input:       "1.5",
-			wantVersion: 1,
-			wantErr:     false,
+			wantErr:     true,
+			wantErrCode: "INVALID_VERSION",
 		},
 		{
-			name:        "trailing chars are ignored (Sscanf stops at non-digit)",
+			name:        "trailing chars return error (strict parsing)",
 			input:       "3abc",
-			wantVersion: 3,
-			wantErr:     false,
+			wantErr:     true,
+			wantErrCode: "INVALID_VERSION",
 		},
 		{
-			name:        "negative is valid",
+			name:        "negative version returns error",
 			input:       "-1",
-			wantVersion: -1,
-			wantErr:     false,
+			wantErr:     true,
+			wantErrCode: "INVALID_VERSION",
 		},
 		{
 			name:        "empty string returns error",
@@ -249,8 +268,14 @@ func TestParseForceVersion(t *testing.T) {
 			wantErrCode: "INVALID_VERSION",
 		},
 		{
-			name:        "leading whitespace is handled",
+			name:        "leading whitespace is trimmed",
 			input:       "  42",
+			wantVersion: 42,
+			wantErr:     false,
+		},
+		{
+			name:        "trailing whitespace is trimmed",
+			input:       "42  ",
 			wantVersion: 42,
 			wantErr:     false,
 		},
@@ -433,8 +458,9 @@ func TestMigrateUpLogic_VersionErrorAfter(t *testing.T) {
 
 	err := runMigrateUpLogic(&buf, mock)
 
-	// Should not error - warning is printed instead
-	require.NoError(t, err)
+	// Should return error with code for CI/CD exit code detection
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "MIGRATION_VERSION_CHECK_FAILED")
 	output := buf.String()
 	assert.Contains(t, output, "Warning")
 	assert.Contains(t, output, "Check status")
@@ -458,10 +484,170 @@ func TestMigrateDownLogic_VersionErrorAfter(t *testing.T) {
 
 	err := runMigrateDownLogic(&buf, mock, false)
 
-	// Should not error - warning is printed instead
-	require.NoError(t, err)
+	// Should return error with code for CI/CD exit code detection
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "MIGRATION_VERSION_CHECK_FAILED")
 	output := buf.String()
 	assert.Contains(t, output, "Warning")
 	assert.Contains(t, output, "Check status")
 	assert.True(t, mock.stepsCalled)
+}
+
+// Dry-run tests
+
+func TestMigrateUpDryRun_PendingMigrations(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           3,
+		pendingMigrations: []uint{4, 5, 6, 7},
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migrations would be applied:")
+	assert.Contains(t, output, "Version 4")
+	assert.Contains(t, output, "Version 5")
+	assert.Contains(t, output, "Version 6")
+	assert.Contains(t, output, "Version 7")
+	assert.Contains(t, output, "Current version: 3")
+	assert.Contains(t, output, "Target version: 7")
+	assert.False(t, mock.upCalled, "Up() should not be called in dry-run mode")
+}
+
+func TestMigrateUpDryRun_AlreadyAtLatest(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           7,
+		pendingMigrations: []uint{},
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Already at latest version: 7")
+	assert.Contains(t, output, "No migrations would be applied")
+	assert.False(t, mock.upCalled)
+}
+
+func TestMigrateUpDryRun_VersionError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{versionErr: errors.New("connection failed")}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connection failed")
+}
+
+func TestMigrateUpDryRun_PendingError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:    3,
+		pendingErr: errors.New("failed to list migrations"),
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to list migrations")
+}
+
+func TestMigrateDownDryRun_RollbackOne(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           5,
+		appliedMigrations: []uint{1, 2, 3, 4, 5},
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, false)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migration would be rolled back:")
+	assert.Contains(t, output, "Version 5")
+	assert.Contains(t, output, "Current version: 5")
+	assert.Contains(t, output, "Target version: 4")
+	assert.False(t, mock.downCalled, "Down() should not be called in dry-run mode")
+	assert.False(t, mock.stepsCalled, "Steps() should not be called in dry-run mode")
+}
+
+func TestMigrateDownDryRun_RollbackAll(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           5,
+		appliedMigrations: []uint{1, 2, 3, 4, 5},
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, true)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migrations would be rolled back:")
+	// Should show in reverse order
+	assert.Contains(t, output, "Version 5")
+	assert.Contains(t, output, "Version 4")
+	assert.Contains(t, output, "Version 3")
+	assert.Contains(t, output, "Version 2")
+	assert.Contains(t, output, "Version 1")
+	assert.Contains(t, output, "Current version: 5")
+	assert.Contains(t, output, "Target version: 0")
+	assert.False(t, mock.downCalled)
+}
+
+func TestMigrateDownDryRun_AlreadyAtZero(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           0,
+		appliedMigrations: []uint{},
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, false)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Already at version 0, no migrations to roll back")
+	assert.False(t, mock.downCalled)
+}
+
+func TestMigrateDownDryRun_RollbackOneToZero(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           1,
+		appliedMigrations: []uint{1},
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, false)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migration would be rolled back:")
+	assert.Contains(t, output, "Version 1")
+	assert.Contains(t, output, "Current version: 1")
+	assert.Contains(t, output, "Target version: 0")
+}
+
+func TestMigrateDownDryRun_VersionError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{versionErr: errors.New("connection failed")}
+
+	err := runMigrateDownDryRun(&buf, mock, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connection failed")
+}
+
+func TestMigrateDownDryRun_AppliedError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:    5,
+		appliedErr: errors.New("failed to list applied"),
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to list applied")
 }

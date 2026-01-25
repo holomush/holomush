@@ -6,6 +6,9 @@ package store
 import (
 	"embed"
 	"errors"
+	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	// Register pgx/v5 database driver for golang-migrate.
@@ -33,14 +36,25 @@ type Migrator struct {
 }
 
 // NewMigrator creates a new Migrator instance.
-// The databaseURL should be a PostgreSQL connection string.
+// The databaseURL should be a PostgreSQL connection string with either
+// postgres:// or pgx5:// scheme. The function automatically converts
+// postgres:// to pgx5:// for golang-migrate compatibility.
 func NewMigrator(databaseURL string) (*Migrator, error) {
 	source, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
 		return nil, oops.Code("MIGRATION_SOURCE_FAILED").With("operation", "create migration source").Wrap(err)
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", source, databaseURL)
+	// Convert postgres:// to pgx5:// for golang-migrate pgx/v5 driver.
+	// The pgx/v5 driver expects the pgx5:// scheme.
+	migrateURL := databaseURL
+	if rest, found := strings.CutPrefix(databaseURL, "postgres://"); found {
+		migrateURL = "pgx5://" + rest
+	} else if rest, found := strings.CutPrefix(databaseURL, "postgresql://"); found {
+		migrateURL = "pgx5://" + rest
+	}
+
+	m, err := migrate.NewWithSourceInstance("iofs", source, migrateURL)
 	if err != nil {
 		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
 	}
@@ -107,4 +121,82 @@ func (m *Migrator) Close() error {
 		return oops.Code("MIGRATION_CLOSE_FAILED").With("component", "database").Wrap(dbErr)
 	}
 	return nil
+}
+
+// allMigrationVersions reads the embedded migrations and returns all available versions.
+// Versions are returned sorted in ascending order.
+func allMigrationVersions() ([]uint, error) {
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		return nil, oops.Code("MIGRATION_LIST_FAILED").With("operation", "read migrations dir").Wrap(err)
+	}
+
+	versionSet := make(map[uint]struct{})
+	for _, entry := range entries {
+		name := entry.Name()
+		// Parse version from filename (e.g., "000003_foo.up.sql" -> 3)
+		if !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		var version uint
+		if _, err := fmt.Sscanf(name, "%06d", &version); err != nil {
+			continue
+		}
+		versionSet[version] = struct{}{}
+	}
+
+	versions := make([]uint, 0, len(versionSet))
+	for v := range versionSet {
+		versions = append(versions, v)
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	return versions, nil
+}
+
+// PendingMigrations returns the list of migration versions that would be applied
+// when running Up(). Returns versions sorted in ascending order.
+func (m *Migrator) PendingMigrations() ([]uint, error) {
+	currentVersion, _, err := m.Version()
+	if err != nil {
+		return nil, err
+	}
+
+	allVersions, err := allMigrationVersions()
+	if err != nil {
+		return nil, err
+	}
+
+	var pending []uint
+	for _, v := range allVersions {
+		if v > currentVersion {
+			pending = append(pending, v)
+		}
+	}
+	return pending, nil
+}
+
+// AppliedMigrations returns the list of migration versions that have been applied.
+// Returns versions sorted in ascending order.
+func (m *Migrator) AppliedMigrations() ([]uint, error) {
+	currentVersion, _, err := m.Version()
+	if err != nil {
+		return nil, err
+	}
+
+	if currentVersion == 0 {
+		return nil, nil
+	}
+
+	allVersions, err := allMigrationVersions()
+	if err != nil {
+		return nil, err
+	}
+
+	var applied []uint
+	for _, v := range allVersions {
+		if v <= currentVersion {
+			applied = append(applied, v)
+		}
+	}
+	return applied, nil
 }

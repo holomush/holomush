@@ -102,9 +102,10 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 
 	// Notify subscribers of the new event
 	// Errors are logged but not returned - event is already persisted, subscribers catch up via Replay
+	// Note: Repeated NOTIFY failures indicate a serious connectivity issue that should be investigated
 	channel := streamToChannel(event.Stream)
 	if _, notifyErr := s.pool.Exec(ctx, "SELECT pg_notify($1, $2)", channel, event.ID.String()); notifyErr != nil {
-		slog.Warn("failed to notify subscribers of event",
+		slog.Error("failed to notify subscribers of event",
 			"event_id", event.ID.String(),
 			"stream", event.Stream,
 			"channel", channel,
@@ -248,7 +249,9 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	// Use pgx.Identifier to safely quote the channel name, preventing SQL injection
 	_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
 	if err != nil {
-		_ = conn.Close(ctx) //nolint:errcheck // cleanup on error path
+		if closeErr := conn.Close(ctx); closeErr != nil {
+			slog.Debug("failed to close connection during cleanup", "error", closeErr)
+		}
 		return nil, nil, oops.With("operation", "listen").With("channel", channel).Wrap(err)
 	}
 
@@ -258,7 +261,11 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	go func() {
 		defer close(events)
 		defer close(errs)
-		defer func() { _ = conn.Close(context.Background()) }() //nolint:errcheck // cleanup in goroutine
+		defer func() {
+			if closeErr := conn.Close(context.Background()); closeErr != nil {
+				slog.Debug("failed to close subscription connection", "error", closeErr, "stream", stream)
+			}
+		}()
 
 		for {
 			notification, err := conn.WaitForNotification(ctx)

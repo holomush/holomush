@@ -90,6 +90,14 @@ func TestMigrator_Steps_NoChange(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestMigrator_Steps_ZeroIsNoOp(t *testing.T) {
+	// golang-migrate returns ErrNoChange when n=0, which our wrapper
+	// treats as success. This documents that Steps(0) is a safe no-op.
+	m := &Migrator{m: &mockMigrate{stepsErr: migrate.ErrNoChange}}
+	err := m.Steps(0)
+	require.NoError(t, err, "Steps(0) should be a no-op returning nil")
+}
+
 func TestMigrator_Steps_Error(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{stepsErr: errors.New("invalid step")}}
 	err := m.Steps(5)
@@ -161,4 +169,183 @@ func TestMigrator_Close_DatabaseError(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_CLOSE_FAILED")
 	errutil.AssertErrorContext(t, err, "component", "database")
+}
+
+func TestMigrator_PendingMigrations_Success(t *testing.T) {
+	// At version 3, migrations 4-7 should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 3}}
+	pending, err := m.PendingMigrations()
+	require.NoError(t, err)
+	assert.Equal(t, []uint{4, 5, 6, 7}, pending)
+}
+
+func TestMigrator_PendingMigrations_AtLatest(t *testing.T) {
+	// At version 7 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 7}}
+	pending, err := m.PendingMigrations()
+	require.NoError(t, err)
+	assert.Empty(t, pending)
+}
+
+func TestMigrator_PendingMigrations_AtZero(t *testing.T) {
+	// At version 0 (fresh db), all migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
+	pending, err := m.PendingMigrations()
+	require.NoError(t, err)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, pending)
+}
+
+func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
+	_, err := m.PendingMigrations()
+	require.Error(t, err)
+}
+
+func TestMigrator_AppliedMigrations_Success(t *testing.T) {
+	// At version 3, migrations 1-3 should be applied
+	m := &Migrator{m: &mockMigrate{versionVal: 3}}
+	applied, err := m.AppliedMigrations()
+	require.NoError(t, err)
+	assert.Equal(t, []uint{1, 2, 3}, applied)
+}
+
+func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
+	// At version 0, no migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
+	applied, err := m.AppliedMigrations()
+	require.NoError(t, err)
+	assert.Empty(t, applied)
+}
+
+func TestMigrator_AppliedMigrations_AtLatest(t *testing.T) {
+	// At version 7, all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 7}}
+	applied, err := m.AppliedMigrations()
+	require.NoError(t, err)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, applied)
+}
+
+func TestMigrator_AppliedMigrations_VersionError(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
+	_, err := m.AppliedMigrations()
+	require.Error(t, err)
+}
+
+// closedMock implements migrateIface and returns errors after Close() is called.
+// This simulates the behavior of golang-migrate after resources are released.
+type closedMock struct {
+	closed bool
+}
+
+var errMigratorClosed = errors.New("migrator is closed")
+
+func (m *closedMock) Up() error {
+	if m.closed {
+		return errMigratorClosed
+	}
+	return nil
+}
+
+func (m *closedMock) Down() error {
+	if m.closed {
+		return errMigratorClosed
+	}
+	return nil
+}
+
+func (m *closedMock) Steps(_ int) error {
+	if m.closed {
+		return errMigratorClosed
+	}
+	return nil
+}
+
+func (m *closedMock) Version() (uint, bool, error) {
+	if m.closed {
+		return 0, false, errMigratorClosed
+	}
+	return 1, false, nil
+}
+
+func (m *closedMock) Force(_ int) error {
+	if m.closed {
+		return errMigratorClosed
+	}
+	return nil
+}
+
+func (m *closedMock) Close() (error, error) {
+	m.closed = true
+	return nil, nil
+}
+
+// TestMigrator_MethodsAfterClose verifies that calling Migrator methods after Close()
+// returns errors instead of panicking. This documents the expected behavior when
+// the underlying golang-migrate resources have been released.
+func TestMigrator_MethodsAfterClose(t *testing.T) {
+	tests := []struct {
+		name   string
+		method func(*Migrator) error
+	}{
+		{
+			name: "Up after Close",
+			method: func(m *Migrator) error {
+				return m.Up()
+			},
+		},
+		{
+			name: "Down after Close",
+			method: func(m *Migrator) error {
+				return m.Down()
+			},
+		},
+		{
+			name: "Steps after Close",
+			method: func(m *Migrator) error {
+				return m.Steps(1)
+			},
+		},
+		{
+			name: "Version after Close",
+			method: func(m *Migrator) error {
+				_, _, err := m.Version()
+				return err
+			},
+		},
+		{
+			name: "Force after Close",
+			method: func(m *Migrator) error {
+				return m.Force(1)
+			},
+		},
+		{
+			name: "PendingMigrations after Close",
+			method: func(m *Migrator) error {
+				_, err := m.PendingMigrations()
+				return err
+			},
+		},
+		{
+			name: "AppliedMigrations after Close",
+			method: func(m *Migrator) error {
+				_, err := m.AppliedMigrations()
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &closedMock{}
+			migrator := &Migrator{m: mock}
+
+			// Close the migrator first
+			err := migrator.Close()
+			require.NoError(t, err, "Close should succeed")
+
+			// Now call the method - it should return an error, not panic
+			err = tt.method(migrator)
+			require.Error(t, err, "calling %s after Close should return an error", tt.name)
+		})
+	}
 }

@@ -333,6 +333,18 @@ func TestRunAutoMigration(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "AUTO_MIGRATION_FAILED")
 		assert.True(t, migrator.closeCalled, "Close should be called even on Up() error")
 	})
+
+	t.Run("already at latest version (no migrations needed)", func(t *testing.T) {
+		// When database is already at latest version, Up() succeeds (returns nil)
+		// because our wrapper treats ErrNoChange as success
+		migrator := &autoMigrateMockMigrator{}
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (Migrator, error) {
+			return migrator, nil
+		})
+		require.NoError(t, err, "auto-migration should succeed when already at latest")
+		assert.True(t, migrator.upCalled, "Up() should be called")
+		assert.True(t, migrator.closeCalled, "Close() should be called")
+	})
 }
 
 func TestParseAutoMigrate_WarnsOnInvalidValue(t *testing.T) {

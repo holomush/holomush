@@ -113,6 +113,10 @@ func (m *Migrator) Force(version int) error       // Force set version
 func (m *Migrator) Close() error
 ```
 
+> **Note:** The `Down()` method rolls back **all** migrations to version 0. However, the
+> CLI `migrate down` command defaults to rolling back **one** migration (using `Steps(-1)`)
+> for safety. Use `migrate down --all` to match `Down()` behavior.
+
 ### CLI Commands
 
 ```text

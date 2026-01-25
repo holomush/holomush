@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
@@ -22,6 +24,82 @@ type MigratorIface interface {
 	Version() (uint, bool, error)
 	Force(version int) error
 	Close() error
+	PendingMigrations() ([]uint, error)
+	AppliedMigrations() ([]uint, error)
+}
+
+// runMigrateUpDryRun shows what migrations would be applied without running them.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateUpDryRun(out io.Writer, migrator MigratorIface) error {
+	currentVersion, _, err := migrator.Version()
+	if err != nil {
+		return oops.With("operation", "get version").Wrap(err)
+	}
+
+	pending, err := migrator.PendingMigrations()
+	if err != nil {
+		return oops.With("operation", "list pending migrations").Wrap(err)
+	}
+
+	if len(pending) == 0 {
+		fmt.Fprintf(out, "Already at latest version: %d\n", currentVersion)
+		fmt.Fprintln(out, "No migrations would be applied.")
+		return nil
+	}
+
+	fmt.Fprintln(out, "Dry run - the following migrations would be applied:")
+	for _, v := range pending {
+		fmt.Fprintf(out, "  - Version %d\n", v)
+	}
+	fmt.Fprintf(out, "\nCurrent version: %d\n", currentVersion)
+	fmt.Fprintf(out, "Target version: %d\n", pending[len(pending)-1])
+	return nil
+}
+
+// runMigrateDownDryRun shows what migrations would be rolled back without running them.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateDownDryRun(out io.Writer, migrator MigratorIface, all bool) error {
+	currentVersion, _, err := migrator.Version()
+	if err != nil {
+		return oops.With("operation", "get version").Wrap(err)
+	}
+
+	if currentVersion == 0 {
+		fmt.Fprintln(out, "Already at version 0, no migrations to roll back.")
+		return nil
+	}
+
+	applied, err := migrator.AppliedMigrations()
+	if err != nil {
+		return oops.With("operation", "list applied migrations").Wrap(err)
+	}
+
+	if len(applied) == 0 {
+		fmt.Fprintln(out, "No migrations to roll back.")
+		return nil
+	}
+
+	if all {
+		fmt.Fprintln(out, "Dry run - the following migrations would be rolled back:")
+		// Show in reverse order (most recent first)
+		for i := len(applied) - 1; i >= 0; i-- {
+			fmt.Fprintf(out, "  - Version %d\n", applied[i])
+		}
+		fmt.Fprintf(out, "\nCurrent version: %d\n", currentVersion)
+		fmt.Fprintln(out, "Target version: 0")
+	} else {
+		fmt.Fprintln(out, "Dry run - the following migration would be rolled back:")
+		fmt.Fprintf(out, "  - Version %d\n", currentVersion)
+		targetVersion := uint(0)
+		if len(applied) > 1 {
+			targetVersion = applied[len(applied)-2]
+		}
+		fmt.Fprintf(out, "\nCurrent version: %d\n", currentVersion)
+		fmt.Fprintf(out, "Target version: %d\n", targetVersion)
+	}
+	return nil
 }
 
 // runMigrateUpLogic handles the migrate up logic with output.
@@ -44,7 +122,7 @@ func runMigrateUpLogic(out io.Writer, migrator MigratorIface) error {
 	if err != nil {
 		fmt.Fprintf(out, "Warning: migrations applied but failed to get version: %v\n", err)
 		fmt.Fprintln(out, "Check status with 'holomush migrate status'")
-		return nil
+		return oops.Code("MIGRATION_VERSION_CHECK_FAILED").With("operation", "verify migration result").Wrap(err)
 	}
 
 	if beforeVersion == afterVersion {
@@ -82,7 +160,7 @@ func runMigrateDownLogic(out io.Writer, migrator MigratorIface, all bool) error 
 	if err != nil {
 		fmt.Fprintf(out, "Warning: rollback applied but failed to get version: %v\n", err)
 		fmt.Fprintln(out, "Check status with 'holomush migrate status'")
-		return nil
+		return oops.Code("MIGRATION_VERSION_CHECK_FAILED").With("operation", "verify rollback result").Wrap(err)
 	}
 
 	if beforeVersion == afterVersion {
@@ -162,7 +240,9 @@ func getDatabaseURL() (string, error) {
 }
 
 func newMigrateUpCmd() *cobra.Command {
-	return &cobra.Command{
+	var dryRun bool
+
+	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Apply all pending migrations",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -181,16 +261,27 @@ func newMigrateUpCmd() *cobra.Command {
 				}
 			}()
 
+			if dryRun {
+				if err := runMigrateUpDryRun(cmd.OutOrStdout(), migrator); err != nil {
+					return oops.With("command", "migrate up --dry-run").Wrap(err)
+				}
+				return nil
+			}
+
 			if err := runMigrateUpLogic(cmd.OutOrStdout(), migrator); err != nil {
 				return oops.With("command", "migrate up").Wrap(err)
 			}
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what migrations would be applied without running them")
+	return cmd
 }
 
 func newMigrateDownCmd() *cobra.Command {
 	var all bool
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "down",
@@ -212,6 +303,13 @@ func newMigrateDownCmd() *cobra.Command {
 				}
 			}()
 
+			if dryRun {
+				if err := runMigrateDownDryRun(cmd.OutOrStdout(), migrator, all); err != nil {
+					return oops.With("command", "migrate down --dry-run").Wrap(err)
+				}
+				return nil
+			}
+
 			if err := runMigrateDownLogic(cmd.OutOrStdout(), migrator, all); err != nil {
 				return oops.With("command", "migrate down").Wrap(err)
 			}
@@ -220,6 +318,7 @@ func newMigrateDownCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&all, "all", false, "Rollback all migrations")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what migrations would be rolled back without running them")
 	return cmd
 }
 
@@ -280,11 +379,15 @@ func newMigrateVersionCmd() *cobra.Command {
 }
 
 // parseForceVersion parses a version string for the migrate force command.
-// Note: fmt.Sscanf stops at the first non-digit, so "3abc" parses as 3.
+// Negative versions are rejected as they have special meaning in golang-migrate
+// (NilVersion) that could accidentally clear version tracking.
 func parseForceVersion(arg string) (int, error) {
-	var version int
-	if _, err := fmt.Sscanf(arg, "%d", &version); err != nil {
-		return 0, oops.Code("INVALID_VERSION").Errorf("invalid version: %s", arg)
+	version, err := strconv.Atoi(strings.TrimSpace(arg))
+	if err != nil {
+		return 0, oops.Code("INVALID_VERSION").Errorf("invalid version %q: must be an integer", arg)
+	}
+	if version < 0 {
+		return 0, oops.Code("INVALID_VERSION").Errorf("invalid version %d: must be non-negative", version)
 	}
 	return version, nil
 }
