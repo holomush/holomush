@@ -412,22 +412,36 @@ func TestMigrator_MethodsAfterClose(t *testing.T) {
 
 func TestMigrationName(t *testing.T) {
 	tests := []struct {
-		version  uint
-		expected string
+		version     uint
+		expected    string
+		expectError bool
 	}{
-		{1, "000001_initial"},
-		{2, "000002_system_info"},
-		{3, "000003_world_model"},
-		{7, "000007_exit_self_reference_constraint"},
-		{999, ""}, // Unknown version returns empty string
+		{1, "000001_initial", false},
+		{2, "000002_system_info", false},
+		{3, "000003_world_model", false},
+		{7, "000007_exit_self_reference_constraint", false},
+		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("version_%d", tt.version), func(t *testing.T) {
-			name := MigrationName(tt.version)
+			name, err := MigrationName(tt.version)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 			assert.Equal(t, tt.expected, name)
 		})
 	}
+}
+
+// TestMigrationName_ReturnsNilErrorForUnknownVersion verifies that looking up
+// an unknown version returns ("", nil) - not found is expected behavior, not an error.
+func TestMigrationName_ReturnsNilErrorForUnknownVersion(t *testing.T) {
+	name, err := MigrationName(99999)
+	require.NoError(t, err, "unknown version should return nil error, not an error")
+	assert.Equal(t, "", name, "unknown version should return empty string")
 }
 
 // TestAllMigrationVersions_ReturnsCopy verifies that allMigrationVersions returns

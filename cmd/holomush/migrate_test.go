@@ -385,6 +385,7 @@ func TestMigrateStatusLogic_Error(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection failed")
+	errutil.AssertErrorContext(t, err, "operation", "get version")
 }
 
 // Version command tests
@@ -408,6 +409,7 @@ func TestMigrateVersionLogic_Error(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db unreachable")
+	errutil.AssertErrorContext(t, err, "operation", "get version")
 }
 
 // Force command tests
@@ -434,6 +436,7 @@ func TestMigrateForceLogic_Error(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid version")
+	errutil.AssertErrorContext(t, err, "operation", "force version")
 	output := buf.String()
 	assert.Contains(t, output, "Forcing version to -5...")
 	assert.NotContains(t, output, "successfully")

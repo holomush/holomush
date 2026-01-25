@@ -16,6 +16,9 @@ import (
 	"github.com/holomush/holomush/internal/store"
 )
 
+// CLI output functions use //nolint:errcheck because stdout/stderr write errors
+// cannot be meaningfully recovered - the user won't see the error message anyway.
+
 // migrator abstracts store.Migrator for CLI command testing.
 type migrator interface {
 	Up() error
@@ -30,7 +33,7 @@ type migrator interface {
 
 // runMigrateUpDryRun shows what migrations would be applied without running them.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateUpDryRun(out io.Writer, migrator migrator) error {
 	currentVersion, _, err := migrator.Version()
 	if err != nil {
@@ -50,7 +53,10 @@ func runMigrateUpDryRun(out io.Writer, migrator migrator) error {
 
 	fmt.Fprintln(out, "Dry run - the following migrations would be applied:")
 	for _, v := range pending {
-		name := store.MigrationName(v)
+		name, err := store.MigrationName(v)
+		if err != nil {
+			return oops.With("operation", "get migration name").With("version", v).Wrap(err)
+		}
 		if name != "" {
 			fmt.Fprintf(out, "  - %s\n", name)
 		} else {
@@ -64,7 +70,7 @@ func runMigrateUpDryRun(out io.Writer, migrator migrator) error {
 
 // runMigrateDownDryRun shows what migrations would be rolled back without running them.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateDownDryRun(out io.Writer, migrator migrator, all bool) error {
 	currentVersion, _, err := migrator.Version()
 	if err != nil {
@@ -91,7 +97,10 @@ func runMigrateDownDryRun(out io.Writer, migrator migrator, all bool) error {
 		// Show in reverse order (most recent first)
 		for i := len(applied) - 1; i >= 0; i-- {
 			v := applied[i]
-			name := store.MigrationName(v)
+			name, err := store.MigrationName(v)
+			if err != nil {
+				return oops.With("operation", "get migration name").With("version", v).Wrap(err)
+			}
 			if name != "" {
 				fmt.Fprintf(out, "  - %s\n", name)
 			} else {
@@ -102,7 +111,10 @@ func runMigrateDownDryRun(out io.Writer, migrator migrator, all bool) error {
 		fmt.Fprintln(out, "Target version: 0")
 	} else {
 		fmt.Fprintln(out, "Dry run - the following migration would be rolled back:")
-		name := store.MigrationName(currentVersion)
+		name, err := store.MigrationName(currentVersion)
+		if err != nil {
+			return oops.With("operation", "get migration name").With("version", currentVersion).Wrap(err)
+		}
 		if name != "" {
 			fmt.Fprintf(out, "  - %s\n", name)
 		} else {
@@ -120,7 +132,7 @@ func runMigrateDownDryRun(out io.Writer, migrator migrator, all bool) error {
 
 // runMigrateUpLogic handles the migrate up logic with output.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateUpLogic(out io.Writer, migrator migrator) error {
 	// Get version before
 	beforeVersion, _, err := migrator.Version()
@@ -151,7 +163,7 @@ func runMigrateUpLogic(out io.Writer, migrator migrator) error {
 
 // runMigrateDownLogic handles the migrate down logic with output.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateDownLogic(out io.Writer, migrator migrator, all bool) error {
 	// Get version before
 	beforeVersion, _, err := migrator.Version()
@@ -189,11 +201,11 @@ func runMigrateDownLogic(out io.Writer, migrator migrator, all bool) error {
 
 // runMigrateStatusLogic handles the migrate status logic with output.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateStatusLogic(out io.Writer, migrator migrator) error {
 	version, dirty, err := migrator.Version()
 	if err != nil {
-		return err
+		return oops.With("operation", "get version").Wrap(err)
 	}
 
 	fmt.Fprintf(out, "Current version: %d\n", version)
@@ -208,11 +220,11 @@ func runMigrateStatusLogic(out io.Writer, migrator migrator) error {
 
 // runMigrateVersionLogic handles the migrate version logic with output.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateVersionLogic(out io.Writer, migrator migrator) error {
 	version, _, err := migrator.Version()
 	if err != nil {
-		return err
+		return oops.With("operation", "get version").Wrap(err)
 	}
 	fmt.Fprintln(out, version)
 	return nil
@@ -220,11 +232,11 @@ func runMigrateVersionLogic(out io.Writer, migrator migrator) error {
 
 // runMigrateForceLogic handles the migrate force logic with output.
 //
-//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+//nolint:errcheck // CLI output errors intentionally ignored - no recovery possible
 func runMigrateForceLogic(out io.Writer, migrator migrator, version int) error {
 	fmt.Fprintf(out, "Forcing version to %d...\n", version)
 	if err := migrator.Force(version); err != nil {
-		return err
+		return oops.With("operation", "force version").Wrap(err)
 	}
 	fmt.Fprintln(out, "Version forced successfully")
 	return nil
@@ -420,6 +432,10 @@ func newMigrateVersionCmd() *cobra.Command {
 // parseForceVersion parses a version string for the migrate force command.
 // Negative versions are rejected as they have special meaning in golang-migrate
 // (NilVersion) that could accidentally clear version tracking.
+//
+// NOTE: This validation is intentionally duplicated in store.Migrator.Force() for
+// defense-in-depth. The store layer is authoritative; this CLI-layer check provides
+// a better user experience by failing early with a clear error message.
 func parseForceVersion(arg string) (int, error) {
 	version, err := strconv.Atoi(strings.TrimSpace(arg))
 	if err != nil {

@@ -67,10 +67,7 @@ func NewMigrator(databaseURL string) (*Migrator, error) {
 
 	m, err := migrate.NewWithSourceInstance("iofs", source, migrateURL)
 	if err != nil {
-		// Close source to prevent resource leak when initialization fails.
-		// Close error is intentionally ignored - we're already returning the more
-		// informative initialization error, and the source is an embedded filesystem.
-		_ = source.Close() //nolint:errcheck // best-effort cleanup, init error takes precedence
+		_ = source.Close() //nolint:errcheck // cleanup for embedded FS; init error takes precedence
 		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
 	}
 
@@ -122,7 +119,11 @@ func (m *Migrator) Version() (version uint, dirty bool, err error) {
 // WARNING: Setting an incorrect version causes the migrator to skip migrations
 // (if too high) or re-run already-applied migrations (if too low), potentially
 // causing data loss or duplicate data.
+//
+// NOTE: The CLI also validates version (defense-in-depth). This store-layer check is
+// authoritative and ensures the invariant holds regardless of entry point.
 func (m *Migrator) Force(version int) error {
+	// Defense-in-depth: CLI also validates, but we enforce here as the authoritative layer.
 	if version < 0 {
 		return oops.Code("INVALID_VERSION").Errorf("version must be non-negative, got %d", version)
 	}
@@ -168,6 +169,12 @@ func allMigrationVersions() ([]uint, error) {
 }
 
 // loadMigrationVersions reads the embedded migrations directory and parses version numbers.
+//
+// Design note: Malformed filenames are logged and skipped rather than causing failures.
+// This is intentional - we don't want to fail on unexpected files in the embedded FS
+// (e.g., .gitkeep, editor temp files that might slip through). The embedded migrations
+// are validated at compile time by TestMigrationsFS_EmbeddedFiles in migrate_embed_test.go,
+// which ensures all files follow the NNNNNN_name.(up|down).sql pattern.
 func loadMigrationVersions() ([]uint, error) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
@@ -183,6 +190,7 @@ func loadMigrationVersions() ([]uint, error) {
 		}
 		var version uint
 		if _, err := fmt.Sscanf(name, "%06d", &version); err != nil {
+			// Intentionally skip malformed files rather than failing - see function doc above.
 			slog.Warn("migration file name doesn't match expected format, skipping",
 				"filename", name,
 				"expected_format", "NNNNNN_name.up.sql",
@@ -201,14 +209,24 @@ func loadMigrationVersions() ([]uint, error) {
 }
 
 // MigrationName returns the name of a migration by version number.
-// Returns empty string if the version is not found.
-// Example: MigrationName(3) returns "000003_world_model"
-func MigrationName(version uint) string {
+//
+// Returns:
+//   - (name, nil) when version is found
+//   - ("", nil) when version is not found (expected behavior, not an error)
+//   - ("", error) when embedded FS cannot be read (indicates binary corruption)
+//
+// Returns the migration name in format NNNNNN_name (e.g., "000001_initial").
+//
+// Design notes:
+//   - ReadDir failure returns an error because it indicates binary corruption or memory
+//     tampering. The embedded FS is immutable in a valid binary, so this is a hard failure.
+//   - Version-not-found returns ("", nil) because looking up an unknown version is expected
+//     behavior in CLI contexts (e.g., displaying version info for a manually forced version).
+func MigrationName(version uint) (string, error) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
-		// This should never happen with a valid binary - the embedded FS is immutable.
-		slog.Warn("failed to read embedded migrations directory", "error", err)
-		return ""
+		// Embedded FS is immutable in a valid binary - this indicates corruption or tampering.
+		return "", oops.Code("MIGRATION_READ_FAILED").With("operation", "read migrations dir").Wrap(err)
 	}
 
 	prefix := fmt.Sprintf("%06d_", version)
@@ -216,10 +234,10 @@ func MigrationName(version uint) string {
 		name := entry.Name()
 		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".up.sql") {
 			// Remove .up.sql suffix
-			return strings.TrimSuffix(name, ".up.sql")
+			return strings.TrimSuffix(name, ".up.sql"), nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // PendingMigrations returns the list of migration versions that would be applied
