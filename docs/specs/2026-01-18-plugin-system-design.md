@@ -54,7 +54,7 @@ documentation for correct API usage.
 │  │                         │                                     │
 │  ▼                         ▼                                     │
 │  ┌─────────────┐    ┌─────────────┐                             │
-│  │ LuaHost     │    │ GoPluginHost│                             │
+│  │ Host     │    │ GoPluginHost│                             │
 │  │ (gopher-lua)│    │ (go-plugin) │                             │
 │  │ - In-process│    │ - Subprocess│                             │
 │  │ - Sandboxed │    │ - gRPC      │                             │
@@ -70,7 +70,7 @@ internal/plugin/
   host.go            # PluginHost interface
   manifest.go        # Manifest parsing and validation
   lua/
-    host.go          # LuaHost implementation
+    host.go          # Host implementation
     state.go         # StateFactory, state management
   goplugin/
     host.go          # GoPluginHost implementation
@@ -429,28 +429,37 @@ func (f *StateFactory) NewState(ctx context.Context) (*lua.LState, error) {
 }
 ```
 
-### LuaHost
+### Host
 
-`LuaHost` manages plugin lifecycle and optionally holds host functions for registration
+`Host` manages plugin lifecycle and optionally holds host functions for registration
 during event delivery. This separation keeps `StateFactory` simple and dependency-free.
 
 ```go
-type LuaHost struct {
+type Host struct {
     factory   *StateFactory
-    hostFuncs *hostfunc.Functions  // Optional; nil for basic host
+    hostFuncs *hostfunc.Functions  // Optional; nil disables host function registration
     plugins   map[string]*luaPlugin
     mu        sync.RWMutex
+    closed    bool
 }
 
 type luaPlugin struct {
-    manifest Manifest
-    code     []byte  // Compiled Lua bytecode (via lua.CompileString at Load time)
+    manifest *plugin.Manifest
+    code     string  // Lua source (compiled at load time in future)
 }
+
+// NewHost creates a Host without host functions.
+func NewHost() *Host
+
+// NewHostWithFunctions creates a Host with host functions.
+// The host functions enable plugins to call holomush.* APIs.
+// Panics if hf is nil.
+func NewHostWithFunctions(hf *hostfunc.Functions) *Host
 ```
 
 ### Plugin Loading Flow
 
-On `LuaHost.Load()`:
+On `Host.Load()`:
 
 1. Read `main.lua` from disk
 2. Compile to bytecode via `lua.CompileString()` (one-time cost)
@@ -458,7 +467,7 @@ On `LuaHost.Load()`:
 
 ### Event Delivery Flow
 
-On `LuaHost.DeliverEvent()`:
+On `Host.DeliverEvent()`:
 
 1. Get fresh sandboxed state from factory
 2. Register host functions (if available)
@@ -470,7 +479,7 @@ On `LuaHost.DeliverEvent()`:
 ```mermaid
 sequenceDiagram
     participant EB as EventBus
-    participant LH as LuaHost
+    participant LH as Host
     participant SF as StateFactory
     participant LS as LuaState
     participant HF as HostFunctions
@@ -492,9 +501,9 @@ sequenceDiagram
     LH->>LS: Call on_event(event)
 
     alt Plugin calls host function
-        LS->>HF: holomush.query_location(id)
+        LS->>HF: holomush.query_room(id)
         HF->>HF: Check capability
-        HF-->>LS: location data
+        HF-->>LS: room data
     end
 
     LS-->>LH: emit events table (or nil)
@@ -553,18 +562,19 @@ type KVStore interface {
     Delete(ctx context.Context, namespace, key string) error
 }
 
-// EventEmitter sends events to the event bus.
-type EventEmitter interface {
-    Emit(ctx context.Context, stream, eventType string, payload []byte) error
+// CapabilityChecker validates plugin capabilities.
+type CapabilityChecker interface {
+    Check(plugin, capability string) bool
 }
 
 // WorldQuerier provides read-only access to world data for plugins.
 // This interface is implemented by WorldQuerierAdapter, which wraps
-// the world.Service with per-plugin authorization.
+// the WorldService with per-plugin authorization.
 type WorldQuerier interface {
     GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error)
     GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error)
     GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error)
+    GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
 }
 
 // WorldService is the underlying service that WorldQuerierAdapter wraps.
@@ -573,6 +583,7 @@ type WorldService interface {
     GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
     GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
     GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Character, error)
+    GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
 }
 ```
 
@@ -618,38 +629,43 @@ each plugin's queries are properly attributed for authorization and audit loggin
 ### Function Registry
 
 ```go
-type HostFunctions struct {
-    eventBus   EventEmitter
-    worldStore WorldReader
-    kvStore    KVStore
-    logger     *slog.Logger
-    enforcer   *CapabilityEnforcer
+// Functions provides host functions to Lua plugins.
+type Functions struct {
+    kvStore      KVStore
+    enforcer     CapabilityChecker
+    worldService WorldService
 }
 
-func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
-    mod := L.NewTable()
+// New creates host functions with dependencies.
+// Panics if enforcer is nil (required dependency).
+// KVStore may be nil; KV functions will return errors if called.
+func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions
 
-    // Event emission - capability checked dynamically based on stream parameter
-    // e.g., "location:123" checks events.emit.location, "session:456" checks events.emit.session
-    L.SetField(mod, "emit_event", h.wrapDynamic(pluginName, h.emitEvent))
+// WithWorldService sets the world service for world query functions.
+// Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
+func WithWorldService(svc WorldService) Option
 
-    // World queries
-    L.SetField(mod, "query_location", h.wrap(pluginName, "world.read.location", h.queryLocation))
-    L.SetField(mod, "query_character", h.wrap(pluginName, "world.read.character", h.queryCharacter))
-    L.SetField(mod, "query_object", h.wrap(pluginName, "world.read.object", h.queryObject))
-
-    // Key-value storage
-    L.SetField(mod, "kv_get", h.wrap(pluginName, "kv.read", h.kvGet))
-    L.SetField(mod, "kv_set", h.wrap(pluginName, "kv.write", h.kvSet))
-    L.SetField(mod, "kv_delete", h.wrap(pluginName, "kv.write", h.kvDelete))
-
-    // Request IDs (no capability required - generates correlation IDs only)
-    L.SetField(mod, "new_request_id", h.newRequestID)
+func (f *Functions) Register(ls *lua.LState, pluginName string) {
+    mod := ls.NewTable()
 
     // Logging (no capability required)
-    L.SetField(mod, "log", h.log)
+    ls.SetField(mod, "log", ls.NewFunction(f.logFn(pluginName)))
 
-    L.SetGlobal("holomush", mod)
+    // Request ID (no capability required)
+    ls.SetField(mod, "new_request_id", ls.NewFunction(f.newRequestIDFn()))
+
+    // KV operations (capability required)
+    ls.SetField(mod, "kv_get", ls.NewFunction(f.wrap(pluginName, "kv.read", f.kvGetFn(pluginName))))
+    ls.SetField(mod, "kv_set", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvSetFn(pluginName))))
+    ls.SetField(mod, "kv_delete", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvDeleteFn(pluginName))))
+
+    // World queries (capability required)
+    ls.SetField(mod, "query_room", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.queryRoomFn(pluginName))))
+    ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
+    ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
+    ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
+
+    ls.SetGlobal("holomush", mod)
 }
 ```
 
@@ -658,8 +674,9 @@ func (h *HostFunctions) Register(L *lua.LState, pluginName string) {
 | Function                                  | Capability                 | Returns               |
 | ----------------------------------------- | -------------------------- | --------------------- |
 | `holomush.emit_event(stream, type, data)` | `events.emit.<stream>`[^1] | `nil, err` on failure |
-| `holomush.query_location(id)`             | `world.read.location`      | `location, err`       |
+| `holomush.query_room(id)`                 | `world.read.location`      | `room, err`           |
 | `holomush.query_character(id)`            | `world.read.character`     | `character, err`      |
+| `holomush.query_room_characters(id)`      | `world.read.character`     | `characters[], err`   |
 | `holomush.query_object(id)`               | `world.read.object`        | `object, err`         |
 | `holomush.kv_get(key)`                    | `kv.read`                  | `value, err`[^2]      |
 | `holomush.kv_set(key, value)`             | `kv.write`                 | `nil, err`[^3]        |
@@ -683,9 +700,9 @@ Host functions that fail (database errors, missing resources, etc.) return `nil,
 to Lua. Plugins SHOULD check for errors:
 
 ```lua
-local location, err = holomush.query_location(id)
+local room, err = holomush.query_room(id)
 if err then
-    holomush.log("error", "failed to query location: " .. err)
+    holomush.log("error", "failed to query room: " .. err)
     return
 end
 ```
@@ -693,10 +710,13 @@ end
 ### Capability Wrapper
 
 ```go
-func (h *HostFunctions) wrap(plugin, cap string, fn lua.LGFunction) lua.LGFunction {
+func (f *Functions) wrap(plugin, capName string, fn lua.LGFunction) lua.LGFunction {
     return func(L *lua.LState) int {
-        if !h.enforcer.Check(plugin, cap) {
-            L.RaiseError("capability denied: %s requires %s", plugin, cap)
+        if !f.enforcer.Check(plugin, capName) {
+            slog.Warn("capability denied",
+                "plugin", plugin,
+                "capability", capName)
+            L.RaiseError("capability denied: %s requires %s", plugin, capName)
             return 0
         }
         return fn(L)
@@ -706,21 +726,21 @@ func (h *HostFunctions) wrap(plugin, cap string, fn lua.LGFunction) lua.LGFuncti
 // wrapDynamic determines capabilities from stream and event type parameters.
 // Stream: "location:123" → events.emit.location, "session:456" → events.emit.session
 // Event type: "prompt" → system.prompt, "disconnect" → system.disconnect
-func (h *HostFunctions) wrapDynamic(plugin string, fn lua.LGFunction) lua.LGFunction {
+func (f *Functions) wrapDynamic(plugin string, fn lua.LGFunction) lua.LGFunction {
     return func(L *lua.LState) int {
         stream := L.CheckString(1)
         eventType := L.CheckString(2)
 
         // Check stream capability
         streamType := strings.SplitN(stream, ":", 2)[0]
-        if !h.enforcer.Check(plugin, "events.emit."+streamType) {
+        if !f.enforcer.Check(plugin, "events.emit."+streamType) {
             L.RaiseError("capability denied: %s requires events.emit.%s", plugin, streamType)
             return 0
         }
 
         // Check system capabilities for privileged event types
         if cap, ok := systemCapabilities[eventType]; ok {
-            if !h.enforcer.Check(plugin, cap) {
+            if !f.enforcer.Check(plugin, cap) {
                 L.RaiseError("capability denied: %s requires %s", plugin, cap)
                 return 0
             }
@@ -884,7 +904,7 @@ message Event {
 type GoPluginHost struct {
     clients  map[string]*plugin.Client
     plugins  map[string]PluginRPC
-    hostFns  *HostFunctions
+    hostFns  *hostfunc.Functions
     enforcer *CapabilityEnforcer
     mu       sync.RWMutex
 }
@@ -999,7 +1019,7 @@ others or crash the server.
 - Context cancellation propagated to host functions
 
 When timeout fires, context cancellation propagates to all in-flight host function
-calls. Long-running host calls (e.g., `query_location` with slow database) SHOULD
+calls. Long-running host calls (e.g., `query_room` with slow database) SHOULD
 check `ctx.Done()` and return early with an appropriate error.
 
 ## Observability
@@ -1007,7 +1027,7 @@ check `ctx.Done()` and return early with an appropriate error.
 ### OTel Tracing
 
 ```go
-func (h *LuaHost) DeliverEvent(ctx context.Context, name string, event Event) ([]EmitEvent, error) {
+func (h *Host) DeliverEvent(ctx context.Context, name string, event Event) ([]EmitEvent, error) {
     ctx, span := tracer.Start(ctx, "plugin.deliver_event",
         trace.WithAttributes(
             attribute.String("plugin.name", name),
