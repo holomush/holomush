@@ -274,6 +274,27 @@ func TestEmitMoveEvent(t *testing.T) {
 		assert.Contains(t, logOutput, "error=",
 			"should log final error, got: %s", logOutput)
 	})
+
+	t.Run("respects context cancellation during retry", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		emitter := &mockEventEmitter{err: errors.New("transient error")}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(cancelCtx, emitter, payload)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+		// Should not have made multiple attempts since context was cancelled
+		assert.LessOrEqual(t, len(emitter.calls), 1, "should stop retrying on context cancellation")
+	})
 }
 
 func TestEmitObjectCreateEvent(t *testing.T) {
