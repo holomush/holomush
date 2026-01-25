@@ -24,6 +24,9 @@ type WorldQuerier interface {
 
 	// GetCharactersByLocation retrieves all characters at a location.
 	GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error)
+
+	// GetObject retrieves an object by ID.
+	GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
 }
 
 // queryRoomFn returns a Lua function that queries room information.
@@ -205,6 +208,79 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 		}
 
 		L.Push(characters)
+		L.Push(lua.LNil)
+		return 2
+	}
+}
+
+// queryObjectFn returns a Lua function that queries object information.
+func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
+	return func(L *lua.LState) int {
+		if f.worldService == nil {
+			slog.Error("query_object called but world service unavailable",
+				"plugin", pluginName,
+				"hint", "use WithWorldService option when creating hostfunc.Functions")
+			L.Push(lua.LNil)
+			L.Push(lua.LString("world service not configured - contact server administrator"))
+			return 2
+		}
+
+		objID := L.CheckString(1)
+		id, err := ulid.Parse(objID)
+		if err != nil {
+			slog.Debug("query_object: invalid object ID format",
+				"plugin", pluginName,
+				"object_id", objID,
+				"error", err)
+			L.Push(lua.LNil)
+			L.Push(lua.LString("invalid object ID: " + err.Error()))
+			return 2
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		defer cancel()
+
+		// Create adapter for this plugin's authorization
+		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
+		obj, err := adapter.GetObject(ctx, id)
+		if err != nil {
+			if errors.Is(err, world.ErrNotFound) {
+				slog.Debug("query_object: object not found",
+					"plugin", pluginName,
+					"object_id", objID)
+			} else {
+				slog.Error("query_object failed",
+					"plugin", pluginName,
+					"object_id", objID,
+					"error", err)
+			}
+			L.Push(lua.LNil)
+			L.Push(lua.LString(err.Error()))
+			return 2
+		}
+
+		// Return object info as a table
+		object := L.NewTable()
+		L.SetField(object, "id", lua.LString(obj.ID.String()))
+		L.SetField(object, "name", lua.LString(obj.Name))
+		L.SetField(object, "description", lua.LString(obj.Description))
+		L.SetField(object, "is_container", lua.LBool(obj.IsContainer))
+
+		// Optional fields - only set if non-nil
+		if obj.LocationID != nil {
+			L.SetField(object, "location_id", lua.LString(obj.LocationID.String()))
+		}
+		if obj.HeldByCharacterID != nil {
+			L.SetField(object, "held_by_character_id", lua.LString(obj.HeldByCharacterID.String()))
+		}
+		if obj.ContainedInObjectID != nil {
+			L.SetField(object, "contained_in_object_id", lua.LString(obj.ContainedInObjectID.String()))
+		}
+		if obj.OwnerID != nil {
+			L.SetField(object, "owner_id", lua.LString(obj.OwnerID.String()))
+		}
+
+		L.Push(object)
 		L.Push(lua.LNil)
 		return 2
 	}

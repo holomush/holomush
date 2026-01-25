@@ -21,6 +21,7 @@ type mockWorldService struct {
 	location   *world.Location
 	character  *world.Character
 	characters []*world.Character
+	object     *world.Object
 	err        error
 
 	// Capture the subject ID passed to each method
@@ -49,6 +50,14 @@ func (m *mockWorldService) GetCharactersByLocation(_ context.Context, subjectID 
 		return nil, m.err
 	}
 	return m.characters, nil
+}
+
+func (m *mockWorldService) GetObject(_ context.Context, subjectID string, _ ulid.ULID) (*world.Object, error) {
+	m.capturedSubjectID = subjectID
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.object, nil
 }
 
 // Compile-time interface check.
@@ -185,6 +194,41 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		chars, err := adapter.GetCharactersByLocation(ctx, locID)
 
 		assert.Nil(t, chars)
+		assert.ErrorIs(t, err, expectedErr)
+	})
+}
+
+func TestWorldQuerierAdapter_GetObject(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+
+	t.Run("returns object and passes correct subject ID", func(t *testing.T) {
+		locID := ulid.Make()
+		expectedObj := &world.Object{
+			ID:          objID,
+			Name:        "Magic Sword",
+			Description: "A glowing blade of ancient power.",
+			LocationID:  &locID,
+			IsContainer: false,
+		}
+		svc := &mockWorldService{object: expectedObj}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "inventory-plugin")
+
+		obj, err := adapter.GetObject(ctx, objID)
+
+		require.NoError(t, err)
+		assert.Equal(t, expectedObj, obj)
+		assert.Equal(t, "system:plugin:inventory-plugin", svc.capturedSubjectID)
+	})
+
+	t.Run("propagates errors", func(t *testing.T) {
+		expectedErr := world.ErrNotFound
+		svc := &mockWorldService{err: expectedErr}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
+
+		obj, err := adapter.GetObject(ctx, objID)
+
+		assert.Nil(t, obj)
 		assert.ErrorIs(t, err, expectedErr)
 	})
 }

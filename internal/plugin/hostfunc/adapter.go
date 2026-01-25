@@ -18,6 +18,7 @@ type WorldService interface {
 	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
 	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
 	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Character, error)
+	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
 }
 
 // WorldQuerierAdapter wraps a WorldService to provide plugin access with
@@ -74,6 +75,15 @@ func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locat
 		return nil, oops.Wrapf(err, "get characters by location for plugin %s", a.pluginName)
 	}
 	return chars, nil
+}
+
+// GetObject retrieves an object by ID with plugin authorization.
+func (a *WorldQuerierAdapter) GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error) {
+	obj, err := a.service.GetObject(ctx, a.SubjectID(), id)
+	if err != nil {
+		return nil, oops.Wrapf(err, "get object for plugin %s", a.pluginName)
+	}
+	return obj, nil
 }
 
 // Compile-time interface check.

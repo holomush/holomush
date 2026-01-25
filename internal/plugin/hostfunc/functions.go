@@ -90,6 +90,14 @@ func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _
 	return chars, nil
 }
 
+func (p *passthroughWorldService) GetObject(ctx context.Context, _ string, id ulid.ULID) (*world.Object, error) {
+	obj, err := p.querier.GetObject(ctx, id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return obj, nil
+}
+
 // New creates host functions with dependencies.
 // Panics if enforcer is nil (required dependency).
 // KVStore may be nil; KV functions will return errors if called.
@@ -126,6 +134,7 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "query_room", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.queryRoomFn(pluginName))))
 	ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
 	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
+	ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
 
 	ls.SetGlobal("holomush", mod)
 }

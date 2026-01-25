@@ -23,6 +23,7 @@ type mockWorldQuerier struct {
 	location   *world.Location
 	character  *world.Character
 	characters []*world.Character
+	object     *world.Object
 	err        error
 }
 
@@ -45,6 +46,13 @@ func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ ulid.ULI
 		return nil, m.err
 	}
 	return m.characters, nil
+}
+
+func (m *mockWorldQuerier) GetObject(_ context.Context, _ ulid.ULID) (*world.Object, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.object, nil
 }
 
 // Compile-time interface check.
@@ -480,6 +488,202 @@ func TestQueryRoomCharacters_RequiresCapability(t *testing.T) {
 	funcs.Register(L, "test-plugin")
 
 	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	require.Error(t, err, "expected capability error")
+	assert.Contains(t, err.Error(), "capability denied")
+}
+
+func TestQueryObject(t *testing.T) {
+	objID := ulid.Make()
+	locID := ulid.Make()
+	ownerID := ulid.Make()
+	obj := &world.Object{
+		ID:          objID,
+		Name:        "Magic Sword",
+		Description: "A glowing blade of ancient power.",
+		LocationID:  &locID,
+		IsContainer: false,
+		OwnerID:     &ownerID,
+	}
+
+	querier := &mockWorldQuerier{object: obj}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	require.NoError(t, err)
+
+	// Check err is nil
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, errVal.Type(), "expected nil error")
+
+	// Check obj is a table with expected fields
+	objVal := L.GetGlobal("obj")
+	require.Equal(t, lua.LTTable, objVal.Type(), "expected table result")
+
+	tbl := objVal.(*lua.LTable)
+	assert.Equal(t, objID.String(), tbl.RawGetString("id").String())
+	assert.Equal(t, obj.Name, tbl.RawGetString("name").String())
+	assert.Equal(t, obj.Description, tbl.RawGetString("description").String())
+	assert.Equal(t, lua.LFalse, tbl.RawGetString("is_container"))
+	assert.Equal(t, locID.String(), tbl.RawGetString("location_id").String())
+	assert.Equal(t, ownerID.String(), tbl.RawGetString("owner_id").String())
+}
+
+func TestQueryObject_WithContainer(t *testing.T) {
+	objID := ulid.Make()
+	charID := ulid.Make()
+	containerID := ulid.Make()
+	obj := &world.Object{
+		ID:                  objID,
+		Name:                "Gold Coins",
+		Description:         "A pile of shiny gold coins.",
+		HeldByCharacterID:   &charID,
+		ContainedInObjectID: &containerID,
+		IsContainer:         true,
+	}
+
+	querier := &mockWorldQuerier{object: obj}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	require.Equal(t, lua.LTTable, objVal.Type())
+
+	tbl := objVal.(*lua.LTable)
+	assert.Equal(t, lua.LTrue, tbl.RawGetString("is_container"))
+	assert.Equal(t, charID.String(), tbl.RawGetString("held_by_character_id").String())
+	assert.Equal(t, containerID.String(), tbl.RawGetString("contained_in_object_id").String())
+}
+
+func TestQueryObject_NilOptionalFields(t *testing.T) {
+	objID := ulid.Make()
+	obj := &world.Object{
+		ID:          objID,
+		Name:        "Simple Object",
+		Description: "Nothing special.",
+		IsContainer: false,
+		// All optional pointer fields are nil
+	}
+
+	querier := &mockWorldQuerier{object: obj}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	require.Equal(t, lua.LTTable, objVal.Type())
+
+	tbl := objVal.(*lua.LTable)
+	assert.Equal(t, lua.LTNil, tbl.RawGetString("location_id").Type())
+	assert.Equal(t, lua.LTNil, tbl.RawGetString("held_by_character_id").Type())
+	assert.Equal(t, lua.LTNil, tbl.RawGetString("contained_in_object_id").Type())
+	assert.Equal(t, lua.LTNil, tbl.RawGetString("owner_id").Type())
+}
+
+func TestQueryObject_InvalidID(t *testing.T) {
+	querier := &mockWorldQuerier{}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("not-valid-ulid")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, objVal.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Contains(t, errVal.String(), "invalid object ID")
+}
+
+func TestQueryObject_NotFound(t *testing.T) {
+	querier := &mockWorldQuerier{err: world.ErrNotFound}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, objVal.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+}
+
+func TestQueryObject_Error(t *testing.T) {
+	objID := ulid.Make()
+	querier := &mockWorldQuerier{err: errors.New("database error")}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, objVal.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Contains(t, errVal.String(), "database error")
+}
+
+func TestQueryObject_NoQuerierConfigured(t *testing.T) {
+	// No world querier provided
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, objVal.Type(), "expected nil object")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
+}
+
+func TestQueryObject_RequiresCapability(t *testing.T) {
+	objID := ulid.Make()
+	obj := &world.Object{
+		ID:   objID,
+		Name: "Test Object",
+	}
+
+	querier := &mockWorldQuerier{object: obj}
+	enforcer := capability.NewEnforcer()
+	// No capabilities granted
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.Error(t, err, "expected capability error")
 	assert.Contains(t, err.Error(), "capability denied")
 }
