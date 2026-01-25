@@ -136,6 +136,18 @@ func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
 		errutil.AssertErrorContext(t, err, "plugin", "my-plugin")
 		errutil.AssertErrorContext(t, err, "entity_type", "location")
 	})
+
+	// Test for (nil, nil) return - edge case where service finds nothing but doesn't error.
+	// This can happen if the underlying query returns no results.
+	t.Run("handles nil location without error", func(t *testing.T) {
+		svc := &mockWorldService{location: nil, err: nil}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
+
+		loc, err := adapter.GetLocation(ctx, locID)
+
+		assert.NoError(t, err)
+		assert.Nil(t, loc)
+	})
 }
 
 func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
@@ -181,6 +193,17 @@ func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
 		errutil.AssertErrorContext(t, err, "plugin", "char-plugin")
 		errutil.AssertErrorContext(t, err, "entity_type", "character")
+	})
+
+	// Test for (nil, nil) return - edge case where service finds nothing but doesn't error.
+	t.Run("handles nil character without error", func(t *testing.T) {
+		svc := &mockWorldService{character: nil, err: nil}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
+
+		char, err := adapter.GetCharacter(ctx, charID)
+
+		assert.NoError(t, err)
+		assert.Nil(t, char)
 	})
 }
 
