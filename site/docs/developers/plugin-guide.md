@@ -116,6 +116,48 @@ local _, err = holomush.kv_set("my-key", "my-value")
 local _, err = holomush.kv_delete("my-key")
 ```
 
+### World Query Functions
+
+Lua plugins can query the game world using these host functions. Each requires
+the appropriate capability declared in `plugin.yaml`.
+
+```lua
+-- Query room/location information (requires world.read.location capability)
+local room, err = holomush.query_room(room_id)
+-- Returns: table with id, name, description, type on success
+-- Returns: nil, error_message on failure
+
+-- Query character information (requires world.read.character capability)
+local char, err = holomush.query_character(character_id)
+-- Returns: table with id, name, player_id, location_id on success
+-- Returns: nil, error_message on failure
+
+-- Query characters in a room (requires world.read.character capability)
+local chars, err = holomush.query_room_characters(room_id)
+-- Returns: array of character tables on success
+-- Returns: nil, error_message on failure
+
+-- Query object information (requires world.read.object capability)
+local obj, err = holomush.query_object(object_id)
+-- Returns: table with id, name, description, is_container, owner_id, containment_type on success
+-- Returns: nil, error_message on failure
+```
+
+Example manifest with world query capabilities:
+
+```yaml
+name: world-aware-plugin
+version: 1.0.0
+type: lua
+events:
+  - say
+capabilities:
+  - world.read.location
+  - world.read.character
+lua-plugin:
+  entry: main.lua
+```
+
 ## Binary Plugins
 
 Binary plugins are Go programs that communicate with HoloMUSH over gRPC using
@@ -282,13 +324,15 @@ See the [World Model Design](https://github.com/holomush/holomush/blob/main/docs
 Plugins declare required capabilities in their manifest. The capability system
 uses glob patterns:
 
-| Pattern               | Matches                |
-| --------------------- | ---------------------- |
-| `events.emit.*`       | Direct children only   |
-| `events.emit.**`      | All descendants        |
-| `world.read.location` | Exact match only       |
-| `kv.read`             | Key-value read access  |
-| `kv.write`            | Key-value write access |
+| Pattern                | Matches                  |
+| ---------------------- | ------------------------ |
+| `events.emit.*`        | Direct children only     |
+| `events.emit.**`       | All descendants          |
+| `world.read.location`  | Query room/location data |
+| `world.read.character` | Query character data     |
+| `world.read.object`    | Query object data        |
+| `kv.read`              | Key-value read access    |
+| `kv.write`             | Key-value write access   |
 
 Example capabilities:
 
@@ -298,6 +342,83 @@ capabilities:
   - kv.read # Read from key-value store
   - kv.write # Write to key-value store
 ```
+
+## Error Handling
+
+Host functions return errors as a second return value. Understanding error types
+helps plugins respond appropriately.
+
+### Error Types
+
+| Error Message                    | Cause                            | Recovery                          |
+| -------------------------------- | -------------------------------- | --------------------------------- |
+| `"room not found"`               | Room ID doesn't exist            | Check ID validity, handle missing |
+| `"character not found"`          | Character ID doesn't exist       | Check ID validity, handle missing |
+| `"object not found"`             | Object ID doesn't exist          | Check ID validity, handle missing |
+| `"access denied"`                | Plugin lacks required capability | Add capability to manifest        |
+| `"query timed out"`              | Query exceeded 5-second timeout  | Simplify query or retry later     |
+| `"internal error (ref: XXXX...)` | Server error with correlation ID | Log and surface to user           |
+
+### Correlation ID Pattern
+
+When a host function returns an error like `"internal error (ref: 01JCXYZ...)"`:
+
+1. The reference ID is a ULID that links to the server's error log
+2. Plugins should surface this ID to users so they can report it to operators
+3. Operators can search logs for the ID to find the full stack trace and context
+
+This pattern enables efficient debugging of production issues without exposing
+internal details to end users.
+
+### Example Error Handling
+
+```lua
+local room, err = holomush.query_room(room_id)
+if err then
+    if err:match("not found") then
+        -- Handle missing entity gracefully
+        holomush.log("debug", "Room not found: " .. room_id)
+        return nil
+    elseif err:match("access denied") then
+        -- Permission error - likely missing capability
+        holomush.log("warn", "Permission denied for room query")
+        return nil
+    elseif err:match("internal error") then
+        -- Surface correlation ID to user for debugging
+        holomush.log("error", "Server error - " .. err)
+        -- Consider notifying the user with the reference ID
+        return {
+            {
+                stream = event.stream,
+                type = "system",
+                payload = '{"message":"An error occurred. Reference: ' ..
+                    err:match("ref: ([^)]+)") .. '"}'
+            }
+        }
+    end
+    return nil
+end
+-- Use room data safely
+holomush.log("debug", "Found room: " .. room.name)
+```
+
+### For Operators
+
+When users report correlation IDs, search server logs to find the full error:
+
+```bash
+# Plain text logs
+grep "error_id=01JCXYZ" /var/log/holomush/server.log
+
+# Structured JSON logs
+jq 'select(.error_id == "01JCXYZ...")' /var/log/holomush/server.json
+
+# With journald
+journalctl -u holomush | grep "error_id=01JCXYZ"
+```
+
+The log entry will contain the full stack trace, original error message, and
+additional context like the plugin name and operation being performed.
 
 ## Best Practices
 
