@@ -645,6 +645,75 @@ A complete example showing both plugin types:
     }
     ```
 
+## Migration Guide
+
+### WithWorldQuerier to WithWorldService
+
+!!! warning "Deprecation Notice"
+
+    `WithWorldQuerier` is deprecated and will be removed in v1.0.0.
+    Migrate to `WithWorldService` before upgrading.
+
+#### Why Migrate?
+
+`WithWorldService` provides per-plugin ABAC (Attribute-Based Access Control)
+authorization. Each plugin receives its own authorization subject
+(`system:plugin:<name>`), enabling:
+
+- **Fine-grained access control**: Operators can grant different plugins different
+  world access permissions
+- **Audit logging**: Plugin queries are traceable to specific plugins
+- **Security isolation**: Plugins only access what they're authorized to access
+
+`WithWorldQuerier` bypasses authorization entirely, which is a security risk in
+production environments.
+
+#### Migration Steps
+
+Replace `WithWorldQuerier` with `WithWorldService`:
+
+=== "Before (deprecated)"
+
+    ```go
+    // Legacy approach - no authorization
+    funcs := hostfunc.New(
+        kvStore,
+        enforcer,
+        hostfunc.WithWorldQuerier(querier),
+    )
+    ```
+
+=== "After (recommended)"
+
+    ```go
+    // New approach - per-plugin ABAC authorization
+    funcs := hostfunc.New(
+        kvStore,
+        enforcer,
+        hostfunc.WithWorldService(worldService),
+    )
+    ```
+
+#### Interface Changes
+
+The key difference is that `WorldService` methods include a `subjectID` parameter
+for authorization:
+
+| Interface      | Method Signature                  |
+| -------------- | --------------------------------- |
+| `WorldQuerier` | `GetLocation(ctx, id)`            |
+| `WorldService` | `GetLocation(ctx, subjectID, id)` |
+
+The host function system automatically provides the subject ID based on the plugin
+name (`system:plugin:<name>`), so plugin code itself does not need changes.
+
+#### Timeline
+
+| Version | Status                        |
+| ------- | ----------------------------- |
+| Current | `WithWorldQuerier` deprecated |
+| v1.0.0  | `WithWorldQuerier` removed    |
+
 ## Next Steps
 
 - Review the [echo-bot example](https://github.com/holomush/holomush/tree/main/plugins/echo-bot)
