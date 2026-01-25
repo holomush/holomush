@@ -7,8 +7,10 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/golang-migrate/migrate/v4"
 	// Register pgx/v5 database driver for golang-migrate.
@@ -20,7 +22,16 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// migrateIface abstracts golang-migrate for testing.
+// Cached migration versions - computed once since embedded FS is immutable.
+var (
+	cachedVersionsOnce sync.Once
+	cachedVersions     []uint
+	cachedVersionsErr  error
+)
+
+// migrateIface abstracts golang-migrate for testing. The real golang-migrate
+// library requires a database connection, making unit tests slow and brittle.
+// This interface allows mocking migration operations without a database.
 type migrateIface interface {
 	Up() error
 	Down() error
@@ -45,7 +56,7 @@ func NewMigrator(databaseURL string) (*Migrator, error) {
 		return nil, oops.Code("MIGRATION_SOURCE_FAILED").With("operation", "create migration source").Wrap(err)
 	}
 
-	// Convert postgres:// to pgx5:// for golang-migrate pgx/v5 driver.
+	// Convert postgres:// or postgresql:// to pgx5:// for golang-migrate pgx/v5 driver.
 	// The pgx/v5 driver expects the pgx5:// scheme.
 	migrateURL := databaseURL
 	if rest, found := strings.CutPrefix(databaseURL, "postgres://"); found {
@@ -103,7 +114,9 @@ func (m *Migrator) Version() (version uint, dirty bool, err error) {
 
 // Force sets the migration version without running migrations.
 // Use only for recovering from a dirty state after manually fixing the database.
-// WARNING: Setting an incorrect version can corrupt database state tracking.
+// WARNING: Setting an incorrect version causes the migrator to skip migrations
+// (if too high) or re-run already-applied migrations (if too low), potentially
+// causing data loss or duplicate data.
 func (m *Migrator) Force(version int) error {
 	if err := m.m.Force(version); err != nil {
 		return oops.Code("MIGRATION_FORCE_FAILED").With("version", version).Wrap(err)
@@ -114,6 +127,12 @@ func (m *Migrator) Force(version int) error {
 // Close releases resources.
 func (m *Migrator) Close() error {
 	srcErr, dbErr := m.m.Close()
+	if srcErr != nil && dbErr != nil {
+		// Both failed - combine errors so neither is lost in logs
+		return oops.Code("MIGRATION_CLOSE_FAILED").
+			With("component", "both").
+			Errorf("source: %v; database: %v", srcErr, dbErr)
+	}
 	if srcErr != nil {
 		return oops.Code("MIGRATION_CLOSE_FAILED").With("component", "source").Wrap(srcErr)
 	}
@@ -123,9 +142,18 @@ func (m *Migrator) Close() error {
 	return nil
 }
 
-// allMigrationVersions reads the embedded migrations and returns all available versions.
+// allMigrationVersions returns all available migration versions from the embedded FS.
+// Results are cached since the embedded filesystem is immutable at runtime.
 // Versions are returned sorted in ascending order.
 func allMigrationVersions() ([]uint, error) {
+	cachedVersionsOnce.Do(func() {
+		cachedVersions, cachedVersionsErr = loadMigrationVersions()
+	})
+	return cachedVersions, cachedVersionsErr
+}
+
+// loadMigrationVersions reads the embedded migrations directory and parses version numbers.
+func loadMigrationVersions() ([]uint, error) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
 		return nil, oops.Code("MIGRATION_LIST_FAILED").With("operation", "read migrations dir").Wrap(err)
@@ -140,6 +168,10 @@ func allMigrationVersions() ([]uint, error) {
 		}
 		var version uint
 		if _, err := fmt.Sscanf(name, "%06d", &version); err != nil {
+			slog.Warn("migration file name doesn't match expected format, skipping",
+				"filename", name,
+				"expected_format", "NNNNNN_name.up.sql",
+				"error", err)
 			continue
 		}
 		versionSet[version] = struct{}{}
@@ -153,17 +185,37 @@ func allMigrationVersions() ([]uint, error) {
 	return versions, nil
 }
 
+// MigrationName returns the name of a migration by version number.
+// Returns empty string if the version is not found.
+// Example: MigrationName(3) returns "000003_world_model"
+func MigrationName(version uint) string {
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		return ""
+	}
+
+	prefix := fmt.Sprintf("%06d_", version)
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".up.sql") {
+			// Remove .up.sql suffix
+			return strings.TrimSuffix(name, ".up.sql")
+		}
+	}
+	return ""
+}
+
 // PendingMigrations returns the list of migration versions that would be applied
 // when running Up(). Returns versions sorted in ascending order.
 func (m *Migrator) PendingMigrations() ([]uint, error) {
 	currentVersion, _, err := m.Version()
 	if err != nil {
-		return nil, err
+		return nil, oops.With("operation", "get pending migrations").Wrap(err)
 	}
 
 	allVersions, err := allMigrationVersions()
 	if err != nil {
-		return nil, err
+		return nil, oops.With("operation", "get pending migrations").Wrap(err)
 	}
 
 	var pending []uint
@@ -180,7 +232,7 @@ func (m *Migrator) PendingMigrations() ([]uint, error) {
 func (m *Migrator) AppliedMigrations() ([]uint, error) {
 	currentVersion, _, err := m.Version()
 	if err != nil {
-		return nil, err
+		return nil, oops.With("operation", "get applied migrations").Wrap(err)
 	}
 
 	if currentVersion == 0 {
@@ -189,7 +241,7 @@ func (m *Migrator) AppliedMigrations() ([]uint, error) {
 
 	allVersions, err := allMigrationVersions()
 	if err != nil {
-		return nil, err
+		return nil, oops.With("operation", "get applied migrations").Wrap(err)
 	}
 
 	var applied []uint

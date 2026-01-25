@@ -50,7 +50,12 @@ func runMigrateUpDryRun(out io.Writer, migrator MigratorIface) error {
 
 	fmt.Fprintln(out, "Dry run - the following migrations would be applied:")
 	for _, v := range pending {
-		fmt.Fprintf(out, "  - Version %d\n", v)
+		name := store.MigrationName(v)
+		if name != "" {
+			fmt.Fprintf(out, "  - %s\n", name)
+		} else {
+			fmt.Fprintf(out, "  - Version %d\n", v)
+		}
 	}
 	fmt.Fprintf(out, "\nCurrent version: %d\n", currentVersion)
 	fmt.Fprintf(out, "Target version: %d\n", pending[len(pending)-1])
@@ -85,13 +90,24 @@ func runMigrateDownDryRun(out io.Writer, migrator MigratorIface, all bool) error
 		fmt.Fprintln(out, "Dry run - the following migrations would be rolled back:")
 		// Show in reverse order (most recent first)
 		for i := len(applied) - 1; i >= 0; i-- {
-			fmt.Fprintf(out, "  - Version %d\n", applied[i])
+			v := applied[i]
+			name := store.MigrationName(v)
+			if name != "" {
+				fmt.Fprintf(out, "  - %s\n", name)
+			} else {
+				fmt.Fprintf(out, "  - Version %d\n", v)
+			}
 		}
 		fmt.Fprintf(out, "\nCurrent version: %d\n", currentVersion)
 		fmt.Fprintln(out, "Target version: 0")
 	} else {
 		fmt.Fprintln(out, "Dry run - the following migration would be rolled back:")
-		fmt.Fprintf(out, "  - Version %d\n", currentVersion)
+		name := store.MigrationName(currentVersion)
+		if name != "" {
+			fmt.Fprintf(out, "  - %s\n", name)
+		} else {
+			fmt.Fprintf(out, "  - Version %d\n", currentVersion)
+		}
 		targetVersion := uint(0)
 		if len(applied) > 1 {
 			targetVersion = applied[len(applied)-2]

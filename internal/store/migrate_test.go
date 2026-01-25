@@ -5,6 +5,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -171,6 +172,21 @@ func TestMigrator_Close_DatabaseError(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "component", "database")
 }
 
+func TestMigrator_Close_BothErrors(t *testing.T) {
+	// When both source and database close fail, we should report both errors
+	m := &Migrator{m: &mockMigrate{
+		closeSourceErr: errors.New("source close failed"),
+		closeDbErr:     errors.New("db close failed"),
+	}}
+	err := m.Close()
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "MIGRATION_CLOSE_FAILED")
+	errutil.AssertErrorContext(t, err, "component", "both")
+	// The error message should contain both original errors
+	assert.Contains(t, err.Error(), "source close failed")
+	assert.Contains(t, err.Error(), "db close failed")
+}
+
 func TestMigrator_PendingMigrations_Success(t *testing.T) {
 	// At version 3, migrations 4-7 should be pending
 	m := &Migrator{m: &mockMigrate{versionVal: 3}}
@@ -199,6 +215,8 @@ func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
 	_, err := m.PendingMigrations()
 	require.Error(t, err)
+	// Error should include operation context for debugging
+	errutil.AssertErrorContext(t, err, "operation", "get pending migrations")
 }
 
 func TestMigrator_AppliedMigrations_Success(t *testing.T) {
@@ -229,6 +247,8 @@ func TestMigrator_AppliedMigrations_VersionError(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
 	_, err := m.AppliedMigrations()
 	require.Error(t, err)
+	// Error should include operation context for debugging
+	errutil.AssertErrorContext(t, err, "operation", "get applied migrations")
 }
 
 // closedMock implements migrateIface and returns errors after Close() is called.
@@ -347,5 +367,36 @@ func TestMigrator_MethodsAfterClose(t *testing.T) {
 			err = tt.method(migrator)
 			require.Error(t, err, "calling %s after Close should return an error", tt.name)
 		})
+	}
+}
+
+func TestMigrationName(t *testing.T) {
+	tests := []struct {
+		version  uint
+		expected string
+	}{
+		{1, "000001_initial"},
+		{2, "000002_system_info"},
+		{3, "000003_world_model"},
+		{7, "000007_exit_self_reference_constraint"},
+		{999, ""}, // Unknown version returns empty string
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("version_%d", tt.version), func(t *testing.T) {
+			name := MigrationName(tt.version)
+			assert.Equal(t, tt.expected, name)
+		})
+	}
+}
+
+// BenchmarkAllMigrationVersions measures the performance of allMigrationVersions.
+// With caching, subsequent calls should be significantly faster.
+func BenchmarkAllMigrationVersions(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, err := allMigrationVersions()
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }

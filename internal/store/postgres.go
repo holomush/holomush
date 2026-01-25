@@ -250,7 +250,7 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
 	if err != nil {
 		if closeErr := conn.Close(ctx); closeErr != nil {
-			slog.Debug("failed to close connection during cleanup", "error", closeErr)
+			slog.Warn("failed to close connection during cleanup, connection may leak", "error", closeErr)
 		}
 		return nil, nil, oops.With("operation", "listen").With("channel", channel).Wrap(err)
 	}
@@ -263,7 +263,7 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 		defer close(errs)
 		defer func() {
 			if closeErr := conn.Close(context.Background()); closeErr != nil {
-				slog.Debug("failed to close subscription connection", "error", closeErr, "stream", stream)
+				slog.Warn("failed to close subscription connection, connection may leak", "error", closeErr, "stream", stream)
 			}
 		}()
 
