@@ -45,23 +45,27 @@ func newMigrateUpCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			url, err := getDatabaseURL()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate up").Wrap(err)
 			}
 
 			migrator, err := store.NewMigrator(url)
 			if err != nil {
-				return err
+				return oops.With("command", "migrate up").Wrap(err)
 			}
-			defer func() { _ = migrator.Close() }() //nolint:errcheck // cleanup on exit
+			defer func() {
+				if closeErr := migrator.Close(); closeErr != nil {
+					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+				}
+			}()
 
 			cmd.Println("Applying migrations...")
 			if err := migrator.Up(); err != nil {
-				return err
+				return oops.With("command", "migrate up").Wrap(err)
 			}
 
 			version, _, versionErr := migrator.Version()
 			if versionErr != nil {
-				return versionErr
+				return oops.With("command", "migrate up").Wrap(versionErr)
 			}
 			cmd.Printf("Migrations complete. Current version: %d\n", version)
 			return nil
@@ -79,30 +83,34 @@ func newMigrateDownCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			url, err := getDatabaseURL()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate down").Wrap(err)
 			}
 
 			migrator, err := store.NewMigrator(url)
 			if err != nil {
-				return err
+				return oops.With("command", "migrate down").Wrap(err)
 			}
-			defer func() { _ = migrator.Close() }() //nolint:errcheck // cleanup on exit
+			defer func() {
+				if closeErr := migrator.Close(); closeErr != nil {
+					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+				}
+			}()
 
 			if all {
 				cmd.Println("Rolling back all migrations...")
 				if err := migrator.Down(); err != nil {
-					return err
+					return oops.With("command", "migrate down").Wrap(err)
 				}
 			} else {
 				cmd.Println("Rolling back one migration...")
 				if err := migrator.Steps(-1); err != nil {
-					return err
+					return oops.With("command", "migrate down").Wrap(err)
 				}
 			}
 
 			version, _, versionErr := migrator.Version()
 			if versionErr != nil {
-				return versionErr
+				return oops.With("command", "migrate down").Wrap(versionErr)
 			}
 			cmd.Printf("Rollback complete. Current version: %d\n", version)
 			return nil
@@ -120,18 +128,22 @@ func newMigrateStatusCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			url, err := getDatabaseURL()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate status").Wrap(err)
 			}
 
 			migrator, err := store.NewMigrator(url)
 			if err != nil {
-				return err
+				return oops.With("command", "migrate status").Wrap(err)
 			}
-			defer func() { _ = migrator.Close() }() //nolint:errcheck // cleanup on exit
+			defer func() {
+				if closeErr := migrator.Close(); closeErr != nil {
+					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+				}
+			}()
 
 			version, dirty, err := migrator.Version()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate status").Wrap(err)
 			}
 
 			cmd.Printf("Current version: %d\n", version)
@@ -150,21 +162,25 @@ func newMigrateVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print current schema version",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			url, err := getDatabaseURL()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate version").Wrap(err)
 			}
 
 			migrator, err := store.NewMigrator(url)
 			if err != nil {
-				return err
+				return oops.With("command", "migrate version").Wrap(err)
 			}
-			defer func() { _ = migrator.Close() }() //nolint:errcheck // cleanup on exit
+			defer func() {
+				if closeErr := migrator.Close(); closeErr != nil {
+					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+				}
+			}()
 
 			version, _, err := migrator.Version()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate version").Wrap(err)
 			}
 
 			fmt.Println(version)
@@ -181,23 +197,29 @@ func newMigrateForceCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			url, err := getDatabaseURL()
 			if err != nil {
-				return err
+				return oops.With("command", "migrate force").Wrap(err)
 			}
 
 			var version int
 			if _, scanErr := fmt.Sscanf(args[0], "%d", &version); scanErr != nil {
-				return oops.Code("INVALID_VERSION").Errorf("invalid version: %s", args[0])
+				return oops.With("command", "migrate force").
+					Code("INVALID_VERSION").
+					Errorf("invalid version: %s", args[0])
 			}
 
 			migrator, err := store.NewMigrator(url)
 			if err != nil {
-				return err
+				return oops.With("command", "migrate force").Wrap(err)
 			}
-			defer func() { _ = migrator.Close() }() //nolint:errcheck // cleanup on exit
+			defer func() {
+				if closeErr := migrator.Close(); closeErr != nil {
+					cmd.PrintErrf("Warning: failed to close migrator: %v\n", closeErr)
+				}
+			}()
 
 			cmd.Printf("Forcing version to %d...\n", version)
 			if err := migrator.Force(version); err != nil {
-				return err
+				return oops.With("command", "migrate force").Wrap(err)
 			}
 
 			cmd.Println("Version forced successfully")

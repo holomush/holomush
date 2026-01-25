@@ -46,7 +46,7 @@ func (m *Migrator) Up() error {
 	return nil
 }
 
-// Down rolls back one migration.
+// Down rolls back all migrations to version 0.
 func (m *Migrator) Down() error {
 	if err := m.m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return oops.Code("MIGRATION_DOWN_FAILED").Wrap(err)

@@ -93,7 +93,7 @@ package store
 import (
     "embed"
     "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/pgx5"
+    _ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
     "github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
@@ -106,7 +106,7 @@ type Migrator struct {
 
 func NewMigrator(databaseURL string) (*Migrator, error)
 func (m *Migrator) Up() error                     // Apply all pending
-func (m *Migrator) Down() error                   // Rollback one
+func (m *Migrator) Down() error                   // Rollback all to version 0
 func (m *Migrator) Steps(n int) error             // +n up, -n down
 func (m *Migrator) Version() (uint, bool, error)  // Current version, dirty flag
 func (m *Migrator) Force(version int) error       // Force set version

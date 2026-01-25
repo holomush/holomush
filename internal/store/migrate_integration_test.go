@@ -54,8 +54,9 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(7), version)
+	assert.Greater(t, version, uint(0), "Up() should apply at least one migration")
 	assert.False(t, dirty)
+	latestVersion := version // Save for relative assertions below
 
 	// Test: Rollback one
 	err = migrator.Steps(-1)
@@ -63,7 +64,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, _, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(6), version)
+	assert.Equal(t, latestVersion-1, version, "Steps(-1) should rollback one version")
 
 	// Test: Apply one
 	err = migrator.Steps(1)
@@ -71,5 +72,27 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, _, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(7), version)
+	assert.Equal(t, latestVersion, version, "Steps(1) should restore to latest version")
+
+	// Test: Down() rolls back all migrations
+	err = migrator.Down()
+	require.NoError(t, err)
+
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	assert.Equal(t, uint(0), version, "Down() should rollback to version 0")
+	assert.False(t, dirty)
+
+	// Test: Re-apply all for Force() test
+	err = migrator.Up()
+	require.NoError(t, err)
+
+	// Test: Force() sets version without running migrations
+	err = migrator.Force(3)
+	require.NoError(t, err)
+
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	assert.Equal(t, uint(3), version, "Force() should set version to 3")
+	assert.False(t, dirty, "Force() should clear dirty flag")
 }
