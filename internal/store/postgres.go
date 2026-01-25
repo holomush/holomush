@@ -6,7 +6,6 @@ package store
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"log/slog"
 	"strings"
@@ -20,26 +19,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 )
 
-//go:embed migrations/001_initial.sql
-var migration001SQL string
-
-//go:embed migrations/002_system_info.sql
-var migration002SQL string
-
-//go:embed migrations/003_world_model.sql
-var migration003SQL string
-
-//go:embed migrations/004_pg_trgm.sql
-var migration004SQL string
-
-//go:embed migrations/005_pg_stat_statements.sql
-var migration005SQL string
-
-//go:embed migrations/006_object_containment_constraint.sql
-var migration006SQL string
-
-//go:embed migrations/007_exit_self_reference_constraint.sql
-var migration007SQL string
 
 //go:embed migrations/008_character_description_nullable_location.sql
 var migration008SQL string
@@ -104,17 +83,6 @@ func (s *PostgresEventStore) Close() {
 func (s *PostgresEventStore) Pool() *pgxpool.Pool {
 	if pool, ok := s.pool.(*pgxpool.Pool); ok {
 		return pool
-	}
-	return nil
-}
-
-// Migrate runs database migrations.
-func (s *PostgresEventStore) Migrate(ctx context.Context) error {
-	migrations := []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL}
-	for i, sql := range migrations {
-		if _, err := s.pool.Exec(ctx, sql); err != nil {
-			return oops.With("operation", "run migration").With("migration_number", i+1).Wrap(err)
-		}
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ func NewMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Database migration management",
-		Long:  `Manage database schema migrations using golang-migrate.`,
+		Long:  `Manage PostgreSQL database schema migrations using golang-migrate.`,
 	}
 
 	cmd.AddCommand(newMigrateUpCmd())

@@ -105,7 +105,8 @@ func TestMigrateCommand_Help(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	output := buf.String()
-	assert.Contains(t, output, "--config", "Migrate missing --config flag")
+	assert.Contains(t, output, "up", "Migrate help should mention 'up' subcommand")
+	assert.Contains(t, output, "down", "Migrate help should mention 'down' subcommand")
 }
 
 func TestMigrateCommand_Properties(t *testing.T) {
@@ -125,7 +126,7 @@ func TestMigrateCommand_NoDatabaseURL(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"migrate"})
+	cmd.SetArgs([]string{"migrate", "up"})
 
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error when DATABASE_URL is not set")
@@ -141,15 +142,14 @@ func TestMigrateCommand_InvalidDatabaseURL(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"migrate"})
+	cmd.SetArgs([]string{"migrate", "up"})
 
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error with invalid DATABASE_URL")
 
-	// Error from pgx parsing - "cannot parse" the URL
-	assert.Contains(t, err.Error(), "parse", "Error should mention parse issue, got: %v", err)
+	// Error from golang-migrate parsing
+	assert.Contains(t, err.Error(), "invalid", "Error should mention invalid URL")
 }
-
 // Status command tests are now in status_test.go
 
 func TestUnknownCommand(t *testing.T) {
