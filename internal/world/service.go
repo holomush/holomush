@@ -355,14 +355,17 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	return nil
 }
 
-// MoveObject moves an object to a new containment after checking write authorization.
-// Returns ErrInvalidContainment if the target containment is invalid.
+// MoveObject moves an object to a new containment (location, character inventory, or another object).
+// Emits a "move" event for plugins after successful database update.
 //
-// Event emission follows eventual consistency semantics: the database move succeeds
-// atomically, then an event is emitted. If event emission fails (returns
-// OBJECT_MOVE_EVENT_FAILED with move_succeeded=true), the move has already persisted
-// and will be visible to subsequent queries. Callers should handle this case by
-// treating the operation as successful for the user while logging the event failure.
+// Event emission follows eventual consistency: the database move succeeds atomically first,
+// then an event is emitted. If event emission fails after all retries are exhausted:
+//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
+//   - Error context includes move_succeeded=true to indicate the database change persisted
+//   - Callers should NOT retry the move (it already succeeded in the database)
+//   - Callers may choose to log the event failure and treat the user operation as successful
+//
+// This design ensures data consistency while surfacing event delivery failures to callers.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
@@ -402,8 +405,9 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
-			With("object_id", id.String()).
+		// Inner error already has EVENT_EMIT_FAILED code from events.go
+		// We add move-specific context for callers to know the DB operation succeeded
+		return oops.With("object_id", id.String()).
 			With("move_succeeded", true).
 			Wrapf(err, "move completed but event emission failed")
 	}

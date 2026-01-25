@@ -737,10 +737,12 @@ func TestWorldService_MoveObject(t *testing.T) {
 	t.Run("moves object when authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		emitter := &mockEventEmitter{} // nil err means Emit succeeds
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			AccessControl: mockAC,
+			EventEmitter:  emitter,
 		})
 
 		fromLocID := ulid.Make()
@@ -843,10 +845,12 @@ func TestWorldService_MoveObject(t *testing.T) {
 	t.Run("handles object with no current containment", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		emitter := &mockEventEmitter{} // nil err means Emit succeeds
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			AccessControl: mockAC,
+			EventEmitter:  emitter,
 		})
 
 		to := world.Containment{LocationID: &locationID}
@@ -2918,6 +2922,38 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_MOVE_FAILED")
+	})
+
+	t.Run("MoveObject returns EVENT_EMIT_FAILED when event emission fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockObjectRepository(t)
+		// mockEventEmitter is defined in events_test.go (same package)
+		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:    mockRepo,
+			AccessControl: mockAC,
+			EventEmitter:  emitter,
+		})
+
+		fromLocID := ulid.Make()
+		existingObj := &world.Object{
+			ID:         objID,
+			Name:       "Test Object",
+			LocationID: &fromLocID,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
+		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(nil)
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		require.Error(t, err)
+		// The inner EVENT_EMIT_FAILED code is returned (from events.go),
+		// wrapped by service.go with move_succeeded context
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		// Verify the error context indicates the move succeeded in the database
+		errutil.AssertErrorContext(t, err, "move_succeeded", true)
 	})
 }
 

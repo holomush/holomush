@@ -84,16 +84,15 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 }
 
 // EmitMoveEvent emits a move event for character or object movement.
-// If emitter is nil, this is a no-op.
+// Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns a validation error if the payload is invalid.
 func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayload) error {
 	if emitter == nil {
-		slog.Warn("event emitter nil, skipping event",
-			"event_type", core.EventTypeMove,
-			"entity_type", payload.EntityType,
-			"entity_id", payload.EntityID.String(),
-			"to_id", payload.ToID.String())
-		return nil
+		return oops.Code("EVENT_EMITTER_MISSING").
+			With("event_type", core.EventTypeMove).
+			With("entity_type", payload.EntityType).
+			With("entity_id", payload.EntityID.String()).
+			Wrap(ErrNoEventEmitter)
 	}
 
 	eventType := string(core.EventTypeMove)
@@ -115,7 +114,7 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 }
 
 // EmitObjectCreateEvent emits an object creation event.
-// If emitter is nil, this is a no-op.
+// Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns an error if obj is nil.
 func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Object) error {
 	if emitter == nil {
@@ -123,10 +122,10 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 		if obj != nil {
 			objectID = obj.ID.String()
 		}
-		slog.Warn("event emitter nil, skipping event",
-			"event_type", core.EventTypeObjectCreate,
-			"object_id", objectID)
-		return nil
+		return oops.Code("EVENT_EMITTER_MISSING").
+			With("event_type", core.EventTypeObjectCreate).
+			With("object_id", objectID).
+			Wrap(ErrNoEventEmitter)
 	}
 
 	eventType := string(core.EventTypeObjectCreate)
@@ -158,16 +157,16 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 }
 
 // EmitExamineEvent emits an examine/look event when a character looks at something.
-// If emitter is nil, this is a no-op.
+// Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns a validation error if the payload is invalid.
 func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload ExaminePayload) error {
 	if emitter == nil {
-		slog.Warn("event emitter nil, skipping event",
-			"event_type", core.EventTypeObjectExamine,
-			"character_id", payload.CharacterID.String(),
-			"target_type", payload.TargetType,
-			"target_id", payload.TargetID.String())
-		return nil
+		return oops.Code("EVENT_EMITTER_MISSING").
+			With("event_type", core.EventTypeObjectExamine).
+			With("character_id", payload.CharacterID.String()).
+			With("target_type", payload.TargetType).
+			With("target_id", payload.TargetID.String()).
+			Wrap(ErrNoEventEmitter)
 	}
 
 	eventType := string(core.EventTypeObjectExamine)
@@ -189,16 +188,16 @@ func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload Examine
 }
 
 // EmitObjectGiveEvent emits an object give event for transfers between characters.
-// If emitter is nil, this is a no-op.
+// Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns a validation error if the payload is invalid.
 func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload ObjectGivePayload) error {
 	if emitter == nil {
-		slog.Warn("event emitter nil, skipping event",
-			"event_type", core.EventTypeObjectGive,
-			"object_id", payload.ObjectID.String(),
-			"from_character_id", payload.FromCharacterID.String(),
-			"to_character_id", payload.ToCharacterID.String())
-		return nil
+		return oops.Code("EVENT_EMITTER_MISSING").
+			With("event_type", core.EventTypeObjectGive).
+			With("object_id", payload.ObjectID.String()).
+			With("from_character_id", payload.FromCharacterID.String()).
+			With("to_character_id", payload.ToCharacterID.String()).
+			Wrap(ErrNoEventEmitter)
 	}
 
 	eventType := string(core.EventTypeObjectGive)

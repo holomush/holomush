@@ -137,16 +137,19 @@ func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
 		errutil.AssertErrorContext(t, err, "entity_type", "location")
 	})
 
-	// Test for (nil, nil) return - edge case where service finds nothing but doesn't error.
-	// This can happen if the underlying query returns no results.
+	// Defensive nil check: If service returns (nil, nil), treat as ErrNotFound.
+	// This is a bug in the underlying service, but we handle it gracefully
+	// to prevent nil pointer panics in plugins.
 	t.Run("handles nil location without error", func(t *testing.T) {
 		svc := &mockWorldService{location: nil, err: nil}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
 
 		loc, err := adapter.GetLocation(ctx, locID)
 
-		assert.NoError(t, err)
+		require.Error(t, err)
 		assert.Nil(t, loc)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
 	})
 }
 
@@ -195,15 +198,19 @@ func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
 		errutil.AssertErrorContext(t, err, "entity_type", "character")
 	})
 
-	// Test for (nil, nil) return - edge case where service finds nothing but doesn't error.
+	// Defensive nil check: If service returns (nil, nil), treat as ErrNotFound.
+	// This is a bug in the underlying service, but we handle it gracefully
+	// to prevent nil pointer panics in plugins.
 	t.Run("handles nil character without error", func(t *testing.T) {
 		svc := &mockWorldService{character: nil, err: nil}
 		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
 
 		char, err := adapter.GetCharacter(ctx, charID)
 
-		assert.NoError(t, err)
+		require.Error(t, err)
 		assert.Nil(t, char)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
 	})
 }
 
@@ -306,5 +313,20 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
 		errutil.AssertErrorContext(t, err, "plugin", "obj-plugin")
 		errutil.AssertErrorContext(t, err, "entity_type", "object")
+	})
+
+	// Defensive nil check: If service returns (nil, nil), treat as ErrNotFound.
+	// This is a bug in the underlying service, but we handle it gracefully
+	// to prevent nil pointer panics in plugins.
+	t.Run("handles nil object without error", func(t *testing.T) {
+		svc := &mockWorldService{object: nil, err: nil}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
+
+		obj, err := adapter.GetObject(ctx, objID)
+
+		require.Error(t, err)
+		assert.Nil(t, obj)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
 	})
 }

@@ -76,7 +76,7 @@ func TestEmitMoveEvent(t *testing.T) {
 	toLocID := ulid.Make()
 	objID := ulid.Make()
 
-	t.Run("nil emitter is a no-op", func(t *testing.T) {
+	t.Run("nil emitter returns ErrNoEventEmitter", func(t *testing.T) {
 		payload := world.MovePayload{
 			EntityType: world.EntityTypeObject,
 			EntityID:   objID,
@@ -87,7 +87,9 @@ func TestEmitMoveEvent(t *testing.T) {
 		}
 
 		err := world.EmitMoveEvent(ctx, nil, payload)
-		require.NoError(t, err)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 	})
 
 	t.Run("returns error for invalid payload", func(t *testing.T) {
@@ -382,14 +384,16 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 	locID := ulid.Make()
 	objID := ulid.Make()
 
-	t.Run("nil emitter is a no-op", func(t *testing.T) {
+	t.Run("nil emitter returns ErrNoEventEmitter", func(t *testing.T) {
 		obj := &world.Object{
 			ID:   objID,
 			Name: "Test Object",
 		}
 
 		err := world.EmitObjectCreateEvent(ctx, nil, obj)
-		require.NoError(t, err)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 	})
 
 	t.Run("emits event with location stream when in location", func(t *testing.T) {
@@ -466,7 +470,7 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 	fromCharID := ulid.Make()
 	toCharID := ulid.Make()
 
-	t.Run("nil emitter is a no-op", func(t *testing.T) {
+	t.Run("nil emitter returns ErrNoEventEmitter", func(t *testing.T) {
 		payload := world.ObjectGivePayload{
 			ObjectID:        objID,
 			ObjectName:      "Sword",
@@ -475,7 +479,9 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 		}
 
 		err := world.EmitObjectGiveEvent(ctx, nil, payload)
-		require.NoError(t, err)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 	})
 
 	t.Run("emits event to character stream", func(t *testing.T) {
@@ -535,7 +541,7 @@ func TestEmitExamineEvent(t *testing.T) {
 	targetID := ulid.Make()
 	locID := ulid.Make()
 
-	t.Run("nil emitter is a no-op", func(t *testing.T) {
+	t.Run("nil emitter returns ErrNoEventEmitter", func(t *testing.T) {
 		payload := world.ExaminePayload{
 			CharacterID: charID,
 			TargetType:  world.TargetTypeObject,
@@ -545,7 +551,9 @@ func TestEmitExamineEvent(t *testing.T) {
 		}
 
 		err := world.EmitExamineEvent(ctx, nil, payload)
-		require.NoError(t, err)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 	})
 
 	t.Run("emits event to location stream", func(t *testing.T) {
@@ -642,116 +650,6 @@ func TestEmitExamineEvent(t *testing.T) {
 	})
 }
 
-func TestEmitEvent_NilEmitterLogsWarn(t *testing.T) {
-	// This test verifies that all Emit*Event functions log at WARN level
-	// when the emitter is nil, consistent with the pattern in service.go:54-56.
-	ctx := context.Background()
-
-	t.Run("EmitMoveEvent logs warn for nil emitter", func(t *testing.T) {
-		var logBuf bytes.Buffer
-		originalLogger := slog.Default()
-		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
-			Level: slog.LevelDebug, // Capture all log levels
-		}))
-		slog.SetDefault(testLogger)
-		defer slog.SetDefault(originalLogger)
-
-		payload := world.MovePayload{
-			EntityType: world.EntityTypeObject,
-			EntityID:   ulid.Make(),
-			FromType:   world.ContainmentTypeLocation,
-			ToType:     world.ContainmentTypeLocation,
-			ToID:       ulid.Make(),
-		}
-
-		err := world.EmitMoveEvent(ctx, nil, payload)
-		require.NoError(t, err)
-
-		logOutput := logBuf.String()
-		assert.True(t, strings.Contains(logOutput, "level=WARN"),
-			"nil emitter should log at WARN level, got: %s", logOutput)
-		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
-			"should contain expected message, got: %s", logOutput)
-	})
-
-	t.Run("EmitObjectCreateEvent logs warn for nil emitter", func(t *testing.T) {
-		var logBuf bytes.Buffer
-		originalLogger := slog.Default()
-		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}))
-		slog.SetDefault(testLogger)
-		defer slog.SetDefault(originalLogger)
-
-		obj := &world.Object{
-			ID:   ulid.Make(),
-			Name: "Test Object",
-		}
-
-		err := world.EmitObjectCreateEvent(ctx, nil, obj)
-		require.NoError(t, err)
-
-		logOutput := logBuf.String()
-		assert.True(t, strings.Contains(logOutput, "level=WARN"),
-			"nil emitter should log at WARN level, got: %s", logOutput)
-		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
-			"should contain expected message, got: %s", logOutput)
-	})
-
-	t.Run("EmitExamineEvent logs warn for nil emitter", func(t *testing.T) {
-		var logBuf bytes.Buffer
-		originalLogger := slog.Default()
-		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}))
-		slog.SetDefault(testLogger)
-		defer slog.SetDefault(originalLogger)
-
-		payload := world.ExaminePayload{
-			CharacterID: ulid.Make(),
-			TargetType:  world.TargetTypeObject,
-			TargetID:    ulid.Make(),
-			TargetName:  "Chest",
-			LocationID:  ulid.Make(),
-		}
-
-		err := world.EmitExamineEvent(ctx, nil, payload)
-		require.NoError(t, err)
-
-		logOutput := logBuf.String()
-		assert.True(t, strings.Contains(logOutput, "level=WARN"),
-			"nil emitter should log at WARN level, got: %s", logOutput)
-		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
-			"should contain expected message, got: %s", logOutput)
-	})
-
-	t.Run("EmitObjectGiveEvent logs warn for nil emitter", func(t *testing.T) {
-		var logBuf bytes.Buffer
-		originalLogger := slog.Default()
-		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}))
-		slog.SetDefault(testLogger)
-		defer slog.SetDefault(originalLogger)
-
-		payload := world.ObjectGivePayload{
-			ObjectID:        ulid.Make(),
-			ObjectName:      "Sword",
-			FromCharacterID: ulid.Make(),
-			ToCharacterID:   ulid.Make(),
-		}
-
-		err := world.EmitObjectGiveEvent(ctx, nil, payload)
-		require.NoError(t, err)
-
-		logOutput := logBuf.String()
-		assert.True(t, strings.Contains(logOutput, "level=WARN"),
-			"nil emitter should log at WARN level, got: %s", logOutput)
-		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
-			"should contain expected message, got: %s", logOutput)
-	})
-}
-
 // mockAccessControl is a test mock for AccessControl.
 type mockAccessControlForEvents struct {
 	allowAll bool
@@ -808,13 +706,13 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		assert.Equal(t, toLocID, decoded.ToID)
 	})
 
-	t.Run("works without event emitter configured", func(t *testing.T) {
+	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			AccessControl: &mockAccessControlForEvents{allowAll: true},
-			// No EventEmitter configured
+			// No EventEmitter configured - this is a misconfiguration
 		})
 
 		existingObj := &world.Object{
@@ -828,8 +726,9 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
 		err := svc.MoveObject(ctx, subjectID, objID, to)
-		require.NoError(t, err)
-		// No panic or error, just skips event emission
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 	})
 
 	t.Run("emits event with from_type none for first-time placement", func(t *testing.T) {

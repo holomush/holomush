@@ -5,6 +5,7 @@ package hostfunc
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -59,6 +60,16 @@ func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*w
 			With("entity_type", "location").
 			Wrapf(err, "get location")
 	}
+	if loc == nil {
+		slog.Warn("service returned nil without error, treating as not found",
+			"plugin", a.pluginName,
+			"entity_type", "location",
+			"entity_id", id.String())
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "location").
+			Wrap(world.ErrNotFound)
+	}
 	return loc, nil
 }
 
@@ -70,6 +81,16 @@ func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*
 			With("plugin", a.pluginName).
 			With("entity_type", "character").
 			Wrapf(err, "get character")
+	}
+	if char == nil {
+		slog.Warn("service returned nil without error, treating as not found",
+			"plugin", a.pluginName,
+			"entity_type", "character",
+			"entity_id", id.String())
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "character").
+			Wrap(world.ErrNotFound)
 	}
 	return char, nil
 }
@@ -94,6 +115,16 @@ func (a *WorldQuerierAdapter) GetObject(ctx context.Context, id ulid.ULID) (*wor
 			With("plugin", a.pluginName).
 			With("entity_type", "object").
 			Wrapf(err, "get object")
+	}
+	if obj == nil {
+		slog.Warn("service returned nil without error, treating as not found",
+			"plugin", a.pluginName,
+			"entity_type", "object",
+			"entity_id", id.String())
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "object").
+			Wrap(world.ErrNotFound)
 	}
 	return obj, nil
 }
