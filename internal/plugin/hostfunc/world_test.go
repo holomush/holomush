@@ -141,7 +141,7 @@ func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, room.Type(), "expected nil room")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "world querier not configured")
+	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
 func TestQueryRoom_Error(t *testing.T) {
@@ -316,7 +316,7 @@ func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, character.Type(), "expected nil character")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "world querier not configured")
+	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
 func TestQueryCharacter_RequiresCapability(t *testing.T) {
@@ -461,7 +461,7 @@ func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, characters.Type(), "expected nil characters")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "world querier not configured")
+	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
 func TestQueryRoomCharacters_RequiresCapability(t *testing.T) {

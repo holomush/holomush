@@ -3093,3 +3093,159 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "SCENE_LIST_PARTICIPANTS_FAILED")
 	})
 }
+
+func TestWorldService_GetCharacter(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("returns character when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		locID := ulid.Make()
+		expectedChar := &world.Character{
+			ID:         charID,
+			Name:       "Test Character",
+			LocationID: &locID,
+		}
+
+		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, charID).Return(expectedChar, nil)
+
+		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		require.NoError(t, err)
+		assert.Equal(t, expectedChar, char)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(false)
+
+		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		assert.Nil(t, char)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when repository not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+
+		svc := world.NewService(world.ServiceConfig{
+			AccessControl: mockAC,
+		})
+
+		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		assert.Nil(t, char)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_GET_FAILED")
+	})
+
+	t.Run("returns not found when character does not exist", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
+
+		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		assert.Nil(t, char)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
+	})
+}
+
+func TestWorldService_GetCharactersByLocation(t *testing.T) {
+	ctx := context.Background()
+	locationID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	t.Run("returns characters when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		char1 := &world.Character{ID: ulid.Make(), Name: "Char1", LocationID: &locationID}
+		char2 := &world.Character{ID: ulid.Make(), Name: "Char2", LocationID: &locationID}
+		expectedChars := []*world.Character{char1, char2}
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID).Return(expectedChars, nil)
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		require.NoError(t, err)
+		assert.Equal(t, expectedChars, chars)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(false)
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, chars)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when repository not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+
+		svc := world.NewService(world.ServiceConfig{
+			AccessControl: mockAC,
+		})
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, chars)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
+	})
+
+	t.Run("returns empty slice for location with no characters", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID).Return([]*world.Character{}, nil)
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		require.NoError(t, err)
+		assert.Empty(t, chars)
+	})
+}

@@ -29,11 +29,11 @@ type WorldQuerier interface {
 // queryRoomFn returns a Lua function that queries room information.
 func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.world == nil {
-			slog.Error("query_room called but world querier unavailable",
+		if f.worldService == nil {
+			slog.Error("query_room called but world service unavailable",
 				"plugin", pluginName)
 			L.Push(lua.LNil)
-			L.Push(lua.LString("world querier not configured"))
+			L.Push(lua.LString("world service not configured"))
 			return 2
 		}
 
@@ -52,7 +52,9 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
 		defer cancel()
 
-		loc, err := f.world.GetLocation(ctx, id)
+		// Create adapter for this plugin's authorization
+		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
+		loc, err := adapter.GetLocation(ctx, id)
 		if err != nil {
 			if errors.Is(err, world.ErrNotFound) {
 				slog.Debug("query_room: room not found",
@@ -85,11 +87,11 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 // queryCharacterFn returns a Lua function that queries character information.
 func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.world == nil {
-			slog.Error("query_character called but world querier unavailable",
+		if f.worldService == nil {
+			slog.Error("query_character called but world service unavailable",
 				"plugin", pluginName)
 			L.Push(lua.LNil)
-			L.Push(lua.LString("world querier not configured"))
+			L.Push(lua.LString("world service not configured"))
 			return 2
 		}
 
@@ -108,7 +110,9 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
 		defer cancel()
 
-		char, err := f.world.GetCharacter(ctx, id)
+		// Create adapter for this plugin's authorization
+		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
+		char, err := adapter.GetCharacter(ctx, id)
 		if err != nil {
 			if errors.Is(err, world.ErrNotFound) {
 				slog.Debug("query_character: character not found",
@@ -143,11 +147,11 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 // queryRoomCharactersFn returns a Lua function that queries characters in a room.
 func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.world == nil {
-			slog.Error("query_room_characters called but world querier unavailable",
+		if f.worldService == nil {
+			slog.Error("query_room_characters called but world service unavailable",
 				"plugin", pluginName)
 			L.Push(lua.LNil)
-			L.Push(lua.LString("world querier not configured"))
+			L.Push(lua.LString("world service not configured"))
 			return 2
 		}
 
@@ -166,7 +170,9 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
 		defer cancel()
 
-		chars, err := f.world.GetCharactersByLocation(ctx, id)
+		// Create adapter for this plugin's authorization
+		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
+		chars, err := adapter.GetCharactersByLocation(ctx, id)
 		if err != nil {
 			if errors.Is(err, world.ErrNotFound) {
 				slog.Debug("query_room_characters: room not found",

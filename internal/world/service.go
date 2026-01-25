@@ -399,6 +399,41 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	return nil
 }
 
+// GetCharacter retrieves a character by ID after checking read authorization.
+func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error) {
+	if s.characterRepo == nil {
+		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("character:%s", id.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	char, err := s.characterRepo.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", id)
+		}
+		return nil, oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", id)
+	}
+	return char, nil
+}
+
+// GetCharactersByLocation retrieves all characters at a location after checking read authorization.
+func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Character, error) {
+	if s.characterRepo == nil {
+		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("location:%s:characters", locationID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	chars, err := s.characterRepo.GetByLocation(ctx, locationID)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_QUERY_FAILED").Wrapf(err, "get characters by location %s", locationID)
+	}
+	return chars, nil
+}
+
 // AddSceneParticipant adds a character to a scene after checking write authorization.
 // Returns ErrInvalidParticipantRole if the role is not valid.
 func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sceneID, characterID ulid.ULID, role ParticipantRole) error {

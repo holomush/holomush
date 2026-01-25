@@ -14,6 +14,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 // kvTimeout is the default timeout for KV operations to prevent indefinite hangs.
@@ -33,19 +35,59 @@ type CapabilityChecker interface {
 
 // Functions provides host functions to Lua plugins.
 type Functions struct {
-	kvStore  KVStore
-	enforcer CapabilityChecker
-	world    WorldQuerier
+	kvStore      KVStore
+	enforcer     CapabilityChecker
+	worldService WorldService
 }
 
 // Option configures Functions.
 type Option func(*Functions)
 
-// WithWorldQuerier sets the world querier for world query functions.
+// WithWorldService sets the world service for world query functions.
+// Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
+func WithWorldService(svc WorldService) Option {
+	return func(f *Functions) {
+		f.worldService = svc
+	}
+}
+
+// WithWorldQuerier is deprecated. Use WithWorldService instead.
+// This adapter allows passing a WorldQuerier directly for backwards compatibility.
 func WithWorldQuerier(w WorldQuerier) Option {
 	return func(f *Functions) {
-		f.world = w
+		// Wrap the querier in a passthrough adapter that ignores authorization
+		f.worldService = &passthroughWorldService{querier: w}
 	}
+}
+
+// passthroughWorldService wraps a WorldQuerier for backwards compatibility.
+// It ignores the subjectID parameter since the underlying querier doesn't use it.
+type passthroughWorldService struct {
+	querier WorldQuerier
+}
+
+func (p *passthroughWorldService) GetLocation(ctx context.Context, _ string, id ulid.ULID) (*world.Location, error) {
+	loc, err := p.querier.GetLocation(ctx, id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return loc, nil
+}
+
+func (p *passthroughWorldService) GetCharacter(ctx context.Context, _ string, id ulid.ULID) (*world.Character, error) {
+	char, err := p.querier.GetCharacter(ctx, id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return char, nil
+}
+
+func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _ string, locationID ulid.ULID) ([]*world.Character, error) {
+	chars, err := p.querier.GetCharactersByLocation(ctx, locationID)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return chars, nil
 }
 
 // New creates host functions with dependencies.
