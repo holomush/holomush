@@ -15,7 +15,22 @@ import (
 var ErrInvalidContainment = errors.New("object must be in exactly one place")
 
 // Containment represents where an object is located.
-// Exactly one field must be set.
+// Exactly one field must be set; use the factory functions [InLocation],
+// [HeldByCharacter], or [ContainedInObject] to construct valid instances.
+//
+// # Design Decision
+//
+// This type uses a struct with explicit validation rather than a sealed interface
+// pattern. While a sealed interface would make invalid states unrepresentable at
+// compile time, the struct approach was chosen because:
+//
+//   - Simpler API for callers (direct field access vs method calls)
+//   - No breaking changes to existing code using Containment{}
+//   - Validation catches misuse at runtime with clear error messages
+//   - Factory functions already provide safe construction
+//
+// Callers SHOULD use the factory functions rather than constructing Containment
+// directly to avoid validation errors.
 type Containment struct {
 	LocationID  *ulid.ULID
 	CharacterID *ulid.ULID
