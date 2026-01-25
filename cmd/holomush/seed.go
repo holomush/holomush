@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -81,9 +82,9 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 
 	// Attempt to create the location; handle duplicate gracefully
 	if err := locationRepo.Create(ctx, startingLoc); err != nil {
-		// Check for unique constraint violation (PostgreSQL error code 23505)
+		// Check for unique constraint violation
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			cmd.Println("Starting location already exists, skipping seed")
 			slog.Info("World already seeded", "location_id", startingLocID)
 			return nil
