@@ -434,6 +434,95 @@ func TestObjectRepository_ListHeldBy(t *testing.T) {
 	assert.Equal(t, "Held Object", objects[0].Name)
 }
 
+func TestObjectRepository_ListHeldBy_OrderingWithMultipleObjects(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewObjectRepository(testPool)
+
+	// Create a test location
+	locationID := ulid.Make()
+	_, err := testPool.Exec(ctx, `
+		INSERT INTO locations (id, name, description, type, replay_policy, created_at)
+		VALUES ($1, 'Inventory Test Location', 'Location for inventory ordering test', 'persistent', 'last:0', NOW())
+	`, locationID.String())
+	require.NoError(t, err)
+	defer func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locationID.String())
+	}()
+
+	// Create a test player
+	playerID := ulid.Make()
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO players (id, username, password_hash, created_at)
+		VALUES ($1, $2, 'testhash', NOW())
+	`, playerID.String(), "player_order_"+playerID.String())
+	require.NoError(t, err)
+	defer func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = $1`, playerID.String())
+	}()
+
+	// Create a test character
+	characterID := ulid.Make()
+	_, err = testPool.Exec(ctx, `
+		INSERT INTO characters (id, player_id, name, location_id, created_at)
+		VALUES ($1, $2, 'Inventory Test Character', $3, NOW())
+	`, characterID.String(), playerID.String(), locationID.String())
+	require.NoError(t, err)
+	defer func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, characterID.String())
+	}()
+
+	// Create 3 objects with distinct creation times to verify ordering.
+	// Objects are ordered by created_at DESC (newest first).
+	baseTime := time.Now().UTC().Truncate(time.Microsecond)
+
+	obj1 := &world.Object{
+		ID:                ulid.Make(),
+		Name:              "First Object (oldest)",
+		Description:       "Created first.",
+		HeldByCharacterID: &characterID,
+		CreatedAt:         baseTime.Add(-2 * time.Second), // oldest
+	}
+	obj2 := &world.Object{
+		ID:                ulid.Make(),
+		Name:              "Second Object (middle)",
+		Description:       "Created second.",
+		HeldByCharacterID: &characterID,
+		CreatedAt:         baseTime.Add(-1 * time.Second), // middle
+	}
+	obj3 := &world.Object{
+		ID:                ulid.Make(),
+		Name:              "Third Object (newest)",
+		Description:       "Created third.",
+		HeldByCharacterID: &characterID,
+		CreatedAt:         baseTime, // newest
+	}
+
+	// Create in random order to ensure ORDER BY is doing the work
+	require.NoError(t, repo.Create(ctx, obj2))
+	require.NoError(t, repo.Create(ctx, obj1))
+	require.NoError(t, repo.Create(ctx, obj3))
+	defer func() {
+		_ = repo.Delete(ctx, obj1.ID)
+		_ = repo.Delete(ctx, obj2.ID)
+		_ = repo.Delete(ctx, obj3.ID)
+	}()
+
+	objects, err := repo.ListHeldBy(ctx, characterID)
+	require.NoError(t, err)
+	require.Len(t, objects, 3)
+
+	// Verify ordering: newest first (ORDER BY created_at DESC)
+	assert.Equal(t, "Third Object (newest)", objects[0].Name, "newest object should be first")
+	assert.Equal(t, "Second Object (middle)", objects[1].Name, "middle object should be second")
+	assert.Equal(t, "First Object (oldest)", objects[2].Name, "oldest object should be last")
+
+	// Verify created_at values are in descending order
+	assert.True(t, objects[0].CreatedAt.After(objects[1].CreatedAt) || objects[0].CreatedAt.Equal(objects[1].CreatedAt),
+		"first object created_at should be >= second")
+	assert.True(t, objects[1].CreatedAt.After(objects[2].CreatedAt) || objects[1].CreatedAt.Equal(objects[2].CreatedAt),
+		"second object created_at should be >= third")
+}
+
 func TestObjectRepository_ListContainedIn(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewObjectRepository(testPool)

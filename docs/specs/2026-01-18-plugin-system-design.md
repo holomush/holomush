@@ -623,7 +623,7 @@ func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*w
 }
 ```
 
-The adapter is created per-query in the host function implementation, ensuring
+The adapter is created per-host-function-call in the host function implementation, ensuring
 each plugin's queries are properly attributed for authorization and audit logging.
 
 ### Function Registry

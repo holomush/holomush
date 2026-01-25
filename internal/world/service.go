@@ -365,6 +365,8 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 //   - Callers should NOT retry the move (it already succeeded in the database)
 //   - Callers may choose to log the event failure and treat the user operation as successful
 //
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+//
 // This design ensures data consistency while surfacing event delivery failures to callers.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
@@ -519,6 +521,8 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 //   - Callers should NOT retry the move (it already succeeded in the database)
 //   - Callers may choose to log the event failure and treat the user operation as successful
 //
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+//
 // This design ensures data consistency while surfacing event delivery failures to callers.
 func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
@@ -586,6 +590,8 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 
 // ExamineLocation allows a character to examine a location.
 // Emits an examine event for plugins after validation and authorization.
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
 func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
@@ -636,6 +642,8 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 
 // ExamineObject allows a character to examine an object.
 // Emits an examine event for plugins after validation and authorization.
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
 func (s *Service) ExamineObject(ctx context.Context, subjectID string, characterID, targetObjectID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
@@ -686,6 +694,8 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 
 // ExamineCharacter allows a character to examine another character.
 // Emits an examine event for plugins after validation and authorization.
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
 func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, characterID, targetCharacterID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
