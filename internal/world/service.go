@@ -28,7 +28,9 @@ type ServiceConfig struct {
 	ExitRepo      ExitRepository
 	ObjectRepo    ObjectRepository
 	SceneRepo     SceneRepository
+	CharacterRepo CharacterRepository
 	AccessControl AccessControl
+	EventEmitter  EventEmitter
 }
 
 // Service provides authorized access to world model operations.
@@ -38,7 +40,9 @@ type Service struct {
 	exitRepo      ExitRepository
 	objectRepo    ObjectRepository
 	sceneRepo     SceneRepository
+	characterRepo CharacterRepository
 	accessControl AccessControl
+	eventEmitter  EventEmitter
 }
 
 // NewService creates a new Service with the given configuration.
@@ -47,12 +51,17 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.AccessControl == nil {
 		panic("world.NewService: AccessControl is required")
 	}
+	if cfg.EventEmitter == nil {
+		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
+	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
 		exitRepo:      cfg.ExitRepo,
 		objectRepo:    cfg.ObjectRepo,
 		sceneRepo:     cfg.SceneRepo,
+		characterRepo: cfg.CharacterRepo,
 		accessControl: cfg.AccessControl,
+		eventEmitter:  cfg.EventEmitter,
 	}
 }
 
@@ -88,11 +97,12 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if loc == nil {
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
 	}
-	if err := loc.Validate(); err != nil {
-		return oops.Code("LOCATION_INVALID").Wrap(err)
-	}
+	// Assign ID before validation since Validate() now requires non-zero ID
 	if loc.ID.IsZero() {
 		loc.ID = ulid.Make()
+	}
+	if err := loc.Validate(); err != nil {
+		return oops.Code("LOCATION_INVALID").Wrap(err)
 	}
 	if err := s.locationRepo.Create(ctx, loc); err != nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Wrapf(err, "create location %s", loc.ID)
@@ -164,7 +174,10 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 
 // CreateExit creates a new exit after checking write authorization.
 // The exit ID is generated if not set.
-// Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
+//
+// Returns a ValidationError if the id, name, aliases, visibility, lock type,
+// lock data, or visible_to are invalid.
+// Returns ErrSelfReferentialExit if from and to locations are the same.
 func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
@@ -175,11 +188,12 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if exit == nil {
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
 	}
-	if err := exit.Validate(); err != nil {
-		return oops.Code("EXIT_INVALID").Wrap(err)
-	}
+	// Assign ID before validation so Validate() doesn't reject zero ID
 	if exit.ID.IsZero() {
 		exit.ID = ulid.Make()
+	}
+	if err := exit.Validate(); err != nil {
+		return oops.Code("EXIT_INVALID").Wrap(err)
 	}
 	if err := s.exitRepo.Create(ctx, exit); err != nil {
 		return oops.Code("EXIT_CREATE_FAILED").Wrapf(err, "create exit %s", exit.ID)
@@ -188,7 +202,10 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 }
 
 // UpdateExit updates an existing exit after checking write authorization.
-// Returns a ValidationError if the name, aliases, visibility, lock type, lock data, or visible_to are invalid.
+//
+// Returns a ValidationError if the id, name, aliases, visibility, lock type,
+// lock data, or visible_to are invalid.
+// Returns ErrSelfReferentialExit if from and to locations are the same.
 func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) error {
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_UPDATE_FAILED").Errorf("exit repository not configured")
@@ -253,6 +270,22 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	return nil
 }
 
+// GetExitsByLocation retrieves all exits from a location after checking read authorization.
+func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Exit, error) {
+	if s.exitRepo == nil {
+		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
+	}
+	resource := fmt.Sprintf("location:%s", locationID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return nil, oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	exits, err := s.exitRepo.ListFromLocation(ctx, locationID)
+	if err != nil {
+		return nil, oops.Code("EXIT_LIST_FAILED").Wrapf(err, "list exits from location %s", locationID)
+	}
+	return exits, nil
+}
+
 // GetObject retrieves an object by ID after checking read authorization.
 func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*Object, error) {
 	if s.objectRepo == nil {
@@ -285,14 +318,15 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if obj == nil {
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
 	}
+	// Assign ID before validation so Validate() doesn't reject zero ID
+	if obj.ID.IsZero() {
+		obj.ID = ulid.Make()
+	}
 	if err := obj.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
 	if err := obj.ValidateContainment(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
-	}
-	if obj.ID.IsZero() {
-		obj.ID = ulid.Make()
 	}
 	if err := s.objectRepo.Create(ctx, obj); err != nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Wrapf(err, "create object %s", obj.ID)
@@ -346,8 +380,19 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	return nil
 }
 
-// MoveObject moves an object to a new containment after checking write authorization.
-// Returns ErrInvalidContainment if the target containment is invalid.
+// MoveObject moves an object to a new containment (location, character inventory, or another object).
+// Emits a "move" event for plugins after successful database update.
+//
+// Event emission follows eventual consistency: the database move succeeds atomically first,
+// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
+//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
+//   - Error context includes move_succeeded=true to indicate the database change persisted
+//   - Callers should NOT retry the move (it already succeeded in the database)
+//   - Callers may choose to log the event failure and treat the user operation as successful
+//
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+//
+// This design ensures data consistency while surfacing event delivery failures to callers.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
@@ -359,13 +404,78 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	if err := to.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
 	}
+
+	// Get current containment for the move event
+	obj, err := s.objectRepo.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
+		}
+		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "get object %s", id)
+	}
+	from := obj.Containment()
+
 	if err := s.objectRepo.Move(ctx, id, to); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "move object %s", id)
 		}
 		return oops.Code("OBJECT_MOVE_FAILED").Wrapf(err, "move object %s", id)
 	}
+
+	// Emit move event - failures are propagated to the caller
+	payload := MovePayload{
+		EntityType: EntityTypeObject,
+		EntityID:   id,
+		FromType:   from.Type(),
+		FromID:     from.ID(), // Can be nil for first-time placements
+		ToType:     to.Type(),
+		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
+	}
+	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
+		// Add OBJECT_MOVE_EVENT_FAILED at top level for error categorization
+		// Inner error has EVENT_EMIT_FAILED code from events.go
+		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
+			With("object_id", id.String()).
+			With("move_succeeded", true).
+			Wrapf(err, "move completed but event emission failed")
+	}
+
 	return nil
+}
+
+// GetCharacter retrieves a character by ID after checking read authorization.
+func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*Character, error) {
+	if s.characterRepo == nil {
+		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("character:%s", id.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	char, err := s.characterRepo.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", id)
+		}
+		return nil, oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", id)
+	}
+	return char, nil
+}
+
+// GetCharactersByLocation retrieves characters at a location with pagination after checking read authorization.
+func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
+	if s.characterRepo == nil {
+		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("location:%s:characters", locationID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_QUERY_FAILED").Wrapf(err, "get characters by location %s", locationID)
+	}
+	return chars, nil
 }
 
 // AddSceneParticipant adds a character to a scene after checking write authorization.
@@ -425,4 +535,253 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Wrapf(err, "list participants for scene %s", sceneID)
 	}
 	return participants, nil
+}
+
+// MoveCharacter moves a character to a new location.
+// Emits a "move" event for plugins after successful database update.
+//
+// Event emission follows eventual consistency: the database move succeeds atomically first,
+// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
+//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
+//   - Error context includes move_succeeded=true to indicate the database change persisted
+//   - Callers should NOT retry the move (it already succeeded in the database)
+//   - Callers may choose to log the event failure and treat the user operation as successful
+//
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+//
+// This design ensures data consistency while surfacing event delivery failures to callers.
+func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("character:%s", characterID.String())
+	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
+		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Get current location for the move event
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "move character %s", characterID)
+		}
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+
+	// Verify destination location exists
+	if s.locationRepo == nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("location repository not configured")
+	}
+	if _, err := s.locationRepo.Get(ctx, toLocationID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "move character to location %s", toLocationID)
+		}
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "verify destination location %s", toLocationID)
+	}
+
+	// Update character location
+	if err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID); err != nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "update character %s location", characterID)
+	}
+
+	// Build move payload
+	var fromType ContainmentType
+	var fromID *ulid.ULID
+	if char.LocationID == nil {
+		fromType = ContainmentTypeNone
+		fromID = nil
+	} else {
+		fromType = ContainmentTypeLocation
+		fromID = char.LocationID
+	}
+
+	payload := MovePayload{
+		EntityType: EntityTypeCharacter,
+		EntityID:   characterID,
+		FromType:   fromType,
+		FromID:     fromID,
+		ToType:     ContainmentTypeLocation,
+		ToID:       toLocationID,
+	}
+	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
+		// Add CHARACTER_MOVE_EVENT_FAILED at top level for error categorization
+		// Inner error has EVENT_EMIT_FAILED code from events.go
+		return oops.Code("CHARACTER_MOVE_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("move_succeeded", true).
+			Wrapf(err, "move completed but event emission failed")
+	}
+
+	return nil
+}
+
+// ExamineLocation allows a character to examine a location.
+// Emits an examine event for plugins after validation and authorization.
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
+func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+	}
+	if s.locationRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("location repository not configured")
+	}
+
+	// Get the examining character
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+	}
+
+	// Character must be in the world to examine anything
+	if char.LocationID == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
+	}
+
+	// Get the target location
+	targetLoc, err := s.locationRepo.Get(ctx, targetLocationID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "target location %s not found", targetLocationID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target location %s", targetLocationID)
+	}
+
+	// Check authorization to read the target
+	resource := fmt.Sprintf("location:%s", targetLocationID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Build and emit examine event
+	payload := ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  TargetTypeLocation,
+		TargetID:    targetLocationID,
+		TargetName:  targetLoc.Name,
+		LocationID:  *char.LocationID,
+	}
+	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
+		return oops.Code("EXAMINE_LOCATION_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("target_id", targetLocationID.String()).
+			Wrapf(err, "examine location event emission failed")
+	}
+	return nil
+}
+
+// ExamineObject allows a character to examine an object.
+// Emits an examine event for plugins after validation and authorization.
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
+func (s *Service) ExamineObject(ctx context.Context, subjectID string, characterID, targetObjectID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+	}
+	if s.objectRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("object repository not configured")
+	}
+
+	// Get the examining character
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+	}
+
+	// Character must be in the world to examine anything
+	if char.LocationID == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
+	}
+
+	// Get the target object
+	targetObj, err := s.objectRepo.Get(ctx, targetObjectID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "target object %s not found", targetObjectID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target object %s", targetObjectID)
+	}
+
+	// Check authorization to read the target
+	resource := fmt.Sprintf("object:%s", targetObjectID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Build and emit examine event
+	payload := ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  TargetTypeObject,
+		TargetID:    targetObjectID,
+		TargetName:  targetObj.Name,
+		LocationID:  *char.LocationID,
+	}
+	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
+		return oops.Code("EXAMINE_OBJECT_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("target_id", targetObjectID.String()).
+			Wrapf(err, "examine object event emission failed")
+	}
+	return nil
+}
+
+// ExamineCharacter allows a character to examine another character.
+// Emits an examine event for plugins after validation and authorization.
+// Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
+// Returns EVENT_EMIT_FAILED error if event emission fails after retries.
+func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, characterID, targetCharacterID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+	}
+
+	// Get the examining character
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+	}
+
+	// Character must be in the world to examine anything
+	if char.LocationID == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
+	}
+
+	// Get the target character
+	targetChar, err := s.characterRepo.Get(ctx, targetCharacterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "target character %s not found", targetCharacterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target character %s", targetCharacterID)
+	}
+
+	// Check authorization to read the target
+	resource := fmt.Sprintf("character:%s", targetCharacterID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Build and emit examine event
+	payload := ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  TargetTypeCharacter,
+		TargetID:    targetCharacterID,
+		TargetName:  targetChar.Name,
+		LocationID:  *char.LocationID,
+	}
+	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
+		return oops.Code("EXAMINE_CHARACTER_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("target_id", targetCharacterID.String()).
+			Wrapf(err, "examine character event emission failed")
+	}
+	return nil
 }

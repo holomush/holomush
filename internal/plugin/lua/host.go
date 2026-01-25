@@ -121,6 +121,9 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	}
 	defer L.Close()
 
+	// Set context on the Lua state so host functions can inherit it
+	L.SetContext(ctx)
+
 	// Register host functions if available
 	if h.hostFuncs != nil {
 		h.hostFuncs.Register(L, name)

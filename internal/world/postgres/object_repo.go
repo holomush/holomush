@@ -59,9 +59,9 @@ func (r *ObjectRepository) Create(ctx context.Context, obj *world.Object) error 
 		                     contained_in_object_id, is_container, owner_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`, obj.ID.String(), obj.Name, obj.Description,
-		ulidToStringPtr(obj.LocationID),
-		ulidToStringPtr(obj.HeldByCharacterID),
-		ulidToStringPtr(obj.ContainedInObjectID),
+		ulidToStringPtr(obj.LocationID()),
+		ulidToStringPtr(obj.HeldByCharacterID()),
+		ulidToStringPtr(obj.ContainedInObjectID()),
 		obj.IsContainer,
 		ulidToStringPtr(obj.OwnerID),
 		obj.CreatedAt)
@@ -80,9 +80,9 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error 
 		       is_container = $7, owner_id = $8
 		WHERE id = $1
 	`, obj.ID.String(), obj.Name, obj.Description,
-		ulidToStringPtr(obj.LocationID),
-		ulidToStringPtr(obj.HeldByCharacterID),
-		ulidToStringPtr(obj.ContainedInObjectID),
+		ulidToStringPtr(obj.LocationID()),
+		ulidToStringPtr(obj.HeldByCharacterID()),
+		ulidToStringPtr(obj.ContainedInObjectID()),
 		obj.IsContainer,
 		ulidToStringPtr(obj.OwnerID))
 	if err != nil {
@@ -388,18 +388,35 @@ func parseObjectFromFields(f *objectScanFields, obj *world.Object) error {
 	if err != nil {
 		return oops.With("operation", "parse object id").With("id", f.idStr).Wrap(err)
 	}
-	obj.LocationID, err = parseOptionalULID(f.locationIDStr, "location_id")
+
+	// Parse containment fields into temp variables
+	locationID, err := parseOptionalULID(f.locationIDStr, "location_id")
 	if err != nil {
 		return err
 	}
-	obj.HeldByCharacterID, err = parseOptionalULID(f.heldByStr, "held_by_character_id")
+	heldByCharacterID, err := parseOptionalULID(f.heldByStr, "held_by_character_id")
 	if err != nil {
 		return err
 	}
-	obj.ContainedInObjectID, err = parseOptionalULID(f.containedIn, "contained_in_object_id")
+	containedInObjectID, err := parseOptionalULID(f.containedIn, "contained_in_object_id")
 	if err != nil {
 		return err
 	}
+
+	// Set containment via SetContainment to enforce invariant
+	// Only set if at least one is non-nil (objects from DB should always have valid containment)
+	if locationID != nil || heldByCharacterID != nil || containedInObjectID != nil {
+		containment := world.Containment{
+			LocationID:  locationID,
+			CharacterID: heldByCharacterID,
+			ObjectID:    containedInObjectID,
+		}
+		err = obj.SetContainment(containment)
+		if err != nil {
+			return oops.With("operation", "set containment from db").Wrap(err)
+		}
+	}
+
 	obj.OwnerID, err = parseOptionalULID(f.ownerIDStr, "owner_id")
 	if err != nil {
 		return err

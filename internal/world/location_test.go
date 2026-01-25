@@ -8,6 +8,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -58,26 +59,48 @@ func TestLocationType_Validate(t *testing.T) {
 }
 
 func TestParseReplayPolicy(t *testing.T) {
-	tests := []struct {
-		name     string
-		policy   string
-		expected int
-	}{
-		{"none", "last:0", 0},
-		{"ten", "last:10", 10},
-		{"fifty", "last:50", 50},
-		{"unlimited", "last:-1", -1},
-		{"invalid prefix", "recent:10", 0},
-		{"empty", "", 0},
-		{"malformed non-integer", "last:abc", 0},
-		{"malformed float", "last:1.5", 0},
-	}
+	t.Run("valid policies", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			policy   string
+			expected int
+		}{
+			{"none", "last:0", 0},
+			{"ten", "last:10", 10},
+			{"fifty", "last:50", 50},
+			{"unlimited", "last:-1", -1},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, world.ParseReplayPolicy(tt.policy))
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				got, err := world.ParseReplayPolicy(tt.policy)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, got)
+			})
+		}
+	})
+
+	t.Run("invalid policies return error", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			policy      string
+			errContains string
+		}{
+			{"invalid prefix", "recent:10", "invalid replay policy format"},
+			{"empty", "", "invalid replay policy format"},
+			{"malformed non-integer", "last:abc", "failed to parse count"},
+			{"malformed float", "last:1.5", "failed to parse count"},
+			{"missing count", "last:", "failed to parse count"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := world.ParseReplayPolicy(tt.policy)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			})
+		}
+	})
 }
 
 func TestDefaultReplayPolicy(t *testing.T) {
@@ -203,9 +226,64 @@ func TestLocation_EffectiveName(t *testing.T) {
 	})
 }
 
+func TestNewLocation(t *testing.T) {
+	t.Run("creates valid location", func(t *testing.T) {
+		loc, err := world.NewLocation("Test Room", "A test room", world.LocationTypePersistent)
+		assert.NoError(t, err)
+		assert.False(t, loc.ID.IsZero())
+		assert.Equal(t, "Test Room", loc.Name)
+		assert.Equal(t, "A test room", loc.Description)
+		assert.Equal(t, world.LocationTypePersistent, loc.Type)
+		assert.Equal(t, world.DefaultReplayPolicy(world.LocationTypePersistent), loc.ReplayPolicy)
+		assert.False(t, loc.CreatedAt.IsZero())
+	})
+
+	t.Run("returns error for empty name", func(t *testing.T) {
+		_, err := world.NewLocation("", "description", world.LocationTypePersistent)
+		assert.Error(t, err)
+	})
+
+	t.Run("returns error for invalid type", func(t *testing.T) {
+		_, err := world.NewLocation("Room", "desc", world.LocationType("invalid"))
+		assert.Error(t, err)
+	})
+}
+
+func TestNewLocationWithID(t *testing.T) {
+	t.Run("creates location with provided ID", func(t *testing.T) {
+		id := ulid.Make()
+		loc, err := world.NewLocationWithID(id, "Test Room", "desc", world.LocationTypeScene)
+		assert.NoError(t, err)
+		assert.Equal(t, id, loc.ID)
+		assert.Equal(t, "last:-1", loc.ReplayPolicy) // Scene default
+	})
+
+	t.Run("returns error for zero ID", func(t *testing.T) {
+		_, err := world.NewLocationWithID(ulid.ULID{}, "Room", "desc", world.LocationTypePersistent)
+		assert.Error(t, err)
+		var ve *world.ValidationError
+		assert.ErrorAs(t, err, &ve)
+		assert.Equal(t, "id", ve.Field)
+	})
+}
+
+func TestLocation_Validate_ZeroID(t *testing.T) {
+	loc := &world.Location{
+		ID:   ulid.ULID{}, // zero
+		Name: "Test",
+		Type: world.LocationTypePersistent,
+	}
+	err := loc.Validate()
+	assert.Error(t, err)
+	var ve *world.ValidationError
+	assert.ErrorAs(t, err, &ve)
+	assert.Equal(t, "id", ve.Field)
+}
+
 func TestLocation_Validate(t *testing.T) {
 	t.Run("valid location", func(t *testing.T) {
 		loc := &world.Location{
+			ID:   ulid.Make(),
 			Name: "Town Square",
 			Type: world.LocationTypePersistent,
 		}
@@ -214,6 +292,7 @@ func TestLocation_Validate(t *testing.T) {
 
 	t.Run("invalid name", func(t *testing.T) {
 		loc := &world.Location{
+			ID:   ulid.Make(),
 			Name: "",
 			Type: world.LocationTypePersistent,
 		}
@@ -224,6 +303,7 @@ func TestLocation_Validate(t *testing.T) {
 
 	t.Run("invalid type", func(t *testing.T) {
 		loc := &world.Location{
+			ID:   ulid.Make(),
 			Name: "Town Square",
 			Type: world.LocationType("invalid"),
 		}
@@ -233,6 +313,7 @@ func TestLocation_Validate(t *testing.T) {
 
 	t.Run("valid with description", func(t *testing.T) {
 		loc := &world.Location{
+			ID:          ulid.Make(),
 			Name:        "Town Square",
 			Type:        world.LocationTypePersistent,
 			Description: "A bustling town square.",

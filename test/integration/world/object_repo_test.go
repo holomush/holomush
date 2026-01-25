@@ -41,8 +41,8 @@ var _ = Describe("ObjectRepository", func() {
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Name).To(Equal("Sword"))
-			Expect(got.LocationID).NotTo(BeNil())
-			Expect(*got.LocationID).To(Equal(room.ID))
+			Expect(got.LocationID()).NotTo(BeNil())
+			Expect(*got.LocationID()).To(Equal(room.ID))
 		})
 
 		It("creates object with containment held by character", func() {
@@ -53,8 +53,8 @@ var _ = Describe("ObjectRepository", func() {
 
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.HeldByCharacterID).NotTo(BeNil())
-			Expect(*got.HeldByCharacterID).To(Equal(charID))
+			Expect(got.HeldByCharacterID()).NotTo(BeNil())
+			Expect(*got.HeldByCharacterID()).To(Equal(charID))
 		})
 	})
 
@@ -68,9 +68,9 @@ var _ = Describe("ObjectRepository", func() {
 
 			got, err := env.Objects.Get(ctx, obj.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.LocationID).To(BeNil())
-			Expect(got.HeldByCharacterID).NotTo(BeNil())
-			Expect(*got.HeldByCharacterID).To(Equal(charID))
+			Expect(got.LocationID()).To(BeNil())
+			Expect(got.HeldByCharacterID()).NotTo(BeNil())
+			Expect(*got.HeldByCharacterID()).To(Equal(charID))
 		})
 
 		It("validates target is container when moving to object", func() {
@@ -99,8 +99,8 @@ var _ = Describe("ObjectRepository", func() {
 
 			got, err := env.Objects.Get(ctx, item.ID)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ContainedInObjectID).NotTo(BeNil())
-			Expect(*got.ContainedInObjectID).To(Equal(container.ID))
+			Expect(got.ContainedInObjectID()).NotTo(BeNil())
+			Expect(*got.ContainedInObjectID()).To(Equal(container.ID))
 		})
 
 		It("enforces max nesting depth", func() {

@@ -14,10 +14,14 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
-// kvTimeout is the default timeout for KV operations to prevent indefinite hangs.
-const kvTimeout = 5 * time.Second
+// defaultPluginQueryTimeout is the timeout for plugin host function operations
+// including KV operations and world queries. This prevents indefinite hangs
+// when backend services are slow or unresponsive.
+const defaultPluginQueryTimeout = 5 * time.Second
 
 // KVStore provides namespaced key-value storage.
 type KVStore interface {
@@ -33,21 +37,87 @@ type CapabilityChecker interface {
 
 // Functions provides host functions to Lua plugins.
 type Functions struct {
-	kvStore  KVStore
-	enforcer CapabilityChecker
+	kvStore      KVStore
+	enforcer     CapabilityChecker
+	worldService WorldService
+}
+
+// Option configures Functions.
+type Option func(*Functions)
+
+// WithWorldService sets the world service for world query functions.
+// Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
+func WithWorldService(svc WorldService) Option {
+	return func(f *Functions) {
+		f.worldService = svc
+	}
+}
+
+// WithWorldQuerier wraps a WorldQuerier for backwards compatibility.
+//
+// Deprecated: WithWorldQuerier will be removed in v1.0.0.
+// Use WithWorldService instead, which enables per-plugin ABAC authorization.
+// This adapter exists for backwards compatibility during the transition period.
+func WithWorldQuerier(w WorldQuerier) Option {
+	return func(f *Functions) {
+		// Wrap the querier in a passthrough adapter that ignores authorization
+		f.worldService = &passthroughWorldService{querier: w}
+	}
+}
+
+// passthroughWorldService wraps a WorldQuerier for backwards compatibility.
+// It ignores the subjectID parameter since the underlying querier doesn't use it.
+type passthroughWorldService struct {
+	querier WorldQuerier
+}
+
+func (p *passthroughWorldService) GetLocation(ctx context.Context, _ string, id ulid.ULID) (*world.Location, error) {
+	loc, err := p.querier.GetLocation(ctx, id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return loc, nil
+}
+
+func (p *passthroughWorldService) GetCharacter(ctx context.Context, _ string, id ulid.ULID) (*world.Character, error) {
+	char, err := p.querier.GetCharacter(ctx, id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return char, nil
+}
+
+func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _ string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
+	chars, err := p.querier.GetCharactersByLocation(ctx, locationID, opts)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return chars, nil
+}
+
+func (p *passthroughWorldService) GetObject(ctx context.Context, _ string, id ulid.ULID) (*world.Object, error) {
+	obj, err := p.querier.GetObject(ctx, id)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
+	}
+	return obj, nil
 }
 
 // New creates host functions with dependencies.
 // Panics if enforcer is nil (required dependency).
 // KVStore may be nil; KV functions will return errors if called.
-func New(kv KVStore, enforcer CapabilityChecker) *Functions {
+func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
 	if enforcer == nil {
 		panic("hostfunc.New: enforcer cannot be nil")
 	}
-	return &Functions{
+	f := &Functions{
 		kvStore:  kv,
 		enforcer: enforcer,
 	}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
 }
 
 // Register adds host functions to a Lua state.
@@ -64,6 +134,12 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "kv_get", ls.NewFunction(f.wrap(pluginName, "kv.read", f.kvGetFn(pluginName))))
 	ls.SetField(mod, "kv_set", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvSetFn(pluginName))))
 	ls.SetField(mod, "kv_delete", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvDeleteFn(pluginName))))
+
+	// World queries (capability required)
+	ls.SetField(mod, "query_room", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.queryRoomFn(pluginName))))
+	ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
+	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
+	ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
 
 	ls.SetGlobal("holomush", mod)
 }
@@ -135,7 +211,7 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		value, err := f.kvStore.Get(ctx, pluginName, key)
@@ -179,7 +255,7 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
@@ -215,7 +291,7 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {

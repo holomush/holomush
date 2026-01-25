@@ -9,6 +9,15 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
+// DefaultLimit is the default number of results when ListOptions.Limit is 0.
+const DefaultLimit = 100
+
+// ListOptions configures pagination for list operations.
+type ListOptions struct {
+	Limit  int // Maximum results to return (0 = use DefaultLimit)
+	Offset int // Number of results to skip
+}
+
 // LocationRepository manages location persistence.
 type LocationRepository interface {
 	// Get retrieves a location by ID.
@@ -124,4 +133,26 @@ type SceneRepository interface {
 type SceneParticipant struct {
 	CharacterID ulid.ULID
 	Role        ParticipantRole
+}
+
+// CharacterRepository defines operations for character persistence.
+type CharacterRepository interface {
+	// Get retrieves a character by ID.
+	Get(ctx context.Context, id ulid.ULID) (*Character, error)
+
+	// Create persists a new character.
+	Create(ctx context.Context, char *Character) error
+
+	// Update modifies an existing character.
+	Update(ctx context.Context, char *Character) error
+
+	// Delete removes a character by ID.
+	Delete(ctx context.Context, id ulid.ULID) error
+
+	// GetByLocation retrieves characters at a location with pagination.
+	// Pass empty ListOptions{} to use default pagination (limit=100, offset=0).
+	GetByLocation(ctx context.Context, locationID ulid.ULID, opts ListOptions) ([]*Character, error)
+
+	// UpdateLocation moves a character to a new location.
+	UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID) error
 }

@@ -715,6 +715,8 @@ func TestPostgresEventStore_Migrate(t *testing.T) {
 				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
 				// Seventh migration (exit self-reference constraint)
 				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
+				// Eighth migration (character description and nullable location)
+				mock.ExpectExec("").WillReturnResult(pgxmock.NewResult("", 0))
 			},
 			wantErr: false,
 		},

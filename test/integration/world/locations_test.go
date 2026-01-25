@@ -75,9 +75,17 @@ var _ = Describe("Location Management", func() {
 		})
 
 		It("parses 'last:N' format correctly", func() {
-			Expect(world.ParseReplayPolicy("last:0")).To(Equal(0))
-			Expect(world.ParseReplayPolicy("last:10")).To(Equal(10))
-			Expect(world.ParseReplayPolicy("last:-1")).To(Equal(-1))
+			n0, err := world.ParseReplayPolicy("last:0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n0).To(Equal(0))
+
+			n10, err := world.ParseReplayPolicy("last:10")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n10).To(Equal(10))
+
+			nUnlimited, err := world.ParseReplayPolicy("last:-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(nUnlimited).To(Equal(-1))
 		})
 
 		It("supports custom replay limits", func() {
@@ -88,7 +96,10 @@ var _ = Describe("Location Management", func() {
 			got, err := env.Locations.Get(ctx, loc.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.ReplayPolicy).To(Equal("last:50"))
-			Expect(world.ParseReplayPolicy(got.ReplayPolicy)).To(Equal(50))
+
+			n, parseErr := world.ParseReplayPolicy(got.ReplayPolicy)
+			Expect(parseErr).NotTo(HaveOccurred())
+			Expect(n).To(Equal(50))
 		})
 	})
 

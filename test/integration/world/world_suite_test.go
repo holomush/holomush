@@ -37,10 +37,11 @@ type testEnv struct {
 	eventStore *store.PostgresEventStore
 
 	// Repositories
-	Locations *worldpg.LocationRepository
-	Exits     *worldpg.ExitRepository
-	Objects   *worldpg.ObjectRepository
-	Scenes    *worldpg.SceneRepository
+	Locations  *worldpg.LocationRepository
+	Exits      *worldpg.ExitRepository
+	Objects    *worldpg.ObjectRepository
+	Scenes     *worldpg.SceneRepository
+	Characters *worldpg.CharacterRepository
 }
 
 var env *testEnv
@@ -109,6 +110,7 @@ func setupWorldTestEnv() (*testEnv, error) {
 		Exits:      worldpg.NewExitRepository(pool),
 		Objects:    worldpg.NewObjectRepository(pool),
 		Scenes:     worldpg.NewSceneRepository(pool),
+		Characters: worldpg.NewCharacterRepository(pool),
 	}, nil
 }
 
@@ -150,16 +152,10 @@ func createTestExit(fromID, toID ulid.ULID, name string) *world.Exit {
 }
 
 func createTestObject(name, description string, containment world.Containment) *world.Object {
-	return &world.Object{
-		ID:                  core.NewULID(),
-		Name:                name,
-		Description:         description,
-		LocationID:          containment.LocationID,
-		HeldByCharacterID:   containment.CharacterID,
-		ContainedInObjectID: containment.ObjectID,
-		IsContainer:         false,
-		CreatedAt:           time.Now(),
-	}
+	obj, err := world.NewObjectWithID(core.NewULID(), name, containment)
+	Expect(err).NotTo(HaveOccurred(), "failed to create test object")
+	obj.Description = description
+	return obj
 }
 
 // createTestCharacterID creates a real character in the database for testing.

@@ -186,6 +186,55 @@ func TestExitRepository_CRUD(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	t.Run("delete bidirectional with return exit already deleted", func(t *testing.T) {
+		loc1ID, loc2ID := createTestLocations(ctx, t)
+
+		forwardExit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: loc1ID,
+			ToLocationID:   loc2ID,
+			Name:           "portal-in",
+			Bidirectional:  true,
+			ReturnName:     "portal-out",
+			Visibility:     world.VisibilityAll,
+		}
+
+		err := repo.Create(ctx, forwardExit)
+		require.NoError(t, err)
+
+		// Verify return exit was created
+		returnExit, err := repo.FindByName(ctx, loc2ID, "portal-out")
+		require.NoError(t, err)
+		require.NotNil(t, returnExit)
+
+		// Delete the return exit directly via SQL to simulate external modification
+		// or race condition (bypassing the repository's bidirectional cleanup logic)
+		_, err = testPool.Exec(ctx, `DELETE FROM exits WHERE id = $1`, returnExit.ID.String())
+		require.NoError(t, err)
+
+		// Verify return exit is gone
+		_, err = repo.FindByName(ctx, loc2ID, "portal-out")
+		require.Error(t, err)
+		require.ErrorIs(t, err, world.ErrNotFound)
+
+		// Now delete the forward exit - should handle gracefully even though
+		// the return exit is already gone. The Delete method returns a
+		// BidirectionalCleanupResult that is NOT severe (just informational).
+		err = repo.Delete(ctx, forwardExit.ID)
+
+		// Check that the returned error is a non-severe cleanup result
+		var cleanupResult *world.BidirectionalCleanupResult
+		require.ErrorAs(t, err, &cleanupResult)
+		require.NotNil(t, cleanupResult.Issue)
+		assert.Equal(t, world.CleanupReturnNotFound, cleanupResult.Issue.Type)
+		assert.False(t, cleanupResult.IsSevere(), "cleanup result should not be severe when return exit was already deleted")
+
+		// Verify forward exit is deleted (primary deletion succeeded)
+		_, err = repo.Get(ctx, forwardExit.ID)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+	})
+
 	t.Run("get not found", func(t *testing.T) {
 		_, err := repo.Get(ctx, ulid.Make())
 		assert.Error(t, err)
@@ -303,6 +352,53 @@ func TestExitRepository_FindByName(t *testing.T) {
 	}
 }
 
+func TestExitRepository_FindByName_EmptyAliasSlice(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewExitRepository(testPool)
+	loc1ID, loc2ID := createTestLocations(ctx, t)
+
+	// Create exit with explicitly empty alias slice (not nil)
+	exit := &world.Exit{
+		ID:             ulid.Make(),
+		FromLocationID: loc1ID,
+		ToLocationID:   loc2ID,
+		Name:           "portal",
+		Aliases:        []string{}, // Explicitly empty slice, not nil
+		Bidirectional:  false,
+		Visibility:     world.VisibilityAll,
+	}
+
+	err := repo.Create(ctx, exit)
+	require.NoError(t, err)
+
+	t.Run("found by exact name", func(t *testing.T) {
+		got, err := repo.FindByName(ctx, loc1ID, "portal")
+		require.NoError(t, err)
+		assert.Equal(t, exit.ID, got.ID)
+		assert.Equal(t, "portal", got.Name)
+	})
+
+	t.Run("found by name case insensitive", func(t *testing.T) {
+		got, err := repo.FindByName(ctx, loc1ID, "Portal")
+		require.NoError(t, err)
+		assert.Equal(t, exit.ID, got.ID)
+	})
+
+	t.Run("not found by non-existent alias", func(t *testing.T) {
+		_, err := repo.FindByName(ctx, loc1ID, "p")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+	})
+
+	t.Run("not found by arbitrary string", func(t *testing.T) {
+		_, err := repo.FindByName(ctx, loc1ID, "gate")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
+	})
+}
+
 func TestExitRepository_WithLockData(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewExitRepository(testPool)
@@ -405,14 +501,14 @@ func TestExitRepository_FindBySimilarity(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		searchTerm    string
-		threshold     float64
-		wantName      string
-		wantErr       bool
-		errContains   string
-		wantErrCode   string
-		wantNotFound  bool
+		name         string
+		searchTerm   string
+		threshold    float64
+		wantName     string
+		wantErr      bool
+		errContains  string
+		wantErrCode  string
+		wantNotFound bool
 	}{
 		{
 			name:       "exact match",

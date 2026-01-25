@@ -70,7 +70,10 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 
 	// Create return exit if bidirectional
 	if exit.Bidirectional && exit.ReturnName != "" {
-		returnExit := exit.ReverseExit()
+		returnExit, err := exit.ReverseExit()
+		if err != nil {
+			return oops.With("operation", "create reverse exit").Wrap(err)
+		}
 		if returnExit != nil {
 			returnExit.ID = ulid.Make()
 			returnExit.CreatedAt = exit.CreatedAt

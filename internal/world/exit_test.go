@@ -159,8 +159,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			LockData:       map[string]any{"key_id": "golden-key"},
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 		assert.Equal(t, toID, reverse.FromLocationID)
 		assert.Equal(t, fromID, reverse.ToLocationID)
 		assert.Equal(t, "south", reverse.Name)
@@ -179,7 +180,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			Bidirectional: false,
 			ReturnName:    "south",
 		}
-		assert.Nil(t, exit.ReverseExit())
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		assert.Nil(t, reverse)
 	})
 
 	t.Run("no return name returns nil", func(t *testing.T) {
@@ -189,7 +192,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			Bidirectional: true,
 			ReturnName:    "",
 		}
-		assert.Nil(t, exit.ReverseExit())
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		assert.Nil(t, reverse)
 	})
 
 	t.Run("reverse exit does not share mutable references", func(t *testing.T) {
@@ -208,8 +213,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			LockData:       lockData,
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 
 		// Modify the reverse exit's mutable fields
 		reverse.LockData["key_id"] = "modified-key"
@@ -241,8 +247,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			LockData:       lockData,
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 
 		// Modify the nested map in reverse exit
 		reverseConditions := reverse.LockData["conditions"].(map[string]any)
@@ -264,14 +271,15 @@ func TestExit_ReverseExit(t *testing.T) {
 			ReturnName:     "south",
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 		assert.Empty(t, reverse.Aliases, "reverse exit should not inherit aliases")
 	})
 
 	t.Run("non-serializable LockData rejected at validation", func(t *testing.T) {
 		// LockData with a channel cannot be marshaled to JSON
-		// This is now caught at validation time, not during ReverseExit
+		// This is caught at validation time
 		exit := &world.Exit{
 			ID:             ulid.Make(),
 			FromLocationID: fromID,
@@ -288,6 +296,142 @@ func TestExit_ReverseExit(t *testing.T) {
 		err := exit.Validate()
 		require.Error(t, err, "exit with non-serializable LockData should fail validation")
 		assert.Contains(t, err.Error(), "not JSON-serializable")
+	})
+
+	t.Run("ReverseExit returns error on non-serializable LockData", func(t *testing.T) {
+		// LockData with a channel cannot be marshaled to JSON
+		// ReverseExit should return an error instead of silently returning nil LockData
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Bidirectional:  true,
+			ReturnName:     "south",
+			Visibility:     world.VisibilityAll,
+			Locked:         true,
+			LockType:       world.LockTypeKey,
+			LockData:       map[string]any{"channel": make(chan int)},
+		}
+
+		reverse, err := exit.ReverseExit()
+		require.Error(t, err, "ReverseExit should return error for non-serializable LockData")
+		assert.Nil(t, reverse)
+		assert.Contains(t, err.Error(), "failed to deep copy lock data")
+	})
+}
+
+func TestExit_SetLocked(t *testing.T) {
+	fromID := ulid.Make()
+	toID := ulid.Make()
+
+	t.Run("lock with valid key type", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		lockData := map[string]any{"key_id": "golden-key"}
+		err := exit.SetLocked(true, world.LockTypeKey, lockData)
+		require.NoError(t, err)
+		assert.True(t, exit.Locked)
+		assert.Equal(t, world.LockTypeKey, exit.LockType)
+		assert.Equal(t, "golden-key", exit.LockData["key_id"])
+	})
+
+	t.Run("unlock clears lock state", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         true,
+			LockType:       world.LockTypeKey,
+			LockData:       map[string]any{"key_id": "old-key"},
+		}
+
+		err := exit.SetLocked(false, "", nil)
+		require.NoError(t, err)
+		assert.False(t, exit.Locked)
+		assert.Empty(t, exit.LockType)
+		assert.Nil(t, exit.LockData)
+	})
+
+	t.Run("lock with invalid lock type returns error", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		err := exit.SetLocked(true, "invalid", nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLockType)
+		// State should be unchanged
+		assert.False(t, exit.Locked)
+	})
+
+	t.Run("lock with non-serializable data returns error", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		badData := map[string]any{"channel": make(chan int)}
+		err := exit.SetLocked(true, world.LockTypeKey, badData)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not JSON-serializable")
+		// State should be unchanged
+		assert.False(t, exit.Locked)
+	})
+
+	t.Run("lock without lock type when locking returns error", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		err := exit.SetLocked(true, "", nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLockType)
+		// State should be unchanged
+		assert.False(t, exit.Locked)
+	})
+
+	t.Run("deep copies lock data to prevent external mutation", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+		}
+
+		originalData := map[string]any{"key_id": "original"}
+		err := exit.SetLocked(true, world.LockTypeKey, originalData)
+		require.NoError(t, err)
+
+		// Modify the original data after setting
+		originalData["key_id"] = "modified"
+
+		// Exit's lock data should be unchanged
+		assert.Equal(t, "original", exit.LockData["key_id"])
 	})
 }
 
@@ -366,6 +510,7 @@ func TestLockType_Validate(t *testing.T) {
 func TestExit_Validate(t *testing.T) {
 	t.Run("valid exit", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 		}
@@ -374,6 +519,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("invalid name", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "",
 			Visibility: world.VisibilityAll,
 		}
@@ -384,6 +530,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("invalid visibility", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.Visibility("invalid"),
 		}
@@ -393,6 +540,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("locked requires valid lock type", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 			Locked:     true,
@@ -404,6 +552,7 @@ func TestExit_Validate(t *testing.T) {
 
 	t.Run("locked with valid lock type", func(t *testing.T) {
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 			Locked:     true,
@@ -416,6 +565,7 @@ func TestExit_Validate(t *testing.T) {
 	t.Run("visibility list requires valid visible_to", func(t *testing.T) {
 		id1 := ulid.Make()
 		exit := &world.Exit{
+			ID:         ulid.Make(),
 			Name:       "north",
 			Visibility: world.VisibilityList,
 			VisibleTo:  []ulid.ULID{id1, id1}, // duplicate
@@ -428,6 +578,7 @@ func TestExit_Validate(t *testing.T) {
 	t.Run("rejects self-referential exit", func(t *testing.T) {
 		locID := ulid.Make()
 		exit := &world.Exit{
+			ID:             ulid.Make(),
 			FromLocationID: locID,
 			ToLocationID:   locID, // same as from
 			Name:           "loop",
@@ -442,10 +593,108 @@ func TestExit_Validate(t *testing.T) {
 		// Exit validation allows zero IDs for flexibility (e.g., builder pattern).
 		// Database NOT NULL constraints enforce that IDs are set on insert.
 		exit := &world.Exit{
+			ID: ulid.Make(),
 			// FromLocationID and ToLocationID both zero
 			Name:       "north",
 			Visibility: world.VisibilityAll,
 		}
 		assert.NoError(t, exit.Validate(), "exit with zero location IDs should pass validation")
+	})
+
+	t.Run("zero id fails", func(t *testing.T) {
+		exit := &world.Exit{
+			// ID is zero value (not set)
+			Name:       "north",
+			Visibility: world.VisibilityAll,
+		}
+		err := exit.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "id")
+	})
+}
+
+func TestNewExit(t *testing.T) {
+	fromID := ulid.Make()
+	toID := ulid.Make()
+
+	t.Run("valid construction succeeds", func(t *testing.T) {
+		exit, err := world.NewExit(fromID, toID, "north")
+		require.NoError(t, err)
+		assert.NotNil(t, exit)
+		assert.False(t, exit.ID.IsZero(), "ID should be generated")
+		assert.Equal(t, fromID, exit.FromLocationID)
+		assert.Equal(t, toID, exit.ToLocationID)
+		assert.Equal(t, "north", exit.Name)
+		assert.Equal(t, world.VisibilityAll, exit.Visibility, "should default to VisibilityAll")
+		assert.False(t, exit.CreatedAt.IsZero(), "CreatedAt should be set")
+	})
+
+	t.Run("empty name fails with validation error", func(t *testing.T) {
+		exit, err := world.NewExit(fromID, toID, "")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("self-referential exit fails", func(t *testing.T) {
+		exit, err := world.NewExit(fromID, fromID, "loop")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrSelfReferentialExit)
+	})
+
+	t.Run("generates unique IDs", func(t *testing.T) {
+		exit1, err1 := world.NewExit(fromID, toID, "north")
+		require.NoError(t, err1)
+		exit2, err2 := world.NewExit(fromID, toID, "south")
+		require.NoError(t, err2)
+		assert.NotEqual(t, exit1.ID, exit2.ID, "IDs should be unique")
+	})
+}
+
+func TestNewExitWithID(t *testing.T) {
+	fromID := ulid.Make()
+	toID := ulid.Make()
+	exitID := ulid.Make()
+
+	t.Run("valid construction succeeds", func(t *testing.T) {
+		exit, err := world.NewExitWithID(exitID, fromID, toID, "north")
+		require.NoError(t, err)
+		assert.NotNil(t, exit)
+		assert.Equal(t, exitID, exit.ID, "ID should match provided ID")
+		assert.Equal(t, fromID, exit.FromLocationID)
+		assert.Equal(t, toID, exit.ToLocationID)
+		assert.Equal(t, "north", exit.Name)
+		assert.Equal(t, world.VisibilityAll, exit.Visibility, "should default to VisibilityAll")
+		assert.False(t, exit.CreatedAt.IsZero(), "CreatedAt should be set")
+	})
+
+	t.Run("empty name fails with validation error", func(t *testing.T) {
+		exit, err := world.NewExitWithID(exitID, fromID, toID, "")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "name")
+	})
+
+	t.Run("self-referential exit fails", func(t *testing.T) {
+		exit, err := world.NewExitWithID(exitID, fromID, fromID, "loop")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrSelfReferentialExit)
+	})
+
+	t.Run("zero ID fails with validation error", func(t *testing.T) {
+		var zeroID ulid.ULID
+		exit, err := world.NewExitWithID(zeroID, fromID, toID, "north")
+		assert.Nil(t, exit)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "id")
+	})
+
+	t.Run("uses provided ID exactly", func(t *testing.T) {
+		specificID := ulid.Make()
+		exit, err := world.NewExitWithID(specificID, fromID, toID, "north")
+		require.NoError(t, err)
+		assert.Equal(t, specificID, exit.ID)
 	})
 }
