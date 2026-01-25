@@ -17,9 +17,19 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// migrateIface abstracts golang-migrate for testing.
+type migrateIface interface {
+	Up() error
+	Down() error
+	Steps(n int) error
+	Version() (version uint, dirty bool, err error)
+	Force(version int) error
+	Close() (source error, database error)
+}
+
 // Migrator wraps golang-migrate for database schema management.
 type Migrator struct {
-	m *migrate.Migrate
+	m migrateIface
 }
 
 // NewMigrator creates a new Migrator instance.
