@@ -263,16 +263,16 @@ func TestMigrator_Close_Idempotent(t *testing.T) {
 }
 
 func TestMigrator_PendingMigrations_Success(t *testing.T) {
-	// At version 3, migrations 4-7 should be pending
+	// At version 3, migrations 4-8 should be pending
 	m := &Migrator{m: &mockMigrate{versionVal: 3}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{4, 5, 6, 7}, pending)
+	assert.Equal(t, []uint{4, 5, 6, 7, 8}, pending)
 }
 
 func TestMigrator_PendingMigrations_AtLatest(t *testing.T) {
-	// At version 7 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 7}}
+	// At version 8 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 8}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -283,7 +283,7 @@ func TestMigrator_PendingMigrations_AtZero(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8}, pending)
 }
 
 func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
@@ -311,11 +311,11 @@ func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
 }
 
 func TestMigrator_AppliedMigrations_AtLatest(t *testing.T) {
-	// At version 7, all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 7}}
+	// At version 8, all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 8}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8}, applied)
 }
 
 func TestMigrator_AppliedMigrations_VersionError(t *testing.T) {

@@ -50,6 +50,7 @@ func TestRunSeed_MissingDatabaseURL(t *testing.T) {
 func TestRunSeed_InvalidDatabaseURL(t *testing.T) {
 	// Use a malformed connection string that will fail during parsing/connection
 	// Using an invalid scheme forces an early failure
+	// Since migrations run first, this fails during migration initialization
 	t.Setenv("DATABASE_URL", "invalid://not-a-valid-url")
 
 	cmd := &cobra.Command{}
@@ -59,7 +60,7 @@ func TestRunSeed_InvalidDatabaseURL(t *testing.T) {
 	cfg := &seedConfig{timeout: 30 * time.Second}
 	err := runSeed(cmd, nil, cfg)
 	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "DB_CONNECT_FAILED")
+	errutil.AssertErrorCode(t, err, "MIGRATION_INIT_FAILED")
 }
 
 func TestNewSeedCmd(t *testing.T) {
