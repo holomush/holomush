@@ -8,11 +8,11 @@ HoloMUSH is a modern MUSH platform with:
 
 - Go core with event-oriented architecture
 - Dual protocol support (telnet + web)
-- WASM plugin system via Extism
+- Lua plugin system (gopher-lua) with go-plugin for complex extensions
 - PostgreSQL for all data
 - SvelteKit PWA for web client
 
-**Architecture Reference**: [docs/plans/2026-01-17-holomush-architecture-design.md](docs/plans/2026-01-17-holomush-architecture-design.md)
+**Architecture Reference**: [docs/plans/2026-01-18-holomush-roadmap-design.md](docs/plans/2026-01-18-holomush-roadmap-design.md)
 
 ---
 
@@ -206,20 +206,6 @@ All source files MUST include SPDX license headers at the top:
 package foo
 ```
 
-**Lua plugins:**
-
-```lua
--- SPDX-License-Identifier: Apache-2.0
--- Copyright 2026 HoloMUSH Contributors
-```
-
-**Python plugins:**
-
-```python
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 HoloMUSH Contributors
-```
-
 **Shell scripts:**
 
 ```bash
@@ -246,7 +232,7 @@ syntax = "proto3";
 
 | Requirement                         | Description                                         |
 | ----------------------------------- | --------------------------------------------------- |
-| **MUST** include SPDX header        | All `.go`, `.lua`, `.sh`, `.py`, `.proto` files     |
+| **MUST** include SPDX header        | All `.go`, `.sh`, `.proto` files                    |
 | **SHOULD** include SPDX header      | YAML configuration files where appropriate          |
 | **MUST NOT** add to generated files | Skip `*.pb.go` files                                |
 | **SHOULD** use `task license:add`   | Automatically adds headers to files missing them    |
@@ -265,11 +251,11 @@ task license:add     # Add missing headers
 
 ### Coverage Requirements
 
-| Requirement                       | Description                                          |
-| --------------------------------- | ---------------------------------------------------- |
-| **MUST** maintain >80% coverage   | Per-package coverage must exceed 80%                 |
-| **MUST** run `task test:coverage` | To verify coverage before completing work            |
-| **SHOULD** target 90%+ coverage   | For core packages (`internal/core`, `internal/wasm`) |
+| Requirement                       | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| **MUST** maintain >80% coverage   | Per-package coverage must exceed 80%                  |
+| **MUST** run `task test:coverage` | To verify coverage before completing work             |
+| **SHOULD** target 90%+ coverage   | For core packages (`internal/core`, `internal/world`) |
 
 ### Test Files
 
@@ -306,72 +292,15 @@ func TestEventType_String(t *testing.T) {
 - Create mock implementations for tests
 - Consider using testify/mock for complex mocks
 
-### WASM Tests (`internal/wasm`)
+### Plugin Tests (`internal/plugin`)
 
-The WASM package has special testing requirements due to Extism plugin compilation
-overhead and concurrency constraints.
+Lua plugins use gopher-lua which creates fresh VM state per event delivery.
 
-#### Plugin Concurrency Model
-
-**Critical constraint:** Extism plugins are NOT thread-safe for concurrent calls.
-This is a fundamental WebAssembly limitation, not language-specific—it applies to
-plugins written in Python, Rust, Go, or any other language.
-
-**Why:** WASM linear memory is shared between host and guest. When multiple callers
-access the same plugin instance simultaneously, memory corruption occurs. Only one
-call can safely execute at a time per plugin instance.
-
-| Component          | Concurrency Model                                           |
-| ------------------ | ----------------------------------------------------------- |
-| `ExtismHost`       | Thread-safe for `LoadPlugin`/`UnloadPlugin` via RWMutex     |
-| `ExtismSubscriber` | Serializes delivery per-plugin (async goroutines, but safe) |
-| Plugin instance    | NOT thread-safe - single call at a time per plugin          |
-
-**Production safety:** `ExtismSubscriber.HandleEvent` delivers events asynchronously
-via goroutines but each plugin receives events sequentially (one at a time). The
-5-second timeout ensures slow plugins don't block the event bus.
-
-#### Test Requirements
-
-| Requirement                              | Description                                              |
-| ---------------------------------------- | -------------------------------------------------------- |
-| **MUST** use shared host where possible  | Use `getSharedEchoHost()` for tests that read-only       |
-| **MUST** use isolated host for mutations | Use `newIsolatedHost()` for tests that close/modify host |
-| **MUST NOT** run parallel with shared    | Extism plugins are NOT thread-safe for concurrent calls  |
-| **SHOULD** avoid loading plugins in loop | Each `LoadPlugin` takes ~1.5s for 10MB WASM compilation  |
-
-**Test helpers** (in `test_helpers_test.go`):
-
-```go
-// Shared host - plugin compiled once, reused across sequential tests
-host := getSharedEchoHost(t)
-// DO NOT close this host
-
-// Isolated host - for tests needing their own state
-host := newIsolatedHost(t)
-defer host.Close(context.Background())
-```
-
-**When to use each:**
-
-| Helper              | Use Case                                               |
-| ------------------- | ------------------------------------------------------ |
-| `getSharedEchoHost` | Pattern matching, event delivery, subscriber tests     |
-| `newIsolatedHost`   | Close tests, error handling, loading different plugins |
-
-**Parallel test pattern:** When subtests need `t.Parallel()`, each MUST create its
-own isolated host:
-
-```go
-for _, tt := range tests {
-    t.Run(tt.name, func(t *testing.T) {
-        t.Parallel()
-        host := newIsolatedHost(t)  // Each parallel subtest needs own host
-        defer host.Close(ctx)
-        // ...
-    })
-}
-```
+| Principle                     | Description                                         |
+| ----------------------------- | --------------------------------------------------- |
+| State isolation               | Each `DeliverEvent` creates a new Lua state         |
+| No shared state between tests | No need for special test helpers or shared fixtures |
+| Fast startup                  | ~50μs per Lua state vs ~1.5s for WASM compilation   |
 
 ### Assertions
 
@@ -489,21 +418,23 @@ site/                # Documentation website (zensical)
     developers/      # For plugin developers
     operators/       # For server operators
 internal/            # Private implementation
+  access/            # ABAC access control system
   control/           # Control plane (admin API)
-  core/              # Event system, sessions, world engine
+  core/              # Event system, sessions
   grpc/              # gRPC server implementation
   logging/           # Structured logging setup
   observability/     # Metrics and health endpoints
-  proto/             # Generated protobuf code
+  plugin/            # Plugin system (Lua host, manifests, subscribers)
   store/             # PostgreSQL implementations
   telnet/            # Telnet protocol adapter
   tls/               # TLS certificate management
-  wasm/              # Plugin host (Extism)
   web/               # WebSocket adapter (future)
+  world/             # World model (objects, locations, exits, scenes)
   xdg/               # XDG base directory support
 pkg/                 # Public plugin API
   plugin/            # Plugin SDK types
-plugins/             # Core plugins (WASM)
+  errutil/           # Error handling utilities
+plugins/             # Lua plugins
 scripts/             # Build and utility scripts
 test/                # Integration tests
   integration/       # End-to-end test suites
@@ -522,18 +453,38 @@ type EventStore interface {
 }
 ```
 
-## Patterns
+## Core Systems
 
-_This section will evolve as the project develops._
+### World Model (`internal/world`)
+
+The world model provides the spatial foundation:
+
+- **Objects** - Base entity type with ULID identifiers
+- **Locations** - Rooms/areas that contain objects
+- **Exits** - Connections between locations (with optional locks)
+- **Scenes** - RP scenes with participants and privacy settings
+
+All world operations go through `WorldService` which validates constraints and
+persists to PostgreSQL via the repository interface.
+
+### Access Control (`internal/access`)
+
+Attribute-Based Access Control (ABAC) with phased implementation:
+
+- **Phase 1 (current):** Static evaluator with role-based permissions
+- **Phase 2 (future):** Full ABAC with policies and attributes
+
+```go
+// Check if subject can perform action on resource
+allowed := evaluator.Evaluate(ctx, subject, action, resource)
+```
+
+Default deny - explicit permission required for all operations.
+
+## Patterns
 
 ### Event Sourcing
 
 - All game actions produce events
 - Events are immutable and ordered
 - State is derived from event replay
-
-### ABAC (Attribute-Based Access Control)
-
-- All access checks go through ABAC evaluator
-- Policies define subject, resource, action, environment attributes
-- Default deny - explicit allow required
