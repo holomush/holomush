@@ -65,7 +65,9 @@ func newMigrateUpCmd() *cobra.Command {
 
 			version, _, versionErr := migrator.Version()
 			if versionErr != nil {
-				return oops.With("command", "migrate up").Wrap(versionErr)
+				cmd.PrintErrf("Warning: migrations applied but failed to get version: %v\n", versionErr)
+				cmd.Println("Migrations complete. Check status with 'holomush migrate status'")
+				return nil
 			}
 			cmd.Printf("Migrations complete. Current version: %d\n", version)
 			return nil
@@ -110,7 +112,9 @@ func newMigrateDownCmd() *cobra.Command {
 
 			version, _, versionErr := migrator.Version()
 			if versionErr != nil {
-				return oops.With("command", "migrate down").Wrap(versionErr)
+				cmd.PrintErrf("Warning: rollback applied but failed to get version: %v\n", versionErr)
+				cmd.Println("Rollback complete. Check status with 'holomush migrate status'")
+				return nil
 			}
 			cmd.Printf("Rollback complete. Current version: %d\n", version)
 			return nil
@@ -183,10 +187,20 @@ func newMigrateVersionCmd() *cobra.Command {
 				return oops.With("command", "migrate version").Wrap(err)
 			}
 
-			fmt.Println(version)
+			cmd.Println(version)
 			return nil
 		},
 	}
+}
+
+// parseForceVersion parses a version string for the migrate force command.
+// Note: fmt.Sscanf stops at the first non-digit, so "3abc" parses as 3.
+func parseForceVersion(arg string) (int, error) {
+	var version int
+	if _, err := fmt.Sscanf(arg, "%d", &version); err != nil {
+		return 0, oops.Code("INVALID_VERSION").Errorf("invalid version: %s", arg)
+	}
+	return version, nil
 }
 
 func newMigrateForceCmd() *cobra.Command {
@@ -200,11 +214,9 @@ func newMigrateForceCmd() *cobra.Command {
 				return oops.With("command", "migrate force").Wrap(err)
 			}
 
-			var version int
-			if _, scanErr := fmt.Sscanf(args[0], "%d", &version); scanErr != nil {
-				return oops.With("command", "migrate force").
-					Code("INVALID_VERSION").
-					Errorf("invalid version: %s", args[0])
+			version, err := parseForceVersion(args[0])
+			if err != nil {
+				return oops.With("command", "migrate force").Wrap(err)
 			}
 
 			migrator, err := store.NewMigrator(url)

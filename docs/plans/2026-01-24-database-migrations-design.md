@@ -184,7 +184,7 @@ if autoMigrate {
 }
 ```
 
-Default: `--auto-migrate=false` (explicit opt-in).
+Default: auto-migration enabled (set `HOLOMUSH_DB_AUTO_MIGRATE=false` to disable).
 
 ## Migration Conversion
 

@@ -27,12 +27,12 @@ type Migrator struct {
 func NewMigrator(databaseURL string) (*Migrator, error) {
 	source, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
-		return nil, oops.Code("MIGRATION_SOURCE_FAILED").Wrap(err)
+		return nil, oops.Code("MIGRATION_SOURCE_FAILED").With("operation", "create migration source").Wrap(err)
 	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", source, databaseURL)
 	if err != nil {
-		return nil, oops.Code("MIGRATION_INIT_FAILED").Wrap(err)
+		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
 	}
 
 	return &Migrator{m: m}, nil
