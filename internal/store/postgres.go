@@ -104,10 +104,10 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 	// Errors are logged but not returned - event is already persisted, subscribers catch up via Replay
 	// Note: Repeated NOTIFY failures indicate a serious connectivity issue that should be investigated
 	//
-	// Metrics consideration (PR #43 review): Adding a Prometheus counter for NOTIFY failures was
-	// evaluated but deferred. Current logging is sufficient for debugging, and adding metrics
-	// would require threading the observability.Metrics through Store creation. This can be
-	// revisited when expanding the observability infrastructure.
+	// Metrics consideration: Adding a Prometheus counter for NOTIFY failures was evaluated but
+	// deferred. Current logging is sufficient for debugging, and adding metrics would require
+	// threading the observability.Metrics through Store creation. This can be revisited when
+	// expanding the observability infrastructure.
 	channel := streamToChannel(event.Stream)
 	if _, notifyErr := s.pool.Exec(ctx, "SELECT pg_notify($1, $2)", channel, event.ID.String()); notifyErr != nil {
 		slog.Error("failed to notify subscribers of event",

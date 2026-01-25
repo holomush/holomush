@@ -689,3 +689,65 @@ func TestNewMigrateCmd_HasRunE(t *testing.T) {
 	cmd := NewMigrateCmd()
 	assert.NotNil(t, cmd.RunE, "migrate command should have RunE set for default-up behavior")
 }
+
+// Version fallback tests - when migration name is not found, show "Version X" format
+
+func TestMigrateUpDryRun_UnknownVersionFallback(t *testing.T) {
+	// Test that unknown version numbers fall back to "Version X" format
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           0,
+		pendingMigrations: []uint{999}, // 999 doesn't exist in migrations
+	}
+
+	err := runMigrateUpDryRun(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migrations would be applied:")
+	assert.Contains(t, output, "Version 999")
+	assert.NotContains(t, output, "000999") // Should not try to format as migration name
+	assert.Contains(t, output, "Current version: 0")
+	assert.Contains(t, output, "Target version: 999")
+}
+
+func TestMigrateDownDryRun_UnknownVersionFallbackSingle(t *testing.T) {
+	// Test fallback for single rollback with unknown version
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           999, // Current version is unknown
+		appliedMigrations: []uint{999},
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, false)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migration would be rolled back:")
+	assert.Contains(t, output, "Version 999")
+	assert.NotContains(t, output, "000999")
+	assert.Contains(t, output, "Current version: 999")
+	assert.Contains(t, output, "Target version: 0")
+}
+
+func TestMigrateDownDryRun_UnknownVersionFallbackAll(t *testing.T) {
+	// Test fallback for rollback all with unknown versions
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{
+		version:           999,
+		appliedMigrations: []uint{1, 998, 999}, // Mix of known (1) and unknown (998, 999)
+	}
+
+	err := runMigrateDownDryRun(&buf, mock, true)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Dry run - the following migrations would be rolled back:")
+	// Unknown versions should use "Version X" format
+	assert.Contains(t, output, "Version 999")
+	assert.Contains(t, output, "Version 998")
+	// Known version 1 should show migration name
+	assert.Contains(t, output, "000001_initial")
+	assert.Contains(t, output, "Current version: 999")
+	assert.Contains(t, output, "Target version: 0")
+}

@@ -29,6 +29,13 @@ var (
 	cachedVersionsErr  error
 )
 
+// Cached migration names - computed once since embedded FS is immutable.
+var (
+	cachedNamesOnce sync.Once
+	cachedNames     map[uint]string // version -> full name (e.g., "000001_initial")
+	cachedNamesErr  error
+)
+
 // migrateIface abstracts golang-migrate for testing. The real golang-migrate
 // library requires a database connection, making unit tests slow and brittle.
 // This interface allows mocking migration operations without a database.
@@ -195,7 +202,6 @@ func loadMigrationVersions() ([]uint, error) {
 			// 1. This runs once at init time via sync.Once (not per-request)
 			// 2. Malformed files are prevented by compile-time test validation
 			// 3. Adding logger DI would require threading it through multiple layers
-			// Logger DI was evaluated and deemed unnecessary complexity (PR #43 review).
 			slog.Warn("migration file name doesn't match expected format, skipping",
 				"filename", name,
 				"expected_format", "NNNNNN_name.up.sql",
@@ -213,7 +219,33 @@ func loadMigrationVersions() ([]uint, error) {
 	return versions, nil
 }
 
+// loadMigrationNames reads the embedded migrations directory and builds a version-to-name map.
+func loadMigrationNames() (map[uint]string, error) {
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		return nil, oops.Code("MIGRATION_READ_FAILED").With("operation", "read migrations dir").Wrap(err)
+	}
+
+	names := make(map[uint]string)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		var version uint
+		if _, err := fmt.Sscanf(name, "%06d", &version); err != nil {
+			continue // Skip malformed files (same behavior as loadMigrationVersions)
+		}
+		// Store name without .up.sql suffix
+		names[version] = strings.TrimSuffix(name, ".up.sql")
+	}
+	return names, nil
+}
+
 // MigrationName returns the name of a migration by version number.
+//
+// Results are cached since the embedded filesystem is immutable at runtime.
+// This provides O(1) lookup performance for repeated calls.
 //
 // Returns:
 //   - (name, nil) when version is found
@@ -228,21 +260,16 @@ func loadMigrationVersions() ([]uint, error) {
 //   - Version-not-found returns ("", nil) because looking up an unknown version is expected
 //     behavior in CLI contexts (e.g., displaying version info for a manually forced version).
 func MigrationName(version uint) (string, error) {
-	entries, err := migrationsFS.ReadDir("migrations")
-	if err != nil {
-		// Embedded FS is immutable in a valid binary - this indicates corruption or tampering.
-		return "", oops.Code("MIGRATION_READ_FAILED").With("operation", "read migrations dir").Wrap(err)
+	cachedNamesOnce.Do(func() {
+		cachedNames, cachedNamesErr = loadMigrationNames()
+	})
+	if cachedNamesErr != nil {
+		return "", cachedNamesErr
 	}
 
-	prefix := fmt.Sprintf("%06d_", version)
-	for _, entry := range entries {
-		name := entry.Name()
-		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".up.sql") {
-			// Remove .up.sql suffix
-			return strings.TrimSuffix(name, ".up.sql"), nil
-		}
-	}
-	return "", nil
+	// O(1) lookup from cache
+	name := cachedNames[version]
+	return name, nil
 }
 
 // PendingMigrations returns the list of migration versions that would be applied

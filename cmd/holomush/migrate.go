@@ -251,7 +251,6 @@ func runMigrateForceLogic(out io.Writer, migrator migrator, version int) error {
 // 2. Error wrapping includes command-specific context
 // 3. Commands have subtle differences (dry-run, all flag) that complicate extraction
 // 4. ~15 lines of duplication is acceptable for CLI commands
-// This was evaluated in PR #43 review and deemed acceptable.
 func NewMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",

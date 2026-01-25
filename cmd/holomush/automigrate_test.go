@@ -345,6 +345,31 @@ func TestRunAutoMigration(t *testing.T) {
 		assert.True(t, migrator.upCalled, "Up() should be called")
 		assert.True(t, migrator.closeCalled, "Close() should be called")
 	})
+
+	t.Run("close error is logged but does not fail operation", func(t *testing.T) {
+		// Capture log output to verify warning is logged
+		var buf bytes.Buffer
+		handler := slog.NewJSONHandler(&buf, nil)
+		oldLogger := slog.Default()
+		slog.SetDefault(slog.New(handler))
+		defer slog.SetDefault(oldLogger)
+
+		migrator := &autoMigrateMockMigrator{closeError: fmt.Errorf("connection reset")}
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (AutoMigrator, error) {
+			return migrator, nil
+		})
+
+		// Main operation should succeed despite close error
+		require.NoError(t, err, "close error should not fail the operation")
+		assert.True(t, migrator.upCalled, "Up() should be called")
+		assert.True(t, migrator.closeCalled, "Close() should be called")
+
+		// Verify warning was logged
+		logOutput := buf.String()
+		assert.Contains(t, logOutput, "error closing migrator", "Should log warning about close error")
+		assert.Contains(t, logOutput, "connection reset", "Warning should include the error message")
+		assert.Contains(t, logOutput, "connection may leak", "Warning should include the note")
+	})
 }
 
 func TestParseAutoMigrate_WarnsOnInvalidValue(t *testing.T) {

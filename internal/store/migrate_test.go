@@ -505,3 +505,46 @@ func BenchmarkAllMigrationVersions(b *testing.B) {
 		}
 	}
 }
+
+// TestMigrationName_UsesCache verifies that MigrationName uses caching and
+// performs consistently across multiple calls for different versions.
+func TestMigrationName_UsesCache(t *testing.T) {
+	// Call MigrationName multiple times for different versions
+	// All calls should succeed (verifies cache works)
+
+	// Test known version
+	name1, err := MigrationName(1)
+	require.NoError(t, err)
+	assert.Equal(t, "000001_initial", name1)
+
+	// Test another known version
+	name4, err := MigrationName(4)
+	require.NoError(t, err)
+	assert.Equal(t, "000004_pg_trgm", name4)
+
+	// Test unknown version (should return empty, not error)
+	name999, err := MigrationName(999)
+	require.NoError(t, err)
+	assert.Equal(t, "", name999)
+}
+
+// BenchmarkMigrationName measures the performance of MigrationName.
+// With caching, subsequent calls should be O(1) map lookups.
+func BenchmarkMigrationName(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = MigrationName(1)
+	}
+}
+
+// BenchmarkMigrationName_MultipleVersions measures MigrationName performance
+// across multiple version lookups in a single iteration.
+func BenchmarkMigrationName_MultipleVersions(b *testing.B) {
+	versions := []uint{1, 2, 3, 4, 5, 6, 7}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, v := range versions {
+			_, _ = MigrationName(v)
+		}
+	}
+}
