@@ -51,8 +51,11 @@ func WithWorldService(svc WorldService) Option {
 	}
 }
 
-// WithWorldQuerier is deprecated. Use WithWorldService instead.
-// This adapter allows passing a WorldQuerier directly for backwards compatibility.
+// WithWorldQuerier wraps a WorldQuerier for backwards compatibility.
+//
+// Deprecated: WithWorldQuerier will be removed in a future release.
+// Use WithWorldService instead, which enables per-plugin ABAC authorization.
+// This adapter exists for backwards compatibility during the transition period.
 func WithWorldQuerier(w WorldQuerier) Option {
 	return func(f *Functions) {
 		// Wrap the querier in a passthrough adapter that ignores authorization
