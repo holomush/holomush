@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 
-name: Deploy Docs
+name: Deploy Site
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
         with:
           version: "0.9.26"
 
-      - name: Build docs
+      - name: Build site
         working-directory: site
         run: uv run zensical build
 
@@ -31,4 +31,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy site/build --project-name=holomush-docs
+          command: pages deploy site/build --project-name=holomush-site

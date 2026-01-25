@@ -69,3 +69,4 @@ dist/
 # Documentation site
 site/build/
 site/.venv/
+*.egg-info/
