@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -332,6 +333,14 @@ func TestGetDatabaseURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setEnv {
 				t.Setenv("DATABASE_URL", tt.envValue)
+			} else {
+				// Explicitly unset DATABASE_URL for tests that expect it to be missing.
+				// CI environments may have DATABASE_URL set globally.
+				originalValue, wasSet := os.LookupEnv("DATABASE_URL")
+				if wasSet {
+					os.Unsetenv("DATABASE_URL")
+					t.Cleanup(func() { os.Setenv("DATABASE_URL", originalValue) })
+				}
 			}
 
 			url, err := getDatabaseURL()
