@@ -648,17 +648,16 @@ func TestQueryObject(t *testing.T) {
 	assert.Equal(t, lua.LFalse, tbl.RawGetString("is_container"))
 	assert.Equal(t, locID.String(), tbl.RawGetString("location_id").String())
 	assert.Equal(t, ownerID.String(), tbl.RawGetString("owner_id").String())
+	assert.Equal(t, "location", tbl.RawGetString("containment_type").String())
 }
 
 func TestQueryObject_WithContainer(t *testing.T) {
 	objID := ulid.Make()
-	charID := ulid.Make()
 	containerID := ulid.Make()
 	obj := &world.Object{
 		ID:                  objID,
 		Name:                "Gold Coins",
 		Description:         "A pile of shiny gold coins.",
-		HeldByCharacterID:   &charID,
 		ContainedInObjectID: &containerID,
 		IsContainer:         true,
 	}
@@ -678,8 +677,37 @@ func TestQueryObject_WithContainer(t *testing.T) {
 
 	tbl := objVal.(*lua.LTable)
 	assert.Equal(t, lua.LTrue, tbl.RawGetString("is_container"))
-	assert.Equal(t, charID.String(), tbl.RawGetString("held_by_character_id").String())
 	assert.Equal(t, containerID.String(), tbl.RawGetString("contained_in_object_id").String())
+	assert.Equal(t, "object", tbl.RawGetString("containment_type").String())
+}
+
+func TestQueryObject_HeldByCharacter(t *testing.T) {
+	objID := ulid.Make()
+	charID := ulid.Make()
+	obj := &world.Object{
+		ID:                objID,
+		Name:              "Magic Sword",
+		Description:       "A glowing blade.",
+		HeldByCharacterID: &charID,
+		IsContainer:       false,
+	}
+
+	querier := &mockWorldQuerier{object: obj}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
+	require.NoError(t, err)
+
+	objVal := L.GetGlobal("obj")
+	require.Equal(t, lua.LTTable, objVal.Type())
+
+	tbl := objVal.(*lua.LTable)
+	assert.Equal(t, charID.String(), tbl.RawGetString("held_by_character_id").String())
+	assert.Equal(t, "character", tbl.RawGetString("containment_type").String())
 }
 
 func TestQueryObject_NilOptionalFields(t *testing.T) {

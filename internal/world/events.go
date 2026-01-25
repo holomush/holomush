@@ -46,7 +46,8 @@ type EventEmitter interface {
 
 // emitWithRetry wraps an emit call with retry logic using exponential backoff.
 // Uses exponential backoff starting at 50ms, up to 3 retries (4 total attempts).
-func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType string, data []byte) error {
+// entityType and entityID provide context for debugging (e.g., "character", "01ABC...").
+func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType, entityType, entityID string, data []byte) error {
 	// Create new backoff for each call - backoffs are stateful and track retry count
 	backoff := retry.WithMaxRetries(3, retry.NewExponential(50*time.Millisecond))
 	attempt := 0
@@ -56,6 +57,8 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 			slog.Debug("event emission failed, will retry",
 				"stream", stream,
 				"event_type", eventType,
+				"entity_type", entityType,
+				"entity_id", entityID,
 				"attempt", attempt,
 				"error", err)
 			// Mark error as retryable
@@ -68,6 +71,8 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 			slog.Warn("event emission cancelled",
 				"stream", stream,
 				"event_type", eventType,
+				"entity_type", entityType,
+				"entity_id", entityID,
 				"attempts", attempt,
 				"reason", err)
 		} else {
@@ -75,6 +80,8 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 			slog.Error("event emission failed after all retries",
 				"stream", stream,
 				"event_type", eventType,
+				"entity_type", entityType,
+				"entity_id", entityID,
 				"attempts", attempt,
 				"error", err)
 		}
@@ -107,7 +114,9 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 
 	// Emit to destination stream with retry
 	stream := LocationStream(payload.ToID)
-	if err := emitWithRetry(ctx, emitter, stream, eventType, data); err != nil {
+	entityType := string(payload.EntityType)
+	entityID := payload.EntityID.String()
+	if err := emitWithRetry(ctx, emitter, stream, eventType, entityType, entityID, data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)
 	}
 	return nil
@@ -150,7 +159,7 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 	if obj.LocationID != nil {
 		stream = LocationStream(*obj.LocationID)
 	}
-	if err := emitWithRetry(ctx, emitter, stream, eventType, data); err != nil {
+	if err := emitWithRetry(ctx, emitter, stream, eventType, "object", obj.ID.String(), data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)
 	}
 	return nil
@@ -181,7 +190,9 @@ func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload Examine
 
 	// Emit to the location stream where the examine is happening
 	stream := LocationStream(payload.LocationID)
-	if err := emitWithRetry(ctx, emitter, stream, eventType, data); err != nil {
+	targetType := string(payload.TargetType)
+	targetID := payload.TargetID.String()
+	if err := emitWithRetry(ctx, emitter, stream, eventType, targetType, targetID, data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)
 	}
 	return nil
@@ -212,7 +223,7 @@ func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload Obje
 
 	// Emit to the recipient character's stream with retry
 	stream := CharacterStream(payload.ToCharacterID)
-	if err := emitWithRetry(ctx, emitter, stream, eventType, data); err != nil {
+	if err := emitWithRetry(ctx, emitter, stream, eventType, "object", payload.ObjectID.String(), data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)
 	}
 	return nil

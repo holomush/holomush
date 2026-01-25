@@ -104,6 +104,15 @@ func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locat
 			With("entity_type", "characters_by_location").
 			Wrapf(err, "get characters by location")
 	}
+	// Normalize nil slice to empty slice for consistent behavior.
+	// Unlike single-entity methods, nil is technically valid for slices,
+	// but we normalize for consistency and to detect potential service issues.
+	if chars == nil {
+		slog.Debug("service returned nil slice, normalizing to empty",
+			"plugin", a.pluginName,
+			"location_id", locationID.String())
+		return []*world.Character{}, nil
+	}
 	return chars, nil
 }
 

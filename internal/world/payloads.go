@@ -44,7 +44,7 @@ func (c ContainmentType) IsValidOrNone() bool {
 type MovePayload struct {
 	EntityType EntityType      `json:"entity_type"` // "character" | "object"
 	EntityID   ulid.ULID       `json:"entity_id"`
-	FromType   ContainmentType `json:"from_type"` // "location" | "character" | "object" | "none"
+	FromType   ContainmentType `json:"from_type"` // Source containment type; "none" for first-time placements
 	FromID     *ulid.ULID      `json:"from_id,omitempty"`
 	ToType     ContainmentType `json:"to_type"` // "location" | "character" | "object"
 	ToID       ulid.ULID       `json:"to_id"`

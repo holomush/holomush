@@ -717,6 +717,19 @@ func TestExaminePayload_Validate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		// Self-examination is explicitly supported (standard MUSH behavior).
+		// Players commonly use "look me" to see their own description.
+		{
+			name: "self-examination allowed (character examines self)",
+			payload: world.ExaminePayload{
+				CharacterID: charID,
+				TargetType:  world.TargetTypeCharacter,
+				TargetID:    charID, // Same as CharacterID - examining self
+				TargetName:  "Self",
+				LocationID:  locID,
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

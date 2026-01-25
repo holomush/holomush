@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -243,6 +244,20 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		assert.Empty(t, chars)
 	})
 
+	// Defensive nil check: If service returns nil slice, normalize to empty slice.
+	// Unlike single-entity methods, nil slices are technically valid,
+	// so we normalize rather than return an error.
+	t.Run("normalizes nil slice to empty slice", func(t *testing.T) {
+		svc := &mockWorldService{characters: nil, err: nil}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "test-plugin")
+
+		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+
+		require.NoError(t, err)
+		assert.NotNil(t, chars, "nil slice should be normalized to empty slice")
+		assert.Empty(t, chars)
+	})
+
 	t.Run("propagates errors", func(t *testing.T) {
 		expectedErr := errors.New("database error")
 		svc := &mockWorldService{err: expectedErr}
@@ -327,6 +342,99 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, obj)
 		assert.ErrorIs(t, err, world.ErrNotFound)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+	})
+}
+
+// blockingMockWorldService simulates slow operations that respect context cancellation.
+// Methods block until the context is cancelled, then return context.DeadlineExceeded.
+type blockingMockWorldService struct{}
+
+func (m *blockingMockWorldService) GetLocation(ctx context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (m *blockingMockWorldService) GetCharacter(ctx context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (m *blockingMockWorldService) GetCharactersByLocation(ctx context.Context, _ string, _ ulid.ULID) ([]*world.Character, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (m *blockingMockWorldService) GetObject(ctx context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// TestWorldQuerierAdapter_ContextTimeout verifies graceful handling of context
+// timeouts for all query methods. The adapter should propagate context errors
+// without panicking and wrap them appropriately.
+func TestWorldQuerierAdapter_ContextTimeout(t *testing.T) {
+	locID := ulid.Make()
+	charID := ulid.Make()
+	objID := ulid.Make()
+
+	t.Run("GetLocation handles context timeout gracefully", func(t *testing.T) {
+		svc := &blockingMockWorldService{}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "timeout-plugin")
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+
+		loc, err := adapter.GetLocation(ctx, locID)
+
+		assert.Nil(t, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+	})
+
+	t.Run("GetCharacter handles context timeout gracefully", func(t *testing.T) {
+		svc := &blockingMockWorldService{}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "timeout-plugin")
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+
+		char, err := adapter.GetCharacter(ctx, charID)
+
+		assert.Nil(t, char)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+	})
+
+	t.Run("GetCharactersByLocation handles context timeout gracefully", func(t *testing.T) {
+		svc := &blockingMockWorldService{}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "timeout-plugin")
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+
+		chars, err := adapter.GetCharactersByLocation(ctx, locID)
+
+		assert.Nil(t, chars)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+	})
+
+	t.Run("GetObject handles context timeout gracefully", func(t *testing.T) {
+		svc := &blockingMockWorldService{}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "timeout-plugin")
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		defer cancel()
+
+		obj, err := adapter.GetObject(ctx, objID)
+
+		assert.Nil(t, obj)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
 		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
 	})
 }

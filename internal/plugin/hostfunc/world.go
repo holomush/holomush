@@ -292,6 +292,10 @@ func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 			L.SetField(object, "owner_id", lua.LString(obj.OwnerID.String()))
 		}
 
+		// Containment type
+		containment := obj.Containment()
+		L.SetField(object, "containment_type", lua.LString(string((&containment).Type())))
+
 		L.Push(object)
 		L.Push(lua.LNil)
 		return 2

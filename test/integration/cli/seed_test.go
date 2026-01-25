@@ -7,7 +7,9 @@ package cli_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"sync"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
@@ -118,14 +120,50 @@ var _ = Describe("Seed Command", func() {
 			// The warning is logged via slog.Warn which goes to stderr in JSON format
 			Expect(string(output2)).To(ContainSubstring("mismatch"))
 		})
+
+		It("handles concurrent seed commands without creating duplicates", func() {
+			var wg sync.WaitGroup
+			results := make(chan error, 5)
+
+			for i := 0; i < 5; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					cmd := exec.CommandContext(ctx, "go", "run", ".", "seed")
+					cmd.Dir = "../../../cmd/holomush"
+					cmd.Env = []string{
+						"DATABASE_URL=" + env.connStr,
+						"PATH=" + os.Getenv("PATH"),
+						"HOME=" + os.Getenv("HOME"),
+					}
+					err := cmd.Run()
+					results <- err
+				}()
+			}
+			wg.Wait()
+			close(results)
+
+			// Some may succeed, some may fail with constraint violation - that's expected
+			// The important thing is exactly one location exists
+
+			// Verify exactly one location exists
+			var count int
+			err := env.pool.QueryRow(ctx, "SELECT COUNT(*) FROM locations WHERE name = 'The Nexus'").Scan(&count)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(count).To(Equal(1))
+		})
 	})
 
 	Describe("Error handling", func() {
 		It("fails with CONFIG_INVALID when DATABASE_URL is missing", func() {
 			cmd := exec.CommandContext(ctx, "go", "run", ".", "seed")
 			cmd.Dir = "../../../cmd/holomush"
-			// Don't set DATABASE_URL - inherits PATH but not DATABASE_URL from parent
-			// By not calling cmd.Env = append(cmd.Environ(), ...) we get empty DATABASE_URL
+			// Explicitly set environment to exclude DATABASE_URL.
+			// Without this, exec.Command inherits ALL environment variables from parent.
+			cmd.Env = []string{
+				"PATH=" + os.Getenv("PATH"),
+				"HOME=" + os.Getenv("HOME"),
+			}
 
 			output, err := cmd.CombinedOutput()
 			Expect(err).To(HaveOccurred())

@@ -52,7 +52,7 @@ func NewService(cfg ServiceConfig) *Service {
 		panic("world.NewService: AccessControl is required")
 	}
 	if cfg.EventEmitter == nil {
-		slog.Warn("world.NewService: EventEmitter not configured, world events will not be emitted")
+		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
 	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
@@ -507,4 +507,226 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Wrapf(err, "list participants for scene %s", sceneID)
 	}
 	return participants, nil
+}
+
+// MoveCharacter moves a character to a new location.
+// Emits a "move" event for plugins after successful database update.
+//
+// Event emission follows eventual consistency: the database move succeeds atomically first,
+// then an event is emitted. If event emission fails after all retries are exhausted:
+//   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
+//   - Error context includes move_succeeded=true to indicate the database change persisted
+//   - Callers should NOT retry the move (it already succeeded in the database)
+//   - Callers may choose to log the event failure and treat the user operation as successful
+//
+// This design ensures data consistency while surfacing event delivery failures to callers.
+func (s *Service) MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("character:%s", characterID.String())
+	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
+		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Get current location for the move event
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "move character %s", characterID)
+		}
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+
+	// Verify destination location exists
+	if s.locationRepo == nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("location repository not configured")
+	}
+	if _, err := s.locationRepo.Get(ctx, toLocationID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "move character to location %s", toLocationID)
+		}
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "verify destination location %s", toLocationID)
+	}
+
+	// Update character location
+	if err := s.characterRepo.UpdateLocation(ctx, characterID, &toLocationID); err != nil {
+		return oops.Code("CHARACTER_MOVE_FAILED").Wrapf(err, "update character %s location", characterID)
+	}
+
+	// Build move payload
+	var fromType ContainmentType
+	var fromID *ulid.ULID
+	if char.LocationID == nil {
+		fromType = ContainmentTypeNone
+		fromID = nil
+	} else {
+		fromType = ContainmentTypeLocation
+		fromID = char.LocationID
+	}
+
+	payload := MovePayload{
+		EntityType: EntityTypeCharacter,
+		EntityID:   characterID,
+		FromType:   fromType,
+		FromID:     fromID,
+		ToType:     ContainmentTypeLocation,
+		ToID:       toLocationID,
+	}
+	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
+		// Inner error already has EVENT_EMIT_FAILED code from events.go
+		// We add move-specific context for callers to know the DB operation succeeded
+		return oops.With("character_id", characterID.String()).
+			With("move_succeeded", true).
+			Wrapf(err, "move completed but event emission failed")
+	}
+
+	return nil
+}
+
+// ExamineLocation allows a character to examine a location.
+// Emits an examine event for plugins after validation and authorization.
+func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+	}
+	if s.locationRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("location repository not configured")
+	}
+
+	// Get the examining character
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+	}
+
+	// Character must be in the world to examine anything
+	if char.LocationID == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
+	}
+
+	// Get the target location
+	targetLoc, err := s.locationRepo.Get(ctx, targetLocationID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "target location %s not found", targetLocationID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target location %s", targetLocationID)
+	}
+
+	// Check authorization to read the target
+	resource := fmt.Sprintf("location:%s", targetLocationID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Build and emit examine event
+	payload := ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  TargetTypeLocation,
+		TargetID:    targetLocationID,
+		TargetName:  targetLoc.Name,
+		LocationID:  *char.LocationID,
+	}
+	return EmitExamineEvent(ctx, s.eventEmitter, payload)
+}
+
+// ExamineObject allows a character to examine an object.
+// Emits an examine event for plugins after validation and authorization.
+func (s *Service) ExamineObject(ctx context.Context, subjectID string, characterID, targetObjectID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+	}
+	if s.objectRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("object repository not configured")
+	}
+
+	// Get the examining character
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+	}
+
+	// Character must be in the world to examine anything
+	if char.LocationID == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
+	}
+
+	// Get the target object
+	targetObj, err := s.objectRepo.Get(ctx, targetObjectID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "target object %s not found", targetObjectID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target object %s", targetObjectID)
+	}
+
+	// Check authorization to read the target
+	resource := fmt.Sprintf("object:%s", targetObjectID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Build and emit examine event
+	payload := ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  TargetTypeObject,
+		TargetID:    targetObjectID,
+		TargetName:  targetObj.Name,
+		LocationID:  *char.LocationID,
+	}
+	return EmitExamineEvent(ctx, s.eventEmitter, payload)
+}
+
+// ExamineCharacter allows a character to examine another character.
+// Emits an examine event for plugins after validation and authorization.
+func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, characterID, targetCharacterID ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
+	}
+
+	// Get the examining character
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "examine character %s not found", characterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get examining character %s", characterID)
+	}
+
+	// Character must be in the world to examine anything
+	if char.LocationID == nil {
+		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
+	}
+
+	// Get the target character
+	targetChar, err := s.characterRepo.Get(ctx, targetCharacterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "target character %s not found", targetCharacterID)
+		}
+		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target character %s", targetCharacterID)
+	}
+
+	// Check authorization to read the target
+	resource := fmt.Sprintf("character:%s", targetCharacterID.String())
+	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
+		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+
+	// Build and emit examine event
+	payload := ExaminePayload{
+		CharacterID: characterID,
+		TargetType:  TargetTypeCharacter,
+		TargetID:    targetCharacterID,
+		TargetName:  targetChar.Name,
+		LocationID:  *char.LocationID,
+	}
+	return EmitExamineEvent(ctx, s.eventEmitter, payload)
 }
