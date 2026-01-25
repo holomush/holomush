@@ -19,12 +19,12 @@ package world
 import (
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // Visibility controls who can see an exit.
@@ -193,17 +193,21 @@ func (e *Exit) IsVisibleTo(charID ulid.ULID, locationOwnerID *ulid.ULID) bool {
 }
 
 // ReverseExit creates the return exit for a bidirectional exit.
-// Returns nil if not bidirectional or no return name is set.
-func (e *Exit) ReverseExit() *Exit {
+// Returns (nil, nil) if not bidirectional or no return name is set.
+// Returns (nil, error) if LockData cannot be deep copied (e.g., non-serializable types).
+func (e *Exit) ReverseExit() (*Exit, error) {
 	if !e.Bidirectional || e.ReturnName == "" {
-		return nil
+		return nil, nil
 	}
 
 	// Deep copy VisibleTo slice to avoid shared reference
 	visibleTo := slices.Clone(e.VisibleTo)
 
 	// Deep copy LockData map to avoid shared reference (including nested structures)
-	lockData := deepCopyLockData(e.LockData)
+	lockData, err := deepCopyLockData(e.LockData)
+	if err != nil {
+		return nil, oops.Wrapf(err, "failed to deep copy lock data")
+	}
 
 	return &Exit{
 		FromLocationID: e.ToLocationID,
@@ -216,31 +220,29 @@ func (e *Exit) ReverseExit() *Exit {
 		Locked:         e.Locked,
 		LockType:       e.LockType,
 		LockData:       lockData,
-	}
+	}, nil
 }
 
 // deepCopyLockData creates a true deep copy of LockData, including nested maps/slices.
 // Uses JSON round-trip which handles arbitrary nested structures in map[string]any.
-// Returns nil if input is nil. Logs errors and returns nil if marshaling fails.
-func deepCopyLockData(src map[string]any) map[string]any {
+// Returns (nil, nil) if input is nil.
+// Returns (nil, error) if marshaling or unmarshaling fails.
+func deepCopyLockData(src map[string]any) (map[string]any, error) {
 	if src == nil {
-		return nil
+		return nil, nil
 	}
 	data, err := json.Marshal(src)
 	if err != nil {
-		// Log the error - this indicates data corruption or invalid types in LockData
-		slog.Error("deepCopyLockData: failed to marshal lock data",
-			"error", err,
-			"keys", len(src))
-		return nil
+		return nil, oops.Code("LOCK_DATA_MARSHAL_FAILED").
+			With("keys", len(src)).
+			Wrapf(err, "failed to marshal lock data")
 	}
 	var dst map[string]any
 	if err := json.Unmarshal(data, &dst); err != nil {
-		// Log the error - this should not happen with valid JSON from Marshal
-		slog.Error("deepCopyLockData: failed to unmarshal lock data",
-			"error", err,
-			"json_length", len(data))
-		return nil
+		// This should not happen with valid JSON from Marshal
+		return nil, oops.Code("LOCK_DATA_UNMARSHAL_FAILED").
+			With("json_length", len(data)).
+			Wrapf(err, "failed to unmarshal lock data")
 	}
-	return dst
+	return dst, nil
 }

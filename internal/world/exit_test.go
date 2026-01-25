@@ -159,8 +159,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			LockData:       map[string]any{"key_id": "golden-key"},
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 		assert.Equal(t, toID, reverse.FromLocationID)
 		assert.Equal(t, fromID, reverse.ToLocationID)
 		assert.Equal(t, "south", reverse.Name)
@@ -179,7 +180,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			Bidirectional: false,
 			ReturnName:    "south",
 		}
-		assert.Nil(t, exit.ReverseExit())
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		assert.Nil(t, reverse)
 	})
 
 	t.Run("no return name returns nil", func(t *testing.T) {
@@ -189,7 +192,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			Bidirectional: true,
 			ReturnName:    "",
 		}
-		assert.Nil(t, exit.ReverseExit())
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		assert.Nil(t, reverse)
 	})
 
 	t.Run("reverse exit does not share mutable references", func(t *testing.T) {
@@ -208,8 +213,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			LockData:       lockData,
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 
 		// Modify the reverse exit's mutable fields
 		reverse.LockData["key_id"] = "modified-key"
@@ -241,8 +247,9 @@ func TestExit_ReverseExit(t *testing.T) {
 			LockData:       lockData,
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 
 		// Modify the nested map in reverse exit
 		reverseConditions := reverse.LockData["conditions"].(map[string]any)
@@ -264,14 +271,15 @@ func TestExit_ReverseExit(t *testing.T) {
 			ReturnName:     "south",
 		}
 
-		reverse := exit.ReverseExit()
-		assert.NotNil(t, reverse)
+		reverse, err := exit.ReverseExit()
+		require.NoError(t, err)
+		require.NotNil(t, reverse)
 		assert.Empty(t, reverse.Aliases, "reverse exit should not inherit aliases")
 	})
 
 	t.Run("non-serializable LockData rejected at validation", func(t *testing.T) {
 		// LockData with a channel cannot be marshaled to JSON
-		// This is now caught at validation time, not during ReverseExit
+		// This is caught at validation time
 		exit := &world.Exit{
 			ID:             ulid.Make(),
 			FromLocationID: fromID,
@@ -288,6 +296,28 @@ func TestExit_ReverseExit(t *testing.T) {
 		err := exit.Validate()
 		require.Error(t, err, "exit with non-serializable LockData should fail validation")
 		assert.Contains(t, err.Error(), "not JSON-serializable")
+	})
+
+	t.Run("ReverseExit returns error on non-serializable LockData", func(t *testing.T) {
+		// LockData with a channel cannot be marshaled to JSON
+		// ReverseExit should return an error instead of silently returning nil LockData
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Bidirectional:  true,
+			ReturnName:     "south",
+			Visibility:     world.VisibilityAll,
+			Locked:         true,
+			LockType:       world.LockTypeKey,
+			LockData:       map[string]any{"channel": make(chan int)},
+		}
+
+		reverse, err := exit.ReverseExit()
+		require.Error(t, err, "ReverseExit should return error for non-serializable LockData")
+		assert.Nil(t, reverse)
+		assert.Contains(t, err.Error(), "failed to deep copy lock data")
 	})
 }
 

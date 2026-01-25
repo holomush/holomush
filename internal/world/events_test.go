@@ -721,7 +721,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 	// objects with no containment cannot be created from outside the package.
 	// The ContainmentType().Type() returning "none" is tested via Containment tests.
 
-	t.Run("fails when event emitter fails", func(t *testing.T) {
+	t.Run("fails with EVENT_EMIT_FAILED when event emitter fails", func(t *testing.T) {
 		emitErr := errors.New("event bus unavailable")
 		emitter := &mockEventEmitter{err: emitErr}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -740,8 +740,11 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
 		// Event emission failure should fail the operation
+		// Note: oops preserves inner error code (EVENT_EMIT_FAILED from events.go)
+		// Service wrapper adds OBJECT_MOVE_EVENT_FAILED but inner code takes precedence
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "event")
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		errutil.AssertErrorContext(t, err, "move_succeeded", true)
 	})
 }

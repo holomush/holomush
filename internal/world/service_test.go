@@ -848,7 +848,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 	// objects with no containment cannot be created from outside the package.
 	// Objects must always have valid containment per the domain invariant.
 
-	t.Run("returns error when event emitter fails", func(t *testing.T) {
+	t.Run("returns EVENT_EMIT_FAILED when event emitter fails", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
@@ -871,6 +871,8 @@ func TestWorldService_MoveObject(t *testing.T) {
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.Error(t, err)
+		// Note: oops preserves inner error code (EVENT_EMIT_FAILED from events.go)
+		// Service wrapper adds OBJECT_MOVE_EVENT_FAILED but inner code takes precedence
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
 		mockAC.AssertExpectations(t)
@@ -3030,8 +3032,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 
 		err = svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
-		// The inner EVENT_EMIT_FAILED code is returned (from events.go),
-		// wrapped by service.go with move_succeeded context
+		// Note: oops preserves inner error code (EVENT_EMIT_FAILED from events.go)
+		// Service wrapper adds OBJECT_MOVE_EVENT_FAILED but inner code takes precedence
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		// Verify the error context indicates the move succeeded in the database
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
@@ -3569,7 +3571,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		mockAC.AssertExpectations(t)
 	})
 
-	t.Run("returns error when event emission fails but move_succeeded=true", func(t *testing.T) {
+	t.Run("returns EVENT_EMIT_FAILED when event emission fails", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -3595,7 +3597,9 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "event")
+		// Note: oops preserves inner error code (EVENT_EMIT_FAILED from events.go)
+		// Service wrapper adds CHARACTER_MOVE_EVENT_FAILED but inner code takes precedence
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
 		mockAC.AssertExpectations(t)
 	})
@@ -3964,7 +3968,11 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
+		// Inner code preserved by oops error chaining (see EmitExamineEvent)
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		// Verify operation context is present
+		errutil.AssertErrorContext(t, err, "character_id", charID.String())
+		errutil.AssertErrorContext(t, err, "target_id", targetLocID.String())
 		mockAC.AssertExpectations(t)
 	})
 
@@ -4187,7 +4195,11 @@ func TestWorldService_ExamineObject(t *testing.T) {
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
+		// Inner code preserved by oops error chaining (see EmitExamineEvent)
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		// Verify operation context is present
+		errutil.AssertErrorContext(t, err, "character_id", charID.String())
+		errutil.AssertErrorContext(t, err, "target_id", targetObjID.String())
 		mockAC.AssertExpectations(t)
 	})
 
@@ -4422,7 +4434,11 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)
+		// Inner code preserved by oops error chaining (see EmitExamineEvent)
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
+		// Verify operation context is present
+		errutil.AssertErrorContext(t, err, "character_id", charID.String())
+		errutil.AssertErrorContext(t, err, "target_id", targetCharID.String())
 		mockAC.AssertExpectations(t)
 	})
 }

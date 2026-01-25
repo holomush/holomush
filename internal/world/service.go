@@ -432,9 +432,10 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		// Inner error already has EVENT_EMIT_FAILED code from events.go
-		// We add move-specific context for callers to know the DB operation succeeded
-		return oops.With("object_id", id.String()).
+		// Add OBJECT_MOVE_EVENT_FAILED at top level for error categorization
+		// Inner error has EVENT_EMIT_FAILED code from events.go
+		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
+			With("object_id", id.String()).
 			With("move_succeeded", true).
 			Wrapf(err, "move completed but event emission failed")
 	}
@@ -603,9 +604,10 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 		ToID:       toLocationID,
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		// Inner error already has EVENT_EMIT_FAILED code from events.go
-		// We add move-specific context for callers to know the DB operation succeeded
-		return oops.With("character_id", characterID.String()).
+		// Add CHARACTER_MOVE_EVENT_FAILED at top level for error categorization
+		// Inner error has EVENT_EMIT_FAILED code from events.go
+		return oops.Code("CHARACTER_MOVE_EVENT_FAILED").
+			With("character_id", characterID.String()).
 			With("move_succeeded", true).
 			Wrapf(err, "move completed but event emission failed")
 	}
@@ -662,7 +664,13 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 		TargetName:  targetLoc.Name,
 		LocationID:  *char.LocationID,
 	}
-	return EmitExamineEvent(ctx, s.eventEmitter, payload)
+	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
+		return oops.Code("EXAMINE_LOCATION_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("target_id", targetLocationID.String()).
+			Wrapf(err, "examine location event emission failed")
+	}
+	return nil
 }
 
 // ExamineObject allows a character to examine an object.
@@ -714,7 +722,13 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 		TargetName:  targetObj.Name,
 		LocationID:  *char.LocationID,
 	}
-	return EmitExamineEvent(ctx, s.eventEmitter, payload)
+	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
+		return oops.Code("EXAMINE_OBJECT_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("target_id", targetObjectID.String()).
+			Wrapf(err, "examine object event emission failed")
+	}
+	return nil
 }
 
 // ExamineCharacter allows a character to examine another character.
@@ -763,5 +777,11 @@ func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, charac
 		TargetName:  targetChar.Name,
 		LocationID:  *char.LocationID,
 	}
-	return EmitExamineEvent(ctx, s.eventEmitter, payload)
+	if err := EmitExamineEvent(ctx, s.eventEmitter, payload); err != nil {
+		return oops.Code("EXAMINE_CHARACTER_EVENT_FAILED").
+			With("character_id", characterID.String()).
+			With("target_id", targetCharacterID.String()).
+			Wrapf(err, "examine character event emission failed")
+	}
+	return nil
 }

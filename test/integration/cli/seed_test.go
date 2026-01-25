@@ -122,10 +122,23 @@ var _ = Describe("Seed Command", func() {
 		})
 
 		It("handles concurrent seed commands without creating duplicates", func() {
-			var wg sync.WaitGroup
-			results := make(chan error, 5)
+			// This test verifies that concurrent seed execution doesn't create
+			// duplicate locations. The seed command handles location unique
+			// constraint violations gracefully (returns success after detecting
+			// existing location).
+			//
+			// NOTE: Full concurrent CLI seed execution also tests migration
+			// concurrency. The migration system may not be fully idempotent for
+			// concurrent execution (constraint creation can race). This test
+			// accepts that some concurrent seeds may fail due to migration races,
+			// but verifies the KEY INVARIANT: exactly one location is created.
 
-			for i := 0; i < 5; i++ {
+			const numConcurrent = 5
+			var wg sync.WaitGroup
+			successCount := 0
+			var mu sync.Mutex
+
+			for i := 0; i < numConcurrent; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
@@ -136,21 +149,24 @@ var _ = Describe("Seed Command", func() {
 						"PATH=" + os.Getenv("PATH"),
 						"HOME=" + os.Getenv("HOME"),
 					}
-					err := cmd.Run()
-					results <- err
+					if err := cmd.Run(); err == nil {
+						mu.Lock()
+						successCount++
+						mu.Unlock()
+					}
 				}()
 			}
 			wg.Wait()
-			close(results)
 
-			// Some may succeed, some may fail with constraint violation - that's expected
-			// The important thing is exactly one location exists
+			// At least one should succeed (the first to complete migrations+insert)
+			Expect(successCount).To(BeNumerically(">=", 1),
+				"at least one concurrent seed should succeed")
 
-			// Verify exactly one location exists
+			// KEY INVARIANT: Exactly one location exists (no duplicates)
 			var count int
 			err := env.pool.QueryRow(ctx, "SELECT COUNT(*) FROM locations WHERE name = 'The Nexus'").Scan(&count)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(count).To(Equal(1))
+			Expect(count).To(Equal(1), "exactly one location should exist")
 		})
 	})
 
