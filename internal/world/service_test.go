@@ -3389,6 +3389,28 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		mockAC.AssertExpectations(t)
 	})
 
+	t.Run("returns CHARACTER_MOVE_FAILED when Get fails with generic error", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			AccessControl: mockAC,
+		})
+
+		dbErr := errors.New("database connection lost")
+		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, dbErr)
+
+		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
+		assert.Contains(t, err.Error(), "get character")
+		mockAC.AssertExpectations(t)
+	})
+
 	t.Run("returns LOCATION_NOT_FOUND when destination does not exist", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -3414,6 +3436,35 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns CHARACTER_MOVE_FAILED when location verification fails with generic error", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			AccessControl: mockAC,
+		})
+
+		existingChar := &world.Character{
+			ID:         charID,
+			Name:       "Test Character",
+			LocationID: &fromLocID,
+		}
+
+		dbErr := errors.New("database timeout")
+		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
+		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(nil, dbErr)
+
+		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
+		assert.Contains(t, err.Error(), "verify destination location")
 		mockAC.AssertExpectations(t)
 	})
 
@@ -3905,6 +3956,64 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
 		mockAC.AssertExpectations(t)
 	})
+
+	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+			// No EventEmitter configured
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetObj := &world.Object{
+			ID:   targetObjID,
+			Name: "Ancient Chest",
+		}
+
+		mockAC.On("Check", ctx, subjectID, "read", "object:"+targetObjID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+
+		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when examiner not in world", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: nil, // Not in world
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+
+		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXAMINE_FAILED")
+		assert.Contains(t, err.Error(), "not in world")
+	})
 }
 
 func TestWorldService_ExamineCharacter(t *testing.T) {
@@ -3976,6 +4085,29 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
 	})
 
+	t.Run("returns error when examiner not in world", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			AccessControl: mockAC,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: nil, // Not in world
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+
+		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXAMINE_FAILED")
+		assert.Contains(t, err.Error(), "not in world")
+	})
+
 	t.Run("returns CHARACTER_NOT_FOUND when target does not exist", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -4028,6 +4160,37 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			AccessControl: mockAC,
+			// No EventEmitter configured
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetChar := &world.Character{
+			ID:   targetCharID,
+			Name: "Mysterious Stranger",
+		}
+
+		mockAC.On("Check", ctx, subjectID, "read", "character:"+targetCharID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+
+		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
+		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
 		mockAC.AssertExpectations(t)
 	})
 }

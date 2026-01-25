@@ -46,7 +46,12 @@ func NewSeedCmd() *cobra.Command {
 		Use:   "seed",
 		Short: "Seed the world with initial data",
 		Long: `Creates initial world data including a starting location.
-This command is idempotent - it will not create duplicates if run multiple times.`,
+This command is idempotent - it will not create duplicates if run multiple times.
+
+When re-running on an existing database, the command verifies that seed data
+attributes match. Use --no-strict to allow attribute mismatches (warns instead
+of failing). Note that verification failures due to database errors always fail
+and cannot be suppressed by --no-strict.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSeed(cmd, args, cfg)
 		},
@@ -116,9 +121,7 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 			// Verify existing location matches expected attributes
 			existing, getErr := locationRepo.Get(ctx, startingLocID)
 			if getErr != nil {
-				logVerificationFailure(cmd, startingLocID, getErr)
-				slog.Info("World already seeded", "location_id", startingLocID)
-				return nil
+				return handleVerificationFailure(cmd, startingLocID, getErr)
 			}
 
 			// Collect and check for attribute mismatches
@@ -183,6 +186,16 @@ func logVerificationFailure(cmd *cobra.Command, locationID ulid.ULID, err error)
 		"location_id", locationID,
 		"error", err)
 	cmd.PrintErrln("WARNING: Could not verify existing seed location attributes")
+}
+
+// handleVerificationFailure returns an error when we cannot verify existing seed location.
+// This error is NOT suppressible by --no-strict because verification failure indicates
+// a database error (not a data mismatch), which requires investigation.
+func handleVerificationFailure(cmd *cobra.Command, locationID ulid.ULID, err error) error {
+	logVerificationFailure(cmd, locationID, err)
+	return oops.Code("SEED_VERIFY_FAILED").
+		With("location_id", locationID.String()).
+		Wrapf(err, "seed location exists but could not verify attributes")
 }
 
 // checkSeedMismatches prints warnings for mismatches and returns an error in strict mode.

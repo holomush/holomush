@@ -52,6 +52,8 @@ func (a *WorldQuerierAdapter) SubjectID() string {
 }
 
 // GetLocation retrieves a location by ID with plugin authorization.
+// Returns errors with code PLUGIN_QUERY_FAILED on failure.
+// If the service returns nil without error, treats as ErrNotFound.
 func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error) {
 	loc, err := a.service.GetLocation(ctx, a.SubjectID(), id)
 	if err != nil {
@@ -74,6 +76,8 @@ func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*w
 }
 
 // GetCharacter retrieves a character by ID with plugin authorization.
+// Returns errors with code PLUGIN_QUERY_FAILED on failure.
+// If the service returns nil without error, treats as ErrNotFound.
 func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error) {
 	char, err := a.service.GetCharacter(ctx, a.SubjectID(), id)
 	if err != nil {
@@ -96,6 +100,8 @@ func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*
 }
 
 // GetCharactersByLocation retrieves all characters at a location with plugin authorization.
+// Returns errors with code PLUGIN_QUERY_FAILED on failure.
+// If the service returns nil, normalizes to empty slice for consistency.
 func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error) {
 	chars, err := a.service.GetCharactersByLocation(ctx, a.SubjectID(), locationID)
 	if err != nil {
@@ -117,6 +123,8 @@ func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locat
 }
 
 // GetObject retrieves an object by ID with plugin authorization.
+// Returns errors with code PLUGIN_QUERY_FAILED on failure.
+// If the service returns nil without error, treats as ErrNotFound.
 func (a *WorldQuerierAdapter) GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error) {
 	obj, err := a.service.GetObject(ctx, a.SubjectID(), id)
 	if err != nil {

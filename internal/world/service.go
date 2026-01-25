@@ -359,7 +359,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 // Emits a "move" event for plugins after successful database update.
 //
 // Event emission follows eventual consistency: the database move succeeds atomically first,
-// then an event is emitted. If event emission fails after all retries are exhausted:
+// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
 //   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
 //   - Error context includes move_succeeded=true to indicate the database change persisted
 //   - Callers should NOT retry the move (it already succeeded in the database)
@@ -513,7 +513,7 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 // Emits a "move" event for plugins after successful database update.
 //
 // Event emission follows eventual consistency: the database move succeeds atomically first,
-// then an event is emitted. If event emission fails after all retries are exhausted:
+// then an event is emitted. If event emission fails after all retries (3 retries, 4 total attempts) are exhausted:
 //   - Returns EVENT_EMIT_FAILED error (from events.go, wrapped with move context)
 //   - Error context includes move_succeeded=true to indicate the database change persisted
 //   - Callers should NOT retry the move (it already succeeded in the database)

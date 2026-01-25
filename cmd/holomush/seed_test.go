@@ -211,6 +211,46 @@ func TestLogVerificationFailure(t *testing.T) {
 	assert.Contains(t, errBuf.String(), "Could not verify existing seed location", "stderr should describe the issue")
 }
 
+func TestHandleVerificationFailure_ReturnsError(t *testing.T) {
+	// Test that handleVerificationFailure returns SEED_VERIFY_FAILED error
+	// and that this error is NOT suppressible by --no-strict
+	tests := []struct {
+		name     string
+		noStrict bool
+	}{
+		{
+			name:     "strict mode returns error",
+			noStrict: false,
+		},
+		{
+			name:     "no-strict mode also returns error (verification failures are never suppressed)",
+			noStrict: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var errBuf bytes.Buffer
+			cmd := &cobra.Command{}
+			cmd.SetErr(&errBuf)
+
+			id, _ := ulid.Parse("01HZN3XS000000000000000000")
+			dbErr := errors.New("connection refused")
+
+			// handleVerificationFailure should return error regardless of noStrict
+			err := handleVerificationFailure(cmd, id, dbErr)
+
+			require.Error(t, err, "verification failure must return error")
+			errutil.AssertErrorCode(t, err, "SEED_VERIFY_FAILED")
+			errutil.AssertErrorContext(t, err, "location_id", id.String())
+			assert.Contains(t, err.Error(), "could not verify attributes")
+
+			// Verify the underlying error is wrapped
+			assert.ErrorIs(t, err, dbErr)
+		})
+	}
+}
+
 func TestCollectMismatches(t *testing.T) {
 	id, _ := ulid.Parse("01HZN3XS000000000000000000")
 

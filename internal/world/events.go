@@ -91,6 +91,8 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 }
 
 // EmitMoveEvent emits a move event for character or object movement.
+// Retries up to 3 times with exponential backoff (4 total attempts) before
+// returning EVENT_EMIT_FAILED.
 // Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns a validation error if the payload is invalid.
 func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayload) error {
@@ -123,6 +125,8 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 }
 
 // EmitObjectCreateEvent emits an object creation event.
+// Retries up to 3 times with exponential backoff (4 total attempts) before
+// returning EVENT_EMIT_FAILED.
 // Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns an error if obj is nil.
 func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Object) error {
@@ -166,6 +170,8 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 }
 
 // EmitExamineEvent emits an examine/look event when a character looks at something.
+// Retries up to 3 times with exponential backoff (4 total attempts) before
+// returning EVENT_EMIT_FAILED.
 // Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns a validation error if the payload is invalid.
 func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload ExaminePayload) error {
@@ -199,6 +205,8 @@ func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload Examine
 }
 
 // EmitObjectGiveEvent emits an object give event for transfers between characters.
+// Retries up to 3 times with exponential backoff (4 total attempts) before
+// returning EVENT_EMIT_FAILED.
 // Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
 // Returns a validation error if the payload is invalid.
 func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload ObjectGivePayload) error {
