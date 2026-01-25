@@ -273,6 +273,21 @@ func TestParseAutoMigrate(t *testing.T) {
 			envValue: "invalid",
 			expected: true,
 		},
+		{
+			name:     "set to False (mixed case)",
+			envValue: "False",
+			expected: false,
+		},
+		{
+			name:     "set to fAlSe (mixed case)",
+			envValue: "fAlSe",
+			expected: false,
+		},
+		{
+			name:     "set to True (mixed case)",
+			envValue: "True",
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {

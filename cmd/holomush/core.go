@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -475,11 +476,9 @@ func parseAutoMigrate() bool {
 		return true // Default: auto-migration enabled
 	}
 
-	// Check for explicit false values
-	switch val {
-	case "false", "FALSE", "0":
+	// Check for explicit false values (case-insensitive)
+	if strings.EqualFold(val, "false") || val == "0" {
 		return false
-	default:
-		return true
 	}
+	return true
 }
