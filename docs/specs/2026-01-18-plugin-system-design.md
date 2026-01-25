@@ -558,13 +558,62 @@ type EventEmitter interface {
     Emit(ctx context.Context, stream, eventType string, payload []byte) error
 }
 
-// WorldReader provides read-only access to world data.
-type WorldReader interface {
-    GetLocation(ctx context.Context, id string) (*Location, error)
-    GetCharacter(ctx context.Context, id string) (*Character, error)
-    GetObject(ctx context.Context, id string) (*Object, error)
+// WorldQuerier provides read-only access to world data for plugins.
+// This interface is implemented by WorldQuerierAdapter, which wraps
+// the world.Service with per-plugin authorization.
+type WorldQuerier interface {
+    GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error)
+    GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error)
+    GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error)
+}
+
+// WorldService is the underlying service that WorldQuerierAdapter wraps.
+// It includes a subjectID parameter for ABAC authorization.
+type WorldService interface {
+    GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+    GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
+    GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Character, error)
 }
 ```
+
+### World Query Authorization
+
+World queries use a **two-layer authorization model** for defense-in-depth:
+
+1. **Capability check** - The plugin MUST have the appropriate capability
+   (e.g., `world.read.location`) to call the host function at all.
+
+2. **ABAC check** - Each query is routed through the ABAC layer with a
+   system-level authorization subject: `system:plugin:<pluginName>`.
+
+This architecture enables:
+
+- **Defense in depth** - Even if a capability check is bypassed, ABAC provides
+  a second authorization barrier.
+- **Consistent authorization model** - Plugins use the same ABAC infrastructure
+  as user requests.
+- **Future flexibility** - Per-plugin ABAC policies can restrict specific plugins
+  to specific resources without changing capabilities.
+
+```go
+// WorldQuerierAdapter wraps WorldService to provide plugin access with
+// system-level authorization. Each plugin gets its own adapter instance.
+type WorldQuerierAdapter struct {
+    service    WorldService
+    pluginName string
+}
+
+func (a *WorldQuerierAdapter) SubjectID() string {
+    return "system:plugin:" + a.pluginName
+}
+
+func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error) {
+    return a.service.GetLocation(ctx, a.SubjectID(), id)
+}
+```
+
+The adapter is created per-query in the host function implementation, ensuring
+each plugin's queries are properly attributed for authorization and audit logging.
 
 ### Function Registry
 
