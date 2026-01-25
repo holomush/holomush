@@ -18,8 +18,10 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// kvTimeout is the default timeout for KV operations to prevent indefinite hangs.
-const kvTimeout = 5 * time.Second
+// defaultPluginQueryTimeout is the timeout for plugin host function operations
+// including KV operations and world queries. This prevents indefinite hangs
+// when backend services are slow or unresponsive.
+const defaultPluginQueryTimeout = 5 * time.Second
 
 // KVStore provides namespaced key-value storage.
 type KVStore interface {
@@ -209,7 +211,7 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		value, err := f.kvStore.Get(ctx, pluginName, key)
@@ -253,7 +255,7 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
@@ -289,7 +291,7 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {

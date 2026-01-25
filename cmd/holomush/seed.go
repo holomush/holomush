@@ -46,12 +46,14 @@ func NewSeedCmd() *cobra.Command {
 		Use:   "seed",
 		Short: "Seed the world with initial data",
 		Long: `Creates initial world data including a starting location.
-This command is idempotent - it will not create duplicates if run multiple times.
 
-When re-running on an existing database, the command verifies that seed data
-attributes match. Use --no-strict to allow attribute mismatches (warns instead
-of failing). Note that verification failures due to database errors always fail
-and cannot be suppressed by --no-strict.`,
+This command supports safe re-runs - it will not create duplicates if run
+multiple times. When re-running, it verifies that existing seed data matches
+expected values and fails if attributes differ.
+
+Use --no-strict to continue on attribute mismatches (logs a warning instead of
+failing). Database errors during verification always fail regardless of
+--no-strict.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSeed(cmd, args, cfg)
 		},

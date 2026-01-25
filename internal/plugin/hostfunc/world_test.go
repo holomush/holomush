@@ -205,6 +205,26 @@ func TestQueryRoom_PermissionDenied(t *testing.T) {
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
+func TestQueryRoom_Timeout(t *testing.T) {
+	roomID := ulid.Make()
+	// Context timeout should be surfaced to plugins as "query timed out"
+	querier := &mockWorldQuerier{err: context.DeadlineExceeded}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`room, err = holomush.query_room("` + roomID.String() + `")`)
+	require.NoError(t, err)
+
+	room := L.GetGlobal("room")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, room.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	assert.Equal(t, "query timed out", errVal.String(), "expected timeout error message")
+}
+
 func TestQueryRoom_RequiresCapability(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{

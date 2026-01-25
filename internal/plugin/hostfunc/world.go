@@ -29,6 +29,13 @@ func sanitizeErrorForPlugin(pluginName, entityType, entityID string, err error) 
 	if errors.Is(err, world.ErrPermissionDenied) {
 		return "access denied"
 	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		slog.Warn("plugin query timed out",
+			"plugin", pluginName,
+			"entity_type", entityType,
+			"entity_id", entityID)
+		return "query timed out"
+	}
 	// Generate correlation ID for this error instance.
 	// This allows operators to find the corresponding log entry when a plugin
 	// reports an internal error to users.
@@ -85,7 +92,7 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
@@ -139,7 +146,7 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
@@ -196,7 +203,7 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
@@ -254,7 +261,7 @@ func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), kvTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization

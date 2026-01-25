@@ -3634,6 +3634,40 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 		mockAC.AssertExpectations(t)
 	})
+
+	t.Run("propagates context cancellation error", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+		emitter := &mockEventEmitter{err: errors.New("transient error")}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			AccessControl: mockAC,
+			EventEmitter:  emitter,
+		})
+
+		existingChar := &world.Character{
+			ID:         charID,
+			Name:       "Test Character",
+			LocationID: &fromLocID,
+		}
+
+		mockAC.On("Check", cancelCtx, subjectID, "write", "character:"+charID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(mock.Anything, charID).Return(existingChar, nil)
+		mockLocRepo.EXPECT().Get(mock.Anything, toLocID).Return(&world.Location{ID: toLocID}, nil)
+		mockCharRepo.EXPECT().UpdateLocation(mock.Anything, charID, &toLocID).Return(nil)
+
+		err := svc.MoveCharacter(cancelCtx, subjectID, charID, toLocID)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+		mockAC.AssertExpectations(t)
+	})
 }
 
 func TestWorldService_ExamineLocation(t *testing.T) {
@@ -3797,6 +3831,39 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when event emitter fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			AccessControl: mockAC,
+			EventEmitter:  emitter,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetLoc := &world.Location{
+			ID:   targetLocID,
+			Name: "Grand Hall",
+		}
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+targetLocID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+
+		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		mockAC.AssertExpectations(t)
 	})
 
@@ -3987,6 +4054,39 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when event emitter fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			ObjectRepo:    mockObjRepo,
+			AccessControl: mockAC,
+			EventEmitter:  emitter,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetObj := &world.Object{
+			ID:   targetObjID,
+			Name: "Ancient Chest",
+		}
+
+		mockAC.On("Check", ctx, subjectID, "read", "object:"+targetObjID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+
+		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		mockAC.AssertExpectations(t)
 	})
 
@@ -4191,6 +4291,37 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when event emitter fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			AccessControl: mockAC,
+			EventEmitter:  emitter,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetChar := &world.Character{
+			ID:   targetCharID,
+			Name: "Mysterious Stranger",
+		}
+
+		mockAC.On("Check", ctx, subjectID, "read", "character:"+targetCharID.String()).Return(true)
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+
+		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		mockAC.AssertExpectations(t)
 	})
 }
