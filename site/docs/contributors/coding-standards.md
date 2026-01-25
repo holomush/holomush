@@ -261,9 +261,9 @@ docs/
 internal/            # Private implementation
   core/              # Event system, sessions, world engine
   store/             # PostgreSQL implementations
-  wasm/              # Plugin host
+  plugins/           # Plugin host (Lua & Go)
 pkg/                 # Public plugin API
-plugins/             # Core plugins
+plugins/             # Core plugins (Lua for customization, Go for performance)
 scripts/             # Build and utility scripts
 test/integration/    # End-to-end test suites
 ```

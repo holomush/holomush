@@ -38,3 +38,6 @@ MD046: false
 # Code fence style
 MD048:
   style: backtick
+
+# Allow flexible list marker spacing (needed for Material for MkDocs grid cards)
+MD030: false
