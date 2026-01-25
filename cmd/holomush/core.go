@@ -123,7 +123,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		}
 	}
 	if deps.MigratorFactory == nil {
-		deps.MigratorFactory = func(url string) (Migrator, error) {
+		deps.MigratorFactory = func(url string) (AutoMigrator, error) {
 			return store.NewMigrator(url)
 		}
 	}
@@ -447,7 +447,7 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 
 // runAutoMigration runs database migrations using the provided factory.
 // It logs the migration status and ensures the migrator is closed.
-func runAutoMigration(databaseURL string, factory func(string) (Migrator, error)) error {
+func runAutoMigration(databaseURL string, factory func(string) (AutoMigrator, error)) error {
 	slog.Info("running auto-migration")
 
 	migrator, err := factory(databaseURL)

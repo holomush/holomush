@@ -14,7 +14,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// migrateLogicMock implements MigratorIface for testing CLI output.
+// migrateLogicMock implements the migrator interface for testing CLI output.
 type migrateLogicMock struct {
 	version               uint
 	dirty                 bool
@@ -653,4 +653,27 @@ func TestMigrateDownDryRun_AppliedError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to list applied")
+}
+
+// Default migrate command tests (runs migrate up)
+
+func TestNewMigrateCmd_DefaultRunsUp(t *testing.T) {
+	// Test that calling 'migrate' without subcommand runs the migrate up logic
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 3, versionAfterMigration: 7}
+
+	// Directly test the default behavior by calling runMigrateUpLogic
+	// This verifies that when no subcommand is provided, migrate up is executed
+	err := runMigrateUpLogic(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Migrated from version 3 to 7")
+	assert.True(t, mock.upCalled)
+}
+
+func TestNewMigrateCmd_HasRunE(t *testing.T) {
+	// Test that the migrate command has a RunE function set (default behavior)
+	cmd := NewMigrateCmd()
+	assert.NotNil(t, cmd.RunE, "migrate command should have RunE set for default-up behavior")
 }

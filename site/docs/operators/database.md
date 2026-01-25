@@ -21,6 +21,9 @@ on startup, or can be managed manually.
 # Apply all pending migrations
 task migrate
 
+# Preview migrations without executing
+task migrate -- --dry-run
+
 # Check current migration status
 task migrate:status
 

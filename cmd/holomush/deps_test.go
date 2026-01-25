@@ -104,7 +104,7 @@ func (m *mockGRPCClient) Close() error {
 	return nil
 }
 
-// mockMigrator implements Migrator for testing.
+// mockMigrator implements AutoMigrator for testing.
 type mockMigrator struct {
 	upFunc    func() error
 	closeFunc func() error
@@ -124,9 +124,9 @@ func (m *mockMigrator) Close() error {
 	return nil
 }
 
-// noOpMigratorFactory returns a Migrator that does nothing, for use in tests
+// noOpMigratorFactory returns an AutoMigrator that does nothing, for use in tests
 // that don't care about migration behavior.
-func noOpMigratorFactory(_ string) (Migrator, error) {
+func noOpMigratorFactory(_ string) (AutoMigrator, error) {
 	return &mockMigrator{}, nil
 }
 

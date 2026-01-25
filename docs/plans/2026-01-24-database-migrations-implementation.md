@@ -1,5 +1,8 @@
 # Database Migrations Implementation Plan
 
+> **Status: Implemented** - This plan was completed in PR #43. The code is the
+> source of truth; this document is retained for historical context.
+>
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan
 > task-by-task.
 
@@ -412,7 +415,8 @@ func (m *Migrator) Up() error {
     return nil
 }
 
-// Down rolls back one migration.
+// Down rolls back all migrations to version 0, effectively removing all schema objects.
+// WARNING: This is a destructive operation that drops all tables and data.
 func (m *Migrator) Down() error {
     if err := m.m.Down(); err != nil && err != migrate.ErrNoChange {
         return oops.Code("MIGRATION_DOWN_FAILED").Wrap(err)

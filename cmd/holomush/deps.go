@@ -52,7 +52,7 @@ type CoreDeps struct {
 
 	// MigratorFactory creates a database migrator.
 	// Default: store.NewMigrator
-	MigratorFactory func(databaseURL string) (Migrator, error)
+	MigratorFactory func(databaseURL string) (AutoMigrator, error)
 
 	// AutoMigrateGetter returns whether auto-migration is enabled.
 	// Default: parseAutoMigrate (reads HOLOMUSH_DB_AUTO_MIGRATE env var)
@@ -105,8 +105,8 @@ type GRPCClient interface {
 	Close() error
 }
 
-// Migrator interface wraps the methods used from store.Migrator.
-type Migrator interface {
+// AutoMigrator is the minimal interface for startup auto-migration.
+type AutoMigrator interface {
 	Up() error
 	Close() error
 }

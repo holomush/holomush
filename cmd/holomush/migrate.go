@@ -16,8 +16,8 @@ import (
 	"github.com/holomush/holomush/internal/store"
 )
 
-// MigratorIface abstracts the Migrator for testing.
-type MigratorIface interface {
+// migrator abstracts store.Migrator for CLI command testing.
+type migrator interface {
 	Up() error
 	Down() error
 	Steps(n int) error
@@ -31,7 +31,7 @@ type MigratorIface interface {
 // runMigrateUpDryRun shows what migrations would be applied without running them.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateUpDryRun(out io.Writer, migrator MigratorIface) error {
+func runMigrateUpDryRun(out io.Writer, migrator migrator) error {
 	currentVersion, _, err := migrator.Version()
 	if err != nil {
 		return oops.With("operation", "get version").Wrap(err)
@@ -65,7 +65,7 @@ func runMigrateUpDryRun(out io.Writer, migrator MigratorIface) error {
 // runMigrateDownDryRun shows what migrations would be rolled back without running them.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateDownDryRun(out io.Writer, migrator MigratorIface, all bool) error {
+func runMigrateDownDryRun(out io.Writer, migrator migrator, all bool) error {
 	currentVersion, _, err := migrator.Version()
 	if err != nil {
 		return oops.With("operation", "get version").Wrap(err)
@@ -121,7 +121,7 @@ func runMigrateDownDryRun(out io.Writer, migrator MigratorIface, all bool) error
 // runMigrateUpLogic handles the migrate up logic with output.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateUpLogic(out io.Writer, migrator MigratorIface) error {
+func runMigrateUpLogic(out io.Writer, migrator migrator) error {
 	// Get version before
 	beforeVersion, _, err := migrator.Version()
 	if err != nil {
@@ -152,7 +152,7 @@ func runMigrateUpLogic(out io.Writer, migrator MigratorIface) error {
 // runMigrateDownLogic handles the migrate down logic with output.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateDownLogic(out io.Writer, migrator MigratorIface, all bool) error {
+func runMigrateDownLogic(out io.Writer, migrator migrator, all bool) error {
 	// Get version before
 	beforeVersion, _, err := migrator.Version()
 	if err != nil {
@@ -190,7 +190,7 @@ func runMigrateDownLogic(out io.Writer, migrator MigratorIface, all bool) error 
 // runMigrateStatusLogic handles the migrate status logic with output.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateStatusLogic(out io.Writer, migrator MigratorIface) error {
+func runMigrateStatusLogic(out io.Writer, migrator migrator) error {
 	version, dirty, err := migrator.Version()
 	if err != nil {
 		return err
@@ -209,7 +209,7 @@ func runMigrateStatusLogic(out io.Writer, migrator MigratorIface) error {
 // runMigrateVersionLogic handles the migrate version logic with output.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateVersionLogic(out io.Writer, migrator MigratorIface) error {
+func runMigrateVersionLogic(out io.Writer, migrator migrator) error {
 	version, _, err := migrator.Version()
 	if err != nil {
 		return err
@@ -221,7 +221,7 @@ func runMigrateVersionLogic(out io.Writer, migrator MigratorIface) error {
 // runMigrateForceLogic handles the migrate force logic with output.
 //
 //nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
-func runMigrateForceLogic(out io.Writer, migrator MigratorIface, version int) error {
+func runMigrateForceLogic(out io.Writer, migrator migrator, version int) error {
 	fmt.Fprintf(out, "Forcing version to %d...\n", version)
 	if err := migrator.Force(version); err != nil {
 		return err
@@ -231,11 +231,34 @@ func runMigrateForceLogic(out io.Writer, migrator MigratorIface, version int) er
 }
 
 // NewMigrateCmd creates the migrate subcommand.
+// When invoked without a subcommand, it defaults to running "migrate up".
 func NewMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Database migration management",
 		Long:  `Manage PostgreSQL database schema migrations using golang-migrate.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Default behavior: run migrate up
+			url, err := getDatabaseURL()
+			if err != nil {
+				return oops.With("command", "migrate").Wrap(err)
+			}
+
+			migrator, err := store.NewMigrator(url)
+			if err != nil {
+				return oops.With("command", "migrate").Wrap(err)
+			}
+			defer func() {
+				if closeErr := migrator.Close(); closeErr != nil {
+					cmd.PrintErrf("Warning: failed to close migrator (connection may leak): %v\n", closeErr)
+				}
+			}()
+
+			if err := runMigrateUpLogic(cmd.OutOrStdout(), migrator); err != nil {
+				return oops.With("command", "migrate").Wrap(err)
+			}
+			return nil
+		},
 	}
 
 	cmd.AddCommand(newMigrateUpCmd())

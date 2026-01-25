@@ -21,6 +21,39 @@ func TestNewMigrator_InvalidURL(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "MIGRATION_INIT_FAILED")
 }
 
+// TestNewMigrator_PostgresqlScheme verifies that postgresql:// URLs are converted
+// to pgx5:// for golang-migrate compatibility. The conversion happens at line 64-65
+// of migrate.go. This test confirms the scheme is recognized (no "unknown driver" error)
+// even though connection will fail with a non-existent host.
+func TestNewMigrator_PostgresqlScheme(t *testing.T) {
+	// Use postgresql:// which should be converted to pgx5://
+	// The error should be a connection error, not an "unknown driver" error
+	_, err := NewMigrator("postgresql://localhost:5432/testdb")
+	require.Error(t, err, "should fail due to connection, not URL scheme")
+	errutil.AssertErrorCode(t, err, "MIGRATION_INIT_FAILED")
+	// If the conversion didn't work, we'd see "unknown driver postgresql"
+	assert.NotContains(t, err.Error(), "unknown driver")
+}
+
+// TestNewMigrator_SourceCleanupOnFailure verifies that when NewWithSourceInstance
+// fails (e.g., invalid database URL), the migration source is properly closed.
+// This prevents resource leaks when migrator initialization fails.
+//
+// The test exercises the error path by providing an invalid URL scheme that
+// causes NewWithSourceInstance to fail. The source.Close() call in the error
+// handler ensures the iofs source is cleaned up before returning the error.
+func TestNewMigrator_SourceCleanupOnFailure(t *testing.T) {
+	// Use a URL with valid-looking structure but invalid scheme
+	// This causes iofs.New to succeed but migrate.NewWithSourceInstance to fail
+	// The fix ensures source.Close() is called before returning the error
+	_, err := NewMigrator("badscheme://localhost:5432/testdb")
+	require.Error(t, err, "should fail with invalid URL scheme")
+	errutil.AssertErrorCode(t, err, "MIGRATION_INIT_FAILED")
+	// Note: We cannot easily verify source.Close() was called without mocking,
+	// but this test documents the error path that the fix addresses.
+	// The implementation fix adds source.Close() before returning the error.
+}
+
 // mockMigrate implements migrateIface for testing.
 type mockMigrate struct {
 	upErr          error
@@ -148,6 +181,13 @@ func TestMigrator_Force_Error(t *testing.T) {
 	err := m.Force(5)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_FORCE_FAILED")
+}
+
+func TestMigrator_Force_NegativeVersionRejected(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{}}
+	err := m.Force(-1)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_VERSION")
 }
 
 func TestMigrator_Close_Success(t *testing.T) {
@@ -388,6 +428,22 @@ func TestMigrationName(t *testing.T) {
 			assert.Equal(t, tt.expected, name)
 		})
 	}
+}
+
+// TestAllMigrationVersions_ReturnsCopy verifies that allMigrationVersions returns
+// a copy of the cached slice, preventing callers from mutating the cache.
+func TestAllMigrationVersions_ReturnsCopy(t *testing.T) {
+	versions1, err := allMigrationVersions()
+	require.NoError(t, err)
+	require.NotEmpty(t, versions1)
+
+	original := versions1[0]
+	versions1[0] = 99999 // Mutate
+
+	versions2, err := allMigrationVersions()
+	require.NoError(t, err)
+
+	assert.Equal(t, original, versions2[0], "mutation should not affect cache")
 }
 
 // BenchmarkAllMigrationVersions measures the performance of allMigrationVersions.

@@ -67,6 +67,10 @@ func NewMigrator(databaseURL string) (*Migrator, error) {
 
 	m, err := migrate.NewWithSourceInstance("iofs", source, migrateURL)
 	if err != nil {
+		// Close source to prevent resource leak when initialization fails.
+		// Close error is intentionally ignored - we're already returning the more
+		// informative initialization error, and the source is an embedded filesystem.
+		_ = source.Close() //nolint:errcheck // best-effort cleanup, init error takes precedence
 		return nil, oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
 	}
 
@@ -114,10 +118,14 @@ func (m *Migrator) Version() (version uint, dirty bool, err error) {
 
 // Force sets the migration version without running migrations.
 // Use only for recovering from a dirty state after manually fixing the database.
+// Version must be non-negative; negative values are rejected with INVALID_VERSION error.
 // WARNING: Setting an incorrect version causes the migrator to skip migrations
 // (if too high) or re-run already-applied migrations (if too low), potentially
 // causing data loss or duplicate data.
 func (m *Migrator) Force(version int) error {
+	if version < 0 {
+		return oops.Code("INVALID_VERSION").Errorf("version must be non-negative, got %d", version)
+	}
 	if err := m.m.Force(version); err != nil {
 		return oops.Code("MIGRATION_FORCE_FAILED").With("version", version).Wrap(err)
 	}
@@ -145,11 +153,18 @@ func (m *Migrator) Close() error {
 // allMigrationVersions returns all available migration versions from the embedded FS.
 // Results are cached since the embedded filesystem is immutable at runtime.
 // Versions are returned sorted in ascending order.
+// Returns a copy of the cached slice to prevent callers from mutating the cache.
 func allMigrationVersions() ([]uint, error) {
 	cachedVersionsOnce.Do(func() {
 		cachedVersions, cachedVersionsErr = loadMigrationVersions()
 	})
-	return cachedVersions, cachedVersionsErr
+	if cachedVersionsErr != nil {
+		return nil, cachedVersionsErr
+	}
+	// Return a copy to prevent callers from mutating the cache.
+	result := make([]uint, len(cachedVersions))
+	copy(result, cachedVersions)
+	return result, nil
 }
 
 // loadMigrationVersions reads the embedded migrations directory and parses version numbers.
@@ -191,6 +206,8 @@ func loadMigrationVersions() ([]uint, error) {
 func MigrationName(version uint) string {
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
+		// This should never happen with a valid binary - the embedded FS is immutable.
+		slog.Warn("failed to read embedded migrations directory", "error", err)
 		return ""
 	}
 
