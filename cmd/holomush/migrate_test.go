@@ -4,6 +4,8 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +13,174 @@ import (
 
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// migrateLogicMock implements MigratorIface for testing CLI output.
+type migrateLogicMock struct {
+	version               uint
+	dirty                 bool
+	upCalled              bool
+	downCalled            bool
+	stepsCalled           bool
+	stepsArg              int
+	upErr                 error
+	downErr               error
+	stepsErr              error
+	versionErr            error
+	closeErr              error
+	versionAfterMigration uint
+	versionCallCount      int
+}
+
+func (m *migrateLogicMock) Up() error {
+	m.upCalled = true
+	if m.upErr != nil {
+		return m.upErr
+	}
+	// Simulate version change after migration
+	m.version = m.versionAfterMigration
+	return nil
+}
+
+func (m *migrateLogicMock) Down() error {
+	m.downCalled = true
+	if m.downErr != nil {
+		return m.downErr
+	}
+	m.version = m.versionAfterMigration
+	return nil
+}
+
+func (m *migrateLogicMock) Steps(n int) error {
+	m.stepsCalled = true
+	m.stepsArg = n
+	if m.stepsErr != nil {
+		return m.stepsErr
+	}
+	m.version = m.versionAfterMigration
+	return nil
+}
+
+func (m *migrateLogicMock) Version() (uint, bool, error) {
+	m.versionCallCount++
+	return m.version, m.dirty, m.versionErr
+}
+
+func (m *migrateLogicMock) Force(_ int) error {
+	return nil
+}
+
+func (m *migrateLogicMock) Close() error {
+	return m.closeErr
+}
+
+func TestMigrateUpLogic_AlreadyAtLatest(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 7, versionAfterMigration: 7}
+
+	err := runMigrateUpLogic(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Already at latest version: 7")
+	assert.NotContains(t, output, "Migrated from")
+	assert.True(t, mock.upCalled)
+}
+
+func TestMigrateUpLogic_MigrationsApplied(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 3, versionAfterMigration: 7}
+
+	err := runMigrateUpLogic(&buf, mock)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Migrated from version 3 to 7")
+	assert.NotContains(t, output, "Already at")
+	assert.True(t, mock.upCalled)
+}
+
+func TestMigrateUpLogic_UpError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 3, upErr: errors.New("migration failed")}
+
+	err := runMigrateUpLogic(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "migration failed")
+	assert.True(t, mock.upCalled)
+}
+
+func TestMigrateUpLogic_VersionErrorBefore(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{versionErr: errors.New("db connection error")}
+
+	err := runMigrateUpLogic(&buf, mock)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db connection error")
+	assert.False(t, mock.upCalled)
+}
+
+func TestMigrateDownLogic_AlreadyAtZero(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 0, versionAfterMigration: 0}
+
+	err := runMigrateDownLogic(&buf, mock, true)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Already at version 0, no migrations to roll back")
+	assert.True(t, mock.downCalled)
+}
+
+func TestMigrateDownLogic_RolledBackAll(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 7, versionAfterMigration: 0}
+
+	err := runMigrateDownLogic(&buf, mock, true)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Rolled back from version 7 to 0")
+	assert.True(t, mock.downCalled)
+	assert.False(t, mock.stepsCalled)
+}
+
+func TestMigrateDownLogic_RolledBackOne(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 7, versionAfterMigration: 6}
+
+	err := runMigrateDownLogic(&buf, mock, false)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Rolled back from version 7 to 6")
+	assert.True(t, mock.stepsCalled)
+	assert.Equal(t, -1, mock.stepsArg)
+	assert.False(t, mock.downCalled)
+}
+
+func TestMigrateDownLogic_DownError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 7, downErr: errors.New("rollback failed")}
+
+	err := runMigrateDownLogic(&buf, mock, true)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rollback failed")
+	assert.True(t, mock.downCalled)
+}
+
+func TestMigrateDownLogic_StepsError(t *testing.T) {
+	var buf bytes.Buffer
+	mock := &migrateLogicMock{version: 7, stepsErr: errors.New("steps failed")}
+
+	err := runMigrateDownLogic(&buf, mock, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "steps failed")
+	assert.True(t, mock.stepsCalled)
+}
 
 func TestParseForceVersion(t *testing.T) {
 	tests := []struct {

@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/samber/oops"
@@ -12,6 +13,85 @@ import (
 
 	"github.com/holomush/holomush/internal/store"
 )
+
+// MigratorIface abstracts the Migrator for testing.
+type MigratorIface interface {
+	Up() error
+	Down() error
+	Steps(n int) error
+	Version() (uint, bool, error)
+	Force(version int) error
+	Close() error
+}
+
+// runMigrateUpLogic handles the migrate up logic with output.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateUpLogic(out io.Writer, migrator MigratorIface) error {
+	// Get version before
+	beforeVersion, _, err := migrator.Version()
+	if err != nil {
+		return oops.With("operation", "get version before").Wrap(err)
+	}
+
+	fmt.Fprintln(out, "Applying migrations...")
+	if upErr := migrator.Up(); upErr != nil {
+		return upErr
+	}
+
+	// Get version after
+	afterVersion, _, err := migrator.Version()
+	if err != nil {
+		fmt.Fprintf(out, "Warning: migrations applied but failed to get version: %v\n", err)
+		fmt.Fprintln(out, "Check status with 'holomush migrate status'")
+		return nil
+	}
+
+	if beforeVersion == afterVersion {
+		fmt.Fprintf(out, "Already at latest version: %d\n", afterVersion)
+	} else {
+		fmt.Fprintf(out, "Migrated from version %d to %d\n", beforeVersion, afterVersion)
+	}
+	return nil
+}
+
+// runMigrateDownLogic handles the migrate down logic with output.
+//
+//nolint:errcheck // CLI output errors are intentionally ignored - no recovery possible
+func runMigrateDownLogic(out io.Writer, migrator MigratorIface, all bool) error {
+	// Get version before
+	beforeVersion, _, err := migrator.Version()
+	if err != nil {
+		return oops.With("operation", "get version before").Wrap(err)
+	}
+
+	if all {
+		fmt.Fprintln(out, "Rolling back all migrations...")
+		if downErr := migrator.Down(); downErr != nil {
+			return downErr
+		}
+	} else {
+		fmt.Fprintln(out, "Rolling back one migration...")
+		if stepsErr := migrator.Steps(-1); stepsErr != nil {
+			return stepsErr
+		}
+	}
+
+	// Get version after
+	afterVersion, _, err := migrator.Version()
+	if err != nil {
+		fmt.Fprintf(out, "Warning: rollback applied but failed to get version: %v\n", err)
+		fmt.Fprintln(out, "Check status with 'holomush migrate status'")
+		return nil
+	}
+
+	if beforeVersion == afterVersion {
+		fmt.Fprintf(out, "Already at version %d, no migrations to roll back\n", afterVersion)
+	} else {
+		fmt.Fprintf(out, "Rolled back from version %d to %d\n", beforeVersion, afterVersion)
+	}
+	return nil
+}
 
 // NewMigrateCmd creates the migrate subcommand.
 func NewMigrateCmd() *cobra.Command {
@@ -58,18 +138,9 @@ func newMigrateUpCmd() *cobra.Command {
 				}
 			}()
 
-			cmd.Println("Applying migrations...")
-			if err := migrator.Up(); err != nil {
+			if err := runMigrateUpLogic(cmd.OutOrStdout(), migrator); err != nil {
 				return oops.With("command", "migrate up").Wrap(err)
 			}
-
-			version, _, versionErr := migrator.Version()
-			if versionErr != nil {
-				cmd.PrintErrf("Warning: migrations applied but failed to get version: %v\n", versionErr)
-				cmd.Println("Migrations complete. Check status with 'holomush migrate status'")
-				return nil
-			}
-			cmd.Printf("Migrations complete. Current version: %d\n", version)
 			return nil
 		},
 	}
@@ -98,25 +169,9 @@ func newMigrateDownCmd() *cobra.Command {
 				}
 			}()
 
-			if all {
-				cmd.Println("Rolling back all migrations...")
-				if err := migrator.Down(); err != nil {
-					return oops.With("command", "migrate down").Wrap(err)
-				}
-			} else {
-				cmd.Println("Rolling back one migration...")
-				if err := migrator.Steps(-1); err != nil {
-					return oops.With("command", "migrate down").Wrap(err)
-				}
+			if err := runMigrateDownLogic(cmd.OutOrStdout(), migrator, all); err != nil {
+				return oops.With("command", "migrate down").Wrap(err)
 			}
-
-			version, _, versionErr := migrator.Version()
-			if versionErr != nil {
-				cmd.PrintErrf("Warning: rollback applied but failed to get version: %v\n", versionErr)
-				cmd.Println("Rollback complete. Check status with 'holomush migrate status'")
-				return nil
-			}
-			cmd.Printf("Rollback complete. Current version: %d\n", version)
 			return nil
 		},
 	}
