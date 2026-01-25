@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -874,4 +875,236 @@ func TestQueryObject_RequiresCapability(t *testing.T) {
 	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
 	require.Error(t, err, "expected capability error")
 	assert.Contains(t, err.Error(), "capability denied")
+}
+
+// contextAwareWorldQuerier passes through the context to allow testing context propagation.
+type contextAwareWorldQuerier struct {
+	ctxChan chan context.Context // receives the context passed to queries
+	err     error                // error to return
+}
+
+func (m *contextAwareWorldQuerier) GetLocation(ctx context.Context, _ ulid.ULID) (*world.Location, error) {
+	if m.ctxChan != nil {
+		select {
+		case m.ctxChan <- ctx:
+		default:
+		}
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &world.Location{ID: ulid.Make(), Name: "Test"}, nil
+}
+
+func (m *contextAwareWorldQuerier) GetCharacter(ctx context.Context, _ ulid.ULID) (*world.Character, error) {
+	if m.ctxChan != nil {
+		select {
+		case m.ctxChan <- ctx:
+		default:
+		}
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &world.Character{ID: ulid.Make(), Name: "Test"}, nil
+}
+
+func (m *contextAwareWorldQuerier) GetCharactersByLocation(ctx context.Context, _ ulid.ULID) ([]*world.Character, error) {
+	if m.ctxChan != nil {
+		select {
+		case m.ctxChan <- ctx:
+		default:
+		}
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	return []*world.Character{}, nil
+}
+
+func (m *contextAwareWorldQuerier) GetObject(ctx context.Context, _ ulid.ULID) (*world.Object, error) {
+	if m.ctxChan != nil {
+		select {
+		case m.ctxChan <- ctx:
+		default:
+		}
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &world.Object{ID: ulid.Make(), Name: "Test"}, nil
+}
+
+// Compile-time interface check.
+var _ hostfunc.WorldQuerier = (*contextAwareWorldQuerier)(nil)
+
+func TestQueryRoom_InheritsParentContext(t *testing.T) {
+	// Create a parent context with a custom value to verify inheritance
+	type ctxKey string
+	const testKey ctxKey = "test-key"
+	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
+
+	ctxChan := make(chan context.Context, 1)
+	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(parentCtx) // Set the parent context on the Lua state
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	// The context passed to the querier should inherit from the Lua state's context
+	select {
+	case receivedCtx := <-ctxChan:
+		// Verify the context inherits values from the parent
+		val := receivedCtx.Value(testKey)
+		assert.Equal(t, "test-value", val, "derived context should inherit values from parent context")
+	default:
+		t.Fatal("querier was not called")
+	}
+}
+
+func TestQueryCharacter_InheritsParentContext(t *testing.T) {
+	type ctxKey string
+	const testKey ctxKey = "test-key"
+	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
+
+	ctxChan := make(chan context.Context, 1)
+	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(parentCtx)
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`char, err = holomush.query_character("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	select {
+	case receivedCtx := <-ctxChan:
+		val := receivedCtx.Value(testKey)
+		assert.Equal(t, "test-value", val, "derived context should inherit values from parent context")
+	default:
+		t.Fatal("querier was not called")
+	}
+}
+
+func TestQueryRoomCharacters_InheritsParentContext(t *testing.T) {
+	type ctxKey string
+	const testKey ctxKey = "test-key"
+	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
+
+	ctxChan := make(chan context.Context, 1)
+	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(parentCtx)
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`chars, err = holomush.query_room_characters("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	select {
+	case receivedCtx := <-ctxChan:
+		val := receivedCtx.Value(testKey)
+		assert.Equal(t, "test-value", val, "derived context should inherit values from parent context")
+	default:
+		t.Fatal("querier was not called")
+	}
+}
+
+func TestQueryObject_InheritsParentContext(t *testing.T) {
+	type ctxKey string
+	const testKey ctxKey = "test-key"
+	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
+
+	ctxChan := make(chan context.Context, 1)
+	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(parentCtx)
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`obj, err = holomush.query_object("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	select {
+	case receivedCtx := <-ctxChan:
+		val := receivedCtx.Value(testKey)
+		assert.Equal(t, "test-value", val, "derived context should inherit values from parent context")
+	default:
+		t.Fatal("querier was not called")
+	}
+}
+
+func TestQueryRoom_InheritsContextDeadline(t *testing.T) {
+	// Create a context with a short deadline (10ms) - shorter than the 5s default
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	ctxChan := make(chan context.Context, 1)
+	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(ctx)
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	// Verify the derived context respects the parent's deadline
+	select {
+	case receivedCtx := <-ctxChan:
+		deadline, ok := receivedCtx.Deadline()
+		require.True(t, ok, "derived context should have a deadline")
+		// The deadline should be within ~10ms of now (the parent's deadline)
+		// rather than 5 seconds (the default query timeout)
+		assert.WithinDuration(t, time.Now(), deadline, 50*time.Millisecond,
+			"deadline should inherit from parent context, not use the 5s default")
+	default:
+		t.Fatal("querier was not called")
+	}
+}
+
+func TestQueryRoom_FallbackToBackgroundContext(t *testing.T) {
+	// Test that when Lua state has no context set, we fall back to context.Background()
+	// This ensures backwards compatibility
+
+	ctxChan := make(chan context.Context, 1)
+	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
+	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldQuerier(querier))
+
+	L := lua.NewState()
+	defer L.Close()
+	// Note: NOT calling L.SetContext() - context is nil
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	require.NoError(t, err)
+
+	// The query should still work and use a 5-second timeout derived from Background
+	select {
+	case receivedCtx := <-ctxChan:
+		deadline, ok := receivedCtx.Deadline()
+		require.True(t, ok, "derived context should have a deadline from default timeout")
+		// Deadline should be roughly 5 seconds from now (the default query timeout)
+		assert.WithinDuration(t, time.Now().Add(5*time.Second), deadline, 100*time.Millisecond,
+			"should use default 5s timeout when no parent context set")
+	default:
+		t.Fatal("querier was not called")
+	}
+
+	// Query should succeed
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, errVal.Type(), "query should succeed with fallback context")
 }

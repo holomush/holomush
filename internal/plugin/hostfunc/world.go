@@ -92,7 +92,12 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		// Inherit context from Lua state if available, otherwise use Background
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
@@ -146,7 +151,12 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		// Inherit context from Lua state if available, otherwise use Background
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
@@ -203,7 +213,12 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		// Inherit context from Lua state if available, otherwise use Background
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
@@ -261,7 +276,12 @@ func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		// Inherit context from Lua state if available, otherwise use Background
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		// Create adapter for this plugin's authorization
