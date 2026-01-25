@@ -4,9 +4,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	cryptotls "crypto/tls"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/holomush/holomush/internal/control"
@@ -331,4 +333,21 @@ func TestRunAutoMigration(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "AUTO_MIGRATION_FAILED")
 		assert.True(t, migrator.closeCalled, "Close should be called even on Up() error")
 	})
+}
+
+func TestParseAutoMigrate_WarnsOnInvalidValue(t *testing.T) {
+	// Capture log output
+	var buf bytes.Buffer
+	handler := slog.NewJSONHandler(&buf, nil)
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	t.Setenv("HOLOMUSH_DB_AUTO_MIGRATE", "flase") // typo
+
+	result := parseAutoMigrate()
+
+	assert.True(t, result, "Invalid value should default to true")
+	assert.Contains(t, buf.String(), "unrecognized", "Should log warning for invalid value")
+	assert.Contains(t, buf.String(), "flase", "Warning should include the invalid value")
 }

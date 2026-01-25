@@ -470,6 +470,7 @@ func runAutoMigration(databaseURL string, factory func(string) (Migrator, error)
 
 // parseAutoMigrate reads the HOLOMUSH_DB_AUTO_MIGRATE environment variable.
 // Returns true (auto-migrate enabled) if the variable is not set, empty, or not explicitly "false" or "0".
+// Logs a warning for unrecognized values to help catch typos.
 func parseAutoMigrate() bool {
 	val := os.Getenv("HOLOMUSH_DB_AUTO_MIGRATE")
 	if val == "" {
@@ -480,5 +481,15 @@ func parseAutoMigrate() bool {
 	if strings.EqualFold(val, "false") || val == "0" {
 		return false
 	}
+
+	// Check for explicit true values (case-insensitive)
+	if strings.EqualFold(val, "true") || val == "1" {
+		return true
+	}
+
+	// Unrecognized value - warn and default to true for safety
+	slog.Warn("unrecognized HOLOMUSH_DB_AUTO_MIGRATE value, defaulting to true",
+		"value", val,
+		"valid_values", "true, false, 1, 0")
 	return true
 }
