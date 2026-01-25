@@ -190,9 +190,10 @@ func TestQueryCharacter(t *testing.T) {
 	charID := ulid.Make()
 	locID := ulid.Make()
 	char := &world.Character{
-		ID:         charID,
-		Name:       "Test Character",
-		LocationID: &locID,
+		ID:          charID,
+		Name:        "Test Character",
+		Description: "A brave adventurer with a mysterious past.",
+		LocationID:  &locID,
 	}
 
 	querier := &mockWorldQuerier{character: char}
@@ -216,6 +217,7 @@ func TestQueryCharacter(t *testing.T) {
 	tbl := character.(*lua.LTable)
 	assert.Equal(t, charID.String(), tbl.RawGetString("id").String())
 	assert.Equal(t, char.Name, tbl.RawGetString("name").String())
+	assert.Equal(t, char.Description, tbl.RawGetString("description").String())
 	assert.Equal(t, locID.String(), tbl.RawGetString("location_id").String())
 }
 

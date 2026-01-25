@@ -129,6 +129,7 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 		character := L.NewTable()
 		L.SetField(character, "id", lua.LString(char.ID.String()))
 		L.SetField(character, "name", lua.LString(char.Name))
+		L.SetField(character, "description", lua.LString(char.Description))
 		if char.LocationID != nil {
 			L.SetField(character, "location_id", lua.LString(char.LocationID.String()))
 		}
