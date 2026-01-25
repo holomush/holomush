@@ -4,6 +4,7 @@
 package world_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -314,6 +315,111 @@ func TestCharacter_SetLocationID_UpdatesField(t *testing.T) {
 	err = char.SetLocationID(nil)
 	require.NoError(t, err)
 	assert.Nil(t, char.LocationID)
+}
+
+func TestCharacter_SetName(t *testing.T) {
+	t.Run("valid name updates field", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "OriginalName")
+		require.NoError(t, err)
+
+		err = char.SetName("NewName")
+		require.NoError(t, err)
+		assert.Equal(t, "NewName", char.Name)
+	})
+
+	t.Run("empty name returns error", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "OriginalName")
+		require.NoError(t, err)
+
+		err = char.SetName("")
+		require.Error(t, err)
+		var validationErr *world.ValidationError
+		require.ErrorAs(t, err, &validationErr)
+		assert.Equal(t, "name", validationErr.Field)
+		// Name should be unchanged
+		assert.Equal(t, "OriginalName", char.Name)
+	})
+
+	t.Run("name exceeding max length returns error", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "OriginalName")
+		require.NoError(t, err)
+
+		longName := strings.Repeat("x", world.MaxNameLength+1)
+		err = char.SetName(longName)
+		require.Error(t, err)
+		var validationErr *world.ValidationError
+		require.ErrorAs(t, err, &validationErr)
+		assert.Equal(t, "name", validationErr.Field)
+		// Name should be unchanged
+		assert.Equal(t, "OriginalName", char.Name)
+	})
+
+	t.Run("name with control characters returns error", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "OriginalName")
+		require.NoError(t, err)
+
+		err = char.SetName("Name\x00WithNull")
+		require.Error(t, err)
+		// Name should be unchanged
+		assert.Equal(t, "OriginalName", char.Name)
+	})
+}
+
+func TestCharacter_SetDescription(t *testing.T) {
+	t.Run("valid description updates field", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "TestChar")
+		require.NoError(t, err)
+
+		err = char.SetDescription("A brave adventurer.")
+		require.NoError(t, err)
+		assert.Equal(t, "A brave adventurer.", char.Description)
+	})
+
+	t.Run("empty description is valid", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "TestChar")
+		require.NoError(t, err)
+		char.Description = "Initial description"
+
+		err = char.SetDescription("")
+		require.NoError(t, err)
+		assert.Equal(t, "", char.Description)
+	})
+
+	t.Run("description exceeding max length returns error", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "TestChar")
+		require.NoError(t, err)
+		char.Description = "Original"
+
+		longDesc := strings.Repeat("x", world.MaxDescriptionLength+1)
+		err = char.SetDescription(longDesc)
+		require.Error(t, err)
+		var validationErr *world.ValidationError
+		require.ErrorAs(t, err, &validationErr)
+		assert.Equal(t, "description", validationErr.Field)
+		// Description should be unchanged
+		assert.Equal(t, "Original", char.Description)
+	})
+
+	t.Run("description with control characters returns error", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "TestChar")
+		require.NoError(t, err)
+		char.Description = "Original"
+
+		err = char.SetDescription("Desc\x00WithNull")
+		require.Error(t, err)
+		// Description should be unchanged
+		assert.Equal(t, "Original", char.Description)
+	})
+
+	t.Run("description with newlines and tabs is valid", func(t *testing.T) {
+		char, err := world.NewCharacter(ulid.Make(), "TestChar")
+		require.NoError(t, err)
+
+		descWithWhitespace := "Line one.\nLine two.\tTabbed."
+		err = char.SetDescription(descWithWhitespace)
+		require.NoError(t, err)
+		assert.Equal(t, descWithWhitespace, char.Description)
+	})
 }
 
 func TestNewCharacterWithID(t *testing.T) {

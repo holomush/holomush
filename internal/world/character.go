@@ -54,6 +54,36 @@ func (c *Character) SetLocationID(id *ulid.ULID) error {
 	return nil
 }
 
+// SetName updates the character's name with validation.
+// The name must be non-empty, valid UTF-8, within MaxNameLength, and contain
+// no control characters.
+//
+// Note: Direct field access to Name is acceptable for repository hydration
+// from the database. This setter should be used by application code to ensure
+// validation.
+func (c *Character) SetName(name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
+	c.Name = name
+	return nil
+}
+
+// SetDescription updates the character's description with validation.
+// The description may be empty, but if non-empty must be valid UTF-8, within
+// MaxDescriptionLength, and contain no control characters except newline/tab.
+//
+// Note: Direct field access to Description is acceptable for repository hydration
+// from the database. This setter should be used by application code to ensure
+// validation.
+func (c *Character) SetDescription(desc string) error {
+	if err := ValidateDescription(desc); err != nil {
+		return err
+	}
+	c.Description = desc
+	return nil
+}
+
 // Validate checks that the character has required fields.
 func (c *Character) Validate() error {
 	if c.ID.IsZero() {

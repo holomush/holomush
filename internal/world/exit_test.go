@@ -321,6 +321,120 @@ func TestExit_ReverseExit(t *testing.T) {
 	})
 }
 
+func TestExit_SetLocked(t *testing.T) {
+	fromID := ulid.Make()
+	toID := ulid.Make()
+
+	t.Run("lock with valid key type", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		lockData := map[string]any{"key_id": "golden-key"}
+		err := exit.SetLocked(true, world.LockTypeKey, lockData)
+		require.NoError(t, err)
+		assert.True(t, exit.Locked)
+		assert.Equal(t, world.LockTypeKey, exit.LockType)
+		assert.Equal(t, "golden-key", exit.LockData["key_id"])
+	})
+
+	t.Run("unlock clears lock state", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         true,
+			LockType:       world.LockTypeKey,
+			LockData:       map[string]any{"key_id": "old-key"},
+		}
+
+		err := exit.SetLocked(false, "", nil)
+		require.NoError(t, err)
+		assert.False(t, exit.Locked)
+		assert.Empty(t, exit.LockType)
+		assert.Nil(t, exit.LockData)
+	})
+
+	t.Run("lock with invalid lock type returns error", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		err := exit.SetLocked(true, "invalid", nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLockType)
+		// State should be unchanged
+		assert.False(t, exit.Locked)
+	})
+
+	t.Run("lock with non-serializable data returns error", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		badData := map[string]any{"channel": make(chan int)}
+		err := exit.SetLocked(true, world.LockTypeKey, badData)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not JSON-serializable")
+		// State should be unchanged
+		assert.False(t, exit.Locked)
+	})
+
+	t.Run("lock without lock type when locking returns error", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+			Locked:         false,
+		}
+
+		err := exit.SetLocked(true, "", nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrInvalidLockType)
+		// State should be unchanged
+		assert.False(t, exit.Locked)
+	})
+
+	t.Run("deep copies lock data to prevent external mutation", func(t *testing.T) {
+		exit := &world.Exit{
+			ID:             ulid.Make(),
+			FromLocationID: fromID,
+			ToLocationID:   toID,
+			Name:           "north",
+			Visibility:     world.VisibilityAll,
+		}
+
+		originalData := map[string]any{"key_id": "original"}
+		err := exit.SetLocked(true, world.LockTypeKey, originalData)
+		require.NoError(t, err)
+
+		// Modify the original data after setting
+		originalData["key_id"] = "modified"
+
+		// Exit's lock data should be unchanged
+		assert.Equal(t, "original", exit.LockData["key_id"])
+	})
+}
+
 func TestLockType_String(t *testing.T) {
 	tests := []struct {
 		name     string

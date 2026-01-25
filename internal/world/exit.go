@@ -161,6 +161,47 @@ func (e *Exit) Validate() error {
 	return nil
 }
 
+// SetLocked atomically updates the exit's lock state with validation.
+// When locking (locked=true), lockType must be a valid LockType and lockData
+// will be validated and deep-copied. When unlocking (locked=false), lockType
+// and lockData are cleared regardless of the values passed.
+//
+// This method ensures that Locked, LockType, and LockData are always in a
+// consistent state. Direct field access should be avoided in favor of this
+// method to prevent invalid state transitions.
+//
+// Note: Direct field access is acceptable for repository hydration from the
+// database where data integrity is guaranteed by the database schema.
+func (e *Exit) SetLocked(locked bool, lockType LockType, lockData map[string]any) error {
+	if !locked {
+		// Unlocking - clear all lock state
+		e.Locked = false
+		e.LockType = ""
+		e.LockData = nil
+		return nil
+	}
+
+	// Locking - validate lock type
+	if err := lockType.Validate(); err != nil {
+		return err
+	}
+
+	// Validate and deep copy lock data
+	if err := ValidateLockData(lockData); err != nil {
+		return err
+	}
+	copiedData, err := deepCopyLockData(lockData)
+	if err != nil {
+		return err
+	}
+
+	// All validation passed - update fields atomically
+	e.Locked = true
+	e.LockType = lockType
+	e.LockData = copiedData
+	return nil
+}
+
 // MatchesName returns true if the given input matches the exit name or any alias.
 // Matching is case-insensitive.
 func (e *Exit) MatchesName(input string) bool {
