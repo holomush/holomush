@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // mockWorldService implements hostfunc.WorldService for testing.
@@ -122,6 +123,19 @@ func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
 		assert.Nil(t, loc)
 		assert.ErrorIs(t, err, expectedErr)
 	})
+
+	t.Run("error includes code and context", func(t *testing.T) {
+		expectedErr := errors.New("underlying error")
+		svc := &mockWorldService{err: expectedErr}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "my-plugin")
+
+		_, err := adapter.GetLocation(ctx, locID)
+
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+		errutil.AssertErrorContext(t, err, "plugin", "my-plugin")
+		errutil.AssertErrorContext(t, err, "entity_type", "location")
+	})
 }
 
 func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
@@ -154,6 +168,19 @@ func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
 
 		assert.Nil(t, char)
 		assert.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("error includes code and context", func(t *testing.T) {
+		expectedErr := errors.New("underlying error")
+		svc := &mockWorldService{err: expectedErr}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "char-plugin")
+
+		_, err := adapter.GetCharacter(ctx, charID)
+
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+		errutil.AssertErrorContext(t, err, "plugin", "char-plugin")
+		errutil.AssertErrorContext(t, err, "entity_type", "character")
 	})
 }
 
@@ -196,6 +223,19 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, expectedErr)
 	})
+
+	t.Run("error includes code and context", func(t *testing.T) {
+		expectedErr := errors.New("underlying error")
+		svc := &mockWorldService{err: expectedErr}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "loc-plugin")
+
+		_, err := adapter.GetCharactersByLocation(ctx, locID)
+
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+		errutil.AssertErrorContext(t, err, "plugin", "loc-plugin")
+		errutil.AssertErrorContext(t, err, "entity_type", "characters_by_location")
+	})
 }
 
 func TestWorldQuerierAdapter_GetObject(t *testing.T) {
@@ -230,5 +270,18 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 
 		assert.Nil(t, obj)
 		assert.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("error includes code and context", func(t *testing.T) {
+		expectedErr := errors.New("underlying error")
+		svc := &mockWorldService{err: expectedErr}
+		adapter := hostfunc.NewWorldQuerierAdapter(svc, "obj-plugin")
+
+		_, err := adapter.GetObject(ctx, objID)
+
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "PLUGIN_QUERY_FAILED")
+		errutil.AssertErrorContext(t, err, "plugin", "obj-plugin")
+		errutil.AssertErrorContext(t, err, "entity_type", "object")
 	})
 }

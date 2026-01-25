@@ -54,7 +54,10 @@ func (a *WorldQuerierAdapter) SubjectID() string {
 func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error) {
 	loc, err := a.service.GetLocation(ctx, a.SubjectID(), id)
 	if err != nil {
-		return nil, oops.Wrapf(err, "get location for plugin %s", a.pluginName)
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "location").
+			Wrapf(err, "get location")
 	}
 	return loc, nil
 }
@@ -63,7 +66,10 @@ func (a *WorldQuerierAdapter) GetLocation(ctx context.Context, id ulid.ULID) (*w
 func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error) {
 	char, err := a.service.GetCharacter(ctx, a.SubjectID(), id)
 	if err != nil {
-		return nil, oops.Wrapf(err, "get character for plugin %s", a.pluginName)
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "character").
+			Wrapf(err, "get character")
 	}
 	return char, nil
 }
@@ -72,7 +78,10 @@ func (a *WorldQuerierAdapter) GetCharacter(ctx context.Context, id ulid.ULID) (*
 func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locationID ulid.ULID) ([]*world.Character, error) {
 	chars, err := a.service.GetCharactersByLocation(ctx, a.SubjectID(), locationID)
 	if err != nil {
-		return nil, oops.Wrapf(err, "get characters by location for plugin %s", a.pluginName)
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "characters_by_location").
+			Wrapf(err, "get characters by location")
 	}
 	return chars, nil
 }
@@ -81,7 +90,10 @@ func (a *WorldQuerierAdapter) GetCharactersByLocation(ctx context.Context, locat
 func (a *WorldQuerierAdapter) GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error) {
 	obj, err := a.service.GetObject(ctx, a.SubjectID(), id)
 	if err != nil {
-		return nil, oops.Wrapf(err, "get object for plugin %s", a.pluginName)
+		return nil, oops.Code("PLUGIN_QUERY_FAILED").
+			With("plugin", a.pluginName).
+			With("entity_type", "object").
+			Wrapf(err, "get object")
 	}
 	return obj, nil
 }
