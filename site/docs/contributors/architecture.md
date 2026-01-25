@@ -72,6 +72,41 @@ Events enable:
 - **Persistence** - All actions are stored and replayable
 - **Plugins** - Extensions react to and emit events
 
+#### Event Ordering Model
+
+HoloMUSH uses **per-stream ordering**, not a global event loop. This is a deliberate
+architectural choice:
+
+| Approach              | Trade-off                                                      |
+| --------------------- | -------------------------------------------------------------- |
+| **Global event loop** | Simple consistency, but bottleneck at scale                    |
+| **Per-stream order**  | Parallelism across streams, ordering where it matters (chosen) |
+
+**Guarantees:**
+
+- Events MUST be delivered in order **within a stream**
+- Events across different streams have no ordering guarantee
+- Clients reconnecting MUST receive missed events in order
+
+**Why this works for MUSHes:** Players in the same room need to see "Alice says hi"
+before "Bob says yo" if Alice spoke first. Players in different rooms don't care
+about each other's event ordering—and shouldn't be blocked by it.
+
+#### Stream Types
+
+| Stream           | Content                                | Subscribers            |
+| ---------------- | -------------------------------------- | ---------------------- |
+| `location:<id>`  | Poses, says, arrivals, departures      | Characters in location |
+| `character:<id>` | Private messages, system notifications | That character         |
+| `channel:<name>` | Channel messages (future)              | Channel members        |
+| `location:*`     | Broadcast events (system-wide)         | All locations          |
+
+#### Cross-Room Events
+
+Movement between rooms produces events in the destination stream. If departure
+visibility is needed in the origin room, that requires a separate event to the
+origin stream. Each stream maintains independent ordering.
+
 ### Session Manager
 
 Handles connection lifecycle with reconnection support:
