@@ -6,6 +6,7 @@ package world
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -62,12 +63,21 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 		}
 		return nil
 	}); err != nil {
-		// Log at ERROR level when all retries are exhausted for production visibility
-		slog.Error("event emission failed after all retries",
-			"stream", stream,
-			"event_type", eventType,
-			"attempts", attempt,
-			"error", err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Log at WARN level for context cancellation (expected during shutdown)
+			slog.Warn("event emission cancelled",
+				"stream", stream,
+				"event_type", eventType,
+				"attempts", attempt,
+				"reason", err)
+		} else {
+			// Log at ERROR level when all retries are exhausted for production visibility
+			slog.Error("event emission failed after all retries",
+				"stream", stream,
+				"event_type", eventType,
+				"attempts", attempt,
+				"error", err)
+		}
 		return oops.Wrapf(err, "emit event after retries")
 	}
 	return nil
@@ -78,7 +88,7 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 // Returns a validation error if the payload is invalid.
 func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayload) error {
 	if emitter == nil {
-		slog.Debug("event emitter nil, skipping event",
+		slog.Warn("event emitter nil, skipping event",
 			"event_type", core.EventTypeMove,
 			"entity_type", payload.EntityType,
 			"entity_id", payload.EntityID.String(),
@@ -113,7 +123,7 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 		if obj != nil {
 			objectID = obj.ID.String()
 		}
-		slog.Debug("event emitter nil, skipping event",
+		slog.Warn("event emitter nil, skipping event",
 			"event_type", core.EventTypeObjectCreate,
 			"object_id", objectID)
 		return nil
@@ -152,7 +162,7 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 // Returns a validation error if the payload is invalid.
 func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload ExaminePayload) error {
 	if emitter == nil {
-		slog.Debug("event emitter nil, skipping event",
+		slog.Warn("event emitter nil, skipping event",
 			"event_type", core.EventTypeObjectExamine,
 			"character_id", payload.CharacterID.String(),
 			"target_type", payload.TargetType,
@@ -183,7 +193,7 @@ func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload Examine
 // Returns a validation error if the payload is invalid.
 func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload ObjectGivePayload) error {
 	if emitter == nil {
-		slog.Debug("event emitter nil, skipping event",
+		slog.Warn("event emitter nil, skipping event",
 			"event_type", core.EventTypeObjectGive,
 			"object_id", payload.ObjectID.String(),
 			"from_character_id", payload.FromCharacterID.String(),

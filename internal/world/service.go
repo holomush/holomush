@@ -405,7 +405,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
 			With("object_id", id.String()).
 			With("move_succeeded", true).
-			Wrapf(err, "emit move event")
+			Wrapf(err, "move completed but event emission failed")
 	}
 
 	return nil

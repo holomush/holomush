@@ -116,9 +116,7 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 			// Verify existing location matches expected attributes
 			existing, getErr := locationRepo.Get(ctx, startingLocID)
 			if getErr != nil {
-				slog.Warn("Could not verify existing seed location",
-					"location_id", startingLocID,
-					"error", getErr)
+				logVerificationFailure(cmd, startingLocID, getErr)
 				slog.Info("World already seeded", "location_id", startingLocID)
 				return nil
 			}
@@ -175,6 +173,16 @@ func collectMismatches(id ulid.ULID, expected, actual seedLocation) []string {
 	}
 
 	return mismatches
+}
+
+// logVerificationFailure logs when we can't verify existing seed location attributes.
+// This is logged at ERROR level (not WARN) because verification failure indicates
+// a potentially serious issue that operators should investigate.
+func logVerificationFailure(cmd *cobra.Command, locationID ulid.ULID, err error) {
+	slog.Error("Could not verify existing seed location",
+		"location_id", locationID,
+		"error", err)
+	cmd.PrintErrln("WARNING: Could not verify existing seed location attributes")
 }
 
 // checkSeedMismatches prints warnings for mismatches and returns an error in strict mode.

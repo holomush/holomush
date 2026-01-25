@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -295,6 +296,85 @@ func TestEmitMoveEvent(t *testing.T) {
 		// Should not have made multiple attempts since context was cancelled
 		assert.LessOrEqual(t, len(emitter.calls), 1, "should stop retrying on context cancellation")
 	})
+
+	t.Run("logs warn instead of error for context cancellation", func(t *testing.T) {
+		// Capture log output by temporarily replacing the default logger
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelWarn, // Capture WARN and above
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		emitter := &mockEventEmitter{err: errors.New("transient error")}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(cancelCtx, emitter, payload)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+
+		// Verify log output: should be WARN level with "cancelled" message, NOT ERROR
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "level=WARN",
+			"context cancellation should log at WARN level, got: %s", logOutput)
+		assert.Contains(t, logOutput, "event emission cancelled",
+			"should log cancellation message, got: %s", logOutput)
+		assert.NotContains(t, logOutput, "level=ERROR",
+			"context cancellation should NOT log at ERROR level, got: %s", logOutput)
+		assert.NotContains(t, logOutput, "failed after all retries",
+			"should NOT log failure message for cancellation, got: %s", logOutput)
+	})
+
+	t.Run("logs warn instead of error for context deadline exceeded", func(t *testing.T) {
+		// Capture log output by temporarily replacing the default logger
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelWarn, // Capture WARN and above
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		// Create already-expired context
+		deadlineCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+
+		emitter := &mockEventEmitter{err: errors.New("transient error")}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(deadlineCtx, emitter, payload)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+
+		// Verify log output: should be WARN level with "cancelled" message, NOT ERROR
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "level=WARN",
+			"context deadline exceeded should log at WARN level, got: %s", logOutput)
+		assert.Contains(t, logOutput, "event emission cancelled",
+			"should log cancellation message, got: %s", logOutput)
+		assert.NotContains(t, logOutput, "level=ERROR",
+			"context deadline exceeded should NOT log at ERROR level, got: %s", logOutput)
+		assert.NotContains(t, logOutput, "failed after all retries",
+			"should NOT log failure message for deadline exceeded, got: %s", logOutput)
+	})
 }
 
 func TestEmitObjectCreateEvent(t *testing.T) {
@@ -559,6 +639,116 @@ func TestEmitExamineEvent(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		assert.ErrorIs(t, err, emitErr)
+	})
+}
+
+func TestEmitEvent_NilEmitterLogsWarn(t *testing.T) {
+	// This test verifies that all Emit*Event functions log at WARN level
+	// when the emitter is nil, consistent with the pattern in service.go:54-56.
+	ctx := context.Background()
+
+	t.Run("EmitMoveEvent logs warn for nil emitter", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelDebug, // Capture all log levels
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   ulid.Make(),
+			FromType:   world.ContainmentTypeLocation,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       ulid.Make(),
+		}
+
+		err := world.EmitMoveEvent(ctx, nil, payload)
+		require.NoError(t, err)
+
+		logOutput := logBuf.String()
+		assert.True(t, strings.Contains(logOutput, "level=WARN"),
+			"nil emitter should log at WARN level, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
+			"should contain expected message, got: %s", logOutput)
+	})
+
+	t.Run("EmitObjectCreateEvent logs warn for nil emitter", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		obj := &world.Object{
+			ID:   ulid.Make(),
+			Name: "Test Object",
+		}
+
+		err := world.EmitObjectCreateEvent(ctx, nil, obj)
+		require.NoError(t, err)
+
+		logOutput := logBuf.String()
+		assert.True(t, strings.Contains(logOutput, "level=WARN"),
+			"nil emitter should log at WARN level, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
+			"should contain expected message, got: %s", logOutput)
+	})
+
+	t.Run("EmitExamineEvent logs warn for nil emitter", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		payload := world.ExaminePayload{
+			CharacterID: ulid.Make(),
+			TargetType:  world.TargetTypeObject,
+			TargetID:    ulid.Make(),
+			TargetName:  "Chest",
+			LocationID:  ulid.Make(),
+		}
+
+		err := world.EmitExamineEvent(ctx, nil, payload)
+		require.NoError(t, err)
+
+		logOutput := logBuf.String()
+		assert.True(t, strings.Contains(logOutput, "level=WARN"),
+			"nil emitter should log at WARN level, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
+			"should contain expected message, got: %s", logOutput)
+	})
+
+	t.Run("EmitObjectGiveEvent logs warn for nil emitter", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		payload := world.ObjectGivePayload{
+			ObjectID:        ulid.Make(),
+			ObjectName:      "Sword",
+			FromCharacterID: ulid.Make(),
+			ToCharacterID:   ulid.Make(),
+		}
+
+		err := world.EmitObjectGiveEvent(ctx, nil, payload)
+		require.NoError(t, err)
+
+		logOutput := logBuf.String()
+		assert.True(t, strings.Contains(logOutput, "level=WARN"),
+			"nil emitter should log at WARN level, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "event emitter nil"),
+			"should contain expected message, got: %s", logOutput)
 	})
 }
 

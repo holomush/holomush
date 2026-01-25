@@ -170,9 +170,20 @@ func TestQueryRoom_InternalError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, room.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	// Should return sanitized message, not the actual error
-	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message, not internal details")
-	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+	// Should return sanitized message with correlation ID, not the actual error
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error (ref: ", "expected sanitized error message with reference ID")
+	assert.NotContains(t, errStr, "database", "internal error details should not be exposed")
+
+	// Extract and validate the reference ID is a valid ULID (26 characters)
+	// Format: "internal error (ref: <26-char-ulid>)"
+	const prefix = "internal error (ref: "
+	const suffix = ")"
+	require.True(t, len(errStr) >= len(prefix)+len(suffix)+26, "error message too short for ULID")
+	refID := errStr[len(prefix) : len(errStr)-len(suffix)]
+	assert.Len(t, refID, 26, "reference ID should be a 26-character ULID")
+	_, parseErr := ulid.Parse(refID)
+	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
 func TestQueryRoom_PermissionDenied(t *testing.T) {
@@ -334,8 +345,19 @@ func TestQueryCharacter_InternalError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, character.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message")
-	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+	// Should return sanitized message with correlation ID, not the actual error
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error (ref: ", "expected sanitized error message with reference ID")
+	assert.NotContains(t, errStr, "database", "internal error details should not be exposed")
+
+	// Extract and validate the reference ID is a valid ULID (26 characters)
+	const prefix = "internal error (ref: "
+	const suffix = ")"
+	require.True(t, len(errStr) >= len(prefix)+len(suffix)+26, "error message too short for ULID")
+	refID := errStr[len(prefix) : len(errStr)-len(suffix)]
+	assert.Len(t, refID, 26, "reference ID should be a 26-character ULID")
+	_, parseErr := ulid.Parse(refID)
+	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
 func TestQueryCharacter_PermissionDenied(t *testing.T) {
@@ -519,8 +541,19 @@ func TestQueryRoomCharacters_InternalError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, characters.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message")
-	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+	// Should return sanitized message with correlation ID, not the actual error
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error (ref: ", "expected sanitized error message with reference ID")
+	assert.NotContains(t, errStr, "database", "internal error details should not be exposed")
+
+	// Extract and validate the reference ID is a valid ULID (26 characters)
+	const prefix = "internal error (ref: "
+	const suffix = ")"
+	require.True(t, len(errStr) >= len(prefix)+len(suffix)+26, "error message too short for ULID")
+	refID := errStr[len(prefix) : len(errStr)-len(suffix)]
+	assert.Len(t, refID, 26, "reference ID should be a 26-character ULID")
+	_, parseErr := ulid.Parse(refID)
+	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
 func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
@@ -732,8 +765,19 @@ func TestQueryObject_InternalError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, objVal.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Equal(t, "internal error", errVal.String(), "expected sanitized error message")
-	assert.NotContains(t, errVal.String(), "database", "internal error details should not be exposed")
+	// Should return sanitized message with correlation ID, not the actual error
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error (ref: ", "expected sanitized error message with reference ID")
+	assert.NotContains(t, errStr, "database", "internal error details should not be exposed")
+
+	// Extract and validate the reference ID is a valid ULID (26 characters)
+	const prefix = "internal error (ref: "
+	const suffix = ")"
+	require.True(t, len(errStr) >= len(prefix)+len(suffix)+26, "error message too short for ULID")
+	refID := errStr[len(prefix) : len(errStr)-len(suffix)]
+	assert.Len(t, refID, 26, "reference ID should be a 26-character ULID")
+	_, parseErr := ulid.Parse(refID)
+	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
 func TestQueryObject_PermissionDenied(t *testing.T) {

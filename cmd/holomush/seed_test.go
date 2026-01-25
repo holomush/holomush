@@ -6,6 +6,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -174,6 +177,38 @@ func TestCheckSeedMismatches(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogVerificationFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	var errBuf bytes.Buffer
+
+	// Set up a logger that writes to our buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	original := slog.Default()
+	slog.SetDefault(logger)
+	defer slog.SetDefault(original)
+
+	id, _ := ulid.Parse("01HZN3XS000000000000000000")
+	testErr := errors.New("database connection lost")
+
+	cmd := &cobra.Command{}
+	cmd.SetErr(&errBuf)
+
+	// This function encapsulates the verification failure logging behavior
+	logVerificationFailure(cmd, id, testErr)
+
+	// Verify ERROR level was used (not WARN)
+	var logEntry map[string]any
+	require.NoError(t, json.Unmarshal(logBuf.Bytes(), &logEntry), "Failed to parse log JSON: %s", logBuf.String())
+	assert.Equal(t, "ERROR", logEntry["level"], "verification failure should log at ERROR level")
+	assert.Equal(t, "Could not verify existing seed location", logEntry["msg"])
+	assert.Contains(t, logEntry["location_id"], "01HZN3XS000000000000000000")
+	assert.Contains(t, logEntry["error"], "database connection lost")
+
+	// Verify stderr warning was printed for operator visibility
+	assert.Contains(t, errBuf.String(), "WARNING:", "should print warning to stderr")
+	assert.Contains(t, errBuf.String(), "Could not verify existing seed location", "stderr should describe the issue")
 }
 
 func TestCollectMismatches(t *testing.T) {

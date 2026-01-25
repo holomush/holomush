@@ -18,6 +18,10 @@ import (
 // sanitizeErrorForPlugin converts internal errors to safe messages for plugins.
 // It maps known error types to user-friendly messages and logs internal errors
 // at ERROR level for operators while returning a generic message to plugins.
+//
+// For internal errors, a correlation ID (ULID) is generated and included in both
+// the log entry and the error message returned to the plugin. This allows operators
+// to correlate plugin-reported errors with server logs for debugging.
 func sanitizeErrorForPlugin(pluginName, entityType, entityID string, err error) string {
 	if errors.Is(err, world.ErrNotFound) {
 		return fmt.Sprintf("%s not found", entityType)
@@ -25,15 +29,21 @@ func sanitizeErrorForPlugin(pluginName, entityType, entityID string, err error) 
 	if errors.Is(err, world.ErrPermissionDenied) {
 		return "access denied"
 	}
-	// Log full error for operators, return generic message to plugin.
+	// Generate correlation ID for this error instance.
+	// This allows operators to find the corresponding log entry when a plugin
+	// reports an internal error to users.
+	errorID := ulid.Make().String()
+
+	// Log full error for operators, return generic message with reference ID to plugin.
 	// The oops error contains full context including stack traces which
 	// should not be exposed to plugins.
 	slog.Error("internal error in plugin query",
+		"error_id", errorID,
 		"plugin", pluginName,
 		"entity_type", entityType,
 		"entity_id", entityID,
 		"error", err)
-	return "internal error"
+	return fmt.Sprintf("internal error (ref: %s)", errorID)
 }
 
 // WorldQuerier provides read access to world data.

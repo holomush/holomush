@@ -67,6 +67,35 @@ For logging oops errors, use `pkg/errutil`:
 errutil.LogError(logger, "operation failed", err)
 ```
 
+### Error Correlation for Plugins
+
+When internal errors occur during plugin host function calls, the error is sanitized
+before returning to the plugin. To help operators debug issues reported by plugins,
+a correlation ID (ULID) is included in both the log entry and the sanitized error
+message.
+
+**Plugin receives:**
+
+```text
+internal error (ref: 01KFSM8W2JKVD441APK779B4PN)
+```
+
+**Server log contains:**
+
+```text
+ERROR internal error in plugin query error_id=01KFSM8W2JKVD441APK779B4PN plugin=my-plugin ...
+```
+
+**Correlation workflow:**
+
+1. Plugin reports error to user (e.g., "internal error (ref: 01KFSM8W...)")
+2. User contacts server operator with the reference ID
+3. Operator searches logs for `error_id=01KFSM8W...`
+4. Full error details including stack trace are available in the log entry
+
+This pattern ensures internal details (database errors, stack traces) are never
+exposed to plugins while still enabling effective debugging.
+
 ### Logging
 
 Use structured logging with slog:
