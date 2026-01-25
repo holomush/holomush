@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -26,7 +27,15 @@ const defaultSeedTimeout = 30 * time.Second
 
 // seedConfig holds configuration for the seed command.
 type seedConfig struct {
-	timeout time.Duration
+	timeout  time.Duration
+	noStrict bool
+}
+
+// seedLocation holds seed data attributes for comparison.
+type seedLocation struct {
+	Name        string
+	Type        string
+	Description string
 }
 
 // NewSeedCmd creates the seed subcommand.
@@ -44,6 +53,7 @@ This command is idempotent - it will not create duplicates if run multiple times
 	}
 
 	cmd.Flags().DurationVar(&cfg.timeout, "timeout", defaultSeedTimeout, "timeout for database operations (e.g., 30s, 1m)")
+	cmd.Flags().BoolVar(&cfg.noStrict, "no-strict", false, "allow seed attribute mismatches (warn instead of fail)")
 
 	return cmd
 }
@@ -109,26 +119,25 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 				slog.Warn("Could not verify existing seed location",
 					"location_id", startingLocID,
 					"error", getErr)
-			} else {
-				// Check for attribute mismatches
-				if existing.Name != startingLoc.Name {
-					slog.Warn("Seed location name mismatch",
-						"location_id", startingLocID,
-						"expected", startingLoc.Name,
-						"actual", existing.Name)
-				}
-				if existing.Type != startingLoc.Type {
-					slog.Warn("Seed location type mismatch",
-						"location_id", startingLocID,
-						"expected", startingLoc.Type,
-						"actual", existing.Type)
-				}
-				if existing.Description != startingLoc.Description {
-					slog.Warn("Seed location description mismatch",
-						"location_id", startingLocID,
-						"expected_length", len(startingLoc.Description),
-						"actual_length", len(existing.Description))
-				}
+				slog.Info("World already seeded", "location_id", startingLocID)
+				return nil
+			}
+
+			// Collect and check for attribute mismatches
+			expected := seedLocation{
+				Name:        startingLoc.Name,
+				Type:        string(startingLoc.Type),
+				Description: startingLoc.Description,
+			}
+			actual := seedLocation{
+				Name:        existing.Name,
+				Type:        string(existing.Type),
+				Description: existing.Description,
+			}
+			mismatches := collectMismatches(startingLocID, expected, actual)
+
+			if mismatchErr := checkSeedMismatches(cmd, mismatches, cfg.noStrict); mismatchErr != nil {
+				return mismatchErr
 			}
 
 			slog.Info("World already seeded", "location_id", startingLocID)
@@ -141,5 +150,50 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 	slog.Info("Created starting location", "id", startingLoc.ID, "name", startingLoc.Name)
 
 	cmd.Println("World seeding complete!")
+	return nil
+}
+
+// collectMismatches compares expected and actual seed location attributes
+// and returns a list of human-readable mismatch descriptions.
+func collectMismatches(id ulid.ULID, expected, actual seedLocation) []string {
+	var mismatches []string
+
+	if expected.Name != actual.Name {
+		mismatches = append(mismatches, fmt.Sprintf(
+			"location %s name mismatch: expected %q, got %q",
+			id, expected.Name, actual.Name))
+	}
+	if expected.Type != actual.Type {
+		mismatches = append(mismatches, fmt.Sprintf(
+			"location %s type mismatch: expected %q, got %q",
+			id, expected.Type, actual.Type))
+	}
+	if expected.Description != actual.Description {
+		mismatches = append(mismatches, fmt.Sprintf(
+			"location %s description mismatch: expected length %d, got length %d",
+			id, len(expected.Description), len(actual.Description)))
+	}
+
+	return mismatches
+}
+
+// checkSeedMismatches prints warnings for mismatches and returns an error in strict mode.
+func checkSeedMismatches(cmd *cobra.Command, mismatches []string, noStrict bool) error {
+	if len(mismatches) == 0 {
+		return nil
+	}
+
+	// Print all mismatches to stderr
+	for _, m := range mismatches {
+		cmd.PrintErrln("WARNING:", m)
+	}
+
+	// In strict mode (default), fail with error
+	if !noStrict {
+		return oops.Code("SEED_MISMATCH").Errorf(
+			"seed data has %d attribute mismatch(es); use --no-strict to allow",
+			len(mismatches))
+	}
+
 	return nil
 }

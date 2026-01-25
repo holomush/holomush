@@ -82,3 +82,201 @@ func TestNewSeedCmd_TimeoutFlag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, time.Minute, timeout, "timeout should be settable to 1m")
 }
+
+func TestNewSeedCmd_NoStrictFlag(t *testing.T) {
+	cmd := NewSeedCmd()
+
+	// Verify --no-strict flag exists with correct default (false = strict mode by default)
+	noStrict, err := cmd.Flags().GetBool("no-strict")
+	require.NoError(t, err)
+	assert.False(t, noStrict, "default should be strict mode (no-strict=false)")
+
+	// Verify flag can be set
+	require.NoError(t, cmd.Flags().Set("no-strict", "true"))
+	noStrict, err = cmd.Flags().GetBool("no-strict")
+	require.NoError(t, err)
+	assert.True(t, noStrict, "no-strict should be settable to true")
+}
+
+func TestSeedConfig_NoStrictField(t *testing.T) {
+	// Verify seedConfig has noStrict field
+	cfg := &seedConfig{
+		noStrict: true,
+	}
+	assert.True(t, cfg.noStrict)
+}
+
+func TestCheckSeedMismatches(t *testing.T) {
+	tests := []struct {
+		name           string
+		noStrict       bool
+		hasMismatches  bool
+		wantError      bool
+		wantWarnings   bool
+	}{
+		{
+			name:          "strict mode with mismatches returns error",
+			noStrict:      false,
+			hasMismatches: true,
+			wantError:     true,
+			wantWarnings:  true,
+		},
+		{
+			name:          "strict mode without mismatches returns success",
+			noStrict:      false,
+			hasMismatches: false,
+			wantError:     false,
+			wantWarnings:  false,
+		},
+		{
+			name:          "no-strict mode with mismatches returns success but warns",
+			noStrict:      true,
+			hasMismatches: true,
+			wantError:     false,
+			wantWarnings:  true,
+		},
+		{
+			name:          "no-strict mode without mismatches returns success",
+			noStrict:      true,
+			hasMismatches: false,
+			wantError:     false,
+			wantWarnings:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var errBuf bytes.Buffer
+			cmd := &cobra.Command{}
+			cmd.SetErr(&errBuf)
+
+			var mismatches []string
+			if tt.hasMismatches {
+				mismatches = []string{
+					"name mismatch: expected 'The Nexus', got 'Old Name'",
+				}
+			}
+
+			err := checkSeedMismatches(cmd, mismatches, tt.noStrict)
+
+			if tt.wantError {
+				require.Error(t, err)
+				errutil.AssertErrorCode(t, err, "SEED_MISMATCH")
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tt.wantWarnings {
+				assert.Contains(t, errBuf.String(), "WARNING:")
+				assert.Contains(t, errBuf.String(), "name mismatch")
+			} else {
+				assert.Empty(t, errBuf.String())
+			}
+		})
+	}
+}
+
+func TestCollectMismatches(t *testing.T) {
+	id, _ := ulid.Parse("01HZN3XS000000000000000000")
+
+	tests := []struct {
+		name         string
+		expected     seedLocation
+		actual       seedLocation
+		wantCount    int
+		wantContains []string
+	}{
+		{
+			name: "no mismatches",
+			expected: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "A description",
+			},
+			actual: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "A description",
+			},
+			wantCount: 0,
+		},
+		{
+			name: "name mismatch",
+			expected: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "A description",
+			},
+			actual: seedLocation{
+				Name:        "Different Name",
+				Type:        "persistent",
+				Description: "A description",
+			},
+			wantCount:    1,
+			wantContains: []string{"name", "The Nexus", "Different Name"},
+		},
+		{
+			name: "type mismatch",
+			expected: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "A description",
+			},
+			actual: seedLocation{
+				Name:        "The Nexus",
+				Type:        "temporary",
+				Description: "A description",
+			},
+			wantCount:    1,
+			wantContains: []string{"type", "persistent", "temporary"},
+		},
+		{
+			name: "description mismatch",
+			expected: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "Expected description",
+			},
+			actual: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "Different description",
+			},
+			wantCount:    1,
+			wantContains: []string{"description"},
+		},
+		{
+			name: "multiple mismatches",
+			expected: seedLocation{
+				Name:        "The Nexus",
+				Type:        "persistent",
+				Description: "Expected",
+			},
+			actual: seedLocation{
+				Name:        "Other",
+				Type:        "temporary",
+				Description: "Different",
+			},
+			wantCount: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mismatches := collectMismatches(id, tt.expected, tt.actual)
+			assert.Len(t, mismatches, tt.wantCount)
+			for _, want := range tt.wantContains {
+				found := false
+				for _, m := range mismatches {
+					if bytes.Contains([]byte(m), []byte(want)) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected mismatch to contain %q", want)
+				}
+			}
+		})
+	}
+}
