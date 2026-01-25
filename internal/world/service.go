@@ -504,4 +504,3 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 	}
 	return participants, nil
 }
-

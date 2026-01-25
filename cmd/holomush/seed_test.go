@@ -108,11 +108,11 @@ func TestSeedConfig_NoStrictField(t *testing.T) {
 
 func TestCheckSeedMismatches(t *testing.T) {
 	tests := []struct {
-		name           string
-		noStrict       bool
-		hasMismatches  bool
-		wantError      bool
-		wantWarnings   bool
+		name          string
+		noStrict      bool
+		hasMismatches bool
+		wantError     bool
+		wantWarnings  bool
 	}{
 		{
 			name:          "strict mode with mismatches returns error",
