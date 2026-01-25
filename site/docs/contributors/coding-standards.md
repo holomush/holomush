@@ -261,7 +261,7 @@ docs/
 internal/            # Private implementation
   core/              # Event system, sessions, world engine
   store/             # PostgreSQL implementations
-  plugins/           # Plugin host (Lua & Go)
+  plugin/            # Plugin host (Lua & Go)
 pkg/                 # Public plugin API
 plugins/             # Core plugins (Lua for customization, Go for performance)
 scripts/             # Build and utility scripts
@@ -317,4 +317,3 @@ type AccessControl interface {
 
 - [Pull Request Guide](pr-guide.md) - Contribution workflow
 - [Architecture](architecture.md) - System design overview
-- [Testing](/developers/testing/) - Detailed testing guide

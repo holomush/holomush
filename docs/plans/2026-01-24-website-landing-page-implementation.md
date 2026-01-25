@@ -2,7 +2,7 @@
 
 **Date:** 2026-01-24
 **Design:** [2026-01-24-website-landing-page-design.md](2026-01-24-website-landing-page-design.md)
-**Status:** Ready for implementation
+**Status:** Completed
 
 ## Prerequisites
 
@@ -108,8 +108,8 @@ git checkout -- site/
 
 ## Definition of Done
 
-- [ ] All 4 tasks completed
-- [ ] `task docs:build` passes
-- [ ] `task docs:serve` shows correct landing page
-- [ ] No WASM references remain in site/docs
-- [ ] No broken links in navigation
+- [x] All 4 tasks completed
+- [x] `task docs:build` passes
+- [x] `task docs:serve` shows correct landing page
+- [x] No WASM references remain in site/docs
+- [x] No broken links in navigation
