@@ -51,6 +51,9 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.AccessControl == nil {
 		panic("world.NewService: AccessControl is required")
 	}
+	if cfg.EventEmitter == nil {
+		slog.Warn("world.NewService: EventEmitter not configured, world events will not be emitted")
+	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
 		exitRepo:      cfg.ExitRepo,
@@ -354,6 +357,12 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 
 // MoveObject moves an object to a new containment after checking write authorization.
 // Returns ErrInvalidContainment if the target containment is invalid.
+//
+// Event emission follows eventual consistency semantics: the database move succeeds
+// atomically, then an event is emitted. If event emission fails (returns
+// OBJECT_MOVE_EVENT_FAILED with move_succeeded=true), the move has already persisted
+// and will be visible to subsequent queries. Callers should handle this case by
+// treating the operation as successful for the user while logging the event failure.
 func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID, to Containment) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
@@ -393,7 +402,10 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 		ToID:       *to.ID(), // Safe: to.Validate() ensures one field is set
 	}
 	if err := EmitMoveEvent(ctx, s.eventEmitter, payload); err != nil {
-		return oops.Code("OBJECT_MOVE_FAILED").With("object_id", id.String()).Wrapf(err, "emit move event")
+		return oops.Code("OBJECT_MOVE_EVENT_FAILED").
+			With("object_id", id.String()).
+			With("move_succeeded", true).
+			Wrapf(err, "emit move event")
 	}
 
 	return nil

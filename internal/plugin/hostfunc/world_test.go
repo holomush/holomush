@@ -141,7 +141,7 @@ func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, room.Type(), "expected nil room")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "world service not configured")
+	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
 func TestQueryRoom_Error(t *testing.T) {
@@ -188,9 +188,11 @@ func TestQueryRoom_RequiresCapability(t *testing.T) {
 
 func TestQueryCharacter(t *testing.T) {
 	charID := ulid.Make()
+	playerID := ulid.Make()
 	locID := ulid.Make()
 	char := &world.Character{
 		ID:          charID,
+		PlayerID:    playerID,
 		Name:        "Test Character",
 		Description: "A brave adventurer with a mysterious past.",
 		LocationID:  &locID,
@@ -216,6 +218,7 @@ func TestQueryCharacter(t *testing.T) {
 
 	tbl := character.(*lua.LTable)
 	assert.Equal(t, charID.String(), tbl.RawGetString("id").String())
+	assert.Equal(t, playerID.String(), tbl.RawGetString("player_id").String())
 	assert.Equal(t, char.Name, tbl.RawGetString("name").String())
 	assert.Equal(t, char.Description, tbl.RawGetString("description").String())
 	assert.Equal(t, locID.String(), tbl.RawGetString("location_id").String())
@@ -316,7 +319,7 @@ func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, character.Type(), "expected nil character")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "world service not configured")
+	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
 func TestQueryCharacter_RequiresCapability(t *testing.T) {
@@ -461,7 +464,7 @@ func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, characters.Type(), "expected nil characters")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "world service not configured")
+	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
 func TestQueryRoomCharacters_RequiresCapability(t *testing.T) {

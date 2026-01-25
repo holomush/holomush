@@ -54,6 +54,29 @@ func (m *mockWorldService) GetCharactersByLocation(_ context.Context, subjectID 
 // Compile-time interface check.
 var _ hostfunc.WorldService = (*mockWorldService)(nil)
 
+func TestNewWorldQuerierAdapter_Validation(t *testing.T) {
+	t.Run("panics when service is nil", func(t *testing.T) {
+		assert.PanicsWithValue(t, "hostfunc.NewWorldQuerierAdapter: service is required", func() {
+			hostfunc.NewWorldQuerierAdapter(nil, "my-plugin")
+		})
+	})
+
+	t.Run("panics when pluginName is empty", func(t *testing.T) {
+		svc := &mockWorldService{}
+		assert.PanicsWithValue(t, "hostfunc.NewWorldQuerierAdapter: pluginName is required", func() {
+			hostfunc.NewWorldQuerierAdapter(svc, "")
+		})
+	})
+
+	t.Run("succeeds with valid inputs", func(t *testing.T) {
+		svc := &mockWorldService{}
+		assert.NotPanics(t, func() {
+			adapter := hostfunc.NewWorldQuerierAdapter(svc, "my-plugin")
+			assert.NotNil(t, adapter)
+		})
+	})
+}
+
 func TestWorldQuerierAdapter_SubjectID(t *testing.T) {
 	svc := &mockWorldService{}
 	adapter := hostfunc.NewWorldQuerierAdapter(svc, "my-plugin")

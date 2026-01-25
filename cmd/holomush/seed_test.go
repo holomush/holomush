@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
@@ -36,7 +37,8 @@ func TestRunSeed_MissingDatabaseURL(t *testing.T) {
 	cmd.SetContext(context.Background())
 	cmd.SetOut(&bytes.Buffer{})
 
-	err := runSeed(cmd, nil)
+	cfg := &seedConfig{timeout: 30 * time.Second}
+	err := runSeed(cmd, nil, cfg)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
@@ -51,7 +53,8 @@ func TestRunSeed_InvalidDatabaseURL(t *testing.T) {
 	cmd.SetContext(context.Background())
 	cmd.SetOut(&bytes.Buffer{})
 
-	err := runSeed(cmd, nil)
+	cfg := &seedConfig{timeout: 30 * time.Second}
+	err := runSeed(cmd, nil, cfg)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DB_CONNECT_FAILED")
 }
@@ -63,4 +66,19 @@ func TestNewSeedCmd(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
 	assert.NotNil(t, cmd.RunE)
+}
+
+func TestNewSeedCmd_TimeoutFlag(t *testing.T) {
+	cmd := NewSeedCmd()
+
+	// Verify timeout flag exists with correct default
+	timeout, err := cmd.Flags().GetDuration("timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, timeout, "default timeout should be 30s")
+
+	// Verify custom timeout can be set
+	require.NoError(t, cmd.Flags().Set("timeout", "1m"))
+	timeout, err = cmd.Flags().GetDuration("timeout")
+	require.NoError(t, err)
+	assert.Equal(t, time.Minute, timeout, "timeout should be settable to 1m")
 }

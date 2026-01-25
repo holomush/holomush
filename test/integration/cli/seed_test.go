@@ -90,6 +90,34 @@ var _ = Describe("Seed Command", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(replayPolicy).To(Equal("last:0"), "persistent locations should have no replay")
 		})
+
+		It("warns when existing location attributes differ from expected", func() {
+			// First run - creates location
+			cmd1 := exec.CommandContext(ctx, "go", "run", ".", "seed")
+			cmd1.Dir = "../../../cmd/holomush"
+			cmd1.Env = append(cmd1.Environ(), "DATABASE_URL="+env.connStr)
+
+			output1, err := cmd1.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "first seed failed: %s", string(output1))
+
+			// Modify the location to have different attributes
+			_, err = env.pool.Exec(ctx,
+				"UPDATE locations SET name = $1 WHERE id = $2",
+				"Modified Nexus", "01HZN3XS000000000000000000",
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second run - should log warning about mismatch
+			cmd2 := exec.CommandContext(ctx, "go", "run", ".", "seed")
+			cmd2.Dir = "../../../cmd/holomush"
+			cmd2.Env = append(cmd2.Environ(), "DATABASE_URL="+env.connStr)
+
+			output2, err := cmd2.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "second seed failed: %s", string(output2))
+			Expect(string(output2)).To(ContainSubstring("Starting location already exists"))
+			// The warning is logged via slog.Warn which goes to stderr in JSON format
+			Expect(string(output2)).To(ContainSubstring("mismatch"))
+		})
 	})
 
 	Describe("Error handling", func() {

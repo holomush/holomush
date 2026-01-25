@@ -21,18 +21,34 @@ import (
 	"github.com/holomush/holomush/internal/world/postgres"
 )
 
+// Default timeout for seed command.
+const defaultSeedTimeout = 30 * time.Second
+
+// seedConfig holds configuration for the seed command.
+type seedConfig struct {
+	timeout time.Duration
+}
+
 // NewSeedCmd creates the seed subcommand.
 func NewSeedCmd() *cobra.Command {
-	return &cobra.Command{
+	cfg := &seedConfig{}
+
+	cmd := &cobra.Command{
 		Use:   "seed",
 		Short: "Seed the world with initial data",
 		Long: `Creates initial world data including a starting location.
 This command is idempotent - it will not create duplicates if run multiple times.`,
-		RunE: runSeed,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSeed(cmd, args, cfg)
+		},
 	}
+
+	cmd.Flags().DurationVar(&cfg.timeout, "timeout", defaultSeedTimeout, "timeout for database operations (e.g., 30s, 1m)")
+
+	return cmd
 }
 
-func runSeed(cmd *cobra.Command, _ []string) error {
+func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 	// Get database URL from environment (config file support in later phase)
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -41,7 +57,7 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 
 	// Add timeout to prevent indefinite hangs
 	// Use cmd.Context() to respect SIGINT/SIGTERM signals
-	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 	defer cancel()
 
 	cmd.Println("Connecting to database...")
@@ -86,6 +102,35 @@ func runSeed(cmd *cobra.Command, _ []string) error {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			cmd.Println("Starting location already exists, skipping seed")
+
+			// Verify existing location matches expected attributes
+			existing, getErr := locationRepo.Get(ctx, startingLocID)
+			if getErr != nil {
+				slog.Warn("Could not verify existing seed location",
+					"location_id", startingLocID,
+					"error", getErr)
+			} else {
+				// Check for attribute mismatches
+				if existing.Name != startingLoc.Name {
+					slog.Warn("Seed location name mismatch",
+						"location_id", startingLocID,
+						"expected", startingLoc.Name,
+						"actual", existing.Name)
+				}
+				if existing.Type != startingLoc.Type {
+					slog.Warn("Seed location type mismatch",
+						"location_id", startingLocID,
+						"expected", startingLoc.Type,
+						"actual", existing.Type)
+				}
+				if existing.Description != startingLoc.Description {
+					slog.Warn("Seed location description mismatch",
+						"location_id", startingLocID,
+						"expected_length", len(startingLoc.Description),
+						"actual_length", len(existing.Description))
+				}
+			}
+
 			slog.Info("World already seeded", "location_id", startingLocID)
 			return nil
 		}

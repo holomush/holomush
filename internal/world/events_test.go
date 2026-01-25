@@ -4,19 +4,22 @@
 package world_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/pkg/errutil"
-
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // mockEventEmitter captures emitted events for testing.
@@ -119,8 +122,8 @@ func TestEmitMoveEvent(t *testing.T) {
 
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "location:"+toLocID.String(), call.Stream)
-		assert.Equal(t, "move", call.EventType)
+		assert.Equal(t, world.LocationStream(toLocID), call.Stream)
+		assert.Equal(t, string(core.EventTypeMove), call.EventType)
 
 		var decoded world.MovePayload
 		err = json.Unmarshal(call.Payload, &decoded)
@@ -187,6 +190,47 @@ func TestEmitMoveEvent(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		assert.Equal(t, 4, emitter.attempts, "should have made 4 attempts (initial + 3 retries)")
 	})
+
+	t.Run("logs debug message on retry attempts", func(t *testing.T) {
+		// Capture log output by temporarily replacing the default logger
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		transientErr := errors.New("connection reset")
+		emitter := &retryCountingEmitter{
+			failCount: 2, // Fail twice, succeed on third attempt
+			failErr:   transientErr,
+		}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.NoError(t, err)
+
+		// Verify log output contains retry information
+		logOutput := logBuf.String()
+		assert.True(t, strings.Contains(logOutput, "event emission failed"),
+			"should log retry message, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "stream="),
+			"should log stream, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "event_type="),
+			"should log event_type, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "attempt="),
+			"should log attempt number, got: %s", logOutput)
+		assert.True(t, strings.Contains(logOutput, "error="),
+			"should log error, got: %s", logOutput)
+	})
 }
 
 func TestEmitObjectCreateEvent(t *testing.T) {
@@ -217,8 +261,8 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "location:"+locID.String(), call.Stream)
-		assert.Equal(t, "object_create", call.EventType)
+		assert.Equal(t, world.LocationStream(locID), call.Stream)
+		assert.Equal(t, string(core.EventTypeObjectCreate), call.EventType)
 
 		var decoded map[string]string
 		err = json.Unmarshal(call.Payload, &decoded)
@@ -242,8 +286,8 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "location:*", call.Stream)
-		assert.Equal(t, "object_create", call.EventType)
+		assert.Equal(t, world.BroadcastLocationStream(), call.Stream)
+		assert.Equal(t, string(core.EventTypeObjectCreate), call.EventType)
 	})
 
 	t.Run("returns error when emitter fails", func(t *testing.T) {
@@ -304,8 +348,8 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "character:"+toCharID.String(), call.Stream)
-		assert.Equal(t, "object_give", call.EventType)
+		assert.Equal(t, world.CharacterStream(toCharID), call.Stream)
+		assert.Equal(t, string(core.EventTypeObjectGive), call.EventType)
 
 		var decoded world.ObjectGivePayload
 		err = json.Unmarshal(call.Payload, &decoded)
@@ -383,8 +427,8 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		// Verify event was emitted
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "location:"+toLocID.String(), call.Stream)
-		assert.Equal(t, "move", call.EventType)
+		assert.Equal(t, world.LocationStream(toLocID), call.Stream)
+		assert.Equal(t, string(core.EventTypeMove), call.EventType)
 
 		var decoded world.MovePayload
 		err = json.Unmarshal(call.Payload, &decoded)
@@ -448,8 +492,8 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		// Verify event was emitted with from_type "none"
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
-		assert.Equal(t, "location:"+toLocID.String(), call.Stream)
-		assert.Equal(t, "move", call.EventType)
+		assert.Equal(t, world.LocationStream(toLocID), call.Stream)
+		assert.Equal(t, string(core.EventTypeMove), call.EventType)
 
 		var decoded world.MovePayload
 		err = json.Unmarshal(call.Payload, &decoded)

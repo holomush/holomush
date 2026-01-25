@@ -3172,6 +3172,25 @@ func TestWorldService_GetCharacter(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
 	})
+
+	t.Run("returns error when repository fails with generic error", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		dbErr := errors.New("database connection failed")
+		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(true)
+		mockRepo.EXPECT().Get(ctx, charID).Return(nil, dbErr)
+
+		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		assert.Nil(t, char)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_GET_FAILED")
+	})
 }
 
 func TestWorldService_GetCharactersByLocation(t *testing.T) {
@@ -3230,6 +3249,26 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
+	})
+
+	t.Run("returns error when repository fails", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			AccessControl: mockAC,
+		})
+
+		dbErr := errors.New("database connection failed")
+		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		mockRepo.EXPECT().GetByLocation(ctx, locationID).Return(nil, dbErr)
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, chars)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
+		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns empty slice for location with no characters", func(t *testing.T) {

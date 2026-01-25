@@ -30,7 +30,14 @@ type WorldQuerierAdapter struct {
 
 // NewWorldQuerierAdapter creates a new adapter for the given plugin.
 // The adapter uses "system:plugin:<pluginName>" as the authorization subject.
+// Panics if svc is nil or pluginName is empty.
 func NewWorldQuerierAdapter(svc WorldService, pluginName string) *WorldQuerierAdapter {
+	if svc == nil {
+		panic("hostfunc.NewWorldQuerierAdapter: service is required")
+	}
+	if pluginName == "" {
+		panic("hostfunc.NewWorldQuerierAdapter: pluginName is required")
+	}
 	return &WorldQuerierAdapter{
 		service:    svc,
 		pluginName: pluginName,

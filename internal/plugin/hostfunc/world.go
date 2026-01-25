@@ -31,9 +31,10 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
 			slog.Error("query_room called but world service unavailable",
-				"plugin", pluginName)
+				"plugin", pluginName,
+				"hint", "use WithWorldService option when creating hostfunc.Functions")
 			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured"))
+			L.Push(lua.LString("world service not configured - contact server administrator"))
 			return 2
 		}
 
@@ -89,9 +90,10 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
 			slog.Error("query_character called but world service unavailable",
-				"plugin", pluginName)
+				"plugin", pluginName,
+				"hint", "use WithWorldService option when creating hostfunc.Functions")
 			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured"))
+			L.Push(lua.LString("world service not configured - contact server administrator"))
 			return 2
 		}
 
@@ -132,6 +134,7 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 		// Return character info as a table
 		character := L.NewTable()
 		L.SetField(character, "id", lua.LString(char.ID.String()))
+		L.SetField(character, "player_id", lua.LString(char.PlayerID.String()))
 		L.SetField(character, "name", lua.LString(char.Name))
 		L.SetField(character, "description", lua.LString(char.Description))
 		if char.LocationID != nil {
@@ -149,9 +152,10 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
 			slog.Error("query_room_characters called but world service unavailable",
-				"plugin", pluginName)
+				"plugin", pluginName,
+				"hint", "use WithWorldService option when creating hostfunc.Functions")
 			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured"))
+			L.Push(lua.LString("world service not configured - contact server administrator"))
 			return 2
 		}
 
@@ -189,7 +193,9 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		// Return array of character info
+		// Return lightweight list of characters (id, name only).
+		// For full character details (player_id, description, location_id),
+		// use query_character on individual character IDs.
 		characters := L.NewTable()
 		for i, char := range chars {
 			c := L.NewTable()
