@@ -62,6 +62,12 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType 
 		}
 		return nil
 	}); err != nil {
+		// Log at ERROR level when all retries are exhausted for production visibility
+		slog.Error("event emission failed after all retries",
+			"stream", stream,
+			"event_type", eventType,
+			"attempts", attempt,
+			"error", err)
 		return oops.Wrapf(err, "emit event after retries")
 	}
 	return nil

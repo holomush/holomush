@@ -231,6 +231,49 @@ func TestEmitMoveEvent(t *testing.T) {
 		assert.True(t, strings.Contains(logOutput, "error="),
 			"should log error, got: %s", logOutput)
 	})
+
+	t.Run("logs error when all retries exhausted", func(t *testing.T) {
+		// Capture log output by temporarily replacing the default logger
+		var logBuf bytes.Buffer
+		originalLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+			Level: slog.LevelError, // Only capture ERROR level logs
+		}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(originalLogger)
+
+		persistentErr := errors.New("service unavailable")
+		emitter := &retryCountingEmitter{
+			failCount: 10, // Always fail (more than max retries)
+			failErr:   persistentErr,
+		}
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeObject,
+			EntityID:   objID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.Error(t, err)
+
+		// Verify ERROR log was emitted when retries exhausted
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "level=ERROR",
+			"should log at ERROR level, got: %s", logOutput)
+		assert.Contains(t, logOutput, "event emission failed after all retries",
+			"should log exhaustion message, got: %s", logOutput)
+		assert.Contains(t, logOutput, "stream=",
+			"should log stream, got: %s", logOutput)
+		assert.Contains(t, logOutput, "event_type=",
+			"should log event_type, got: %s", logOutput)
+		assert.Contains(t, logOutput, "attempts=4",
+			"should log total attempts (4), got: %s", logOutput)
+		assert.Contains(t, logOutput, "error=",
+			"should log final error, got: %s", logOutput)
+	})
 }
 
 func TestEmitObjectCreateEvent(t *testing.T) {
