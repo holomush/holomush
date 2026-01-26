@@ -28,6 +28,9 @@ errors
 - Create: `internal/store/migrations/000009_auth_player_fields.up.sql`
 - Create: `internal/store/migrations/000009_auth_player_fields.down.sql`
 
+> **Note:** Migration numbers (000009, 000010, 000011) assume no other migrations
+> are added before implementation. Verify and adjust numbering at implementation time.
+
 **Step 1: Create up migration**
 
 Create `internal/store/migrations/000009_auth_player_fields.up.sql`:
@@ -81,7 +84,11 @@ Create `internal/store/migrations/000009_auth_player_fields.down.sql`:
 ALTER TABLE players DROP CONSTRAINT IF EXISTS fk_players_default_character;
 
 -- Restore NOT NULL on characters.player_id
--- NOTE: This will fail if any characters have NULL player_id
+-- WARNING: This will fail if any rostered characters exist (NULL player_id).
+-- Before running this down migration, either:
+--   1. Assign all rostered characters to a player, or
+--   2. Delete rostered characters
+-- This is intentional: reversing Epic 5 requires addressing rostered characters.
 ALTER TABLE characters ALTER COLUMN player_id SET NOT NULL;
 
 -- Remove index
@@ -312,8 +319,8 @@ func TestVerifyPassword(t *testing.T) {
 func TestVerifyBcryptUpgrade(t *testing.T) {
     hasher := auth.NewArgon2idHasher()
 
-    // This is the bcrypt hash from test data in 000001_initial.up.sql
-    bcryptHash := "$2a$10$N9qo8uLOickgx2ZMRZoMye"
+    // This is a valid bcrypt hash for testing upgrade detection
+    bcryptHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIvNq.Uf3hE9tQALNP1Qn9sNp5x5x5x5"
 
     t.Run("detects bcrypt hash needing upgrade", func(t *testing.T) {
         needsUpgrade := hasher.NeedsUpgrade(bcryptHash)
@@ -449,6 +456,11 @@ func (h *Argon2idHasher) Verify(password, encodedHash string) (bool, error) {
     expectedHash, err := base64.RawStdEncoding.DecodeString(parts[5])
     if err != nil {
         return false, oops.Code("AUTH_INVALID_HASH").Wrap(err)
+    }
+
+    // Validate threads fits in uint8 to prevent silent truncation
+    if threads > 255 {
+        return false, oops.Code("AUTH_INVALID_HASH").Errorf("threads value %d exceeds uint8 max", threads)
     }
 
     // Compute hash with same parameters
