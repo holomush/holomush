@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -121,6 +122,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 			return os.Getenv("DATABASE_URL")
 		}
 	}
+	if deps.MigratorFactory == nil {
+		deps.MigratorFactory = func(url string) (AutoMigrator, error) {
+			return store.NewMigrator(url)
+		}
+	}
+	if deps.AutoMigrateGetter == nil {
+		deps.AutoMigrateGetter = parseAutoMigrate
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
@@ -138,6 +147,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	databaseURL := deps.DatabaseURLGetter()
 	if databaseURL == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("DATABASE_URL environment variable is required")
+	}
+
+	// Run auto-migration if enabled (default: true)
+	if deps.AutoMigrateGetter() {
+		if err := runAutoMigration(databaseURL, deps.MigratorFactory); err != nil {
+			return err
+		}
+	} else {
+		slog.Info("auto-migration disabled via HOLOMUSH_DB_AUTO_MIGRATE=false")
 	}
 
 	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
@@ -425,4 +443,54 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 	case <-ctx.Done():
 		// Context cancelled, exit monitoring
 	}
+}
+
+// runAutoMigration runs database migrations using the provided factory.
+// It logs the migration status and ensures the migrator is closed.
+func runAutoMigration(databaseURL string, factory func(string) (AutoMigrator, error)) error {
+	slog.Info("running auto-migration")
+
+	migrator, err := factory(databaseURL)
+	if err != nil {
+		return oops.Code("MIGRATION_INIT_FAILED").With("operation", "create migrator").Wrap(err)
+	}
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			slog.Warn("error closing migrator", "error", closeErr, "note", "connection may leak")
+		}
+	}()
+
+	if err := migrator.Up(); err != nil {
+		return oops.Code("AUTO_MIGRATION_FAILED").With("operation", "run migrations").Wrap(err)
+	}
+
+	slog.Info("auto-migration complete")
+	return nil
+}
+
+// parseAutoMigrate reads the HOLOMUSH_DB_AUTO_MIGRATE environment variable.
+// Returns true (auto-migrate enabled) if the variable is not set, empty, or not explicitly "false" or "0".
+// Whitespace-only values are treated as empty (not set).
+// Logs a warning for unrecognized values to help catch typos.
+func parseAutoMigrate() bool {
+	val := strings.TrimSpace(os.Getenv("HOLOMUSH_DB_AUTO_MIGRATE"))
+	if val == "" {
+		return true // Default: auto-migration enabled
+	}
+
+	// Check for explicit false values (case-insensitive)
+	if strings.EqualFold(val, "false") || val == "0" {
+		return false
+	}
+
+	// Check for explicit true values (case-insensitive)
+	if strings.EqualFold(val, "true") || val == "1" {
+		return true
+	}
+
+	// Unrecognized value - warn and default to true for safety
+	slog.Warn("unrecognized HOLOMUSH_DB_AUTO_MIGRATE value, defaulting to true",
+		"value", val,
+		"valid_values", "true, false, 1, 0")
+	return true
 }

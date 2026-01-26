@@ -22,16 +22,13 @@ import (
 	"github.com/holomush/holomush/internal/world/postgres"
 )
 
-// Default timeout for seed command.
 const defaultSeedTimeout = 30 * time.Second
 
-// seedConfig holds configuration for the seed command.
 type seedConfig struct {
 	timeout  time.Duration
 	noStrict bool
 }
 
-// seedLocation holds seed data attributes for comparison.
 type seedLocation struct {
 	Name        string
 	Type        string
@@ -77,6 +74,20 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 	defer cancel()
 
+	cmd.Println("Running migrations...")
+	migrator, err := store.NewMigrator(databaseURL)
+	if err != nil {
+		return oops.Code("MIGRATION_INIT_FAILED").With("operation", "initialize migrator").Wrap(err)
+	}
+	defer func() {
+		if closeErr := migrator.Close(); closeErr != nil {
+			slog.Warn("error closing migrator", "error", closeErr, "note", "connection may leak")
+		}
+	}()
+	if migrateErr := migrator.Up(); migrateErr != nil {
+		return oops.Code("MIGRATION_FAILED").With("operation", "run migrations").Wrap(migrateErr)
+	}
+
 	cmd.Println("Connecting to database...")
 	eventStore, err := store.NewPostgresEventStore(ctx, databaseURL)
 	if err != nil {
@@ -84,12 +95,6 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 	}
 	defer eventStore.Close()
 
-	cmd.Println("Running migrations...")
-	if migrateErr := eventStore.Migrate(ctx); migrateErr != nil {
-		return oops.Code("MIGRATION_FAILED").With("operation", "run migrations").Wrap(migrateErr)
-	}
-
-	// Reuse the event store's pool for the location repository
 	pool := eventStore.Pool()
 	if pool == nil {
 		return oops.Code("DB_POOL_FAILED").Errorf("failed to get database pool from event store")

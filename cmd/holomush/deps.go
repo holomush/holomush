@@ -49,6 +49,14 @@ type CoreDeps struct {
 	// DatabaseURLGetter returns the database URL.
 	// Default: reads from DATABASE_URL environment variable
 	DatabaseURLGetter func() string
+
+	// MigratorFactory creates a database migrator.
+	// Default: store.NewMigrator
+	MigratorFactory func(databaseURL string) (AutoMigrator, error)
+
+	// AutoMigrateGetter returns whether auto-migration is enabled.
+	// Default: parseAutoMigrate (reads HOLOMUSH_DB_AUTO_MIGRATE env var)
+	AutoMigrateGetter func() bool
 }
 
 // GatewayDeps contains injectable dependencies for the gateway command.
@@ -94,5 +102,11 @@ type ObservabilityServer interface {
 
 // GRPCClient interface wraps the methods used from holoGRPC.Client.
 type GRPCClient interface {
+	Close() error
+}
+
+// AutoMigrator is the minimal interface for startup auto-migration.
+type AutoMigrator interface {
+	Up() error
 	Close() error
 }

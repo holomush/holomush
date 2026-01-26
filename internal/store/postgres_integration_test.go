@@ -44,12 +44,22 @@ func setupPostgresContainer() (*store.PostgresEventStore, func(), error) {
 		return nil, nil, err
 	}
 
-	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
+	// Run migrations using the new Migrator
+	migrator, err := store.NewMigrator(connStr)
 	if err != nil {
+		_ = container.Terminate(ctx)
 		return nil, nil, err
 	}
+	if err := migrator.Up(); err != nil {
+		_ = migrator.Close()
+		_ = container.Terminate(ctx)
+		return nil, nil, err
+	}
+	_ = migrator.Close()
 
-	if err := eventStore.Migrate(ctx); err != nil {
+	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
+	if err != nil {
+		_ = container.Terminate(ctx)
 		return nil, nil, err
 	}
 

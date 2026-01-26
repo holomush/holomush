@@ -104,6 +104,37 @@ func (m *mockGRPCClient) Close() error {
 	return nil
 }
 
+// mockMigrator implements AutoMigrator for testing.
+type mockMigrator struct {
+	upFunc    func() error
+	closeFunc func() error
+}
+
+func (m *mockMigrator) Up() error {
+	if m.upFunc != nil {
+		return m.upFunc()
+	}
+	return nil
+}
+
+func (m *mockMigrator) Close() error {
+	if m.closeFunc != nil {
+		return m.closeFunc()
+	}
+	return nil
+}
+
+// noOpMigratorFactory returns an AutoMigrator that does nothing, for use in tests
+// that don't care about migration behavior.
+func noOpMigratorFactory(_ string) (AutoMigrator, error) {
+	return &mockMigrator{}, nil
+}
+
+// disableAutoMigrate returns false, disabling auto-migration for tests.
+func disableAutoMigrate() bool {
+	return false
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)
@@ -222,6 +253,8 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -296,6 +329,8 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return nil, fmt.Errorf("connection refused")
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -325,6 +360,8 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 				},
 			}, nil
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -355,6 +392,8 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -388,6 +427,8 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return nil, fmt.Errorf("failed to load TLS certificates")
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -424,6 +465,8 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -463,6 +506,8 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -506,6 +551,8 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -558,6 +605,8 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()
@@ -1033,6 +1082,8 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
 	}
 
 	cmd := newMockCmd()

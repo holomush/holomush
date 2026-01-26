@@ -5,6 +5,9 @@
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'persistent';
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS shadows_id TEXT REFERENCES locations(id);
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS owner_id TEXT REFERENCES characters(id);
+-- replay_policy: Controls event replay behavior for new joiners.
+-- Format: 'strategy:count' where strategy is 'last' (replay N recent events) or 'none' (no replay).
+-- Examples: 'last:10' replays 10 most recent events, 'last:0' and 'none:0' disable replay.
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS replay_policy TEXT NOT NULL DEFAULT 'last:0';
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
@@ -20,10 +23,14 @@ CREATE TABLE IF NOT EXISTS exits (
     aliases TEXT[] DEFAULT '{}',
     bidirectional BOOLEAN NOT NULL DEFAULT TRUE,
     return_name TEXT,
+    -- visibility: 'all' (everyone), 'owner' (exit owner only), 'list' (visible_to IDs only)
     visibility TEXT NOT NULL DEFAULT 'all',
+    -- visible_to: character IDs who can see exit when visibility='list'
     visible_to TEXT[] DEFAULT '{}',
     locked BOOLEAN NOT NULL DEFAULT FALSE,
+    -- lock_type: 'key' (requires object), 'puzzle' (requires solution), 'attribute' (character attribute check), etc.
     lock_type TEXT,
+    -- lock_data: type-specific configuration (e.g., {"key_id": "..."} or {"attribute": "strength", "min": 10})
     lock_data JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(from_location_id, name)

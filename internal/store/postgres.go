@@ -6,7 +6,6 @@ package store
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"log/slog"
 	"strings"
@@ -19,30 +18,6 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 )
-
-//go:embed migrations/001_initial.sql
-var migration001SQL string
-
-//go:embed migrations/002_system_info.sql
-var migration002SQL string
-
-//go:embed migrations/003_world_model.sql
-var migration003SQL string
-
-//go:embed migrations/004_pg_trgm.sql
-var migration004SQL string
-
-//go:embed migrations/005_pg_stat_statements.sql
-var migration005SQL string
-
-//go:embed migrations/006_object_containment_constraint.sql
-var migration006SQL string
-
-//go:embed migrations/007_exit_self_reference_constraint.sql
-var migration007SQL string
-
-//go:embed migrations/008_character_description_nullable_location.sql
-var migration008SQL string
 
 // ErrSystemInfoNotFound is returned when a system info key doesn't exist.
 var ErrSystemInfoNotFound = errors.New("system info key not found")
@@ -108,17 +83,6 @@ func (s *PostgresEventStore) Pool() *pgxpool.Pool {
 	return nil
 }
 
-// Migrate runs database migrations.
-func (s *PostgresEventStore) Migrate(ctx context.Context) error {
-	migrations := []string{migration001SQL, migration002SQL, migration003SQL, migration004SQL, migration005SQL, migration006SQL, migration007SQL, migration008SQL}
-	for i, sql := range migrations {
-		if _, err := s.pool.Exec(ctx, sql); err != nil {
-			return oops.With("operation", "run migration").With("migration_number", i+1).Wrap(err)
-		}
-	}
-	return nil
-}
-
 // Append persists an event and notifies subscribers via NOTIFY.
 func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error {
 	_, err := s.pool.Exec(ctx,
@@ -138,9 +102,15 @@ func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error
 
 	// Notify subscribers of the new event
 	// Errors are logged but not returned - event is already persisted, subscribers catch up via Replay
+	// Note: Repeated NOTIFY failures indicate a serious connectivity issue that should be investigated
+	//
+	// Metrics consideration: Adding a Prometheus counter for NOTIFY failures was evaluated but
+	// deferred. Current logging is sufficient for debugging, and adding metrics would require
+	// threading the observability.Metrics through Store creation. This can be revisited when
+	// expanding the observability infrastructure.
 	channel := streamToChannel(event.Stream)
 	if _, notifyErr := s.pool.Exec(ctx, "SELECT pg_notify($1, $2)", channel, event.ID.String()); notifyErr != nil {
-		slog.Warn("failed to notify subscribers of event",
+		slog.Error("failed to notify subscribers of event",
 			"event_id", event.ID.String(),
 			"stream", event.Stream,
 			"channel", channel,
@@ -284,7 +254,9 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	// Use pgx.Identifier to safely quote the channel name, preventing SQL injection
 	_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
 	if err != nil {
-		_ = conn.Close(ctx) //nolint:errcheck // cleanup on error path
+		if closeErr := conn.Close(ctx); closeErr != nil {
+			slog.Error("failed to close connection during cleanup - connection will leak", "error", closeErr)
+		}
 		return nil, nil, oops.With("operation", "listen").With("channel", channel).Wrap(err)
 	}
 
@@ -294,7 +266,11 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	go func() {
 		defer close(events)
 		defer close(errs)
-		defer func() { _ = conn.Close(context.Background()) }() //nolint:errcheck // cleanup in goroutine
+		defer func() {
+			if closeErr := conn.Close(context.Background()); closeErr != nil {
+				slog.Error("failed to close subscription connection - connection will leak", "error", closeErr, "stream", stream)
+			}
+		}()
 
 		for {
 			notification, err := conn.WaitForNotification(ctx)

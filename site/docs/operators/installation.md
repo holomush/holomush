@@ -171,7 +171,7 @@ Before first run, apply database migrations:
 
 ```bash
 DATABASE_URL="postgres://holomush:secret@localhost:5432/holomush?sslmode=disable" \
-  holomush migrate
+  holomush migrate up
 ```
 
 ### Start the Server

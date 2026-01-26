@@ -8,7 +8,7 @@ Thank you for your interest in contributing to HoloMUSH!
 
 - Go 1.22+
 - Task (task runner)
-- PostgreSQL 16+
+- PostgreSQL 18+
 
 ### Setup
 

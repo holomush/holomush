@@ -113,8 +113,8 @@ func TestCoreCommand_InvalidDatabaseURL(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err, "Expected error with invalid DATABASE_URL")
-	// Error from pgx parsing - "cannot parse" the URL
-	assert.Contains(t, err.Error(), "parse", "Error should mention parse issue, got: %v", err)
+	// Error from golang-migrate during auto-migration - "unknown driver" when scheme is invalid
+	assert.Contains(t, err.Error(), "unknown driver", "Error should mention unknown driver, got: %v", err)
 }
 
 func TestCoreCommand_FlagParsing(t *testing.T) {

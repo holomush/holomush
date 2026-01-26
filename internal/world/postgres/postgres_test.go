@@ -50,20 +50,18 @@ func TestMain(m *testing.M) {
 		panic("failed to get connection string: " + err.Error())
 	}
 
-	// Create the event store to run migrations
-	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
+	// Run all migrations using the new Migrator
+	migrator, err := store.NewMigrator(connStr)
 	if err != nil {
 		_ = container.Terminate(ctx)
-		panic("failed to create event store: " + err.Error())
+		panic("failed to create migrator: " + err.Error())
 	}
-
-	// Run all migrations
-	if err := eventStore.Migrate(ctx); err != nil {
-		eventStore.Close()
+	if err := migrator.Up(); err != nil {
+		_ = migrator.Close()
 		_ = container.Terminate(ctx)
 		panic("failed to run migrations: " + err.Error())
 	}
-	eventStore.Close()
+	_ = migrator.Close()
 
 	// Create a new pool for tests
 	pool, err := pgxpool.New(ctx, connStr)

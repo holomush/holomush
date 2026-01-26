@@ -15,13 +15,13 @@ HoloMUSH configuration follows a hierarchy:
 
 ### Global Commands
 
-| Command            | Description                      |
-| ------------------ | -------------------------------- |
-| `holomush core`    | Start the core process           |
-| `holomush gateway` | Start the gateway process        |
-| `holomush migrate` | Run database migrations          |
-| `holomush status`  | Check health of core and gateway |
-| `holomush --help`  | Show available commands          |
+| Command                  | Description                                                      |
+| ------------------------ | ---------------------------------------------------------------- |
+| `holomush core`          | Start the core process                                           |
+| `holomush gateway`       | Start the gateway process                                        |
+| `holomush migrate <cmd>` | Database migration management (up, down, status, version, force) |
+| `holomush status`        | Check health of core and gateway                                 |
+| `holomush --help`        | Show available commands                                          |
 
 ### Core Flags
 
@@ -76,15 +76,34 @@ holomush gateway \
   --log-format=json
 ```
 
-### Migrate Command
+### Migrate Commands
 
-The migrate command applies database schema changes.
+The migrate commands manage database schema migrations.
 
 ```bash
-holomush migrate
+# Apply all pending migrations
+holomush migrate up
+
+# Apply migrations in dry-run mode (shows what would be applied)
+holomush migrate up --dry-run
+
+# Rollback one migration
+holomush migrate down
+
+# Rollback all migrations
+holomush migrate down --all
+
+# Show current migration status
+holomush migrate status
+
+# Show current version only
+holomush migrate version
+
+# Force set version (for dirty state recovery)
+holomush migrate force <version>
 ```
 
-No flags. Requires `DATABASE_URL` environment variable.
+All migrate commands require `DATABASE_URL` environment variable.
 
 ## Environment Variables
 
