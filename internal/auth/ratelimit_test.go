@@ -20,6 +20,13 @@ func TestRateLimiter_CheckFailures(t *testing.T) {
 		assert.False(t, result.IsLockedOut)
 	})
 
+	t.Run("negative failures treated as zero", func(t *testing.T) {
+		result := auth.CheckFailures(-1, nil)
+		assert.Zero(t, result.Delay)
+		assert.False(t, result.RequiresCaptcha)
+		assert.False(t, result.IsLockedOut)
+	})
+
 	t.Run("1-3 failures returns progressive delay", func(t *testing.T) {
 		result1 := auth.CheckFailures(1, nil)
 		assert.Equal(t, time.Second, result1.Delay)

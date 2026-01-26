@@ -69,6 +69,39 @@ func TestVerifyPassword(t *testing.T) {
 		_, err := hasher.Verify("password", "not-a-valid-hash")
 		assert.Error(t, err)
 	})
+
+	t.Run("wrong algorithm returns error", func(t *testing.T) {
+		_, err := hasher.Verify("password", "$argon2i$v=19$m=65536,t=1,p=4$c2FsdA$aGFzaA")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported hash algorithm")
+	})
+
+	t.Run("invalid version format returns error", func(t *testing.T) {
+		_, err := hasher.Verify("password", "$argon2id$vXX$m=65536,t=1,p=4$c2FsdA$aGFzaA")
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid parameters format returns error", func(t *testing.T) {
+		_, err := hasher.Verify("password", "$argon2id$v=19$invalid$c2FsdA$aGFzaA")
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid salt base64 returns error", func(t *testing.T) {
+		_, err := hasher.Verify("password", "$argon2id$v=19$m=65536,t=1,p=4$!!!invalid!!!$aGFzaA")
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid hash base64 returns error", func(t *testing.T) {
+		_, err := hasher.Verify("password", "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA$!!!invalid!!!")
+		assert.Error(t, err)
+	})
+
+	t.Run("threads overflow returns error", func(t *testing.T) {
+		// threads=256 exceeds uint8 max (255)
+		_, err := hasher.Verify("password", "$argon2id$v=19$m=65536,t=1,p=256$c2FsdA$aGFzaA")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "threads value")
+	})
 }
 
 func TestVerifyBcryptUpgrade(t *testing.T) {
