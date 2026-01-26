@@ -906,9 +906,22 @@ func TestPostgresEventStore_Subscribe_WaitError(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should receive an error due to wait failure
+	// Note: when the goroutine exits after sending to errCh, it closes eventCh.
+	// Both channels become ready simultaneously, so we must handle the case where
+	// select picks eventCh (closed) before errCh (has error).
 	select {
-	case <-eventCh:
-		t.Fatal("should not receive event")
+	case event, ok := <-eventCh:
+		if ok {
+			t.Fatalf("should not receive event, got %v", event)
+		}
+		// Channel was closed; verify we still get the error
+		select {
+		case err := <-errCh:
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "connection lost")
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for error after eventCh closed")
+		}
 	case err := <-errCh:
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "connection lost")
