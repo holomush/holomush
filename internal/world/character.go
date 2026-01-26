@@ -55,14 +55,14 @@ func (c *Character) SetLocationID(id *ulid.ULID) error {
 }
 
 // SetName updates the character's name with validation.
-// The name must be non-empty, valid UTF-8, within MaxNameLength, and contain
-// no control characters.
+// Character names must contain letters and spaces only, be 2-32 characters,
+// with no leading/trailing/consecutive spaces.
 //
 // Note: Direct field access to Name is acceptable for repository hydration
 // from the database. This setter should be used by application code to ensure
 // validation.
 func (c *Character) SetName(name string) error {
-	if err := ValidateName(name); err != nil {
+	if err := ValidateCharacterName(name); err != nil {
 		return err
 	}
 	c.Name = name
@@ -92,7 +92,7 @@ func (c *Character) Validate() error {
 	if c.PlayerID.IsZero() {
 		return &ValidationError{Field: "player_id", Message: "cannot be zero"}
 	}
-	if err := ValidateName(c.Name); err != nil {
+	if err := ValidateCharacterName(c.Name); err != nil {
 		return err
 	}
 	return ValidateDescription(c.Description)

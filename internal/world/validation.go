@@ -6,6 +6,8 @@ package world
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -20,6 +22,10 @@ const (
 	MaxAliasLength       = 50
 	MaxVisibleToCount    = 100
 	MaxLockDataKeys      = 20
+
+	// Character name limits (stricter than general names)
+	MinCharacterNameLength = 2
+	MaxCharacterNameLength = 32
 )
 
 // ValidationError represents an input validation error.
@@ -48,6 +54,66 @@ func ValidateName(name string) error {
 		return &ValidationError{Field: "name", Message: "cannot contain control characters"}
 	}
 	return nil
+}
+
+// characterNameRegex matches names with only Unicode letters and single spaces between words.
+var characterNameRegex = regexp.MustCompile(`^[\p{L}]+( [\p{L}]+)*$`)
+
+// ValidateCharacterName checks that a character name is valid.
+// Character names have stricter rules than general names:
+// - Letters and spaces only (no numbers, no special characters)
+// - Length: 2-32 characters
+// - No leading/trailing spaces
+// - No consecutive spaces
+func ValidateCharacterName(name string) error {
+	if name == "" {
+		return &ValidationError{Field: "name", Message: "cannot be empty"}
+	}
+
+	// Check for leading/trailing whitespace
+	if name != strings.TrimSpace(name) {
+		return &ValidationError{Field: "name", Message: "cannot have leading or trailing spaces"}
+	}
+
+	// Check for consecutive spaces
+	if strings.Contains(name, "  ") {
+		return &ValidationError{Field: "name", Message: "cannot have consecutive spaces"}
+	}
+
+	if len(name) < MinCharacterNameLength {
+		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at least %d characters", MinCharacterNameLength)}
+	}
+
+	if len(name) > MaxCharacterNameLength {
+		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at most %d characters", MaxCharacterNameLength)}
+	}
+
+	// Check that name contains only letters and single spaces
+	if !characterNameRegex.MatchString(name) {
+		return &ValidationError{Field: "name", Message: "must contain letters and spaces only"}
+	}
+
+	return nil
+}
+
+// NormalizeCharacterName converts a character name to Initial Caps format.
+// - Trims leading/trailing whitespace
+// - Collapses consecutive spaces to single space
+// - Capitalizes first letter of each word, lowercases rest
+//
+// Example: "alaric" -> "Alaric", "jOhN sMiTh" -> "John Smith"
+func NormalizeCharacterName(name string) string {
+	// Trim and collapse whitespace
+	words := strings.Fields(name)
+	for i, word := range words {
+		if word != "" {
+			// Convert to runes to handle Unicode properly
+			runes := []rune(strings.ToLower(word))
+			runes[0] = unicode.ToUpper(runes[0])
+			words[i] = string(runes)
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // ValidateDescription checks that a description is valid.

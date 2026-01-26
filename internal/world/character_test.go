@@ -51,8 +51,9 @@ func TestCharacter_Validate(t *testing.T) {
 		require.NoError(t, char.Validate())
 	})
 
-	t.Run("name at exactly max length passes", func(t *testing.T) {
-		exactName := make([]byte, world.MaxNameLength)
+	t.Run("name at exactly max character name length passes", func(t *testing.T) {
+		// Character names have a stricter 32-char limit
+		exactName := make([]byte, world.MaxCharacterNameLength)
 		for i := range exactName {
 			exactName[i] = 'a'
 		}
@@ -65,8 +66,9 @@ func TestCharacter_Validate(t *testing.T) {
 		require.NoError(t, char.Validate())
 	})
 
-	t.Run("name exceeds max length", func(t *testing.T) {
-		longName := make([]byte, world.MaxNameLength+1)
+	t.Run("name exceeds max character name length", func(t *testing.T) {
+		// Character names have a stricter 32-char limit
+		longName := make([]byte, world.MaxCharacterNameLength+1)
 		for i := range longName {
 			longName[i] = 'a'
 		}
@@ -234,9 +236,9 @@ func TestNewCharacter(t *testing.T) {
 	})
 
 	t.Run("generates unique IDs", func(t *testing.T) {
-		char1, err1 := world.NewCharacter(playerID, "Hero1")
+		char1, err1 := world.NewCharacter(playerID, "Alaric")
 		require.NoError(t, err1)
-		char2, err2 := world.NewCharacter(playerID, "Hero2")
+		char2, err2 := world.NewCharacter(playerID, "Baldric")
 		require.NoError(t, err2)
 		assert.NotEqual(t, char1.ID, char2.ID, "IDs should be unique")
 	})
@@ -340,11 +342,12 @@ func TestCharacter_SetName(t *testing.T) {
 		assert.Equal(t, "OriginalName", char.Name)
 	})
 
-	t.Run("name exceeding max length returns error", func(t *testing.T) {
+	t.Run("name exceeding max character name length returns error", func(t *testing.T) {
 		char, err := world.NewCharacter(ulid.Make(), "OriginalName")
 		require.NoError(t, err)
 
-		longName := strings.Repeat("x", world.MaxNameLength+1)
+		// Character names have a stricter 32-char limit
+		longName := strings.Repeat("x", world.MaxCharacterNameLength+1)
 		err = char.SetName(longName)
 		require.Error(t, err)
 		var validationErr *world.ValidationError
@@ -464,5 +467,161 @@ func TestNewCharacterWithID(t *testing.T) {
 		char, err := world.NewCharacterWithID(specificID, playerID, "Hero")
 		require.NoError(t, err)
 		assert.Equal(t, specificID, char.ID)
+	})
+}
+
+func TestValidateCharacterName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errMsg  string
+	}{
+		// Valid names
+		{name: "valid simple", input: "Alaric", wantErr: false},
+		{name: "valid two words", input: "John Smith", wantErr: false},
+		{name: "valid three words", input: "John Paul Smith", wantErr: false},
+		{name: "minimum length", input: "Al", wantErr: false},
+		{name: "maximum length 32 chars", input: "Abcdefghijklmnopqrstuvwxyzabcdef", wantErr: false},
+
+		// Invalid: too short/long
+		{name: "too short single char", input: "A", wantErr: true, errMsg: "at least 2 characters"},
+		{name: "too long 33 chars", input: "Abcdefghijklmnopqrstuvwxyzabcdefg", wantErr: true, errMsg: "at most 32 characters"},
+		{name: "empty", input: "", wantErr: true, errMsg: "cannot be empty"},
+
+		// Invalid: numbers not allowed
+		{name: "contains numbers", input: "Alaric123", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "starts with number", input: "1Alaric", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "number in middle", input: "Alar1c", wantErr: true, errMsg: "letters and spaces only"},
+
+		// Invalid: special characters not allowed
+		{name: "contains exclamation", input: "Alaric!", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "contains at symbol", input: "Alaric@test", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "contains hyphen", input: "John-Smith", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "contains underscore", input: "John_Smith", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "contains apostrophe", input: "O'Brien", wantErr: true, errMsg: "letters and spaces only"},
+
+		// Invalid: whitespace issues
+		{name: "leading space", input: " Alaric", wantErr: true, errMsg: "leading or trailing spaces"},
+		{name: "trailing space", input: "Alaric ", wantErr: true, errMsg: "leading or trailing spaces"},
+		{name: "double space", input: "John  Smith", wantErr: true, errMsg: "consecutive spaces"},
+		{name: "triple space", input: "John   Smith", wantErr: true, errMsg: "consecutive spaces"},
+		{name: "only spaces", input: "   ", wantErr: true, errMsg: "leading or trailing spaces"},
+
+		// Invalid: control characters
+		{name: "contains null", input: "Alar\x00ic", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "contains tab", input: "John\tSmith", wantErr: true, errMsg: "letters and spaces only"},
+		{name: "contains newline", input: "John\nSmith", wantErr: true, errMsg: "letters and spaces only"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := world.ValidateCharacterName(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNormalizeCharacterName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "already correct", input: "Alaric", expected: "Alaric"},
+		{name: "lowercase to title", input: "alaric", expected: "Alaric"},
+		{name: "all caps to title", input: "ALARIC", expected: "Alaric"},
+		{name: "mixed case single word", input: "aLaRiC", expected: "Alaric"},
+		{name: "two words lowercase", input: "john smith", expected: "John Smith"},
+		{name: "two words uppercase", input: "JOHN SMITH", expected: "John Smith"},
+		{name: "mixed case two words", input: "jOhN sMiTh", expected: "John Smith"},
+		{name: "three words", input: "john paul smith", expected: "John Paul Smith"},
+		{name: "preserves single spaces", input: "John Smith", expected: "John Smith"},
+		{name: "trims leading space", input: " alaric", expected: "Alaric"},
+		{name: "trims trailing space", input: "alaric ", expected: "Alaric"},
+		{name: "trims both", input: " alaric ", expected: "Alaric"},
+		{name: "collapses multiple spaces", input: "john   smith", expected: "John Smith"},
+		{name: "collapses and trims", input: "  john   smith  ", expected: "John Smith"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := world.NormalizeCharacterName(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestNormalizeCharacterName_Unicode(t *testing.T) {
+	// Note: Current implementation only handles ASCII letters.
+	// These tests document the current behavior with unicode.
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// Unicode letters - NormalizeCharacterName handles them via unicode.ToUpper/ToLower
+		{name: "accented lowercase", input: "élise", expected: "Élise"},
+		{name: "accented uppercase", input: "ÉLISE", expected: "Élise"},
+		{name: "german eszett", input: "groß", expected: "Groß"},
+		{name: "cyrillic lowercase", input: "иван", expected: "Иван"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := world.NormalizeCharacterName(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCharacterNameValidation_Integration(t *testing.T) {
+	// Test that character creation uses the validation
+	playerID := ulid.Make()
+
+	t.Run("valid name creates character", func(t *testing.T) {
+		char, err := world.NewCharacter(playerID, "Alaric")
+		require.NoError(t, err)
+		assert.Equal(t, "Alaric", char.Name)
+	})
+
+	t.Run("name with numbers fails", func(t *testing.T) {
+		_, err := world.NewCharacter(playerID, "Alaric123")
+		require.Error(t, err)
+		var validationErr *world.ValidationError
+		require.ErrorAs(t, err, &validationErr)
+		assert.Equal(t, "name", validationErr.Field)
+	})
+
+	t.Run("name with special chars fails", func(t *testing.T) {
+		_, err := world.NewCharacter(playerID, "Alaric!")
+		require.Error(t, err)
+	})
+
+	t.Run("name too short fails", func(t *testing.T) {
+		_, err := world.NewCharacter(playerID, "A")
+		require.Error(t, err)
+	})
+
+	t.Run("SetName validates character name rules", func(t *testing.T) {
+		char, err := world.NewCharacter(playerID, "Alaric")
+		require.NoError(t, err)
+
+		// Should fail with numbers
+		err = char.SetName("Hero123")
+		require.Error(t, err)
+		assert.Equal(t, "Alaric", char.Name) // unchanged
+
+		// Should succeed with valid name
+		err = char.SetName("Hero")
+		require.NoError(t, err)
+		assert.Equal(t, "Hero", char.Name)
 	})
 }
