@@ -18,7 +18,7 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS default_character_id TEXT;
 -- Extensible preferences
 ALTER TABLE players ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}';
 
--- Timestamps
+-- Timestamps (updated_at managed at application layer, not via database trigger)
 ALTER TABLE players ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- Unique index on email (partial - only when email is set)

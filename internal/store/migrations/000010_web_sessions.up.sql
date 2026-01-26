@@ -15,5 +15,5 @@ CREATE TABLE IF NOT EXISTS web_sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_web_sessions_player ON web_sessions(player_id);
-CREATE INDEX IF NOT EXISTS idx_web_sessions_token ON web_sessions(token_signature);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_sessions_token ON web_sessions(token_signature);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
