@@ -55,8 +55,8 @@ func (c *Character) SetLocationID(id *ulid.ULID) error {
 }
 
 // SetName updates the character's name with validation.
-// Character names must contain letters and spaces only, be 2-32 characters,
-// with no leading/trailing/consecutive spaces.
+// Character names must contain letters and spaces only, be MinCharacterNameLength
+// to MaxCharacterNameLength characters, with no leading/trailing/consecutive spaces.
 //
 // Note: Direct field access to Name is acceptable for repository hydration
 // from the database. This setter should be used by application code to ensure

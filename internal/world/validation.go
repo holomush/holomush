@@ -62,12 +62,18 @@ var characterNameRegex = regexp.MustCompile(`^[\p{L}]+( [\p{L}]+)*$`)
 // ValidateCharacterName checks that a character name is valid.
 // Character names have stricter rules than general names:
 // - Letters and spaces only (no numbers, no special characters)
-// - Length: 2-32 characters
+// - Length: MinCharacterNameLength to MaxCharacterNameLength characters
 // - No leading/trailing spaces
 // - No consecutive spaces
+// - Supports Unicode letters (accented characters, Cyrillic, etc.)
 func ValidateCharacterName(name string) error {
 	if name == "" {
 		return &ValidationError{Field: "name", Message: "cannot be empty"}
+	}
+
+	// Validate UTF-8 before any other processing
+	if !utf8.ValidString(name) {
+		return &ValidationError{Field: "name", Message: "must be valid UTF-8"}
 	}
 
 	// Check for leading/trailing whitespace
@@ -80,11 +86,13 @@ func ValidateCharacterName(name string) error {
 		return &ValidationError{Field: "name", Message: "cannot have consecutive spaces"}
 	}
 
-	if len(name) < MinCharacterNameLength {
+	// Use rune count for proper Unicode character counting
+	runeCount := utf8.RuneCountInString(name)
+	if runeCount < MinCharacterNameLength {
 		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at least %d characters", MinCharacterNameLength)}
 	}
 
-	if len(name) > MaxCharacterNameLength {
+	if runeCount > MaxCharacterNameLength {
 		return &ValidationError{Field: "name", Message: fmt.Sprintf("must be at most %d characters", MaxCharacterNameLength)}
 	}
 
@@ -100,8 +108,9 @@ func ValidateCharacterName(name string) error {
 // - Trims leading/trailing whitespace
 // - Collapses consecutive spaces to single space
 // - Capitalizes first letter of each word, lowercases rest
+// - Handles Unicode letters properly (accented characters, Cyrillic, etc.)
 //
-// Example: "alaric" -> "Alaric", "jOhN sMiTh" -> "John Smith"
+// Example: "alaric" -> "Alaric", "jOhN sMiTh" -> "John Smith", "josé" -> "José"
 func NormalizeCharacterName(name string) string {
 	// Trim and collapse whitespace
 	words := strings.Fields(name)

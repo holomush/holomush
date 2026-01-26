@@ -512,6 +512,13 @@ func TestValidateCharacterName(t *testing.T) {
 		{name: "contains null", input: "Alar\x00ic", wantErr: true, errMsg: "letters and spaces only"},
 		{name: "contains tab", input: "John\tSmith", wantErr: true, errMsg: "letters and spaces only"},
 		{name: "contains newline", input: "John\nSmith", wantErr: true, errMsg: "letters and spaces only"},
+
+		// Invalid: UTF-8 validation
+		{name: "invalid UTF-8 bytes", input: "\xff\xfe", wantErr: true, errMsg: "must be valid UTF-8"},
+
+		// Unicode length counting (runes, not bytes)
+		{name: "32 char cyrillic valid", input: "Александрийскийгородзеленоград", wantErr: false}, // 30 Cyrillic chars
+		{name: "unicode accented at max", input: "Éléonoreélisabethéléonore", wantErr: false},     // 25 chars with accents
 	}
 
 	for _, tt := range tests {
