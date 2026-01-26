@@ -388,3 +388,37 @@ func TestParseAutoMigrate_WarnsOnInvalidValue(t *testing.T) {
 	assert.Contains(t, buf.String(), "unrecognized", "Should log warning for invalid value")
 	assert.Contains(t, buf.String(), "flase", "Warning should include the invalid value")
 }
+
+func TestParseAutoMigrate_WhitespaceOnlyTreatedAsNotSet(t *testing.T) {
+	// Whitespace-only values should be treated as "not set" (default true)
+	// and should NOT trigger a warning
+	var buf bytes.Buffer
+	handler := slog.NewJSONHandler(&buf, nil)
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	tests := []struct {
+		name     string
+		envValue string
+	}{
+		{"single space", " "},
+		{"multiple spaces", "   "},
+		{"tab", "\t"},
+		{"newline", "\n"},
+		{"mixed whitespace", " \t\n "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf.Reset()
+			t.Setenv("HOLOMUSH_DB_AUTO_MIGRATE", tt.envValue)
+
+			result := parseAutoMigrate()
+
+			assert.True(t, result, "Whitespace-only value should default to true")
+			assert.NotContains(t, buf.String(), "unrecognized",
+				"Should NOT log warning for whitespace-only value")
+		})
+	}
+}

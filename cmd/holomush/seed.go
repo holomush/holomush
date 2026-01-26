@@ -22,16 +22,13 @@ import (
 	"github.com/holomush/holomush/internal/world/postgres"
 )
 
-// Default timeout for seed command.
 const defaultSeedTimeout = 30 * time.Second
 
-// seedConfig holds configuration for the seed command.
 type seedConfig struct {
 	timeout  time.Duration
 	noStrict bool
 }
 
-// seedLocation holds seed data attributes for comparison.
 type seedLocation struct {
 	Name        string
 	Type        string
@@ -98,7 +95,6 @@ func runSeed(cmd *cobra.Command, _ []string, cfg *seedConfig) error {
 	}
 	defer eventStore.Close()
 
-	// Reuse the event store's pool for the location repository
 	pool := eventStore.Pool()
 	if pool == nil {
 		return oops.Code("DB_POOL_FAILED").Errorf("failed to get database pool from event store")

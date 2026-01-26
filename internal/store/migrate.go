@@ -49,6 +49,10 @@ type migrateIface interface {
 }
 
 // Migrator wraps golang-migrate for database schema management.
+//
+// IMPORTANT: Migrator is NOT safe for concurrent use. Each instance
+// should be used from a single goroutine and must not be copied.
+// For concurrent scenarios, create separate Migrator instances.
 type Migrator struct {
 	m migrateIface
 }
@@ -159,9 +163,7 @@ func (m *Migrator) Close() error {
 }
 
 // allMigrationVersions returns all available migration versions from the embedded FS.
-// Results are cached since the embedded filesystem is immutable at runtime.
-// Versions are returned sorted in ascending order.
-// Returns a copy of the cached slice to prevent callers from mutating the cache.
+// Results are cached and a defensive copy is returned.
 func allMigrationVersions() ([]uint, error) {
 	cachedVersionsOnce.Do(func() {
 		cachedVersions, cachedVersionsErr = loadMigrationVersions()
@@ -243,22 +245,12 @@ func loadMigrationNames() (map[uint]string, error) {
 }
 
 // MigrationName returns the name of a migration by version number.
-//
 // Results are cached since the embedded filesystem is immutable at runtime.
-// This provides O(1) lookup performance for repeated calls.
 //
 // Returns:
 //   - (name, nil) when version is found
-//   - ("", nil) when version is not found (expected behavior, not an error)
-//   - ("", error) when embedded FS cannot be read (indicates binary corruption)
-//
-// Returns the migration name in format NNNNNN_name (e.g., "000001_initial").
-//
-// Design notes:
-//   - ReadDir failure returns an error because it indicates binary corruption or memory
-//     tampering. The embedded FS is immutable in a valid binary, so this is a hard failure.
-//   - Version-not-found returns ("", nil) because looking up an unknown version is expected
-//     behavior in CLI contexts (e.g., displaying version info for a manually forced version).
+//   - ("", nil) when version is not found (expected behavior)
+//   - ("", error) when embedded FS cannot be read (indicates corruption)
 func MigrationName(version uint) (string, error) {
 	cachedNamesOnce.Do(func() {
 		cachedNames, cachedNamesErr = loadMigrationNames()
