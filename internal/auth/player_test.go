@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestPlayer_IsLocked(t *testing.T) {
@@ -39,10 +40,17 @@ func TestPlayer_RecordFailure(t *testing.T) {
 		assert.Equal(t, 1, p.FailedAttempts)
 	})
 
-	t.Run("sets lockout at threshold", func(t *testing.T) {
-		p := &auth.Player{FailedAttempts: 6}
+	t.Run("no lockout below threshold", func(t *testing.T) {
+		p := &auth.Player{FailedAttempts: auth.LockoutThreshold - 2}
 		p.RecordFailure()
-		assert.Equal(t, 7, p.FailedAttempts)
+		assert.Equal(t, auth.LockoutThreshold-1, p.FailedAttempts)
+		assert.Nil(t, p.LockedUntil)
+	})
+
+	t.Run("sets lockout at threshold", func(t *testing.T) {
+		p := &auth.Player{FailedAttempts: auth.LockoutThreshold - 1}
+		p.RecordFailure()
+		assert.Equal(t, auth.LockoutThreshold, p.FailedAttempts)
 		assert.NotNil(t, p.LockedUntil)
 		assert.True(t, p.LockedUntil.After(time.Now()))
 	})
@@ -178,25 +186,25 @@ func TestValidateUsername(t *testing.T) {
 func TestValidateUsername_ErrorCodes(t *testing.T) {
 	t.Run("empty username has correct error code", func(t *testing.T) {
 		err := auth.ValidateUsername("")
-		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_USERNAME")
 		assert.Contains(t, err.Error(), "empty")
 	})
 
-	t.Run("too short has correct error message", func(t *testing.T) {
+	t.Run("too short has correct error code", func(t *testing.T) {
 		err := auth.ValidateUsername("ab")
-		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_USERNAME")
 		assert.Contains(t, err.Error(), "at least")
 	})
 
-	t.Run("too long has correct error message", func(t *testing.T) {
+	t.Run("too long has correct error code", func(t *testing.T) {
 		err := auth.ValidateUsername("abcdefghijklmnopqrstuvwxyz12345")
-		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_USERNAME")
 		assert.Contains(t, err.Error(), "at most")
 	})
 
-	t.Run("invalid chars has correct error message", func(t *testing.T) {
+	t.Run("invalid chars has correct error code", func(t *testing.T) {
 		err := auth.ValidateUsername("test@user")
-		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_USERNAME")
 		assert.Contains(t, err.Error(), "letter")
 	})
 }
