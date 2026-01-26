@@ -146,7 +146,7 @@ jobs:
           ls -la dist/
 
       - name: Attest binary provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: "dist/*.tar.gz"
 
@@ -196,7 +196,7 @@ jobs:
           echo "Image digest: ${DIGEST}"
 
       - name: Attest container provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ghcr.io/holomush/holomush
           subject-digest: ${{ steps.digest.outputs.digest }}
