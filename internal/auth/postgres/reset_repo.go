@@ -59,7 +59,9 @@ func (r *PasswordResetRepository) GetByPlayer(ctx context.Context, playerID ulid
 			Wrap(auth.ErrNotFound)
 	}
 	if err != nil {
-		return nil, err
+		return nil, oops.With("operation", "get reset by player").
+			With("player_id", playerID.String()).
+			Wrap(err)
 	}
 	return reset, nil
 }
@@ -77,7 +79,7 @@ func (r *PasswordResetRepository) GetByTokenHash(ctx context.Context, tokenHash 
 		return nil, oops.Code("RESET_NOT_FOUND").Wrap(auth.ErrNotFound)
 	}
 	if err != nil {
-		return nil, err
+		return nil, oops.With("operation", "get reset by token hash").Wrap(err)
 	}
 	return reset, nil
 }
@@ -143,7 +145,6 @@ func (r *PasswordResetRepository) scanReset(row pgx.Row) (*auth.PasswordReset, e
 	err := row.Scan(&idStr, &playerIDStr, &tokenHash, &expiresAt, &createdAt)
 	if err != nil {
 		// Propagate pgx.ErrNoRows unchanged for callers to handle with context.
-		// This matches the established pattern in internal/world/postgres/*_repo.go.
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, err //nolint:wrapcheck // Callers wrap with context-specific info
 		}
