@@ -53,13 +53,12 @@ func (r *PasswordResetRepository) GetByPlayer(ctx context.Context, playerID ulid
 	`, playerID.String())
 
 	reset, err := r.scanReset(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("RESET_NOT_FOUND").
+			With("player_id", playerID.String()).
+			Wrap(auth.ErrNotFound)
+	}
 	if err != nil {
-		if errors.Is(err, auth.ErrNotFound) {
-			return nil, oops.Code("RESET_NOT_FOUND").
-				With("operation", "get by player").
-				With("player_id", playerID.String()).
-				Wrap(err)
-		}
 		return nil, err
 	}
 	return reset, nil
@@ -74,12 +73,10 @@ func (r *PasswordResetRepository) GetByTokenHash(ctx context.Context, tokenHash 
 	`, tokenHash)
 
 	reset, err := r.scanReset(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("RESET_NOT_FOUND").Wrap(auth.ErrNotFound)
+	}
 	if err != nil {
-		if errors.Is(err, auth.ErrNotFound) {
-			return nil, oops.Code("RESET_NOT_FOUND").
-				With("operation", "get by token hash").
-				Wrap(err)
-		}
 		return nil, err
 	}
 	return reset, nil
@@ -133,6 +130,7 @@ func (r *PasswordResetRepository) DeleteExpired(ctx context.Context) (int64, err
 }
 
 // scanReset scans a single row into a PasswordReset.
+// Callers are responsible for handling pgx.ErrNoRows.
 func (r *PasswordResetRepository) scanReset(row pgx.Row) (*auth.PasswordReset, error) {
 	var (
 		idStr       string
@@ -144,8 +142,10 @@ func (r *PasswordResetRepository) scanReset(row pgx.Row) (*auth.PasswordReset, e
 
 	err := row.Scan(&idStr, &playerIDStr, &tokenHash, &expiresAt, &createdAt)
 	if err != nil {
+		// Propagate pgx.ErrNoRows unchanged for callers to handle with context.
+		// This matches the established pattern in internal/world/postgres/*_repo.go.
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, auth.ErrNotFound
+			return nil, err //nolint:wrapcheck // Callers wrap with context-specific info
 		}
 		return nil, oops.Code("RESET_SCAN_FAILED").
 			With("operation", "scan password_reset").
