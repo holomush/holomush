@@ -52,7 +52,17 @@ func (r *PasswordResetRepository) GetByPlayer(ctx context.Context, playerID ulid
 		LIMIT 1
 	`, playerID.String())
 
-	return r.scanReset(row)
+	reset, err := r.scanReset(row)
+	if err != nil {
+		if errors.Is(err, auth.ErrNotFound) {
+			return nil, oops.Code("RESET_NOT_FOUND").
+				With("operation", "get by player").
+				With("player_id", playerID.String()).
+				Wrap(err)
+		}
+		return nil, err
+	}
+	return reset, nil
 }
 
 // GetByTokenHash retrieves a reset request by its token hash.
@@ -63,7 +73,16 @@ func (r *PasswordResetRepository) GetByTokenHash(ctx context.Context, tokenHash 
 		WHERE token_hash = $1
 	`, tokenHash)
 
-	return r.scanReset(row)
+	reset, err := r.scanReset(row)
+	if err != nil {
+		if errors.Is(err, auth.ErrNotFound) {
+			return nil, oops.Code("RESET_NOT_FOUND").
+				With("operation", "get by token hash").
+				Wrap(err)
+		}
+		return nil, err
+	}
+	return reset, nil
 }
 
 // Delete removes a password reset request.
