@@ -47,28 +47,38 @@ func TestVerifyResetToken(t *testing.T) {
 		token, hash, err := auth.GenerateResetToken()
 		require.NoError(t, err)
 
-		assert.True(t, auth.VerifyResetToken(token, hash))
+		valid, err := auth.VerifyResetToken(token, hash)
+		require.NoError(t, err)
+		assert.True(t, valid)
 	})
 
 	t.Run("rejects incorrect token", func(t *testing.T) {
 		_, hash, err := auth.GenerateResetToken()
 		require.NoError(t, err)
 
-		assert.False(t, auth.VerifyResetToken("wrongtoken", hash))
+		valid, err := auth.VerifyResetToken("wrongtoken", hash)
+		require.NoError(t, err)
+		assert.False(t, valid)
 	})
 
-	t.Run("rejects empty token", func(t *testing.T) {
+	t.Run("returns error for empty token", func(t *testing.T) {
 		_, hash, err := auth.GenerateResetToken()
 		require.NoError(t, err)
 
-		assert.False(t, auth.VerifyResetToken("", hash))
+		valid, err := auth.VerifyResetToken("", hash)
+		assert.Error(t, err)
+		assert.False(t, valid)
+		assert.Contains(t, err.Error(), "reset token cannot be empty")
 	})
 
-	t.Run("rejects empty hash", func(t *testing.T) {
+	t.Run("returns error for empty hash", func(t *testing.T) {
 		token, _, err := auth.GenerateResetToken()
 		require.NoError(t, err)
 
-		assert.False(t, auth.VerifyResetToken(token, ""))
+		valid, err := auth.VerifyResetToken(token, "")
+		assert.Error(t, err)
+		assert.False(t, valid)
+		assert.Contains(t, err.Error(), "stored hash cannot be empty")
 	})
 
 	t.Run("rejects token with swapped characters", func(t *testing.T) {
@@ -80,7 +90,9 @@ func TestVerifyResetToken(t *testing.T) {
 		tokenBytes[0], tokenBytes[1] = tokenBytes[1], tokenBytes[0]
 		tamperedToken := string(tokenBytes)
 
-		assert.False(t, auth.VerifyResetToken(tamperedToken, hash))
+		valid, err := auth.VerifyResetToken(tamperedToken, hash)
+		require.NoError(t, err)
+		assert.False(t, valid)
 	})
 }
 
@@ -109,16 +121,90 @@ func TestPasswordReset_IsExpired(t *testing.T) {
 		assert.True(t, reset.IsExpired())
 	})
 
-	t.Run("expired when ExpiresAt is exactly now", func(t *testing.T) {
+	t.Run("expired when ExpiresAt is just past now", func(t *testing.T) {
 		now := time.Now()
 		reset := &auth.PasswordReset{
 			ID:        ulid.Make(),
 			PlayerID:  playerID,
 			TokenHash: "somehash",
-			ExpiresAt: now.Add(-time.Nanosecond), // Just past now
+			ExpiresAt: now.Add(-time.Nanosecond),
 			CreatedAt: now.Add(-time.Hour),
 		}
 		assert.True(t, reset.IsExpired())
+	})
+}
+
+func TestPasswordReset_IsExpiredAt(t *testing.T) {
+	playerID := ulid.Make()
+	baseTime := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	t.Run("not expired when check time is before expiry", func(t *testing.T) {
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: "somehash",
+			ExpiresAt: baseTime.Add(time.Hour),
+			CreatedAt: baseTime,
+		}
+		assert.False(t, reset.IsExpiredAt(baseTime.Add(30*time.Minute)))
+	})
+
+	t.Run("expired when check time is after expiry", func(t *testing.T) {
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: "somehash",
+			ExpiresAt: baseTime.Add(time.Hour),
+			CreatedAt: baseTime,
+		}
+		assert.True(t, reset.IsExpiredAt(baseTime.Add(2*time.Hour)))
+	})
+
+	t.Run("not expired when check time equals expiry", func(t *testing.T) {
+		expiryTime := baseTime.Add(time.Hour)
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: "somehash",
+			ExpiresAt: expiryTime,
+			CreatedAt: baseTime,
+		}
+		// time.After returns false when times are equal
+		assert.False(t, reset.IsExpiredAt(expiryTime))
+	})
+}
+
+func TestNewPasswordReset(t *testing.T) {
+	validPlayerID := ulid.Make()
+	validHash := "abc123def456"
+	validExpiry := time.Now().Add(time.Hour)
+
+	t.Run("creates valid reset", func(t *testing.T) {
+		reset, err := auth.NewPasswordReset(validPlayerID, validHash, validExpiry)
+		require.NoError(t, err)
+		assert.Equal(t, validPlayerID, reset.PlayerID)
+		assert.Equal(t, validHash, reset.TokenHash)
+		assert.Equal(t, validExpiry, reset.ExpiresAt)
+		assert.False(t, reset.ID.Compare(ulid.ULID{}) == 0)
+		assert.False(t, reset.CreatedAt.IsZero())
+	})
+
+	t.Run("rejects zero player ID", func(t *testing.T) {
+		_, err := auth.NewPasswordReset(ulid.ULID{}, validHash, validExpiry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "player ID cannot be zero")
+	})
+
+	t.Run("rejects empty token hash", func(t *testing.T) {
+		_, err := auth.NewPasswordReset(validPlayerID, "", validExpiry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "token hash cannot be empty")
+	})
+
+	t.Run("rejects zero expiry time", func(t *testing.T) {
+		_, err := auth.NewPasswordReset(validPlayerID, validHash, time.Time{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "expiry time cannot be zero")
 	})
 }
 
