@@ -71,7 +71,10 @@ func (r *PasswordReset) IsExpiredAt(t time.Time) bool {
 func GenerateResetToken() (token, hash string, err error) {
 	tokenBytes := make([]byte, ResetTokenBytes)
 	if _, err = rand.Read(tokenBytes); err != nil {
-		return "", "", oops.Code("RESET_TOKEN_GENERATE_FAILED").Wrap(err)
+		return "", "", oops.Code("RESET_TOKEN_GENERATE_FAILED").
+			With("operation", "crypto/rand.Read").
+			With("requested_bytes", ResetTokenBytes).
+			Wrap(err)
 	}
 
 	token = hex.EncodeToString(tokenBytes)
