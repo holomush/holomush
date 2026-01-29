@@ -85,9 +85,14 @@ func TestVerifyResetToken(t *testing.T) {
 		token, hash, err := auth.GenerateResetToken()
 		require.NoError(t, err)
 
-		// Swap two characters in the token
+		// Swap two different characters in the token to guarantee mutation.
 		tokenBytes := []byte(token)
-		tokenBytes[0], tokenBytes[1] = tokenBytes[1], tokenBytes[0]
+		for i := 0; i < len(tokenBytes)-1; i++ {
+			if tokenBytes[i] != tokenBytes[i+1] {
+				tokenBytes[i], tokenBytes[i+1] = tokenBytes[i+1], tokenBytes[i]
+				break
+			}
+		}
 		tamperedToken := string(tokenBytes)
 
 		valid, err := auth.VerifyResetToken(tamperedToken, hash)
