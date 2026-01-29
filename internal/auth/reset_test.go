@@ -94,6 +94,7 @@ func TestVerifyResetToken(t *testing.T) {
 			}
 		}
 		tamperedToken := string(tokenBytes)
+		require.NotEqual(t, token, tamperedToken, "swap must produce a different token")
 
 		valid, err := auth.VerifyResetToken(tamperedToken, hash)
 		require.NoError(t, err)
