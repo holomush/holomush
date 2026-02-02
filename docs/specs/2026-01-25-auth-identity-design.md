@@ -69,24 +69,36 @@ ALTER TABLE characters ALTER COLUMN player_id DROP NOT NULL;
 
 ### Web Session Schema
 
-Web sessions persist authentication state with signed tokens.
+Web sessions persist authentication state with opaque tokens (see [Token Design](#web-token-design)).
 
 ```sql
--- 000010_web_sessions.up.sql
+-- 000012_web_sessions_schema_update.up.sql (updates 000010)
 CREATE TABLE IF NOT EXISTS web_sessions (
     id TEXT PRIMARY KEY,
     player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-    character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-    token_signature TEXT NOT NULL,
+    character_id TEXT REFERENCES characters(id) ON DELETE SET NULL,  -- nullable until character selected
+    token_hash TEXT NOT NULL,      -- SHA256 of random token
+    user_agent TEXT NOT NULL,      -- client identification
+    ip_address TEXT NOT NULL,      -- client IP for security logging
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL,
-    last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_sessions_token ON web_sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_player ON web_sessions(player_id);
-CREATE INDEX IF NOT EXISTS idx_web_sessions_token ON web_sessions(token_signature);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_expires ON web_sessions(expires_at);
+
+-- 000013_web_sessions_player_index.up.sql
+CREATE INDEX IF NOT EXISTS idx_web_sessions_player_created
+    ON web_sessions(player_id, created_at DESC);
 ```
+
+**Key differences from classic JWT approach:**
+
+- `character_id` is nullable — player authenticates first, selects character second
+- `token_hash` stores SHA256 of token, not a signature
+- `user_agent` and `ip_address` enable security auditing
 
 **Note:** Telnet has no session table — the TCP connection IS the session.
 
@@ -143,15 +155,39 @@ This differs from classic MUSH where each character has a password.
 
 ### Web Token Design
 
+Web sessions use **opaque tokens** (random bytes) rather than signed JWTs. This is a deliberate
+design choice that prioritizes instant revocation over stateless verification.
+
 ```text
-token = base64(payload) + "." + base64(hmac_sha256(payload, secret))
-payload = {player_id, character_id, issued_at, expires_at}
+token = hex(random_32_bytes)           # 64 hex characters, sent to client
+hash  = SHA256(token)                  # stored in database
 ```
 
-- HMAC-SHA256 with rotatable server secret
-- Payload includes character_id (required for valid session)
-- 30-day expiry, refresh on activity
-- Stored in httpOnly, secure cookie
+**Token lifecycle:**
+
+1. On login: generate 32 random bytes, store SHA256 hash in `web_sessions`
+2. On request: client sends token, server hashes and looks up session
+3. On logout/revoke: delete session row (instant invalidation)
+
+**Why opaque tokens instead of HMAC/JWT:**
+
+| Factor            | HMAC/JWT           | Opaque (chosen)      |
+| ----------------- | ------------------ | -------------------- |
+| Revocation        | Requires blacklist | Instant (delete row) |
+| Session updates   | New token needed   | Update DB row        |
+| Secret management | Rotation required  | None                 |
+| Complexity        | Higher             | Lower                |
+
+For HoloMUSH, instant revocation on logout/password-change and the ability to update
+session data (character selection) without issuing new tokens outweighs the benefit
+of stateless verification. The DB lookup cost is negligible at MUSH scale.
+
+**Token parameters:**
+
+- Size: 32 bytes (256 bits of entropy)
+- Expiry: 24 hours
+- Storage: httpOnly, secure cookie (web) or returned directly (API)
+- Comparison: constant-time via `crypto/subtle`
 
 ## Authentication Flows
 
@@ -281,14 +317,15 @@ Counters reset on successful login.
 
 ### Security Summary
 
-| Aspect               | Implementation                                |
-| -------------------- | --------------------------------------------- |
-| Password hash        | argon2id (t=1, m=64MB, p=4)                   |
-| Session token        | HMAC-SHA256 signed, httpOnly cookie           |
-| Reset token          | 32 bytes random, SHA-256 stored, 1hr expiry   |
-| Rate limiting        | Progressive delay → Turnstile (web) → lockout |
-| Lockout duration     | 15 minutes after 7 failures                   |
-| Session invalidation | On password change, on explicit logout        |
+| Aspect               | Implementation                                     |
+| -------------------- | -------------------------------------------------- |
+| Password hash        | argon2id (t=1, m=64MB, p=4)                        |
+| Session token        | 32 bytes random, SHA-256 stored, 24hr expiry       |
+| Reset token          | 32 bytes random, SHA-256 stored, 1hr expiry        |
+| Rate limiting        | Progressive delay → Turnstile (web) → lockout      |
+| Lockout duration     | 15 minutes after 7 failures                        |
+| Session invalidation | On password change, on explicit logout (immediate) |
+| Token comparison     | Constant-time via crypto/subtle                    |
 
 ## API Endpoints
 
