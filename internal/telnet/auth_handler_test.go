@@ -436,7 +436,7 @@ func TestAuthHandler_HandleCreate_GenericError(t *testing.T) {
 	regSvc.AssertExpectations(t)
 }
 
-func TestAuthHandler_HandlePlay_OwnershipVerificationFails(t *testing.T) {
+func TestAuthHandler_HandleEmbody_OwnershipVerificationFails(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
@@ -453,7 +453,7 @@ func TestAuthHandler_HandlePlay_OwnershipVerificationFails(t *testing.T) {
 	charLister.On("GetByName", ctx, "Hero").Return(charInfo, nil)
 	charLister.On("ListByPlayer", ctx, playerID).Return(nil, listErr)
 
-	result := handler.HandlePlay(ctx, sessionID, playerID, "Hero")
+	result := handler.HandleEmbody(ctx, sessionID, playerID, "Hero")
 
 	assert.False(t, result.Success)
 	assert.Contains(t, result.Message, "Could not verify")
@@ -461,7 +461,7 @@ func TestAuthHandler_HandlePlay_OwnershipVerificationFails(t *testing.T) {
 	charLister.AssertExpectations(t)
 }
 
-func TestAuthHandler_HandlePlay_SelectCharacterFails(t *testing.T) {
+func TestAuthHandler_HandleEmbody_SelectCharacterFails(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
@@ -479,7 +479,7 @@ func TestAuthHandler_HandlePlay_SelectCharacterFails(t *testing.T) {
 	charLister.On("ListByPlayer", ctx, playerID).Return([]*CharacterInfo{charInfo}, nil)
 	authSvc.On("SelectCharacter", ctx, sessionID, charID).Return(selectErr)
 
-	result := handler.HandlePlay(ctx, sessionID, playerID, "Hero")
+	result := handler.HandleEmbody(ctx, sessionID, playerID, "Hero")
 
 	assert.False(t, result.Success)
 	assert.Contains(t, result.Message, "Failed to select")
@@ -488,9 +488,9 @@ func TestAuthHandler_HandlePlay_SelectCharacterFails(t *testing.T) {
 	authSvc.AssertExpectations(t)
 }
 
-// --- Play command tests ---
+// --- Embody command tests ---
 
-func TestAuthHandler_HandlePlay_Success(t *testing.T) {
+func TestAuthHandler_HandleEmbody_Success(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
@@ -508,7 +508,7 @@ func TestAuthHandler_HandlePlay_Success(t *testing.T) {
 	charLister.On("ListByPlayer", ctx, playerID).Return([]*CharacterInfo{charInfo}, nil)
 	authSvc.On("SelectCharacter", ctx, sessionID, charID).Return(nil)
 
-	result := handler.HandlePlay(ctx, sessionID, playerID, "Hero")
+	result := handler.HandleEmbody(ctx, sessionID, playerID, "Hero")
 
 	assert.True(t, result.Success)
 	assert.Equal(t, charID, result.CharacterID)
@@ -519,7 +519,7 @@ func TestAuthHandler_HandlePlay_Success(t *testing.T) {
 	authSvc.AssertExpectations(t)
 }
 
-func TestAuthHandler_HandlePlay_CharacterNotFound(t *testing.T) {
+func TestAuthHandler_HandleEmbody_CharacterNotFound(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
@@ -533,7 +533,7 @@ func TestAuthHandler_HandlePlay_CharacterNotFound(t *testing.T) {
 
 	charLister.On("GetByName", ctx, "Unknown").Return(nil, charErr)
 
-	result := handler.HandlePlay(ctx, sessionID, playerID, "Unknown")
+	result := handler.HandleEmbody(ctx, sessionID, playerID, "Unknown")
 
 	assert.False(t, result.Success)
 	assert.Contains(t, result.Message, "not found")
@@ -541,7 +541,7 @@ func TestAuthHandler_HandlePlay_CharacterNotFound(t *testing.T) {
 	charLister.AssertExpectations(t)
 }
 
-func TestAuthHandler_HandlePlay_CharacterNotOwned(t *testing.T) {
+func TestAuthHandler_HandleEmbody_CharacterNotOwned(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
@@ -561,7 +561,7 @@ func TestAuthHandler_HandlePlay_CharacterNotOwned(t *testing.T) {
 	// We need a way to verify ownership - let's check with player's character list
 	charLister.On("ListByPlayer", ctx, playerID).Return([]*CharacterInfo{}, nil)
 
-	result := handler.HandlePlay(ctx, sessionID, playerID, "OtherHero")
+	result := handler.HandleEmbody(ctx, sessionID, playerID, "OtherHero")
 
 	// This should still work - the ownership check happens at select time
 	// For now we trust the character lookup
@@ -572,7 +572,7 @@ func TestAuthHandler_HandlePlay_CharacterNotOwned(t *testing.T) {
 	charLister.AssertExpectations(t)
 }
 
-func TestAuthHandler_HandlePlay_CaseInsensitive(t *testing.T) {
+func TestAuthHandler_HandleEmbody_CaseInsensitive(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
@@ -591,7 +591,7 @@ func TestAuthHandler_HandlePlay_CaseInsensitive(t *testing.T) {
 	charLister.On("ListByPlayer", ctx, playerID).Return([]*CharacterInfo{charInfo}, nil)
 	authSvc.On("SelectCharacter", ctx, sessionID, charID).Return(nil)
 
-	result := handler.HandlePlay(ctx, sessionID, playerID, "hero")
+	result := handler.HandleEmbody(ctx, sessionID, playerID, "hero")
 
 	assert.True(t, result.Success)
 	assert.Equal(t, "Hero", result.CharacterName) // Returns canonical name

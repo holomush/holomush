@@ -290,7 +290,7 @@ func TestAuthHandler_HandleCreate_LogsUnexpectedRegistrationError(t *testing.T) 
 	assert.Contains(t, entry.Error, "email service unavailable")
 }
 
-func TestAuthHandler_HandlePlay_LogsOwnershipVerificationFailure(t *testing.T) {
+func TestAuthHandler_HandleEmbody_LogsOwnershipVerificationFailure(t *testing.T) {
 	// Setup: character lookup succeeds but ownership verification fails
 	charID := ulid.Make()
 	charInfo := &telnet.CharacterInfo{ID: charID, Name: "Hero"}
@@ -315,8 +315,8 @@ func TestAuthHandler_HandlePlay_LogsOwnershipVerificationFailure(t *testing.T) {
 	sessionID := ulid.Make()
 	playerID := ulid.Make()
 
-	// HandlePlay - ownership verification fails
-	result := handler.HandlePlay(context.Background(), sessionID, playerID, "Hero")
+	// HandleEmbody - ownership verification fails
+	result := handler.HandleEmbody(context.Background(), sessionID, playerID, "Hero")
 	assert.False(t, result.Success)
 	assert.Contains(t, result.Message, "Could not verify")
 
@@ -334,7 +334,7 @@ func TestAuthHandler_HandlePlay_LogsOwnershipVerificationFailure(t *testing.T) {
 	assert.Equal(t, playerID.String(), entry.PlayerID)
 }
 
-func TestAuthHandler_HandlePlay_LogsSelectCharacterFailure(t *testing.T) {
+func TestAuthHandler_HandleEmbody_LogsSelectCharacterFailure(t *testing.T) {
 	// Setup: character lookup and ownership verification succeed, but select fails
 	charID := ulid.Make()
 	charInfo := &telnet.CharacterInfo{ID: charID, Name: "Hero"}
@@ -359,8 +359,8 @@ func TestAuthHandler_HandlePlay_LogsSelectCharacterFailure(t *testing.T) {
 	sessionID := ulid.Make()
 	playerID := ulid.Make()
 
-	// HandlePlay - select character fails
-	result := handler.HandlePlay(context.Background(), sessionID, playerID, "Hero")
+	// HandleEmbody - select character fails
+	result := handler.HandleEmbody(context.Background(), sessionID, playerID, "Hero")
 	assert.False(t, result.Success)
 	assert.Contains(t, result.Message, "Failed to select")
 

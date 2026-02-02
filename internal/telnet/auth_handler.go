@@ -217,23 +217,21 @@ func (h *AuthHandler) handleCreateError(err error) CreateResult {
 	return CreateResult{Success: false, Message: "Registration failed. Please try again."}
 }
 
-// PlayResult contains the result of a play command.
-type PlayResult struct {
+// EmbodyResult contains the result of an embody command.
+type EmbodyResult struct {
 	Success       bool
 	Message       string
 	CharacterID   ulid.ULID
 	CharacterName string
 }
 
-// HandlePlay processes a play command to select a character.
-func (h *AuthHandler) HandlePlay(ctx context.Context, sessionID, playerID ulid.ULID, characterName string) PlayResult {
-	// Look up the character by name
+// HandleEmbody processes an embody command to assume control of a character.
+func (h *AuthHandler) HandleEmbody(ctx context.Context, sessionID, playerID ulid.ULID, characterName string) EmbodyResult {
 	charInfo, err := h.charLister.GetByName(ctx, characterName)
 	if err != nil {
-		return PlayResult{Success: false, Message: "Character not found."}
+		return EmbodyResult{Success: false, Message: "Character not found."}
 	}
 
-	// Verify ownership by checking player's character list
 	playerChars, err := h.charLister.ListByPlayer(ctx, playerID)
 	if err != nil {
 		h.logger.Warn("character ownership verification failed",
@@ -243,7 +241,7 @@ func (h *AuthHandler) HandlePlay(ctx context.Context, sessionID, playerID ulid.U
 			"operation", "list_by_player",
 			"error", err.Error(),
 		)
-		return PlayResult{Success: false, Message: "Could not verify character ownership."}
+		return EmbodyResult{Success: false, Message: "Could not verify character ownership."}
 	}
 
 	owned := false
@@ -254,10 +252,9 @@ func (h *AuthHandler) HandlePlay(ctx context.Context, sessionID, playerID ulid.U
 		}
 	}
 	if !owned {
-		return PlayResult{Success: false, Message: "You do not own this character."}
+		return EmbodyResult{Success: false, Message: "You do not own this character."}
 	}
 
-	// Update session with selected character
 	if err := h.authService.SelectCharacter(ctx, sessionID, charInfo.ID); err != nil {
 		h.logger.Warn("character selection failed",
 			"event", "character_select_failed",
@@ -266,12 +263,12 @@ func (h *AuthHandler) HandlePlay(ctx context.Context, sessionID, playerID ulid.U
 			"operation", "select_character",
 			"error", err.Error(),
 		)
-		return PlayResult{Success: false, Message: "Failed to select character."}
+		return EmbodyResult{Success: false, Message: "Failed to select character."}
 	}
 
-	return PlayResult{
+	return EmbodyResult{
 		Success:       true,
-		Message:       "Now playing as " + charInfo.Name + ".",
+		Message:       "Now embodying " + charInfo.Name + ".",
 		CharacterID:   charInfo.ID,
 		CharacterName: charInfo.Name,
 	}
