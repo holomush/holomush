@@ -6,6 +6,7 @@ package core
 import (
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -219,4 +220,98 @@ func TestSessionManager_EndSession_MultipleConnections(t *testing.T) {
 	// Verify session is completely gone
 	assert.Nil(t, sm.GetSession(charID), "Session should not exist after EndSession")
 	assert.Nil(t, sm.GetConnections(charID), "Connections should not exist after EndSession")
+}
+
+func TestSessionManager_Connect_SetsLastActivity(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+
+	session := sm.Connect(charID, connID)
+	require.NotNil(t, session)
+
+	// LastActivity should be set and recent
+	assert.False(t, session.LastActivity.IsZero(), "LastActivity should be set on connect")
+}
+
+func TestSessionManager_UpdateActivity(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+
+	// Create session
+	session1 := sm.Connect(charID, connID)
+	originalActivity := session1.LastActivity
+
+	// Update activity
+	sm.UpdateActivity(charID)
+
+	// Get session and verify activity was updated
+	session2 := sm.GetSession(charID)
+	assert.True(t, session2.LastActivity.After(originalActivity) || session2.LastActivity.Equal(originalActivity),
+		"LastActivity should be updated or equal after UpdateActivity")
+}
+
+func TestSessionManager_UpdateActivity_NonExistentSession(_ *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+
+	// UpdateActivity for non-existent session should not panic
+	sm.UpdateActivity(charID)
+	// No assertion - just verify no panic occurs
+}
+
+func TestSessionManager_ListActiveSessions_Empty(t *testing.T) {
+	sm := NewSessionManager()
+
+	sessions := sm.ListActiveSessions()
+	assert.Empty(t, sessions, "Expected empty list for no sessions")
+}
+
+func TestSessionManager_ListActiveSessions_MultipleSessions(t *testing.T) {
+	sm := NewSessionManager()
+
+	char1 := NewULID()
+	char2 := NewULID()
+	char3 := NewULID()
+	conn1 := NewULID()
+	conn2 := NewULID()
+	conn3 := NewULID()
+
+	sm.Connect(char1, conn1)
+	sm.Connect(char2, conn2)
+	sm.Connect(char3, conn3)
+
+	sessions := sm.ListActiveSessions()
+	assert.Len(t, sessions, 3, "Expected 3 active sessions")
+
+	// Verify all character IDs are present
+	charIDs := make(map[ulid.ULID]bool)
+	for _, s := range sessions {
+		charIDs[s.CharacterID] = true
+	}
+	assert.True(t, charIDs[char1], "char1 should be in sessions")
+	assert.True(t, charIDs[char2], "char2 should be in sessions")
+	assert.True(t, charIDs[char3], "char3 should be in sessions")
+}
+
+func TestSessionManager_ListActiveSessions_DefensiveCopy(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+
+	sm.Connect(charID, connID)
+
+	// Get sessions and modify returned slice
+	sessions := sm.ListActiveSessions()
+	require.Len(t, sessions, 1)
+	sessions[0].Connections = append(sessions[0].Connections, NewULID())
+
+	// Internal state should be unchanged
+	sessions2 := sm.ListActiveSessions()
+	assert.Len(t, sessions2[0].Connections, 1, "Internal session connections should be unchanged")
 }

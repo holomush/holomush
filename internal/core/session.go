@@ -6,6 +6,7 @@ package core
 import (
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -16,6 +17,7 @@ type Session struct {
 	CharacterID  ulid.ULID
 	Connections  []ulid.ULID          // Active connection IDs
 	EventCursors map[string]ulid.ULID // Last seen event per stream
+	LastActivity time.Time            // Last time the session had activity
 }
 
 // copySession returns a defensive copy of a session to prevent external modification.
@@ -31,6 +33,7 @@ func copySession(s *Session) *Session {
 		CharacterID:  s.CharacterID,
 		Connections:  connections,
 		EventCursors: cursors,
+		LastActivity: s.LastActivity,
 	}
 }
 
@@ -60,11 +63,13 @@ func (sm *SessionManager) Connect(charID, connID ulid.ULID) *Session {
 			CharacterID:  charID,
 			Connections:  make([]ulid.ULID, 0, 1),
 			EventCursors: make(map[string]ulid.ULID),
+			LastActivity: time.Now(),
 		}
 		sm.sessions[charID] = session
 	}
 
 	session.Connections = append(session.Connections, connID)
+	session.LastActivity = time.Now()
 
 	return copySession(session)
 }
@@ -152,4 +157,31 @@ func (sm *SessionManager) EndSession(charID ulid.ULID) error {
 
 	delete(sm.sessions, charID)
 	return nil
+}
+
+// UpdateActivity refreshes the last activity time for a character's session.
+func (sm *SessionManager) UpdateActivity(charID ulid.ULID) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session, exists := sm.sessions[charID]
+	if !exists {
+		slog.Debug("UpdateActivity called for non-existent session",
+			"char_id", charID.String(),
+		)
+		return
+	}
+	session.LastActivity = time.Now()
+}
+
+// ListActiveSessions returns copies of all active sessions.
+func (sm *SessionManager) ListActiveSessions() []*Session {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	result := make([]*Session, 0, len(sm.sessions))
+	for _, session := range sm.sessions {
+		result = append(result, copySession(session))
+	}
+	return result
 }
