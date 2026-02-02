@@ -63,13 +63,12 @@ func (sm *SessionManager) Connect(charID, connID ulid.ULID) *Session {
 			CharacterID:  charID,
 			Connections:  make([]ulid.ULID, 0, 1),
 			EventCursors: make(map[string]ulid.ULID),
-			LastActivity: time.Now(),
 		}
 		sm.sessions[charID] = session
 	}
 
 	session.Connections = append(session.Connections, connID)
-	session.LastActivity = time.Now()
+	session.LastActivity = time.Now() // Set for both new and reconnecting sessions
 
 	return copySession(session)
 }
