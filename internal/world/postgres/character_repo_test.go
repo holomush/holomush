@@ -385,6 +385,64 @@ func TestCharacterRepository_Delete(t *testing.T) {
 	})
 }
 
+func TestCharacterRepository_IsOwnedByPlayer(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewCharacterRepository(testPool)
+
+	t.Run("returns true when character is owned by player", func(t *testing.T) {
+		playerID := createTestPlayer(ctx, t)
+		char := &world.Character{
+			ID:          ulid.Make(),
+			PlayerID:    playerID,
+			Name:        "OwnedChar",
+			Description: "Owned by player.",
+			LocationID:  nil,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+
+		require.NoError(t, repo.Create(ctx, char))
+
+		t.Cleanup(func() {
+			_ = repo.Delete(ctx, char.ID)
+		})
+
+		owned, err := repo.IsOwnedByPlayer(ctx, char.ID, playerID)
+		require.NoError(t, err)
+		assert.True(t, owned)
+	})
+
+	t.Run("returns false when character is owned by different player", func(t *testing.T) {
+		playerID := createTestPlayer(ctx, t)
+		otherPlayerID := createTestPlayer(ctx, t)
+		char := &world.Character{
+			ID:          ulid.Make(),
+			PlayerID:    playerID,
+			Name:        "NotYourChar",
+			Description: "Owned by another player.",
+			LocationID:  nil,
+			CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		}
+
+		require.NoError(t, repo.Create(ctx, char))
+
+		t.Cleanup(func() {
+			_ = repo.Delete(ctx, char.ID)
+		})
+
+		owned, err := repo.IsOwnedByPlayer(ctx, char.ID, otherPlayerID)
+		require.NoError(t, err)
+		assert.False(t, owned)
+	})
+
+	t.Run("returns false for non-existent character", func(t *testing.T) {
+		playerID := createTestPlayer(ctx, t)
+
+		owned, err := repo.IsOwnedByPlayer(ctx, ulid.Make(), playerID)
+		require.NoError(t, err)
+		assert.False(t, owned)
+	})
+}
+
 func TestCharacterRepository_UpdateLocation(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewCharacterRepository(testPool)

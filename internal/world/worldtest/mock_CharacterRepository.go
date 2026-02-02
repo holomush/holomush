@@ -237,6 +237,64 @@ func (_c *MockCharacterRepository_GetByLocation_Call) RunAndReturn(run func(cont
 	return _c
 }
 
+// IsOwnedByPlayer provides a mock function with given fields: ctx, characterID, playerID
+func (_m *MockCharacterRepository) IsOwnedByPlayer(ctx context.Context, characterID ulid.ULID, playerID ulid.ULID) (bool, error) {
+	ret := _m.Called(ctx, characterID, playerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IsOwnedByPlayer")
+	}
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID) (bool, error)); ok {
+		return rf(ctx, characterID, playerID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, ulid.ULID) bool); ok {
+		r0 = rf(ctx, characterID, playerID)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, ulid.ULID) error); ok {
+		r1 = rf(ctx, characterID, playerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCharacterRepository_IsOwnedByPlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IsOwnedByPlayer'
+type MockCharacterRepository_IsOwnedByPlayer_Call struct {
+	*mock.Call
+}
+
+// IsOwnedByPlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - characterID ulid.ULID
+//   - playerID ulid.ULID
+func (_e *MockCharacterRepository_Expecter) IsOwnedByPlayer(ctx interface{}, characterID interface{}, playerID interface{}) *MockCharacterRepository_IsOwnedByPlayer_Call {
+	return &MockCharacterRepository_IsOwnedByPlayer_Call{Call: _e.mock.On("IsOwnedByPlayer", ctx, characterID, playerID)}
+}
+
+func (_c *MockCharacterRepository_IsOwnedByPlayer_Call) Run(run func(ctx context.Context, characterID ulid.ULID, playerID ulid.ULID)) *MockCharacterRepository_IsOwnedByPlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockCharacterRepository_IsOwnedByPlayer_Call) Return(_a0 bool, _a1 error) *MockCharacterRepository_IsOwnedByPlayer_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCharacterRepository_IsOwnedByPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID, ulid.ULID) (bool, error)) *MockCharacterRepository_IsOwnedByPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function with given fields: ctx, char
 func (_m *MockCharacterRepository) Update(ctx context.Context, char *world.Character) error {
 	ret := _m.Called(ctx, char)

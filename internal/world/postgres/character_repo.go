@@ -117,6 +117,22 @@ func (r *CharacterRepository) UpdateLocation(ctx context.Context, characterID ul
 	return nil
 }
 
+// IsOwnedByPlayer checks if a character is owned by a specific player.
+// Returns false (not an error) if the character does not exist.
+func (r *CharacterRepository) IsOwnedByPlayer(ctx context.Context, characterID, playerID ulid.ULID) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM characters WHERE id = $1 AND player_id = $2)
+	`, characterID.String(), playerID.String()).Scan(&exists)
+	if err != nil {
+		return false, oops.Code("CHARACTER_OWNERSHIP_CHECK_FAILED").
+			With("character_id", characterID.String()).
+			With("player_id", playerID.String()).
+			Wrap(err)
+	}
+	return exists, nil
+}
+
 // characterScanFields holds intermediate scan values for character parsing.
 type characterScanFields struct {
 	idStr         string

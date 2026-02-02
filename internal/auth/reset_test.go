@@ -4,6 +4,7 @@
 package auth_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,31 @@ func TestGenerateResetToken(t *testing.T) {
 		require.NoError(t, err)
 		// SHA256 produces 32 bytes = 64 hex chars
 		assert.Len(t, hash, 64)
+	})
+
+	t.Run("concurrent generation produces unique tokens", func(t *testing.T) {
+		const numTokens = 100
+		tokens := make(chan string, numTokens)
+
+		var wg sync.WaitGroup
+		for i := 0; i < numTokens; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				token, _, err := auth.GenerateResetToken()
+				require.NoError(t, err)
+				tokens <- token
+			}()
+		}
+		wg.Wait()
+		close(tokens)
+
+		seen := make(map[string]bool)
+		for token := range tokens {
+			require.False(t, seen[token], "duplicate reset token generated")
+			seen[token] = true
+		}
+		require.Len(t, seen, numTokens)
 	})
 }
 

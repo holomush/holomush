@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package auth provides authentication primitives for HoloMUSH.
 package auth
 
 import (
@@ -15,7 +14,19 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// OWASP-recommended argon2id parameters.
+// Argon2id parameters based on OWASP Password Storage Cheat Sheet recommendations.
+// See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+//
+// SECURITY trade-offs:
+//   - Memory (64 MB): High memory cost makes GPU/ASIC attacks expensive since attackers
+//     must provision significant memory per hash attempt, drastically reducing parallelism.
+//   - Iterations (1): With 64 MB memory, a single iteration provides strong resistance.
+//     More iterations increase CPU time but the memory-hardness is the primary defense.
+//   - Threads (4): Utilizes multi-core CPUs for faster hashing on legitimate servers
+//     while not significantly helping attackers (they're memory-bound, not CPU-bound).
+//
+// NOTE: These parameters MUST match those in dummyPasswordHash (auth_service.go) to
+// ensure timing-attack resistance for non-existent user lookups.
 const (
 	argon2Time    = 1         // iterations
 	argon2Memory  = 64 * 1024 // 64 MB

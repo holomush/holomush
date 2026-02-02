@@ -155,4 +155,8 @@ type CharacterRepository interface {
 
 	// UpdateLocation moves a character to a new location.
 	UpdateLocation(ctx context.Context, characterID ulid.ULID, locationID *ulid.ULID) error
+
+	// IsOwnedByPlayer checks if a character is owned by a specific player.
+	// Returns false (not an error) if the character does not exist.
+	IsOwnedByPlayer(ctx context.Context, characterID, playerID ulid.ULID) (bool, error)
 }
