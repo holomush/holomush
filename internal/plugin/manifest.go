@@ -30,6 +30,7 @@ type Manifest struct {
 	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
 	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
 	Capabilities []string          `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Commands     []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
 	LuaPlugin    *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
 	BinaryPlugin *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
 }
@@ -42,6 +43,44 @@ type LuaConfig struct {
 // BinaryConfig holds binary plugin configuration.
 type BinaryConfig struct {
 	Executable string `yaml:"executable" json:"executable" jsonschema:"required,minLength=1"`
+}
+
+// CommandSpec declares a command provided by a plugin.
+type CommandSpec struct {
+	// Name is the canonical command name (e.g., "say", "teleport").
+	Name string `yaml:"name" json:"name" jsonschema:"required,minLength=1"`
+
+	// Capabilities lists all required capabilities for the command (AND logic).
+	// The player must have ALL listed capabilities to use this command.
+	Capabilities []string `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+
+	// Help is a short one-line description of the command.
+	Help string `yaml:"help,omitempty" json:"help,omitempty"`
+
+	// Usage shows the command syntax (e.g., "say <message>").
+	Usage string `yaml:"usage,omitempty" json:"usage,omitempty"`
+
+	// HelpText provides detailed inline markdown help.
+	// Mutually exclusive with HelpFile.
+	HelpText string `yaml:"helpText,omitempty" json:"helpText,omitempty"`
+
+	// HelpFile references an external markdown file for detailed help.
+	// Path is relative to the plugin directory.
+	// Mutually exclusive with HelpText.
+	HelpFile string `yaml:"helpFile,omitempty" json:"helpFile,omitempty"`
+}
+
+// Validate checks command spec constraints.
+func (c *CommandSpec) Validate() error {
+	if c.Name == "" {
+		return oops.In("command").New("command name is required")
+	}
+
+	if c.HelpText != "" && c.HelpFile != "" {
+		return oops.In("command").With("name", c.Name).New("cannot specify both helpText and helpFile")
+	}
+
+	return nil
 }
 
 // maxNameLength is the maximum allowed length for plugin names.
@@ -117,6 +156,13 @@ func (m *Manifest) Validate() error {
 		}
 	default:
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua' or 'binary'")
+	}
+
+	// Validate commands
+	for i := range m.Commands {
+		if err := m.Commands[i].Validate(); err != nil {
+			return oops.In("manifest").With("plugin", m.Name).With("command_index", i).Wrap(err)
+		}
 	}
 
 	return nil

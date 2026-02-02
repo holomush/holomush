@@ -748,3 +748,284 @@ lua-plugin:
 	// YAML should trim whitespace
 	assert.True(t, strings.TrimSpace(m.Name) == "test-plugin" || m.Name == "test-plugin")
 }
+
+func TestParseManifest_Commands(t *testing.T) {
+	tests := []struct {
+		name         string
+		yaml         string
+		wantErr      bool
+		wantErrMsg   string
+		wantCommands int
+	}{
+		{
+			name: "single command with inline help",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    help: Send a message to the room
+    usage: "say <message>"
+    helpText: |
+      The say command sends a message to all players in the current room.
+
+      Example: say Hello everyone!
+lua-plugin:
+  entry: main.lua
+`,
+			wantCommands: 1,
+		},
+		{
+			name: "command with capabilities",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: teleport
+    capabilities:
+      - world.write.location
+      - player.move
+    help: Teleport to a location
+    usage: "teleport <destination>"
+lua-plugin:
+  entry: main.lua
+`,
+			wantCommands: 1,
+		},
+		{
+			name: "command with helpFile reference",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: combat
+    help: Combat system commands
+    usage: "combat <action>"
+    helpFile: help/combat.md
+lua-plugin:
+  entry: main.lua
+`,
+			wantCommands: 1,
+		},
+		{
+			name: "multiple commands",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    help: Send a message
+    usage: "say <message>"
+  - name: pose
+    help: Describe an action
+    usage: "pose <action>"
+  - name: ooc
+    help: Out-of-character message
+    usage: "ooc <message>"
+lua-plugin:
+  entry: main.lua
+`,
+			wantCommands: 3,
+		},
+		{
+			name: "no commands is valid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantCommands: 0,
+		},
+		{
+			name: "command with both helpText and helpFile is invalid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: bad
+    help: Invalid command
+    usage: "bad"
+    helpText: Some inline help
+    helpFile: help/bad.md
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr:    true,
+			wantErrMsg: "cannot specify both helpText and helpFile",
+		},
+		{
+			name: "command with empty name is invalid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: ""
+    help: Empty name
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr:    true,
+			wantErrMsg: "command name is required",
+		},
+		{
+			name: "command missing name is invalid",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - help: Missing name field
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr:    true,
+			wantErrMsg: "command name is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := plugin.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr {
+				require.Error(t, err, "expected error")
+				assert.Contains(t, err.Error(), tt.wantErrMsg)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, m.Commands, tt.wantCommands)
+		})
+	}
+}
+
+func TestParseManifest_CommandSpec_Fields(t *testing.T) {
+	yaml := `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: teleport
+    capabilities:
+      - world.write.location
+      - player.move
+    help: Teleport to a location
+    usage: "teleport <destination>"
+    helpText: |
+      Teleport yourself or another player to a destination.
+
+      Examples:
+        teleport #123
+        teleport The Garden
+lua-plugin:
+  entry: main.lua
+`
+	m, err := plugin.ParseManifest([]byte(yaml))
+	require.NoError(t, err)
+	require.Len(t, m.Commands, 1)
+
+	cmd := m.Commands[0]
+	assert.Equal(t, "teleport", cmd.Name)
+	assert.Equal(t, []string{"world.write.location", "player.move"}, cmd.Capabilities)
+	assert.Equal(t, "Teleport to a location", cmd.Help)
+	assert.Equal(t, "teleport <destination>", cmd.Usage)
+	assert.Contains(t, cmd.HelpText, "Teleport yourself")
+	assert.Empty(t, cmd.HelpFile)
+}
+
+func TestParseManifest_CommandSpec_HelpFile(t *testing.T) {
+	yaml := `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: combat
+    help: Combat system
+    usage: "combat <action>"
+    helpFile: help/combat.md
+lua-plugin:
+  entry: main.lua
+`
+	m, err := plugin.ParseManifest([]byte(yaml))
+	require.NoError(t, err)
+	require.Len(t, m.Commands, 1)
+
+	cmd := m.Commands[0]
+	assert.Equal(t, "combat", cmd.Name)
+	assert.Equal(t, "help/combat.md", cmd.HelpFile)
+	assert.Empty(t, cmd.HelpText)
+}
+
+func TestCommandSpec_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		cmd     plugin.CommandSpec
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid command minimal",
+			cmd: plugin.CommandSpec{
+				Name: "say",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid command full inline help",
+			cmd: plugin.CommandSpec{
+				Name:         "teleport",
+				Capabilities: []string{"world.write"},
+				Help:         "Teleport to a location",
+				Usage:        "teleport <dest>",
+				HelpText:     "Detailed help here",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid command with helpFile",
+			cmd: plugin.CommandSpec{
+				Name:     "combat",
+				Help:     "Combat system",
+				HelpFile: "help/combat.md",
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty name",
+			cmd: plugin.CommandSpec{
+				Name: "",
+				Help: "Some help",
+			},
+			wantErr: true,
+			errMsg:  "command name is required",
+		},
+		{
+			name: "both helpText and helpFile",
+			cmd: plugin.CommandSpec{
+				Name:     "bad",
+				HelpText: "inline help",
+				HelpFile: "help/bad.md",
+			},
+			wantErr: true,
+			errMsg:  "cannot specify both helpText and helpFile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cmd.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
