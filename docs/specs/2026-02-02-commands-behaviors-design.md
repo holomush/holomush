@@ -373,6 +373,7 @@ defer span.End()
 **Baggage**: Command context propagates via OTel baggage:
 
 - `command.name` - for downstream correlation
+- `player.id` - authenticated player
 - `session.id` - links to session traces
 - `character.id` - links to world model operations
 
