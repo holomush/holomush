@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"context"
 	"regexp"
 	"time"
 
@@ -98,4 +99,29 @@ func ValidateUsername(username string) error {
 			Errorf("username must start with a letter and contain only letters, numbers, and underscores")
 	}
 	return nil
+}
+
+// PlayerRepository manages player persistence.
+type PlayerRepository interface {
+	// Create stores a new player.
+	Create(ctx context.Context, player *Player) error
+
+	// GetByID retrieves a player by ID.
+	GetByID(ctx context.Context, id ulid.ULID) (*Player, error)
+
+	// GetByUsername retrieves a player by username (case-insensitive).
+	GetByUsername(ctx context.Context, username string) (*Player, error)
+
+	// GetByEmail retrieves a player by email (case-insensitive).
+	// Returns ErrNotFound if no player has the given email.
+	GetByEmail(ctx context.Context, email string) (*Player, error)
+
+	// Update updates an existing player.
+	Update(ctx context.Context, player *Player) error
+
+	// UpdatePassword updates only the password hash for a player.
+	UpdatePassword(ctx context.Context, id ulid.ULID, passwordHash string) error
+
+	// Delete removes a player.
+	Delete(ctx context.Context, id ulid.ULID) error
 }
