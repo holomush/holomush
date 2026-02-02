@@ -120,6 +120,13 @@ func (h *AuthHandler) HandleConnect(ctx context.Context, username, password, ipA
 	characters, err := h.charLister.ListByPlayer(ctx, session.PlayerID)
 	if err != nil {
 		// Login succeeded but character listing failed - still allow connection
+		h.logger.Warn("best-effort character listing failed",
+			"event", "character_list_failed",
+			"player_id", session.PlayerID.String(),
+			"session_id", session.ID.String(),
+			"operation", "list_by_player",
+			"error", err.Error(),
+		)
 		return ConnectResult{
 			Success:    true,
 			Message:    "Welcome! (Note: Could not retrieve character list)",
@@ -150,6 +157,12 @@ func (h *AuthHandler) handleConnectError(err error) ConnectResult {
 			return ConnectResult{Success: false, Message: "Account is temporarily locked. Please try again later."}
 		}
 	}
+	// Log unexpected errors for debugging
+	h.logger.Warn("unexpected login failure",
+		"event", "login_failed_unexpected",
+		"operation", "login",
+		"error", err.Error(),
+	)
 	return ConnectResult{Success: false, Message: "Login failed. Please try again."}
 }
 
@@ -195,6 +208,12 @@ func (h *AuthHandler) handleCreateError(err error) CreateResult {
 			return CreateResult{Success: false, Message: "Password is invalid. Please choose a stronger password."}
 		}
 	}
+	// Log unexpected errors for debugging
+	h.logger.Warn("unexpected registration failure",
+		"event", "registration_failed_unexpected",
+		"operation", "register",
+		"error", err.Error(),
+	)
 	return CreateResult{Success: false, Message: "Registration failed. Please try again."}
 }
 
@@ -217,6 +236,13 @@ func (h *AuthHandler) HandlePlay(ctx context.Context, sessionID, playerID ulid.U
 	// Verify ownership by checking player's character list
 	playerChars, err := h.charLister.ListByPlayer(ctx, playerID)
 	if err != nil {
+		h.logger.Warn("character ownership verification failed",
+			"event", "ownership_verification_failed",
+			"session_id", sessionID.String(),
+			"player_id", playerID.String(),
+			"operation", "list_by_player",
+			"error", err.Error(),
+		)
 		return PlayResult{Success: false, Message: "Could not verify character ownership."}
 	}
 
@@ -233,6 +259,13 @@ func (h *AuthHandler) HandlePlay(ctx context.Context, sessionID, playerID ulid.U
 
 	// Update session with selected character
 	if err := h.authService.SelectCharacter(ctx, sessionID, charInfo.ID); err != nil {
+		h.logger.Warn("character selection failed",
+			"event", "character_select_failed",
+			"session_id", sessionID.String(),
+			"character_id", charInfo.ID.String(),
+			"operation", "select_character",
+			"error", err.Error(),
+		)
 		return PlayResult{Success: false, Message: "Failed to select character."}
 	}
 

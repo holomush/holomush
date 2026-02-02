@@ -68,6 +68,10 @@ func NewAuthServiceWithLogger(players PlayerRepository, sessions WebSessionRepos
 // We still run password verification to make response time consistent.
 // This is NOT a real credential - it's a fake hash that will never match any password.
 //
+// SECURITY: The parameters in this hash (m=65536,t=1,p=4) MUST match the real argon2id
+// parameters in hasher.go. If they differ, an attacker could distinguish non-existent
+// users from real users by measuring response time differences.
+//
 //nolint:gosec // G101: This is an intentionally fake hash for timing attack prevention, not a credential.
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=1,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
@@ -75,7 +79,6 @@ const dummyPasswordHash = "$argon2id$v=19$m=65536,t=1,p=4$AAAAAAAAAAAAAAAAAAAAAA
 // Returns the session, plaintext token, and any error.
 // Uses constant-time operations to prevent timing-based username enumeration.
 func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAddress string) (*WebSession, string, error) {
-	// Look up player by username
 	player, lookupErr := s.players.GetByUsername(ctx, username)
 
 	// Determine which hash to verify against (real or dummy for timing attack prevention)
@@ -126,7 +129,11 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAd
 		return nil, "", oops.Code("AUTH_INVALID_CREDENTIALS").Errorf("invalid username or password")
 	}
 
-	// Check lockout AFTER password verification to maintain constant time
+	// SECURITY: Check lockout AFTER password verification to maintain constant time.
+	// If we checked lockout first, an attacker could distinguish between:
+	// - Locked accounts (fast "account locked" response)
+	// - Non-existent accounts (slow password verification, then "invalid credentials")
+	// By always performing password verification first, both cases take the same time.
 	if player.IsLocked() {
 		return nil, "", oops.Code("AUTH_ACCOUNT_LOCKED").
 			With("locked_until", player.LockedUntil).
@@ -141,6 +148,13 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAd
 		newHash, hashErr := s.hasher.Hash(password)
 		if hashErr == nil {
 			player.PasswordHash = newHash
+		} else {
+			s.logger.Warn("best-effort password hash upgrade failed",
+				"event", "hash_upgrade_failed",
+				"player_id", player.ID.String(),
+				"operation", "hash_upgrade",
+				"error", hashErr.Error(),
+			)
 		}
 	}
 
@@ -155,7 +169,6 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAd
 		)
 	}
 
-	// Generate session token
 	token, tokenHash, err := GenerateSessionToken()
 	if err != nil {
 		return nil, "", oops.Code("AUTH_LOGIN_FAILED").
@@ -163,7 +176,6 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAd
 			Wrap(err)
 	}
 
-	// Create session
 	expiresAt := time.Now().Add(SessionTokenExpiry)
 	session, err := NewWebSession(player.ID, nil, tokenHash, userAgent, ipAddress, expiresAt)
 	if err != nil {

@@ -78,7 +78,6 @@ func NewPasswordResetServiceWithLogger(
 // Returns the plaintext token for sending via email (email sending is NOT this service's job).
 // If the player doesn't exist, returns success anyway (empty token) to prevent email enumeration.
 func (s *PasswordResetService) RequestReset(ctx context.Context, email string) (string, error) {
-	// Look up player by email
 	player, err := s.playerRepo.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -90,7 +89,6 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) (
 			Wrap(err)
 	}
 
-	// Generate reset token
 	token, hash, err := GenerateResetToken()
 	if err != nil {
 		return "", oops.Code("RESET_REQUEST_FAILED").
@@ -106,7 +104,6 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, email string) (
 			Wrap(err)
 	}
 
-	// Store the reset
 	if err := s.resetRepo.Create(ctx, reset); err != nil {
 		return "", oops.Code("RESET_REQUEST_FAILED").
 			With("operation", "Create").
@@ -154,13 +151,11 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 		return oops.Code("RESET_PASSWORD_EMPTY").Errorf("new password cannot be empty")
 	}
 
-	// Validate the token
 	playerID, err := s.ValidateToken(ctx, token)
 	if err != nil {
 		return err // Already has appropriate error code
 	}
 
-	// Hash the new password
 	hashedPassword, err := s.hasher.Hash(newPassword)
 	if err != nil {
 		return oops.Code("RESET_PASSWORD_FAILED").
@@ -168,7 +163,6 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 			Wrap(err)
 	}
 
-	// Update the player's password
 	if err := s.playerRepo.UpdatePassword(ctx, playerID, hashedPassword); err != nil {
 		return oops.Code("RESET_PASSWORD_FAILED").
 			With("operation", "UpdatePassword").

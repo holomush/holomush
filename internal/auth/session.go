@@ -104,6 +104,13 @@ func HashSessionToken(token string) string {
 
 // VerifySessionToken checks if the plaintext token matches the stored hash.
 // Uses constant-time comparison to prevent timing attacks.
+//
+// SECURITY: Without constant-time comparison, an attacker could deduce valid token
+// prefixes byte-by-byte by measuring response times. Standard string comparison
+// returns early on the first mismatched byte, leaking information about how many
+// leading bytes matched. subtle.ConstantTimeCompare always takes the same time
+// regardless of where (or if) the strings differ.
+//
 // Returns (true, nil) on match, (false, nil) on mismatch, or (false, error) on invalid input.
 func VerifySessionToken(token, hash string) (bool, error) {
 	if token == "" {

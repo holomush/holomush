@@ -60,6 +60,17 @@ func TestNewAuthService_NilDependencies(t *testing.T) {
 	}
 }
 
+func TestNewAuthServiceWithLogger_NilLogger(t *testing.T) {
+	players := mocks.NewMockPlayerRepository(t)
+	sessions := mocks.NewMockWebSessionRepository(t)
+	hasher := mocks.NewMockPasswordHasher(t)
+
+	svc, err := auth.NewAuthServiceWithLogger(players, sessions, hasher, nil)
+	require.Error(t, err)
+	assert.Nil(t, svc)
+	assert.Contains(t, err.Error(), "logger")
+}
+
 func TestAuthService_Login(t *testing.T) {
 	ctx := context.Background()
 
@@ -627,5 +638,103 @@ func TestAuthService_SelectCharacter(t *testing.T) {
 		selectErr := svc.SelectCharacter(ctx, sessionID, characterID)
 		require.Error(t, selectErr)
 		errutil.AssertErrorCode(t, selectErr, "SESSION_SELECT_CHAR_FAILED")
+	})
+}
+
+// TestService_SessionStateTransitions tests the state machine for session state changes:
+// anonymous -> authenticated (login) -> character-selected (SelectCharacter)
+func TestService_SessionStateTransitions(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("SelectCharacter succeeds on session with no character", func(t *testing.T) {
+		// This tests the transition: authenticated -> character-selected
+		// When a session has no character yet (CharacterID is nil), SelectCharacter should succeed
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		sessionID := ulid.Make()
+		characterID := ulid.Make()
+
+		// The repository's UpdateCharacter handles setting the character on a session
+		// regardless of whether it previously had one
+		sessionRepo.On("UpdateCharacter", ctx, sessionID, characterID).Return(nil)
+
+		selectErr := svc.SelectCharacter(ctx, sessionID, characterID)
+		require.NoError(t, selectErr)
+		sessionRepo.AssertExpectations(t)
+	})
+
+	t.Run("SelectCharacter updates existing character selection", func(t *testing.T) {
+		// This tests replacing an existing character with a different one
+		// A player may switch between multiple characters they own
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		sessionID := ulid.Make()
+		newCharacterID := ulid.Make()
+
+		// UpdateCharacter replaces any existing character selection
+		sessionRepo.On("UpdateCharacter", ctx, sessionID, newCharacterID).Return(nil)
+
+		selectErr := svc.SelectCharacter(ctx, sessionID, newCharacterID)
+		require.NoError(t, selectErr)
+		sessionRepo.AssertExpectations(t)
+	})
+
+	t.Run("full state transition flow: login then select character", func(t *testing.T) {
+		// This tests the complete flow:
+		// 1. Login creates session WITHOUT character (CharacterID is nil)
+		// 2. SelectCharacter adds character to the session
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		// Step 1: Login
+		playerID := ulid.Make()
+		player := &auth.Player{
+			ID:             playerID,
+			Username:       "testuser",
+			PasswordHash:   "$argon2id$v=19$m=65536,t=1,p=4$salt$hash",
+			FailedAttempts: 0,
+			LockedUntil:    nil,
+		}
+
+		playerRepo.On("GetByUsername", ctx, "testuser").Return(player, nil)
+		hasher.On("Verify", "password123", player.PasswordHash).Return(true, nil)
+		hasher.On("NeedsUpgrade", player.PasswordHash).Return(false)
+		playerRepo.On("Update", ctx, mock.AnythingOfType("*auth.Player")).Return(nil)
+
+		var createdSession *auth.WebSession
+		sessionRepo.On("Create", ctx, mock.AnythingOfType("*auth.WebSession")).Run(func(args mock.Arguments) {
+			createdSession = args.Get(1).(*auth.WebSession)
+		}).Return(nil)
+
+		session, token, loginErr := svc.Login(ctx, "testuser", "password123", "Mozilla/5.0", "192.168.1.1")
+		require.NoError(t, loginErr)
+		assert.NotNil(t, session)
+		assert.NotEmpty(t, token)
+
+		// Verify session was created without a character (nil CharacterID)
+		assert.Nil(t, createdSession.CharacterID, "session should be created without character")
+		assert.Equal(t, playerID, createdSession.PlayerID, "session should have correct player ID")
+
+		// Step 2: Select character
+		characterID := ulid.Make()
+		sessionRepo.On("UpdateCharacter", ctx, session.ID, characterID).Return(nil)
+
+		selectErr := svc.SelectCharacter(ctx, session.ID, characterID)
+		require.NoError(t, selectErr)
+
+		sessionRepo.AssertExpectations(t)
+		playerRepo.AssertExpectations(t)
+		hasher.AssertExpectations(t)
 	})
 }

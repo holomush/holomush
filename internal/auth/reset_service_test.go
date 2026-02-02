@@ -425,4 +425,43 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		err = svc.ResetPassword(ctx, token, newPassword)
 		require.NoError(t, err)
 	})
+
+	t.Run("token cannot be reused after successful reset", func(t *testing.T) {
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		require.NoError(t, err)
+
+		// Generate a real token
+		token, tokenHash, err := auth.GenerateResetToken()
+		require.NoError(t, err)
+
+		playerID := ulid.Make()
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: tokenHash,
+			ExpiresAt: time.Now().Add(time.Hour),
+		}
+		newPassword1 := "newSecurePassword123"
+		newPassword2 := "anotherPassword456"
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash" //nolint:gosec // Test data, not real credentials
+
+		// First reset succeeds - token is found
+		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil).Once()
+		hasher.On("Hash", newPassword1).Return(hashedPassword, nil)
+		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
+		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
+
+		err = svc.ResetPassword(ctx, token, newPassword1)
+		require.NoError(t, err)
+
+		// Second reset with same token fails - token was deleted
+		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(nil, auth.ErrNotFound).Once()
+
+		err = svc.ResetPassword(ctx, token, newPassword2)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "RESET_TOKEN_INVALID")
+	})
 }

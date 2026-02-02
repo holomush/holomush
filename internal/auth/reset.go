@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package auth provides authentication primitives for HoloMUSH.
 package auth
 
 import (
@@ -110,8 +109,8 @@ type PasswordResetRepository interface {
 	Create(ctx context.Context, reset *PasswordReset) error
 
 	// GetByPlayer retrieves the most recent reset request for a player,
-	// ordered by CreatedAt descending. Only one reset per player is typically
-	// active at a time; previous resets are invalidated when a new one is created.
+	// ordered by CreatedAt descending. Multiple reset tokens may exist
+	// concurrently; all are deleted only after successful password reset.
 	GetByPlayer(ctx context.Context, playerID ulid.ULID) (*PasswordReset, error)
 
 	// GetByTokenHash retrieves a reset request by its token hash.

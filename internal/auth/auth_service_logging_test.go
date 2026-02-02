@@ -226,6 +226,70 @@ func TestService_Login_LogsUpdateFailure_RecordSuccess(t *testing.T) {
 	assert.Contains(t, entry.Error, "database timeout")
 }
 
+// mockHasherUpgradeFails is a hasher that signals upgrade needed but fails on Hash.
+type mockHasherUpgradeFails struct {
+	hashErr error
+}
+
+func (m *mockHasherUpgradeFails) Hash(_ string) (string, error) {
+	return "", m.hashErr
+}
+
+func (m *mockHasherUpgradeFails) Verify(password, hash string) (bool, error) {
+	// Only accept "correctpassword" as valid
+	if hash == "$argon2id$v=19$m=65536,t=1,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" {
+		return false, nil
+	}
+	return password == "correctpassword", nil
+}
+
+func (m *mockHasherUpgradeFails) NeedsUpgrade(_ string) bool {
+	return true // Always needs upgrade
+}
+
+func TestService_Login_LogsHashUpgradeFailure(t *testing.T) {
+	// Setup: player exists, login succeeds, hash upgrade is needed but Hash() fails
+	playerID := ulid.Make()
+	player := &auth.Player{
+		ID:           playerID,
+		Username:     "testuser",
+		PasswordHash: "$argon2id$v=19$m=65536,t=1,p=4$salt$hash",
+	}
+
+	hashErr := errors.New("argon2 memory allocation failed")
+	playerRepo := &mockPlayerRepoLogging{
+		player:    player,
+		updateErr: nil, // Update succeeds
+	}
+	sessionRepo := &mockSessionRepoLogging{}
+	hasher := &mockHasherUpgradeFails{hashErr: hashErr}
+
+	// Capture logs
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	svc, err := auth.NewAuthServiceWithLogger(playerRepo, sessionRepo, hasher, logger)
+	require.NoError(t, err)
+
+	// Login with correct password - login succeeds but hash upgrade fails
+	session, token, err := svc.Login(context.Background(), "testuser", "correctpassword", "test-agent", "127.0.0.1")
+	require.NoError(t, err) // Login should succeed despite hash upgrade failure
+	assert.NotNil(t, session)
+	assert.NotEmpty(t, token)
+
+	// Parse and verify log output
+	var entry logEntry
+	err = json.Unmarshal(buf.Bytes(), &entry)
+	require.NoError(t, err, "should have logged JSON entry for hash upgrade failure")
+
+	assert.Equal(t, "WARN", entry.Level)
+	assert.Contains(t, entry.Msg, "hash upgrade failed")
+	assert.Equal(t, "hash_upgrade_failed", entry.Event)
+	assert.Equal(t, "hash_upgrade", entry.Operation)
+	assert.Equal(t, playerID.String(), entry.PlayerID)
+	assert.Contains(t, entry.Error, "argon2 memory allocation failed")
+}
+
 func TestService_ValidateSession_LogsUpdateLastSeenFailure(t *testing.T) {
 	// Setup: session exists but UpdateLastSeen fails
 	sessionID := ulid.Make()
