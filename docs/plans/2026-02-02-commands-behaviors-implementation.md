@@ -8,6 +8,10 @@
 
 **Tech Stack:** Go 1.23+, PostgreSQL (aliases), gopher-lua (plugin commands), oops (errors), OTel (tracing/metrics)
 
+**Related:**
+
+- [Plugin Stdlib Design](2026-02-02-plugin-stdlib-design.md) — Standard library for Lua/Go plugins (formatting, typed contexts, event emission)
+
 ---
 
 ## Phase 0: ADRs (Foundation Decisions)
