@@ -213,13 +213,17 @@ lower-priority layer in the resolution order.
 - MUST NOT exceed 20 characters
 - Examples: `look`, `@create`, `+who`, `say!` are valid; `123go`, `*star` are invalid
 
-**Player aliases** MUST match: `^[a-zA-Z0-9][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
+**Player aliases** MUST match: `^[a-zA-Z][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
 
-- MUST start with alphanumeric (letter or digit)
+- MUST start with a letter (not digits)
 - MAY contain special characters after first char
 - MUST NOT exceed 20 characters
 
 **System aliases** MUST follow the same pattern as player aliases.
+
+Aliases follow the same validation as command names for consistency and a simpler mental model.
+
+**Implementation note**: Validation constants SHOULD be defined in `internal/command/validation.go`.
 
 **Circular alias detection**: Alias creation MUST detect and reject circular alias chains.
 The resolver MUST track expansion depth and fail if it exceeds 10 expansions (indicating
@@ -250,6 +254,39 @@ their own alias namespace.
 
 System alias creation SHOULD warn if shadowing a command but MUST block if shadowing
 another system alias (use `sysalias remove` first).
+
+### Alias Caching
+
+Alias resolution MUST use in-memory caching for performance.
+
+**Cache Strategy:**
+
+- System aliases MUST be loaded into memory at server startup
+- Player aliases MUST be loaded when a session is established
+- Cache MUST be invalidated when aliases are created, updated, or deleted
+
+**Data Structure:**
+
+```go
+type AliasCache struct {
+    playerAliases map[ulid.ULID]map[string]string // playerID → alias → command
+    systemAliases map[string]string               // alias → command
+    mu            sync.RWMutex
+}
+```
+
+**Performance Target:** Alias resolution from cache MUST complete in <1μs.
+
+**Invalidation Rules:**
+
+| Event               | Invalidation Action                        |
+| ------------------- | ------------------------------------------ |
+| Player alias CRUD   | Invalidate that player's cache entry       |
+| System alias CRUD   | Invalidate entire system alias cache       |
+| Session termination | Remove player's entry from `playerAliases` |
+
+The cache is authoritative during operation. Database reads occur only at startup
+and session establishment; writes always update both cache and database atomically.
 
 ---
 
@@ -327,6 +364,43 @@ func HasCapability(ctx context.Context, charID ulid.ULID, cap string) bool {
 
 This keeps the command system decoupled from ABAC implementation. Epic 7 can enhance
 the evaluator without changing command dispatch.
+
+### Rate Limiting
+
+Rate limiting prevents command flooding (DoS protection) while allowing legitimate burst usage.
+
+**Algorithm**: Token bucket with per-session tracking.
+
+**Default Limits**:
+
+| Parameter      | Value             | Notes                         |
+| -------------- | ----------------- | ----------------------------- |
+| Burst capacity | 10 commands       | Maximum burst size            |
+| Sustained rate | 2 commands/second | Token refill rate             |
+| Configuration  | Server settings   | Operators MAY adjust defaults |
+
+**Limiting Dimensions**:
+
+- **Per-session**: Primary rate limiting MUST be applied per session
+- **Per-capability**: Commands MAY specify different limits (e.g., admin commands)
+
+**Bypass**: Characters with `admin.rate_limit_bypass` capability MUST be exempt from rate limiting.
+
+**Error Handling**:
+
+```go
+func ErrRateLimited(cooldownMs int64) error {
+    return oops.Code("RATE_LIMITED").
+        With("cooldown_ms", cooldownMs).
+        Errorf("Too many commands. Please slow down.")
+}
+```
+
+The error SHOULD include cooldown duration in context for client display.
+
+**Observability**:
+
+- Metric: `holomush.command.rate_limited` (counter, labels: `command`)
 
 ---
 
@@ -490,7 +564,7 @@ from async event delivery between plugins.
 | Invalid arguments | Return error with code `HOST_INVALID_ARGS`   | Lua receives `nil, error_message`    |
 | Internal failure  | Return error with code `HOST_INTERNAL_ERROR` | Lua receives `nil, "internal error"` |
 | Not found         | Return empty result (not an error)           | Lua receives empty table/nil         |
-| Timeout           | N/A (host functions MUST NOT timeout)        | N/A                                  |
+| Timeout           | N/A (host functions are synchronous)         | N/A                                  |
 
 Lua plugins SHOULD check return values and handle errors gracefully:
 
@@ -541,7 +615,12 @@ This keeps handlers stateless and testable.
 ### Lua Command Execution
 
 Registry holds a dispatcher that routes to plugin. The dispatcher creates an internal
-`command` event type (not persisted to EventStore) to invoke the plugin handler:
+`command` event type (not persisted to EventStore) to invoke the plugin handler.
+
+**State Limitations**: Each command invocation creates a fresh Lua VM state. State does
+NOT persist between invocations. For v1, commands requiring confirmation SHOULD use
+`--confirm` flags or host function KV store for state (see [ADR 0005](../adr/0005-command-state-management.md)).
+Multi-turn command wizards are explicitly out of scope for v1.
 
 ```go
 func LuaDispatcher(pluginName, cmdName string, host plugin.Host) CommandHandler {
@@ -711,6 +790,7 @@ commands:
 | Command Declaration Model   | Manifest-declared at load time                         | Commands visible at startup, clean unload, matches event subscription pattern.                                                                                                                                                                             |
 | Command Security Model      | Capability-based (fine-grained)                        | Integrates with ABAC, granular permissions, uniform for Go and Lua.                                                                                                                                                                                        |
 | Command Conflict Resolution | Alphabetical load order, last-loaded wins with warning | Plugins MUST load in alphabetical order by plugin name. Within a plugin, commands register in manifest order. Last registration wins. Server MUST log warning on conflict. Plugins SHOULD NOT override core commands without explicit admin configuration. |
+| Command State Management    | Deferred (see ADR 0005)                                | v1 uses ephemeral state; multi-turn commands deferred                                                                                                                                                                                                      |
 
 ---
 
@@ -720,6 +800,8 @@ commands:
 - Tab completion (future, client-side for web)
 - Semantic search for help (future, requires embeddings)
 - Runtime command registration (commands are static per plugin version)
+- Multi-turn command wizards (Lua state is ephemeral per command execution)
+- Command-scoped state persistence (future: use session-scoped KV store host functions)
 
 ---
 
@@ -727,3 +809,4 @@ commands:
 
 - [HoloMUSH Roadmap](../plans/2026-01-18-holomush-roadmap-design.md) - Epic 6 definition
 - [Plugin System Design](./2026-01-18-plugin-system-design.md) - Lua plugin architecture
+- [ADR 0005: Command State Management](../adr/0005-command-state-management.md) - Deferred multi-turn command design
