@@ -51,15 +51,31 @@ func (c *AliasCache) LoadPlayerAliases(playerID ulid.ULID, aliases map[string]st
 }
 
 // SetSystemAlias adds or updates a single system alias.
-func (c *AliasCache) SetSystemAlias(alias, command string) {
+// Returns an error if the alias would create a circular reference.
+func (c *AliasCache) SetSystemAlias(alias, command string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Temporarily set the alias to check for circularity
+	oldCmd, existed := c.systemAliases[alias]
 	c.systemAliases[alias] = command
+
+	if c.wouldBeCircularLocked(ulid.ULID{}, alias) {
+		// Restore previous state
+		if existed {
+			c.systemAliases[alias] = oldCmd
+		} else {
+			delete(c.systemAliases, alias)
+		}
+		return ErrCircularAlias(alias)
+	}
+
+	return nil
 }
 
 // SetPlayerAlias adds or updates a single player alias.
-func (c *AliasCache) SetPlayerAlias(playerID ulid.ULID, alias, command string) {
+// Returns an error if the alias would create a circular reference.
+func (c *AliasCache) SetPlayerAlias(playerID ulid.ULID, alias, command string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -67,7 +83,21 @@ func (c *AliasCache) SetPlayerAlias(playerID ulid.ULID, alias, command string) {
 		c.playerAliases[playerID] = make(map[string]string)
 	}
 
+	// Temporarily set the alias to check for circularity
+	oldCmd, existed := c.playerAliases[playerID][alias]
 	c.playerAliases[playerID][alias] = command
+
+	if c.wouldBeCircularLocked(playerID, alias) {
+		// Restore previous state
+		if existed {
+			c.playerAliases[playerID][alias] = oldCmd
+		} else {
+			delete(c.playerAliases[playerID], alias)
+		}
+		return ErrCircularAlias(alias)
+	}
+
+	return nil
 }
 
 // RemoveSystemAlias removes a system alias.
@@ -86,6 +116,42 @@ func (c *AliasCache) RemovePlayerAlias(playerID ulid.ULID, alias string) {
 	if c.playerAliases[playerID] != nil {
 		delete(c.playerAliases[playerID], alias)
 	}
+}
+
+// wouldBeCircularLocked checks if an alias would create a circular reference.
+// Must be called with Lock held (not RLock) since it's used during mutation.
+func (c *AliasCache) wouldBeCircularLocked(playerID ulid.ULID, alias string) bool {
+	// Track the expansion chain
+	_, expanded := c.resolveWithDepth(playerID, alias, 0)
+	// If we expanded at all and hit the depth limit, it's circular
+	// We check by seeing if resolving the alias leads back through a long chain
+	cmd := alias
+	for depth := 0; depth < MaxExpansionDepth; depth++ {
+		// Check player alias first
+		if playerAliases, ok := c.playerAliases[playerID]; ok {
+			if next, ok := playerAliases[cmd]; ok {
+				nextFirst, _ := splitFirstWord(next)
+				if nextFirst == "" {
+					return false
+				}
+				cmd = nextFirst
+				continue
+			}
+		}
+		// Check system alias
+		if next, ok := c.systemAliases[cmd]; ok {
+			nextFirst, _ := splitFirstWord(next)
+			if nextFirst == "" {
+				return false
+			}
+			cmd = nextFirst
+			continue
+		}
+		// No more aliases - not circular
+		return false
+	}
+	// Hit depth limit - circular or too long
+	return expanded
 }
 
 // ClearPlayer removes all aliases for a player (typically on session termination).

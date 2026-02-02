@@ -68,7 +68,8 @@ func TestAliasCache_LoadPlayerAliases(t *testing.T) {
 func TestAliasCache_SetSystemAlias(t *testing.T) {
 	cache := NewAliasCache()
 
-	cache.SetSystemAlias("w", "west")
+	err := cache.SetSystemAlias("w", "west")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "w", nil)
 	assert.Equal(t, "west", resolved)
@@ -78,8 +79,10 @@ func TestAliasCache_SetSystemAlias(t *testing.T) {
 func TestAliasCache_SetSystemAlias_Update(t *testing.T) {
 	cache := NewAliasCache()
 
-	cache.SetSystemAlias("w", "west")
-	cache.SetSystemAlias("w", "whisper")
+	err := cache.SetSystemAlias("w", "west")
+	require.NoError(t, err)
+	err = cache.SetSystemAlias("w", "whisper")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "w", nil)
 	assert.Equal(t, "whisper", resolved)
@@ -90,7 +93,8 @@ func TestAliasCache_SetPlayerAlias(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
-	cache.SetPlayerAlias(playerID, "aa", "attack all")
+	err := cache.SetPlayerAlias(playerID, "aa", "attack all")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(playerID, "aa", nil)
 	assert.Equal(t, "attack all", resolved)
@@ -101,8 +105,10 @@ func TestAliasCache_SetPlayerAlias_Update(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
-	cache.SetPlayerAlias(playerID, "aa", "attack all")
-	cache.SetPlayerAlias(playerID, "aa", "attack ally")
+	err := cache.SetPlayerAlias(playerID, "aa", "attack all")
+	require.NoError(t, err)
+	err = cache.SetPlayerAlias(playerID, "aa", "attack ally")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(playerID, "aa", nil)
 	assert.Equal(t, "attack ally", resolved)
@@ -112,7 +118,8 @@ func TestAliasCache_SetPlayerAlias_Update(t *testing.T) {
 func TestAliasCache_RemoveSystemAlias(t *testing.T) {
 	cache := NewAliasCache()
 
-	cache.SetSystemAlias("w", "west")
+	err := cache.SetSystemAlias("w", "west")
+	require.NoError(t, err)
 	cache.RemoveSystemAlias("w")
 
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "w", nil)
@@ -136,7 +143,8 @@ func TestAliasCache_RemovePlayerAlias(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
-	cache.SetPlayerAlias(playerID, "aa", "attack all")
+	err := cache.SetPlayerAlias(playerID, "aa", "attack all")
+	require.NoError(t, err)
 	cache.RemovePlayerAlias(playerID, "aa")
 
 	resolved, wasAlias := cache.Resolve(playerID, "aa", nil)
@@ -161,8 +169,10 @@ func TestAliasCache_ClearPlayer(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
-	cache.SetPlayerAlias(playerID, "aa", "attack all")
-	cache.SetPlayerAlias(playerID, "bb", "bash barrier")
+	err := cache.SetPlayerAlias(playerID, "aa", "attack all")
+	require.NoError(t, err)
+	err = cache.SetPlayerAlias(playerID, "bb", "bash barrier")
+	require.NoError(t, err)
 	cache.ClearPlayer(playerID)
 
 	resolved1, wasAlias1 := cache.Resolve(playerID, "aa", nil)
@@ -182,7 +192,8 @@ func TestAliasCache_ClearPlayer_NonExistent(t *testing.T) {
 	cache.ClearPlayer(playerID)
 
 	// Verify cache is still functional
-	cache.SetPlayerAlias(playerID, "test", "look")
+	err := cache.SetPlayerAlias(playerID, "test", "look")
+	require.NoError(t, err)
 	resolved, wasAlias := cache.Resolve(playerID, "test", nil)
 	assert.Equal(t, "look", resolved)
 	assert.True(t, wasAlias)
@@ -200,7 +211,8 @@ func TestAliasCache_Resolve_RegisteredCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Also set "look" as an alias (should be ignored)
-	cache.SetSystemAlias("look", "something else")
+	err = cache.SetSystemAlias("look", "something else")
+	require.NoError(t, err)
 
 	// Exact match should return unchanged
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "look", registry)
@@ -212,7 +224,8 @@ func TestAliasCache_Resolve_PlayerAliasExpandsCommand(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
-	cache.SetPlayerAlias(playerID, "l", "look")
+	err := cache.SetPlayerAlias(playerID, "l", "look")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(playerID, "l", nil)
 	assert.Equal(t, "look", resolved)
@@ -222,7 +235,8 @@ func TestAliasCache_Resolve_PlayerAliasExpandsCommand(t *testing.T) {
 func TestAliasCache_Resolve_SystemAliasExpandsCommand(t *testing.T) {
 	cache := NewAliasCache()
 
-	cache.SetSystemAlias("l", "look")
+	err := cache.SetSystemAlias("l", "look")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "l", nil)
 	assert.Equal(t, "look", resolved)
@@ -233,8 +247,10 @@ func TestAliasCache_Resolve_PlayerAliasOverridesSystem(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
-	cache.SetSystemAlias("l", "look")
-	cache.SetPlayerAlias(playerID, "l", "list")
+	err := cache.SetSystemAlias("l", "look")
+	require.NoError(t, err)
+	err = cache.SetPlayerAlias(playerID, "l", "list")
+	require.NoError(t, err)
 
 	// Player alias takes precedence
 	resolved, wasAlias := cache.Resolve(playerID, "l", nil)
@@ -253,18 +269,19 @@ func TestAliasCache_Resolve_NoMatch(t *testing.T) {
 func TestAliasCache_Resolve_ExpansionDepthLimit(t *testing.T) {
 	cache := NewAliasCache()
 
-	// Create circular alias chain
-	cache.SetSystemAlias("a", "b")
-	cache.SetSystemAlias("b", "c")
-	cache.SetSystemAlias("c", "d")
-	cache.SetSystemAlias("d", "e")
-	cache.SetSystemAlias("e", "f")
-	cache.SetSystemAlias("f", "g")
-	cache.SetSystemAlias("g", "h")
-	cache.SetSystemAlias("h", "i")
-	cache.SetSystemAlias("i", "j")
-	cache.SetSystemAlias("j", "k")
-	cache.SetSystemAlias("k", "l") // 11th level - should stop before this
+	// Create a long alias chain (each link points to the next, which doesn't exist yet)
+	// This is NOT circular, just a long chain
+	require.NoError(t, cache.SetSystemAlias("a", "b"))
+	require.NoError(t, cache.SetSystemAlias("b", "c"))
+	require.NoError(t, cache.SetSystemAlias("c", "d"))
+	require.NoError(t, cache.SetSystemAlias("d", "e"))
+	require.NoError(t, cache.SetSystemAlias("e", "f"))
+	require.NoError(t, cache.SetSystemAlias("f", "g"))
+	require.NoError(t, cache.SetSystemAlias("g", "h"))
+	require.NoError(t, cache.SetSystemAlias("h", "i"))
+	require.NoError(t, cache.SetSystemAlias("i", "j"))
+	require.NoError(t, cache.SetSystemAlias("j", "k"))
+	require.NoError(t, cache.SetSystemAlias("k", "l")) // 11th level - should stop before this
 
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "a", nil)
 
@@ -273,19 +290,50 @@ func TestAliasCache_Resolve_ExpansionDepthLimit(t *testing.T) {
 	assert.NotEqual(t, "a", resolved) // Should have expanded at least some
 }
 
-func TestAliasCache_Resolve_CircularAlias(t *testing.T) {
+func TestAliasCache_SetSystemAlias_RejectsCircular(t *testing.T) {
 	cache := NewAliasCache()
 
-	// Create true circular reference
-	cache.SetSystemAlias("a", "b")
-	cache.SetSystemAlias("b", "c")
-	cache.SetSystemAlias("c", "a")
+	// Create aliases that will form a cycle when the last one is added
+	require.NoError(t, cache.SetSystemAlias("a", "b"))
+	require.NoError(t, cache.SetSystemAlias("b", "c"))
 
-	_, wasAlias := cache.Resolve(ulid.ULID{}, "a", nil)
+	// This should fail - it would create a→b→c→a cycle
+	err := cache.SetSystemAlias("c", "a")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "circular reference detected")
 
-	// Should stop at MaxExpansionDepth without panic/hang
-	assert.True(t, wasAlias)
-	// The exact resolved value depends on when depth limit is hit
+	// Verify the alias was NOT added
+	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "c", nil)
+	assert.Equal(t, "c", resolved)
+	assert.False(t, wasAlias)
+}
+
+func TestAliasCache_SetPlayerAlias_RejectsCircular(t *testing.T) {
+	cache := NewAliasCache()
+	playerID := ulid.MustNew(1, nil)
+
+	// Create aliases that will form a cycle
+	require.NoError(t, cache.SetPlayerAlias(playerID, "x", "y"))
+	require.NoError(t, cache.SetPlayerAlias(playerID, "y", "z"))
+
+	// This should fail - it would create x→y→z→x cycle
+	err := cache.SetPlayerAlias(playerID, "z", "x")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "circular reference detected")
+
+	// Verify the alias was NOT added
+	resolved, wasAlias := cache.Resolve(playerID, "z", nil)
+	assert.Equal(t, "z", resolved)
+	assert.False(t, wasAlias)
+}
+
+func TestAliasCache_SetSystemAlias_AllowsSelfReference(t *testing.T) {
+	cache := NewAliasCache()
+
+	// Self-reference creates an immediate cycle
+	err := cache.SetSystemAlias("loop", "loop")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "circular reference detected")
 }
 
 func TestAliasCache_ConcurrentAccess(t *testing.T) {
@@ -304,9 +352,9 @@ func TestAliasCache_ConcurrentAccess(t *testing.T) {
 			for j := 0; j < iterations; j++ {
 				switch n % 5 {
 				case 0:
-					cache.SetSystemAlias("test", "look")
+					_ = cache.SetSystemAlias("test", "look") // Error OK in concurrent test
 				case 1:
-					cache.SetPlayerAlias(playerID, "test", "look")
+					_ = cache.SetPlayerAlias(playerID, "test", "look") // Error OK in concurrent test
 				case 2:
 					cache.RemoveSystemAlias("test")
 				case 3:
@@ -321,7 +369,8 @@ func TestAliasCache_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// Verify cache is still functional after concurrent access
-	cache.SetSystemAlias("verify", "check")
+	err := cache.SetSystemAlias("verify", "check")
+	require.NoError(t, err)
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "verify", nil)
 	assert.Equal(t, "check", resolved)
 	assert.True(t, wasAlias)
@@ -330,7 +379,8 @@ func TestAliasCache_ConcurrentAccess(t *testing.T) {
 func TestAliasCache_Resolve_PreservesArgs(t *testing.T) {
 	cache := NewAliasCache()
 
-	cache.SetSystemAlias("l", "look")
+	err := cache.SetSystemAlias("l", "look")
+	require.NoError(t, err)
 
 	// Input with arguments should preserve them
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "l here", nil)
@@ -342,7 +392,8 @@ func TestAliasCache_Resolve_MultiWordAlias(t *testing.T) {
 	cache := NewAliasCache()
 
 	// Alias only matches first word
-	cache.SetSystemAlias("look", "examine")
+	err := cache.SetSystemAlias("look", "examine")
+	require.NoError(t, err)
 
 	resolved, wasAlias := cache.Resolve(ulid.ULID{}, "look room", nil)
 	assert.Equal(t, "examine room", resolved)
@@ -378,7 +429,7 @@ func BenchmarkAliasCache_Resolve(b *testing.B) {
 		"e": "east",
 		"w": "west",
 	})
-	cache.SetPlayerAlias(playerID, "aa", "attack all")
+	_ = cache.SetPlayerAlias(playerID, "aa", "attack all")
 
 	// Register a command
 	_ = registry.Register(CommandEntry{Name: "look", Source: "core"})

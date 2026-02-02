@@ -60,6 +60,14 @@ func TestErrRateLimited(t *testing.T) {
 	assert.Equal(t, int64(1000), oopsErr.Context()["cooldown_ms"])
 }
 
+func TestErrCircularAlias(t *testing.T) {
+	err := ErrCircularAlias("loop")
+	oopsErr, _ := oops.AsOops(err)
+	assert.Equal(t, "CIRCULAR_ALIAS", oopsErr.Code())
+	assert.Equal(t, "loop", oopsErr.Context()["alias"])
+	assert.Contains(t, err.Error(), "circular reference detected")
+}
+
 func TestPlayerMessage(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -90,6 +98,11 @@ func TestPlayerMessage(t *testing.T) {
 			name:     "rate limited",
 			err:      ErrRateLimited(1000),
 			expected: "Too many commands. Please slow down.",
+		},
+		{
+			name:     "circular alias",
+			err:      ErrCircularAlias("loop"),
+			expected: "Alias rejected: circular reference detected (expansion depth exceeded)",
 		},
 		{
 			name:     "generic error",

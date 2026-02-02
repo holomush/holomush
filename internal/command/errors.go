@@ -14,6 +14,7 @@ const (
 	CodeInvalidArgs      = "INVALID_ARGS"
 	CodeWorldError       = "WORLD_ERROR"
 	CodeRateLimited      = "RATE_LIMITED"
+	CodeCircularAlias    = "CIRCULAR_ALIAS"
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
@@ -55,6 +56,13 @@ func ErrRateLimited(cooldownMs int64) error {
 		Errorf("Too many commands. Please slow down.")
 }
 
+// ErrCircularAlias creates an error for circular alias detection.
+func ErrCircularAlias(alias string) error {
+	return oops.Code(CodeCircularAlias).
+		With("alias", alias).
+		Errorf("Alias rejected: circular reference detected (expansion depth exceeded)")
+}
+
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
 	if err == nil {
@@ -82,6 +90,8 @@ func PlayerMessage(err error) string {
 		return "Something went wrong. Try again."
 	case CodeRateLimited:
 		return "Too many commands. Please slow down."
+	case CodeCircularAlias:
+		return "Alias rejected: circular reference detected (expansion depth exceeded)"
 	default:
 		return "Something went wrong. Try again."
 	}
