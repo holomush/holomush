@@ -103,11 +103,15 @@ Implementation: `internal/auth/hasher.go:30-36`
 
 Progressive rate limiting protects against brute-force attacks:
 
-| Failures | Action                         |
-| -------- | ------------------------------ |
-| 1-3      | Progressive delay (1s, 2s, 4s) |
-| 4-6      | CAPTCHA required (web only)    |
-| 7+       | 15-minute lockout              |
+| Failures | Delay | CAPTCHA (web only) |
+| -------- | ----- | ------------------ |
+| 1        | 1s    | No                 |
+| 2        | 2s    | No                 |
+| 3        | 4s    | No                 |
+| 4        | 8s    | Yes                |
+| 5        | 16s   | Yes                |
+| 6        | 32s   | Yes                |
+| 7+       | N/A   | 15-minute lockout  |
 
 Implementation: `internal/auth/ratelimit.go`
 

@@ -131,13 +131,13 @@ regardless of where (or if) the inputs differ.
 
 These patterns MUST be maintained in the following locations:
 
-| Location                         | Pattern                                     |
-| -------------------------------- | ------------------------------------------- |
-| `auth_service.go:67-76`          | Dummy hash constant and documentation       |
-| `auth_service.go:84-101`         | Dummy hash selection for non-existent users |
-| `auth_service.go:132-141`        | Lockout check after password verification   |
-| `session.go:115-125`             | Constant-time token hash comparison         |
-| `hasher.go:139`                  | Constant-time password hash comparison      |
+| Location                  | Pattern                                     |
+| ------------------------- | ------------------------------------------- |
+| `auth_service.go:67-76`   | Dummy hash constant and documentation       |
+| `auth_service.go:84-101`  | Dummy hash selection for non-existent users |
+| `auth_service.go:132-141` | Lockout check after password verification   |
+| `session.go:115-125`      | Constant-time token hash comparison         |
+| `hasher.go:139`           | Constant-time password hash comparison      |
 
 ## Consequences
 
@@ -189,7 +189,7 @@ This attack is harder but still exploitable, especially for session tokens.
 ### Neutral
 
 - Performance impact is negligible for legitimate traffic
-- Rate limiting (see ADR 0003) mitigates DoS concerns
+- Rate limiting mitigates DoS concerns (see `internal/auth/ratelimit.go`)
 - Code review should verify parameter consistency
 
 ## References

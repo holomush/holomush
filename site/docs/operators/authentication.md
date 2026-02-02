@@ -55,11 +55,15 @@ This prevents attackers from enumerating valid usernames by measuring response t
 
 Rate limiting is per-username and protects against brute-force attacks:
 
-| Failed Attempts | Response                            |
-| --------------- | ----------------------------------- |
-| 1-3             | Progressive delay (1s, 2s, 4s)      |
-| 4-6             | CAPTCHA required (web clients only) |
-| 7+              | 15-minute account lockout           |
+| Failed Attempts | Delay | CAPTCHA (web only) |
+| --------------- | ----- | ------------------ |
+| 1               | 1s    | No                 |
+| 2               | 2s    | No                 |
+| 3               | 4s    | No                 |
+| 4               | 8s    | Yes                |
+| 5               | 16s   | Yes                |
+| 6               | 32s   | Yes                |
+| 7+              | N/A   | 15-minute lockout  |
 
 ### Lockout Recovery
 

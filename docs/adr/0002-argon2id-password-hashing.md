@@ -38,13 +38,13 @@ algorithms exist, each with different security properties:
 
 We chose **argon2id** with the following parameters:
 
-| Parameter   | Value    | Purpose                          |
-| ----------- | -------- | -------------------------------- |
-| Time        | 1        | Number of iterations             |
-| Memory      | 64 MB    | Working memory per hash          |
-| Parallelism | 4        | Threads for computation          |
-| Salt        | 16 bytes | Random salt per password         |
-| Output      | 32 bytes | Final hash length (256 bits)     |
+| Parameter   | Value    | Purpose                      |
+| ----------- | -------- | ---------------------------- |
+| Time        | 1        | Number of iterations         |
+| Memory      | 64 MB    | Working memory per hash      |
+| Parallelism | 4        | Threads for computation      |
+| Salt        | 16 bytes | Random salt per password     |
+| Output      | 32 bytes | Final hash length (256 bits) |
 
 Hashes are stored in PHC string format:
 
