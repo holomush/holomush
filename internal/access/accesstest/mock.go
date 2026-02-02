@@ -42,9 +42,38 @@ func (r *MapResolver) CharactersAt(_ context.Context, locationID string) ([]stri
 	return r.Characters[locationID], nil
 }
 
+// MockAccessControl is an AccessControl for testing with selective grants.
+type MockAccessControl struct {
+	grants map[string]map[string]bool // subject -> "action:resource" -> allowed
+}
+
+// NewMockAccessControl creates a new MockAccessControl.
+func NewMockAccessControl() *MockAccessControl {
+	return &MockAccessControl{
+		grants: make(map[string]map[string]bool),
+	}
+}
+
+// Grant allows a subject to perform an action on a resource.
+func (m *MockAccessControl) Grant(subject, action, resource string) {
+	if m.grants[subject] == nil {
+		m.grants[subject] = make(map[string]bool)
+	}
+	m.grants[subject][action+":"+resource] = true
+}
+
+// Check implements AccessControl.
+func (m *MockAccessControl) Check(_ context.Context, subject, action, resource string) bool {
+	if caps, ok := m.grants[subject]; ok {
+		return caps[action+":"+resource]
+	}
+	return false
+}
+
 // Verify interfaces are satisfied.
 var (
 	_ access.AccessControl    = AllowAll{}
 	_ access.AccessControl    = DenyAll{}
+	_ access.AccessControl    = (*MockAccessControl)(nil)
 	_ access.LocationResolver = (*MapResolver)(nil)
 )
