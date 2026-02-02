@@ -188,13 +188,17 @@ CREATE TABLE player_aliases (
 Aliases expand to full command strings, then re-parse. Example: `l` → `look` → parsed
 as command `look` with no args.
 
-### Alias Validation
+### Validation
 
-Aliases MUST match the pattern `^[a-z][a-z0-9]{0,31}$`:
+**Command names** may contain: `[a-zA-Z0-9_!?@#$%^+-]+` (any single word, max 20 chars)
 
-- Lowercase letters and digits only
-- Must start with a letter
-- Maximum 32 characters
+**Player aliases** MUST match: `^[a-zA-Z0-9][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
+
+- Must start with alphanumeric
+- May contain special characters after first char
+- Maximum 20 characters
+
+**System aliases** follow the same pattern as player aliases.
 
 Alias creation MUST detect and reject circular alias chains. The resolver tracks
 expansion depth and fails if it exceeds 10 expansions (indicating a cycle or
@@ -348,6 +352,38 @@ All command executions logged with:
 - Character ID, command name, success/failure
 - Error details (full context) on failure
 - Player input at DEBUG level only (privacy)
+
+### Observability (OpenTelemetry)
+
+Command execution integrates with the existing OTel infrastructure from Epic 1:
+
+**Tracing**: Each command execution creates a span:
+
+```go
+ctx, span := tracer.Start(ctx, "command.execute",
+    trace.WithAttributes(
+        attribute.String("command.name", cmdName),
+        attribute.String("command.source", entry.Source),
+        attribute.String("character.id", exec.CharacterID.String()),
+    ),
+)
+defer span.End()
+```
+
+**Baggage**: Command context propagates via OTel baggage:
+
+- `command.name` - for downstream correlation
+- `session.id` - links to session traces
+- `character.id` - links to world model operations
+
+**Metrics**: Command dispatcher exports:
+
+- `holomush.command.executions` (counter) - by command name, source, status
+- `holomush.command.duration` (histogram) - execution latency by command
+- `holomush.alias.expansions` (counter) - alias usage patterns
+
+Lua plugin command execution inherits the parent span context, allowing traces
+to flow through Go → Lua → host function calls.
 
 ---
 
