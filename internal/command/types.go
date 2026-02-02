@@ -45,6 +45,11 @@ type CommandExecution struct {
 	Args          string
 	Output        io.Writer
 	Services      *Services
+	// InvokedAs is the original command name as typed by the user, before alias
+	// resolution. For example, if "say'" is an alias for "say", InvokedAs will
+	// be "say'" while the handler is for "say". Plugins can use this to detect
+	// which variant was invoked.
+	InvokedAs string
 }
 
 // Services provides access to core services for command handlers.

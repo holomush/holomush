@@ -162,46 +162,84 @@ func (c *AliasCache) ClearPlayer(playerID ulid.ULID) {
 	delete(c.playerAliases, playerID)
 }
 
+// AliasResult contains the result of alias resolution.
+type AliasResult struct {
+	Resolved   string // The resolved command string
+	WasAlias   bool   // Whether an alias was expanded
+	AliasUsed  string // The alias that was matched (empty if no alias)
+}
+
 // Resolve expands an input string through alias resolution.
 // Resolution order:
 // 1. Check if input matches a registered command name → return unchanged
 // 2. Check player aliases for the given playerID
 // 3. Check system aliases
-// 4. No match → return original input unchanged
+// 4. Check single-character prefix aliases (e.g., ":" or ";" for poses)
+// 5. No match → return original input unchanged
 //
-// Returns the resolved string and whether an alias was expanded.
-func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registry) (resolved string, wasAlias bool) {
+// Returns the resolved string, whether an alias was expanded, and which alias was used.
+func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registry) AliasResult {
 	if input == "" {
-		return input, false
+		return AliasResult{Resolved: input}
 	}
 
 	// Extract the first word (command) and any remaining args
 	firstWord, args := splitFirstWord(input)
 	if firstWord == "" {
-		return input, false
+		return AliasResult{Resolved: input}
 	}
 
 	// Step 1: Check if first word is a registered command
 	if registry != nil {
 		if _, ok := registry.Get(firstWord); ok {
-			return input, false
+			return AliasResult{Resolved: input}
 		}
 	}
 
 	// Resolve with depth tracking to prevent circular aliases
 	c.mu.RLock()
 	resolvedCmd, expanded := c.resolveWithDepth(playerID, firstWord, 0)
+
+	// If first word didn't match, check for single-character prefix aliases.
+	// This handles MUSH-style shortcuts like ":waves" or ";'s eyes widen"
+	// where the alias is a single character attached to the text.
+	if !expanded && len(firstWord) > 1 {
+		prefix := firstWord[:1]
+		// Check player prefix aliases first
+		if playerAliases, ok := c.playerAliases[playerID]; ok {
+			if prefixCmd, ok := playerAliases[prefix]; ok {
+				rest := firstWord[1:]
+				c.mu.RUnlock()
+				resolved := prefixCmd + " " + rest
+				if args != "" {
+					resolved = prefixCmd + " " + rest + " " + args
+				}
+				return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: prefix}
+			}
+		}
+		// Check system prefix aliases
+		if prefixCmd, ok := c.systemAliases[prefix]; ok {
+			rest := firstWord[1:]
+			c.mu.RUnlock()
+			resolved := prefixCmd + " " + rest
+			if args != "" {
+				resolved = prefixCmd + " " + rest + " " + args
+			}
+			return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: prefix}
+		}
+	}
 	c.mu.RUnlock()
 
 	if !expanded {
-		return input, false
+		return AliasResult{Resolved: input}
 	}
 
 	// Reassemble with original args
+	resolved := resolvedCmd
 	if args != "" {
-		return resolvedCmd + " " + args, true
+		resolved = resolvedCmd + " " + args
 	}
-	return resolvedCmd, true
+	return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: firstWord}
 }
 
 // resolveWithDepth performs alias resolution with depth tracking.

@@ -161,7 +161,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 
 	Describe("Say Command Event Handling", func() {
 		Context("when receiving say command event", func() {
-			It("emits say event to location stream", func() {
+			It("emits say event to location stream with double quotes by default", func() {
 				ctx := context.Background()
 				event := pluginpkg.Event{
 					ID:        "01ABC",
@@ -182,6 +182,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(emits[0].Payload).To(ContainSubstring(`"speaker":"Alice"`))
 			})
 		})
+
 
 		Context("when say command has empty message", func() {
 			It("returns no events", func() {
@@ -205,7 +206,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 
 	Describe("Pose Command Event Handling", func() {
 		Context("when receiving pose command event", func() {
-			It("emits pose event with character name prepended", func() {
+			It("emits pose event with character name and space prepended", func() {
 				ctx := context.Background()
 				event := pluginpkg.Event{
 					ID:        "01GHI",
@@ -224,6 +225,48 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(emits[0].Type).To(Equal(pluginpkg.EventTypePose))
 				Expect(emits[0].Payload).To(ContainSubstring(`Bob waves hello.`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"actor":"Bob"`))
+			})
+		})
+
+		Context("when pose command uses : variant", func() {
+			It("includes space before action (same as regular pose)", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01GHI1",
+					Stream:    "char:char123",
+					Type:      pluginpkg.EventType("command"),
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char123",
+					Payload:   `{"name":"pose","args":":smiles warmly.","character_name":"Bob","location_id":"loc456"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+				// : variant should still include space (same as regular pose)
+				Expect(emits[0].Payload).To(ContainSubstring(`Bob smiles warmly.`))
+			})
+		})
+
+		Context("when pose command uses ; variant (no-space/possessive)", func() {
+			It("omits space before action for possessives", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01GHI2A",
+					Stream:    "char:char123",
+					Type:      pluginpkg.EventType("command"),
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char123",
+					Payload:   `{"name":"pose","args":";'s eyes widen.","character_name":"Bob","location_id":"loc456"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+				// ; variant should NOT include space (for possessives like 's)
+				Expect(emits[0].Payload).To(ContainSubstring(`Bob's eyes widen.`))
 			})
 		})
 

@@ -575,3 +575,60 @@ func TestDispatcher_NoCharacter(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, CodeNoCharacter, oopsErr.Code())
 }
+
+func TestDispatcher_InvokedAs(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	// Register a test command that captures InvokedAs
+	var capturedInvokedAs string
+	err := reg.Register(CommandEntry{
+		Name:         "pose",
+		Capabilities: []string{"comms.pose"},
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedInvokedAs = exec.InvokedAs
+			return nil
+		},
+		Source: "test",
+	})
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	playerID := ulid.Make()
+	mockAccess.Grant("char:"+charID.String(), "execute", "comms.pose")
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	t.Run("direct command sets InvokedAs to command name", func(t *testing.T) {
+		capturedInvokedAs = ""
+		exec := &CommandExecution{
+			CharacterID: charID,
+			PlayerID:    playerID,
+			Output:      &bytes.Buffer{},
+		}
+
+		err := dispatcher.Dispatch(context.Background(), "pose waves", exec)
+		require.NoError(t, err)
+		assert.Equal(t, "pose", capturedInvokedAs)
+	})
+
+	t.Run("alias preserves original invoked name", func(t *testing.T) {
+		// Set up alias cache with ; -> pose (for possessive poses like ";'s eyes widen")
+		cache := NewAliasCache()
+		cache.LoadSystemAliases(map[string]string{
+			";": "pose",
+		})
+		dispatcher.SetAliasCache(cache)
+
+		capturedInvokedAs = ""
+		exec := &CommandExecution{
+			CharacterID: charID,
+			PlayerID:    playerID,
+			Output:      &bytes.Buffer{},
+		}
+
+		err := dispatcher.Dispatch(context.Background(), ";'s eyes widen", exec)
+		require.NoError(t, err)
+		assert.Equal(t, ";", capturedInvokedAs, "InvokedAs should be the original command before alias resolution")
+	})
+}

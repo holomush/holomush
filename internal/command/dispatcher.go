@@ -45,11 +45,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		return ErrNoCharacter()
 	}
 
+	// Parse original input to capture the invoked command name before alias resolution
+	originalParsed, err := Parse(input)
+	if err != nil {
+		return err
+	}
+	invokedAs := originalParsed.Name
+
 	// Resolve aliases if cache is configured
 	resolvedInput := input
-	wasAlias := false
+	aliasResult := AliasResult{}
 	if d.aliasCache != nil {
-		resolvedInput, wasAlias = d.aliasCache.Resolve(exec.PlayerID, input, d.registry)
+		aliasResult = d.aliasCache.Resolve(exec.PlayerID, input, d.registry)
+		resolvedInput = aliasResult.Resolved
+		// If an alias was used, set InvokedAs to the actual alias (not the parsed word)
+		if aliasResult.WasAlias && aliasResult.AliasUsed != "" {
+			invokedAs = aliasResult.AliasUsed
+		}
 	}
 
 	// Parse resolved input
@@ -74,9 +86,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}()
 
 	// Add alias attribute to span if alias was expanded
-	if wasAlias {
+	if aliasResult.WasAlias {
 		span.SetAttributes(attribute.Bool("command.alias_expanded", true))
 		span.SetAttributes(attribute.String("command.original_input", input))
+		span.SetAttributes(attribute.String("command.alias_used", aliasResult.AliasUsed))
 	}
 
 	// Look up command
@@ -99,6 +112,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Execute
 	exec.Args = parsed.Args
+	exec.InvokedAs = invokedAs
 	err = entry.Handler(ctx, exec)
 	return err
 }

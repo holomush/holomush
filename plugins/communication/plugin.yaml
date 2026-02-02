@@ -24,8 +24,8 @@ commands:
 
       ### Examples
 
-      - `say Hello everyone!` - Says "Hello everyone!" to the room
-      - `say How are you?` - Says "How are you?" to the room
+      - `say Hello everyone!` - Shows: CharacterName says, "Hello everyone!"
+      - `say How are you?` - Shows: CharacterName says, "How are you?"
 
   - name: pose
     capabilities:
@@ -39,10 +39,19 @@ commands:
 
       Your character name is prepended to the action.
 
+      ### Variants
+
+      - `pose waves` or `:waves` - Shows "CharacterName waves" (space before action)
+      - `;'s eyes widen` - Shows "CharacterName's eyes widen" (no space, for possessives)
+
+      The `:` and `;` shortcuts are aliases. Use `;` when your action starts with
+      a possessive ('s) or other text that should connect directly to your name.
+
       ### Examples
 
       - `pose waves hello.` - Shows "CharacterName waves hello."
-      - `pose looks around curiously.` - Shows "CharacterName looks around curiously."
+      - `:looks around curiously.` - Shows "CharacterName looks around curiously."
+      - `;'s jaw drops.` - Shows "CharacterName's jaw drops."
 
   - name: emit
     capabilities:
