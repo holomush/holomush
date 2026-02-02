@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // Session represents a character's ongoing presence in the game.
@@ -135,4 +136,20 @@ func (sm *SessionManager) GetConnections(charID ulid.ULID) []ulid.ULID {
 	result := make([]ulid.ULID, len(session.Connections))
 	copy(result, session.Connections)
 	return result
+}
+
+// EndSession completely removes a character's session from the manager.
+// Returns an error if the session does not exist.
+func (sm *SessionManager) EndSession(charID ulid.ULID) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if _, exists := sm.sessions[charID]; !exists {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("char_id", charID.String()).
+			Errorf("session not found for character %s", charID.String())
+	}
+
+	delete(sm.sessions, charID)
+	return nil
 }

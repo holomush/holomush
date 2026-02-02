@@ -6,6 +6,7 @@ package core
 import (
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -163,4 +164,59 @@ func TestSessionManager_GetConnections_NonExistent(t *testing.T) {
 
 	conns := sm.GetConnections(charID)
 	assert.Nil(t, conns, "Expected nil for non-existent session")
+}
+
+func TestSessionManager_EndSession(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	connID := NewULID()
+
+	// Create session
+	sm.Connect(charID, connID)
+	require.NotNil(t, sm.GetSession(charID), "Session should exist before EndSession")
+
+	// End session
+	err := sm.EndSession(charID)
+	require.NoError(t, err)
+
+	// Verify session is gone
+	assert.Nil(t, sm.GetSession(charID), "Session should not exist after EndSession")
+}
+
+func TestSessionManager_EndSession_NonExistent(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+
+	// End non-existent session should return error
+	err := sm.EndSession(charID)
+	require.Error(t, err)
+
+	// Verify error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "Expected oops error")
+	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code())
+}
+
+func TestSessionManager_EndSession_MultipleConnections(t *testing.T) {
+	sm := NewSessionManager()
+
+	charID := NewULID()
+	conn1 := NewULID()
+	conn2 := NewULID()
+
+	// Create session with multiple connections
+	sm.Connect(charID, conn1)
+	sm.Connect(charID, conn2)
+	session := sm.GetSession(charID)
+	require.Len(t, session.Connections, 2, "Should have 2 connections before EndSession")
+
+	// End session
+	err := sm.EndSession(charID)
+	require.NoError(t, err)
+
+	// Verify session is completely gone
+	assert.Nil(t, sm.GetSession(charID), "Session should not exist after EndSession")
+	assert.Nil(t, sm.GetConnections(charID), "Connections should not exist after EndSession")
 }
