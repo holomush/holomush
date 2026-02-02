@@ -873,7 +873,7 @@ lua-plugin:
   entry: main.lua
 `,
 			wantErr:    true,
-			wantErrMsg: "command name is required",
+			wantErrMsg: "cannot be empty",
 		},
 		{
 			name: "command missing name is invalid",
@@ -887,7 +887,7 @@ lua-plugin:
   entry: main.lua
 `,
 			wantErr:    true,
-			wantErrMsg: "command name is required",
+			wantErrMsg: "cannot be empty",
 		},
 	}
 
@@ -1003,7 +1003,43 @@ func TestCommandSpec_Validate(t *testing.T) {
 				Help: "Some help",
 			},
 			wantErr: true,
-			errMsg:  "command name is required",
+			errMsg:  "cannot be empty",
+		},
+		{
+			name: "whitespace-only name",
+			cmd: plugin.CommandSpec{
+				Name: "   ",
+				Help: "Some help",
+			},
+			wantErr: true,
+			errMsg:  "cannot be empty",
+		},
+		{
+			name: "name too long",
+			cmd: plugin.CommandSpec{
+				Name: "thisisaverylongcommandname",
+				Help: "Some help",
+			},
+			wantErr: true,
+			errMsg:  "exceeds maximum length",
+		},
+		{
+			name: "name starts with number",
+			cmd: plugin.CommandSpec{
+				Name: "1say",
+				Help: "Some help",
+			},
+			wantErr: true,
+			errMsg:  "must start with a letter",
+		},
+		{
+			name: "name with invalid characters",
+			cmd: plugin.CommandSpec{
+				Name: "say*command",
+				Help: "Some help",
+			},
+			wantErr: true,
+			errMsg:  "must start with a letter",
 		},
 		{
 			name: "both helpText and helpFile",
@@ -1020,6 +1056,79 @@ func TestCommandSpec_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.cmd.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestManifest_Validate_DuplicateCommandNames(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "duplicate command names",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    help: First say command
+  - name: pose
+    help: Pose command
+  - name: say
+    help: Duplicate say command
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: true,
+			errMsg:  "duplicate command name",
+		},
+		{
+			name: "unique command names",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    help: Say command
+  - name: pose
+    help: Pose command
+  - name: ooc
+    help: OOC command
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+		},
+		{
+			name: "single command",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    help: Say command
+lua-plugin:
+  entry: main.lua
+`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := plugin.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)

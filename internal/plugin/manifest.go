@@ -10,6 +10,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/samber/oops"
 	"gopkg.in/yaml.v3"
+
+	"github.com/holomush/holomush/internal/command"
 )
 
 // Type identifies the plugin runtime.
@@ -72,8 +74,8 @@ type CommandSpec struct {
 
 // Validate checks command spec constraints.
 func (c *CommandSpec) Validate() error {
-	if c.Name == "" {
-		return oops.In("command").New("command name is required")
+	if err := command.ValidateCommandName(c.Name); err != nil {
+		return oops.In("command").Wrap(err)
 	}
 
 	if c.HelpText != "" && c.HelpFile != "" {
@@ -158,11 +160,16 @@ func (m *Manifest) Validate() error {
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua' or 'binary'")
 	}
 
-	// Validate commands
+	// Validate commands and check for duplicates
+	seenCommands := make(map[string]bool)
 	for i := range m.Commands {
 		if err := m.Commands[i].Validate(); err != nil {
 			return oops.In("manifest").With("plugin", m.Name).With("command_index", i).Wrap(err)
 		}
+		if seenCommands[m.Commands[i].Name] {
+			return oops.In("manifest").With("plugin", m.Name).With("command", m.Commands[i].Name).New("duplicate command name")
+		}
+		seenCommands[m.Commands[i].Name] = true
 	}
 
 	return nil
