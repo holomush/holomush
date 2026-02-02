@@ -5,6 +5,7 @@ package telnet
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -53,15 +54,50 @@ type AuthHandler struct {
 	authService AuthService
 	regService  RegistrationService
 	charLister  CharacterLister
+	logger      *slog.Logger
 }
 
-// NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(authService AuthService, regService RegistrationService, charLister CharacterLister) *AuthHandler {
+// NewAuthHandler creates a new AuthHandler with a no-op logger.
+// Returns an error if any required dependency is nil.
+func NewAuthHandler(authService AuthService, regService RegistrationService, charLister CharacterLister) (*AuthHandler, error) {
+	if authService == nil {
+		return nil, oops.Errorf("auth service is required")
+	}
+	if regService == nil {
+		return nil, oops.Errorf("registration service is required")
+	}
+	if charLister == nil {
+		return nil, oops.Errorf("character lister is required")
+	}
 	return &AuthHandler{
 		authService: authService,
 		regService:  regService,
 		charLister:  charLister,
+		logger:      slog.New(slog.DiscardHandler),
+	}, nil
+}
+
+// NewAuthHandlerWithLogger creates a new AuthHandler with the provided logger.
+// Returns an error if any required dependency is nil.
+func NewAuthHandlerWithLogger(authService AuthService, regService RegistrationService, charLister CharacterLister, logger *slog.Logger) (*AuthHandler, error) {
+	if authService == nil {
+		return nil, oops.Errorf("auth service is required")
 	}
+	if regService == nil {
+		return nil, oops.Errorf("registration service is required")
+	}
+	if charLister == nil {
+		return nil, oops.Errorf("character lister is required")
+	}
+	if logger == nil {
+		return nil, oops.Errorf("logger is required")
+	}
+	return &AuthHandler{
+		authService: authService,
+		regService:  regService,
+		charLister:  charLister,
+		logger:      logger,
+	}, nil
 }
 
 // ConnectResult contains the result of a connect command.
@@ -218,7 +254,14 @@ type QuitResult struct {
 func (h *AuthHandler) HandleQuit(ctx context.Context, sessionID *ulid.ULID) QuitResult {
 	if sessionID != nil {
 		// Best effort logout - the user is disconnecting regardless of logout success
-		_ = h.authService.Logout(ctx, *sessionID) //nolint:errcheck // Best effort, quit succeeds regardless
+		if err := h.authService.Logout(ctx, *sessionID); err != nil {
+			h.logger.Warn("best-effort logout failed",
+				"event", "logout_failed",
+				"session_id", sessionID.String(),
+				"operation", "logout",
+				"error", err.Error(),
+			)
+		}
 	}
 
 	return QuitResult{

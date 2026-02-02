@@ -15,76 +15,60 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// mockWebSessionRepository is a mock for auth.WebSessionRepository.
-type mockWebSessionRepository struct {
-	mock.Mock
-}
-
-func (m *mockWebSessionRepository) Create(ctx context.Context, session *auth.WebSession) error {
-	args := m.Called(ctx, session)
-	return args.Error(0)
-}
-
-func (m *mockWebSessionRepository) GetByID(ctx context.Context, id ulid.ULID) (*auth.WebSession, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func TestNewAuthService_NilDependencies(t *testing.T) {
+	tests := []struct {
+		name        string
+		players     auth.PlayerRepository
+		sessions    auth.WebSessionRepository
+		hasher      auth.PasswordHasher
+		expectError string
+	}{
+		{
+			name:        "nil players repository",
+			players:     nil,
+			sessions:    mocks.NewMockWebSessionRepository(t),
+			hasher:      mocks.NewMockPasswordHasher(t),
+			expectError: "players repository is required",
+		},
+		{
+			name:        "nil sessions repository",
+			players:     mocks.NewMockPlayerRepository(t),
+			sessions:    nil,
+			hasher:      mocks.NewMockPasswordHasher(t),
+			expectError: "sessions repository is required",
+		},
+		{
+			name:        "nil password hasher",
+			players:     mocks.NewMockPlayerRepository(t),
+			sessions:    mocks.NewMockWebSessionRepository(t),
+			hasher:      nil,
+			expectError: "password hasher is required",
+		},
 	}
-	return args.Get(0).(*auth.WebSession), args.Error(1)
-}
 
-func (m *mockWebSessionRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*auth.WebSession, error) {
-	args := m.Called(ctx, tokenHash)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, err := auth.NewAuthService(tt.players, tt.sessions, tt.hasher)
+			require.Error(t, err)
+			assert.Nil(t, svc)
+			assert.Contains(t, err.Error(), tt.expectError)
+		})
 	}
-	return args.Get(0).(*auth.WebSession), args.Error(1)
-}
-
-func (m *mockWebSessionRepository) GetByPlayer(ctx context.Context, playerID ulid.ULID) ([]*auth.WebSession, error) {
-	args := m.Called(ctx, playerID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*auth.WebSession), args.Error(1)
-}
-
-func (m *mockWebSessionRepository) UpdateLastSeen(ctx context.Context, id ulid.ULID, lastSeen time.Time) error {
-	args := m.Called(ctx, id, lastSeen)
-	return args.Error(0)
-}
-
-func (m *mockWebSessionRepository) UpdateCharacter(ctx context.Context, id, characterID ulid.ULID) error {
-	args := m.Called(ctx, id, characterID)
-	return args.Error(0)
-}
-
-func (m *mockWebSessionRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *mockWebSessionRepository) DeleteByPlayer(ctx context.Context, playerID ulid.ULID) error {
-	args := m.Called(ctx, playerID)
-	return args.Error(0)
-}
-
-func (m *mockWebSessionRepository) DeleteExpired(ctx context.Context) (int64, error) {
-	args := m.Called(ctx)
-	return args.Get(0).(int64), args.Error(1)
 }
 
 func TestAuthService_Login(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful login creates session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -107,17 +91,14 @@ func TestAuthService_Login(t *testing.T) {
 		assert.NotEmpty(t, token)
 		assert.Equal(t, playerID, session.PlayerID)
 		assert.Len(t, token, 64) // 32 bytes hex-encoded
-
-		playerRepo.AssertExpectations(t)
-		sessionRepo.AssertExpectations(t)
-		hasher.AssertExpectations(t)
 	})
 
 	t.Run("login fails for non-existent user with constant time", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerRepo.On("GetByUsername", ctx, "unknown").Return(nil, auth.ErrNotFound)
 		// Verify is still called with dummy hash to prevent timing attacks
@@ -128,16 +109,14 @@ func TestAuthService_Login(t *testing.T) {
 		assert.Nil(t, session)
 		assert.Empty(t, token)
 		errutil.AssertErrorCode(t, err, "AUTH_INVALID_CREDENTIALS")
-
-		playerRepo.AssertExpectations(t)
-		hasher.AssertExpectations(t)
 	})
 
 	t.Run("login fails for wrong password", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -157,15 +136,14 @@ func TestAuthService_Login(t *testing.T) {
 		assert.Nil(t, session)
 		assert.Empty(t, token)
 		errutil.AssertErrorCode(t, err, "AUTH_INVALID_CREDENTIALS")
-
-		playerRepo.AssertExpectations(t)
 	})
 
 	t.Run("login fails for locked out user after password verification", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		lockedUntil := time.Now().Add(15 * time.Minute)
@@ -186,16 +164,14 @@ func TestAuthService_Login(t *testing.T) {
 		assert.Nil(t, session)
 		assert.Empty(t, token)
 		errutil.AssertErrorCode(t, err, "AUTH_ACCOUNT_LOCKED")
-
-		playerRepo.AssertExpectations(t)
-		hasher.AssertExpectations(t)
 	})
 
 	t.Run("login increments failure count on wrong password", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -212,17 +188,16 @@ func TestAuthService_Login(t *testing.T) {
 			return p.FailedAttempts == 3
 		})).Return(nil)
 
-		_, _, err := svc.Login(ctx, "testuser", "wrongpassword", "Mozilla/5.0", "192.168.1.1")
-		require.Error(t, err)
-
-		playerRepo.AssertExpectations(t)
+		_, _, loginErr := svc.Login(ctx, "testuser", "wrongpassword", "Mozilla/5.0", "192.168.1.1")
+		require.Error(t, loginErr)
 	})
 
 	t.Run("login resets failure count on success", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -245,15 +220,14 @@ func TestAuthService_Login(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, session)
 		assert.NotEmpty(t, token)
-
-		playerRepo.AssertExpectations(t)
 	})
 
 	t.Run("login triggers lockout at threshold", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -270,18 +244,17 @@ func TestAuthService_Login(t *testing.T) {
 			return p.FailedAttempts == 7 && p.LockedUntil != nil
 		})).Return(nil)
 
-		_, _, err := svc.Login(ctx, "testuser", "wrongpassword", "Mozilla/5.0", "192.168.1.1")
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "AUTH_INVALID_CREDENTIALS")
-
-		playerRepo.AssertExpectations(t)
+		_, _, loginErr := svc.Login(ctx, "testuser", "wrongpassword", "Mozilla/5.0", "192.168.1.1")
+		require.Error(t, loginErr)
+		errutil.AssertErrorCode(t, loginErr, "AUTH_INVALID_CREDENTIALS")
 	})
 
 	t.Run("upgrades password hash when needed", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		oldHash := "$bcrypt$2a$10$oldHash"
@@ -307,16 +280,14 @@ func TestAuthService_Login(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, session)
 		assert.NotEmpty(t, token)
-
-		playerRepo.AssertExpectations(t)
-		hasher.AssertExpectations(t)
 	})
 
 	t.Run("login succeeds even if password upgrade fails", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		oldHash := "$bcrypt$2a$10$oldHash"
@@ -342,16 +313,14 @@ func TestAuthService_Login(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, session)
 		assert.NotEmpty(t, token)
-
-		playerRepo.AssertExpectations(t)
-		hasher.AssertExpectations(t)
 	})
 
 	t.Run("propagates player repository errors", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerRepo.On("GetByUsername", ctx, "testuser").Return(nil, errors.New("database error"))
 
@@ -363,10 +332,11 @@ func TestAuthService_Login(t *testing.T) {
 	})
 
 	t.Run("propagates hasher verify errors", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -388,10 +358,11 @@ func TestAuthService_Login(t *testing.T) {
 	})
 
 	t.Run("propagates session create errors", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		playerID := ulid.Make()
 		player := &auth.Player{
@@ -420,46 +391,47 @@ func TestAuthService_Logout(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful logout deletes session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		sessionID := ulid.Make()
 		sessionRepo.On("Delete", ctx, sessionID).Return(nil)
 
-		err := svc.Logout(ctx, sessionID)
-		require.NoError(t, err)
-
-		sessionRepo.AssertExpectations(t)
+		logoutErr := svc.Logout(ctx, sessionID)
+		require.NoError(t, logoutErr)
 	})
 
 	t.Run("returns error for non-existent session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		sessionID := ulid.Make()
 		sessionRepo.On("Delete", ctx, sessionID).Return(auth.ErrNotFound)
 
-		err := svc.Logout(ctx, sessionID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+		logoutErr := svc.Logout(ctx, sessionID)
+		require.Error(t, logoutErr)
+		errutil.AssertErrorCode(t, logoutErr, "SESSION_NOT_FOUND")
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		sessionID := ulid.Make()
 		sessionRepo.On("Delete", ctx, sessionID).Return(errors.New("database error"))
 
-		err := svc.Logout(ctx, sessionID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "AUTH_LOGOUT_FAILED")
+		logoutErr := svc.Logout(ctx, sessionID)
+		require.Error(t, logoutErr)
+		errutil.AssertErrorCode(t, logoutErr, "AUTH_LOGOUT_FAILED")
 	})
 }
 
@@ -467,10 +439,11 @@ func TestAuthService_ValidateSession(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("validates active session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		token, tokenHash, err := auth.GenerateSessionToken()
 		require.NoError(t, err)
@@ -493,15 +466,14 @@ func TestAuthService_ValidateSession(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, session.ID, result.ID)
 		assert.Equal(t, playerID, result.PlayerID)
-
-		sessionRepo.AssertExpectations(t)
 	})
 
 	t.Run("returns error for expired session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		token, tokenHash, err := auth.GenerateSessionToken()
 		require.NoError(t, err)
@@ -526,10 +498,11 @@ func TestAuthService_ValidateSession(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		token := "nonexistent0123456789abcdef0123456789abcdef0123456789abcdef01"
 
@@ -542,10 +515,11 @@ func TestAuthService_ValidateSession(t *testing.T) {
 	})
 
 	t.Run("returns error for empty token", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		result, err := svc.ValidateSession(ctx, "")
 		require.Error(t, err)
@@ -554,10 +528,11 @@ func TestAuthService_ValidateSession(t *testing.T) {
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		token := "sometoken0123456789abcdef0123456789abcdef0123456789abcdef0123"
 
@@ -571,10 +546,11 @@ func TestAuthService_ValidateSession(t *testing.T) {
 
 	t.Run("continues if last seen update fails", func(t *testing.T) {
 		// Last seen update failure should not prevent validation from succeeding
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		token, tokenHash, err := auth.GenerateSessionToken()
 		require.NoError(t, err)
@@ -597,8 +573,6 @@ func TestAuthService_ValidateSession(t *testing.T) {
 		result, err := svc.ValidateSession(ctx, token)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
-
-		sessionRepo.AssertExpectations(t)
 	})
 }
 
@@ -606,51 +580,52 @@ func TestAuthService_SelectCharacter(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("updates session character", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		sessionID := ulid.Make()
 		characterID := ulid.Make()
 
 		sessionRepo.On("UpdateCharacter", ctx, sessionID, characterID).Return(nil)
 
-		err := svc.SelectCharacter(ctx, sessionID, characterID)
-		require.NoError(t, err)
-
-		sessionRepo.AssertExpectations(t)
+		selectErr := svc.SelectCharacter(ctx, sessionID, characterID)
+		require.NoError(t, selectErr)
 	})
 
 	t.Run("returns error for non-existent session", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		sessionID := ulid.Make()
 		characterID := ulid.Make()
 
 		sessionRepo.On("UpdateCharacter", ctx, sessionID, characterID).Return(auth.ErrNotFound)
 
-		err := svc.SelectCharacter(ctx, sessionID, characterID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+		selectErr := svc.SelectCharacter(ctx, sessionID, characterID)
+		require.Error(t, selectErr)
+		errutil.AssertErrorCode(t, selectErr, "SESSION_NOT_FOUND")
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		playerRepo := new(mockPlayerRepository)
-		sessionRepo := new(mockWebSessionRepository)
-		hasher := new(mockPasswordHasher)
-		svc := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		require.NoError(t, err)
 
 		sessionID := ulid.Make()
 		characterID := ulid.Make()
 
 		sessionRepo.On("UpdateCharacter", ctx, sessionID, characterID).Return(errors.New("database error"))
 
-		err := svc.SelectCharacter(ctx, sessionID, characterID)
-		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "SESSION_SELECT_CHAR_FAILED")
+		selectErr := svc.SelectCharacter(ctx, sessionID, characterID)
+		require.Error(t, selectErr)
+		errutil.AssertErrorCode(t, selectErr, "SESSION_SELECT_CHAR_FAILED")
 	})
 }

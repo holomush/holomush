@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -17,15 +18,50 @@ type Service struct {
 	players  PlayerRepository
 	sessions WebSessionRepository
 	hasher   PasswordHasher
+	logger   *slog.Logger
 }
 
-// NewAuthService creates a new Service.
-func NewAuthService(players PlayerRepository, sessions WebSessionRepository, hasher PasswordHasher) *Service {
+// NewAuthService creates a new Service with a no-op logger.
+// Returns an error if any required dependency is nil.
+func NewAuthService(players PlayerRepository, sessions WebSessionRepository, hasher PasswordHasher) (*Service, error) {
+	if players == nil {
+		return nil, oops.Errorf("players repository is required")
+	}
+	if sessions == nil {
+		return nil, oops.Errorf("sessions repository is required")
+	}
+	if hasher == nil {
+		return nil, oops.Errorf("password hasher is required")
+	}
 	return &Service{
 		players:  players,
 		sessions: sessions,
 		hasher:   hasher,
+		logger:   slog.New(slog.DiscardHandler),
+	}, nil
+}
+
+// NewAuthServiceWithLogger creates a new Service with the provided logger.
+// Returns an error if any required dependency is nil.
+func NewAuthServiceWithLogger(players PlayerRepository, sessions WebSessionRepository, hasher PasswordHasher, logger *slog.Logger) (*Service, error) {
+	if players == nil {
+		return nil, oops.Errorf("players repository is required")
 	}
+	if sessions == nil {
+		return nil, oops.Errorf("sessions repository is required")
+	}
+	if hasher == nil {
+		return nil, oops.Errorf("password hasher is required")
+	}
+	if logger == nil {
+		return nil, oops.Errorf("logger is required")
+	}
+	return &Service{
+		players:  players,
+		sessions: sessions,
+		hasher:   hasher,
+		logger:   logger,
+	}, nil
 }
 
 // dummyPasswordHash is used when a user doesn't exist to prevent timing attacks.
@@ -78,7 +114,14 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAd
 		if playerExists {
 			// Record failure only for existing players
 			player.RecordFailure()
-			_ = s.players.Update(ctx, player) //nolint:errcheck // Best effort
+			if err := s.players.Update(ctx, player); err != nil {
+				s.logger.Warn("best-effort player update failed",
+					"event", "player_update_failed",
+					"player_id", player.ID.String(),
+					"operation", "record_failure",
+					"error", err.Error(),
+				)
+			}
 		}
 		return nil, "", oops.Code("AUTH_INVALID_CREDENTIALS").Errorf("invalid username or password")
 	}
@@ -102,8 +145,15 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent, ipAd
 	}
 
 	// Update player with reset failure count (and possibly upgraded hash)
-	// Ignore errors - login should succeed even if update fails
-	_ = s.players.Update(ctx, player) //nolint:errcheck // Best effort, login succeeds regardless
+	// Login should succeed even if update fails
+	if err := s.players.Update(ctx, player); err != nil {
+		s.logger.Warn("best-effort player update failed",
+			"event", "player_update_failed",
+			"player_id", player.ID.String(),
+			"operation", "record_success",
+			"error", err.Error(),
+		)
+	}
 
 	// Generate session token
 	token, tokenHash, err := GenerateSessionToken()
@@ -173,9 +223,17 @@ func (s *Service) ValidateSession(ctx context.Context, token string) (*WebSessio
 		return nil, oops.Code("SESSION_EXPIRED").Errorf("session has expired")
 	}
 
-	// Update last seen timestamp (non-blocking, ignore errors)
+	// Update last seen timestamp (non-blocking)
+	// Validation succeeds even if update fails
 	now := time.Now()
-	_ = s.sessions.UpdateLastSeen(ctx, session.ID, now) //nolint:errcheck // Best effort, validation succeeds regardless
+	if err := s.sessions.UpdateLastSeen(ctx, session.ID, now); err != nil {
+		s.logger.Warn("best-effort session update failed",
+			"event", "session_update_failed",
+			"session_id", session.ID.String(),
+			"operation", "update_last_seen",
+			"error", err.Error(),
+		)
+	}
 
 	return session, nil
 }

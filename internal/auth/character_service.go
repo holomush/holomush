@@ -38,11 +38,18 @@ type CharacterService struct {
 }
 
 // NewCharacterService creates a new CharacterService.
-func NewCharacterService(charRepo CharacterRepository, locRepo LocationRepository) *CharacterService {
+// Returns an error if any required dependency is nil.
+func NewCharacterService(charRepo CharacterRepository, locRepo LocationRepository) (*CharacterService, error) {
+	if charRepo == nil {
+		return nil, oops.Errorf("character repository is required")
+	}
+	if locRepo == nil {
+		return nil, oops.Errorf("location repository is required")
+	}
 	return &CharacterService{
 		charRepo: charRepo,
 		locRepo:  locRepo,
-	}
+	}, nil
 }
 
 // Create creates a new character for a player with the default character limit.

@@ -9,10 +9,63 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+func TestNewPlayer(t *testing.T) {
+	t.Run("creates valid player with email", func(t *testing.T) {
+		email := "test@example.com"
+		player, err := auth.NewPlayer("ValidUser", &email, "$argon2id$hash")
+		require.NoError(t, err)
+		require.NotNil(t, player)
+
+		assert.NotEqual(t, ulid.ULID{}, player.ID)
+		assert.Equal(t, "ValidUser", player.Username)
+		assert.Equal(t, &email, player.Email)
+		assert.Equal(t, "$argon2id$hash", player.PasswordHash)
+		assert.False(t, player.CreatedAt.IsZero())
+		assert.False(t, player.UpdatedAt.IsZero())
+		assert.Equal(t, player.CreatedAt, player.UpdatedAt)
+	})
+
+	t.Run("creates valid player without email", func(t *testing.T) {
+		player, err := auth.NewPlayer("ValidUser", nil, "$argon2id$hash")
+		require.NoError(t, err)
+		require.NotNil(t, player)
+		assert.Nil(t, player.Email)
+	})
+
+	t.Run("rejects empty username", func(t *testing.T) {
+		player, err := auth.NewPlayer("", nil, "$argon2id$hash")
+		assert.Nil(t, player)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_USERNAME")
+	})
+
+	t.Run("rejects short username", func(t *testing.T) {
+		player, err := auth.NewPlayer("ab", nil, "$argon2id$hash")
+		assert.Nil(t, player)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_USERNAME")
+	})
+
+	t.Run("rejects empty password hash", func(t *testing.T) {
+		player, err := auth.NewPlayer("ValidUser", nil, "")
+		assert.Nil(t, player)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_PASSWORD")
+	})
+
+	t.Run("rejects whitespace-only password hash", func(t *testing.T) {
+		player, err := auth.NewPlayer("ValidUser", nil, "   \t  ")
+		assert.Nil(t, player)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_PASSWORD")
+	})
+}
 
 func TestPlayer_IsLocked(t *testing.T) {
 	t.Run("no lockout", func(t *testing.T) {

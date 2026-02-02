@@ -13,41 +13,40 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// mockCharacterRepository is a mock for auth.CharacterRepository.
-type mockCharacterRepository struct {
-	mock.Mock
-}
-
-func (m *mockCharacterRepository) Create(ctx context.Context, char *world.Character) error {
-	args := m.Called(ctx, char)
-	return args.Error(0)
-}
-
-func (m *mockCharacterRepository) ExistsByName(ctx context.Context, name string) (bool, error) {
-	args := m.Called(ctx, name)
-	return args.Bool(0), args.Error(1)
-}
-
-func (m *mockCharacterRepository) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
-	args := m.Called(ctx, playerID)
-	return args.Int(0), args.Error(1)
-}
-
-// mockLocationRepository is a mock for auth.LocationRepository.
-type mockLocationRepository struct {
-	mock.Mock
-}
-
-func (m *mockLocationRepository) GetStartingLocation(ctx context.Context) (*world.Location, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func TestNewCharacterService_NilDependencies(t *testing.T) {
+	tests := []struct {
+		name        string
+		charRepo    auth.CharacterRepository
+		locRepo     auth.LocationRepository
+		expectError string
+	}{
+		{
+			name:        "nil character repository",
+			charRepo:    nil,
+			locRepo:     mocks.NewMockLocationRepository(t),
+			expectError: "character repository is required",
+		},
+		{
+			name:        "nil location repository",
+			charRepo:    mocks.NewMockCharacterRepository(t),
+			locRepo:     nil,
+			expectError: "location repository is required",
+		},
 	}
-	return args.Get(0).(*world.Location), args.Error(1)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, err := auth.NewCharacterService(tt.charRepo, tt.locRepo)
+			require.Error(t, err)
+			assert.Nil(t, svc)
+			assert.Contains(t, err.Error(), tt.expectError)
+		})
+	}
 }
 
 func TestCharacterService_Create(t *testing.T) {
@@ -55,9 +54,10 @@ func TestCharacterService_Create(t *testing.T) {
 	playerID := ulid.Make()
 
 	t.Run("creates character with valid name", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
@@ -71,15 +71,13 @@ func TestCharacterService_Create(t *testing.T) {
 		assert.Equal(t, "Alaric", char.Name) // normalized to Initial Caps
 		assert.Equal(t, playerID, char.PlayerID)
 		assert.Equal(t, &startingLoc.ID, char.LocationID)
-
-		charRepo.AssertExpectations(t)
-		locRepo.AssertExpectations(t)
 	})
 
 	t.Run("normalizes character name", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
@@ -93,9 +91,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("rejects invalid character name", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		char, err := svc.Create(ctx, playerID, "123")
 		assert.Nil(t, char)
@@ -104,9 +103,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		char, err := svc.Create(ctx, playerID, "")
 		assert.Nil(t, char)
@@ -115,9 +115,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("rejects duplicate name case insensitive", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		// "Alaric" already exists
 		charRepo.On("ExistsByName", ctx, "Alaric").Return(true, nil)
@@ -129,9 +130,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("rejects when player at character limit", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(auth.DefaultMaxCharacters, nil)
@@ -143,9 +145,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("returns error when starting location unavailable", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, nil)
@@ -158,9 +161,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("propagates repository errors on ExistsByName", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, assert.AnError)
 
@@ -171,9 +175,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("propagates repository errors on CountByPlayer", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
 		charRepo.On("CountByPlayer", ctx, playerID).Return(0, assert.AnError)
@@ -185,9 +190,10 @@ func TestCharacterService_Create(t *testing.T) {
 	})
 
 	t.Run("propagates repository errors on Create", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)
@@ -207,9 +213,10 @@ func TestCharacterService_CreateWithMaxCharacters(t *testing.T) {
 	playerID := ulid.Make()
 
 	t.Run("respects custom max characters limit", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		// Custom limit of 3
 		charRepo.On("ExistsByName", ctx, "Alaric").Return(false, nil)
@@ -222,9 +229,10 @@ func TestCharacterService_CreateWithMaxCharacters(t *testing.T) {
 	})
 
 	t.Run("allows creation when under custom limit", func(t *testing.T) {
-		charRepo := new(mockCharacterRepository)
-		locRepo := new(mockLocationRepository)
-		svc := auth.NewCharacterService(charRepo, locRepo)
+		charRepo := mocks.NewMockCharacterRepository(t)
+		locRepo := mocks.NewMockLocationRepository(t)
+		svc, err := auth.NewCharacterService(charRepo, locRepo)
+		require.NoError(t, err)
 
 		startingLoc := &world.Location{ID: ulid.Make()}
 		locRepo.On("GetStartingLocation", ctx).Return(startingLoc, nil)

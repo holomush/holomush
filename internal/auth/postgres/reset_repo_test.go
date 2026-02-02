@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // createTestPlayer creates a player in the database for testing password resets.
@@ -65,6 +66,8 @@ func TestPasswordResetRepository_Create(t *testing.T) {
 	})
 
 	t.Run("fails on duplicate token_hash", func(t *testing.T) {
+		// This test simulates the rare birthday problem scenario where token generation
+		// produces a hash collision. The database unique constraint should reject it.
 		reset1 := &auth.PasswordReset{
 			ID:        ulid.Make(),
 			PlayerID:  playerID,
@@ -87,7 +90,8 @@ func TestPasswordResetRepository_Create(t *testing.T) {
 			CreatedAt: time.Now().UTC(),
 		}
 		err = repo.Create(ctx, reset2)
-		assert.Error(t, err)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "RESET_CREATE_FAILED")
 	})
 }
 

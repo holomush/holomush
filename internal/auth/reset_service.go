@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -17,19 +18,59 @@ type PasswordResetService struct {
 	playerRepo PlayerRepository
 	resetRepo  PasswordResetRepository
 	hasher     PasswordHasher
+	logger     *slog.Logger
 }
 
-// NewPasswordResetService creates a new PasswordResetService.
+// NewPasswordResetService creates a new PasswordResetService with a no-op logger.
+// Returns an error if any required dependency is nil.
 func NewPasswordResetService(
 	playerRepo PlayerRepository,
 	resetRepo PasswordResetRepository,
 	hasher PasswordHasher,
-) *PasswordResetService {
+) (*PasswordResetService, error) {
+	if playerRepo == nil {
+		return nil, oops.Errorf("player repository is required")
+	}
+	if resetRepo == nil {
+		return nil, oops.Errorf("reset repository is required")
+	}
+	if hasher == nil {
+		return nil, oops.Errorf("password hasher is required")
+	}
 	return &PasswordResetService{
 		playerRepo: playerRepo,
 		resetRepo:  resetRepo,
 		hasher:     hasher,
+		logger:     slog.New(slog.DiscardHandler),
+	}, nil
+}
+
+// NewPasswordResetServiceWithLogger creates a new PasswordResetService with the provided logger.
+// Returns an error if any required dependency is nil.
+func NewPasswordResetServiceWithLogger(
+	playerRepo PlayerRepository,
+	resetRepo PasswordResetRepository,
+	hasher PasswordHasher,
+	logger *slog.Logger,
+) (*PasswordResetService, error) {
+	if playerRepo == nil {
+		return nil, oops.Errorf("player repository is required")
 	}
+	if resetRepo == nil {
+		return nil, oops.Errorf("reset repository is required")
+	}
+	if hasher == nil {
+		return nil, oops.Errorf("password hasher is required")
+	}
+	if logger == nil {
+		return nil, oops.Errorf("logger is required")
+	}
+	return &PasswordResetService{
+		playerRepo: playerRepo,
+		resetRepo:  resetRepo,
+		hasher:     hasher,
+		logger:     logger,
+	}, nil
 }
 
 // RequestReset requests a password reset for a player by email.
@@ -136,9 +177,14 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 
 	// Delete all reset tokens for the player.
 	// This is cleanup - if it fails, the password was still updated successfully.
-	// The error is intentionally ignored because the main operation (password update) succeeded.
-	//nolint:errcheck // Cleanup failure is acceptable; password was already updated
-	s.resetRepo.DeleteByPlayer(ctx, playerID)
+	if err := s.resetRepo.DeleteByPlayer(ctx, playerID); err != nil {
+		s.logger.Warn("best-effort token cleanup failed",
+			"event", "token_cleanup_failed",
+			"player_id", playerID.String(),
+			"operation", "delete_tokens",
+			"error", err.Error(),
+		)
+	}
 
 	return nil
 }

@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -25,6 +26,29 @@ const (
 // - Start with a letter (a-z, A-Z)
 // - Contain only letters, numbers, and underscores
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
+
+// NewPlayer creates a new Player with validated inputs.
+// Username is validated using ValidateUsername rules.
+// Email is optional (nil allowed).
+// PasswordHash must be non-empty and non-whitespace.
+func NewPlayer(username string, email *string, passwordHash string) (*Player, error) {
+	if err := ValidateUsername(username); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(passwordHash) == "" {
+		return nil, oops.Code("AUTH_INVALID_PASSWORD").Errorf("password hash cannot be empty")
+	}
+
+	now := time.Now().UTC()
+	return &Player{
+		ID:           ulid.Make(),
+		Username:     username,
+		Email:        email,
+		PasswordHash: passwordHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, nil
+}
 
 // Player represents a player account.
 type Player struct {

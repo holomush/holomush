@@ -12,6 +12,7 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
 )
@@ -84,12 +85,54 @@ func TestNewAuthHandler(t *testing.T) {
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
 
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	assert.NotNil(t, handler)
 	assert.Equal(t, authSvc, handler.authService)
 	assert.Equal(t, regSvc, handler.regService)
 	assert.Equal(t, charLister, handler.charLister)
+}
+
+func TestNewAuthHandler_NilDependencies(t *testing.T) {
+	tests := []struct {
+		name        string
+		authService AuthService
+		regService  RegistrationService
+		charLister  CharacterLister
+		expectError string
+	}{
+		{
+			name:        "nil auth service",
+			authService: nil,
+			regService:  new(mockRegistrationService),
+			charLister:  new(mockCharacterLister),
+			expectError: "auth service is required",
+		},
+		{
+			name:        "nil registration service",
+			authService: new(mockAuthService),
+			regService:  nil,
+			charLister:  new(mockCharacterLister),
+			expectError: "registration service is required",
+		},
+		{
+			name:        "nil character lister",
+			authService: new(mockAuthService),
+			regService:  new(mockRegistrationService),
+			charLister:  nil,
+			expectError: "character lister is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, err := NewAuthHandler(tt.authService, tt.regService, tt.charLister)
+			require.Error(t, err)
+			assert.Nil(t, handler)
+			assert.Contains(t, err.Error(), tt.expectError)
+		})
+	}
 }
 
 // --- Connect command tests ---
@@ -98,7 +141,8 @@ func TestAuthHandler_HandleConnect_Success(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	playerID := ulid.Make()
@@ -133,7 +177,8 @@ func TestAuthHandler_HandleConnect_InvalidCredentials(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	authErr := oops.Code("AUTH_INVALID_CREDENTIALS").Errorf("invalid username or password")
@@ -153,7 +198,8 @@ func TestAuthHandler_HandleConnect_AccountLocked(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	authErr := oops.Code("AUTH_ACCOUNT_LOCKED").Errorf("account is temporarily locked")
@@ -173,7 +219,8 @@ func TestAuthHandler_HandleConnect_NoCharacters(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	playerID := ulid.Make()
@@ -205,7 +252,8 @@ func TestAuthHandler_HandleCreate_Success(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	playerID := ulid.Make()
@@ -232,7 +280,8 @@ func TestAuthHandler_HandleCreate_RegistrationDisabled(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -250,7 +299,8 @@ func TestAuthHandler_HandleCreate_UsernameTaken(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	regErr := oops.Code("AUTH_USERNAME_TAKEN").Errorf("username already exists")
@@ -270,7 +320,8 @@ func TestAuthHandler_HandleCreate_InvalidUsername(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	regErr := oops.Code("AUTH_INVALID_USERNAME").Errorf("invalid username")
@@ -290,7 +341,8 @@ func TestAuthHandler_HandleCreate_InvalidPassword(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	regErr := oops.Code("AUTH_INVALID_PASSWORD").Errorf("password too weak")
@@ -311,7 +363,8 @@ func TestAuthHandler_HandleConnect_CharacterListFailure(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	playerID := ulid.Make()
@@ -343,7 +396,8 @@ func TestAuthHandler_HandleConnect_GenericError(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	// Error without oops code (generic error)
@@ -364,7 +418,8 @@ func TestAuthHandler_HandleCreate_GenericError(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	// Error without specific code
@@ -385,7 +440,8 @@ func TestAuthHandler_HandlePlay_OwnershipVerificationFails(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -409,7 +465,8 @@ func TestAuthHandler_HandlePlay_SelectCharacterFails(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -437,7 +494,8 @@ func TestAuthHandler_HandlePlay_Success(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -465,7 +523,8 @@ func TestAuthHandler_HandlePlay_CharacterNotFound(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -486,7 +545,8 @@ func TestAuthHandler_HandlePlay_CharacterNotOwned(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -516,7 +576,8 @@ func TestAuthHandler_HandlePlay_CaseInsensitive(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -545,7 +606,8 @@ func TestAuthHandler_HandleQuit_WithSession(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -564,7 +626,8 @@ func TestAuthHandler_HandleQuit_WithoutSession(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -581,7 +644,8 @@ func TestAuthHandler_HandleQuit_LogoutError(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sessionID := ulid.Make()
@@ -604,7 +668,8 @@ func TestAuthHandler_PasswordsNeverLeakedInErrorMessages(t *testing.T) {
 	authSvc := new(mockAuthService)
 	regSvc := new(mockRegistrationService)
 	charLister := new(mockCharacterLister)
-	handler := NewAuthHandler(authSvc, regSvc, charLister)
+	handler, err := NewAuthHandler(authSvc, regSvc, charLister)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 	sensitivePassword := "SuperSecret123!"
