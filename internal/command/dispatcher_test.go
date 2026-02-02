@@ -294,3 +294,248 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello   world", capturedArgs)
 }
+
+func TestDispatcher_SetAliasCache(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	// Initially nil
+	assert.Nil(t, dispatcher.aliasCache)
+
+	// Set cache
+	cache := NewAliasCache()
+	dispatcher.SetAliasCache(cache)
+	assert.Equal(t, cache, dispatcher.aliasCache)
+
+	// Set to nil
+	dispatcher.SetAliasCache(nil)
+	assert.Nil(t, dispatcher.aliasCache)
+}
+
+func TestDispatcher_WithoutAliasCache(t *testing.T) {
+	// Ensure dispatcher works exactly as before when no alias cache is set
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var capturedArgs string
+	err := reg.Register(CommandEntry{
+		Name:         "look",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedArgs = exec.Args
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+	// No alias cache set
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    ulid.Make(),
+		Output:      &output,
+	}
+
+	err = dispatcher.Dispatch(context.Background(), "look here", exec)
+	require.NoError(t, err)
+	assert.Equal(t, "here", capturedArgs)
+}
+
+func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var capturedArgs string
+	err := reg.Register(CommandEntry{
+		Name:         "look",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedArgs = exec.Args
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	// Set up alias cache with some aliases that won't match
+	cache := NewAliasCache()
+	cache.LoadSystemAliases(map[string]string{
+		"l": "look",
+	})
+	dispatcher.SetAliasCache(cache)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    ulid.Make(),
+		Output:      &output,
+	}
+
+	// Input is an actual command, not an alias
+	err = dispatcher.Dispatch(context.Background(), "look here", exec)
+	require.NoError(t, err)
+	assert.Equal(t, "here", capturedArgs)
+}
+
+func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var capturedArgs string
+	err := reg.Register(CommandEntry{
+		Name:         "look",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedArgs = exec.Args
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	// Set up alias cache with system alias
+	cache := NewAliasCache()
+	cache.LoadSystemAliases(map[string]string{
+		"l": "look",
+	})
+	dispatcher.SetAliasCache(cache)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    ulid.Make(),
+		Output:      &output,
+	}
+
+	// Use alias 'l' which should expand to 'look'
+	err = dispatcher.Dispatch(context.Background(), "l around", exec)
+	require.NoError(t, err)
+	assert.Equal(t, "around", capturedArgs)
+}
+
+func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var capturedArgs string
+	err := reg.Register(CommandEntry{
+		Name:         "say",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedArgs = exec.Args
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	// Set up alias cache with player alias
+	playerID := ulid.Make()
+	cache := NewAliasCache()
+	cache.LoadPlayerAliases(playerID, map[string]string{
+		"greet": "say Hello everyone!",
+	})
+	dispatcher.SetAliasCache(cache)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    playerID,
+		Output:      &output,
+	}
+
+	// Use alias 'greet' which should expand to 'say Hello everyone!'
+	err = dispatcher.Dispatch(context.Background(), "greet", exec)
+	require.NoError(t, err)
+	assert.Equal(t, "Hello everyone!", capturedArgs)
+}
+
+func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var capturedArgs string
+	err := reg.Register(CommandEntry{
+		Name:         "say",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedArgs = exec.Args
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	playerID := ulid.Make()
+	cache := NewAliasCache()
+	// System alias
+	cache.LoadSystemAliases(map[string]string{
+		"hi": "say hello from system",
+	})
+	// Player alias with same name (should override)
+	cache.LoadPlayerAliases(playerID, map[string]string{
+		"hi": "say hello from player",
+	})
+	dispatcher.SetAliasCache(cache)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    playerID,
+		Output:      &output,
+	}
+
+	// Player alias should take precedence
+	err = dispatcher.Dispatch(context.Background(), "hi", exec)
+	require.NoError(t, err)
+	assert.Equal(t, "hello from player", capturedArgs)
+}
+
+func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var capturedArgs string
+	err := reg.Register(CommandEntry{
+		Name:         "say",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			capturedArgs = exec.Args
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	cache := NewAliasCache()
+	cache.LoadSystemAliases(map[string]string{
+		"s": "say",
+	})
+	dispatcher.SetAliasCache(cache)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    ulid.Make(),
+		Output:      &output,
+	}
+
+	// 's' expands to 'say', with extra args appended
+	err = dispatcher.Dispatch(context.Background(), "s this is my message", exec)
+	require.NoError(t, err)
+	assert.Equal(t, "this is my message", capturedArgs)
+}

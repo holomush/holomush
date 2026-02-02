@@ -18,8 +18,9 @@ var tracer = otel.Tracer("holomush/command")
 
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
-	registry *Registry
-	access   access.AccessControl
+	registry   *Registry
+	access     access.AccessControl
+	aliasCache *AliasCache // optional, can be nil
 }
 
 // NewDispatcher creates a new command dispatcher.
@@ -30,10 +31,23 @@ func NewDispatcher(registry *Registry, ac access.AccessControl) *Dispatcher {
 	}
 }
 
+// SetAliasCache configures the dispatcher to resolve aliases.
+// If nil, alias resolution is disabled.
+func (d *Dispatcher) SetAliasCache(cache *AliasCache) {
+	d.aliasCache = cache
+}
+
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
-	// Parse input
-	parsed, err := Parse(input)
+	// Resolve aliases if cache is configured
+	resolvedInput := input
+	wasAlias := false
+	if d.aliasCache != nil {
+		resolvedInput, wasAlias = d.aliasCache.Resolve(exec.PlayerID, input, d.registry)
+	}
+
+	// Parse resolved input
+	parsed, err := Parse(resolvedInput)
 	if err != nil {
 		return err
 	}
@@ -52,6 +66,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		}
 		span.End()
 	}()
+
+	// Add alias attribute to span if alias was expanded
+	if wasAlias {
+		span.SetAttributes(attribute.Bool("command.alias_expanded", true))
+		span.SetAttributes(attribute.String("command.original_input", input))
+	}
 
 	// Look up command
 	entry, ok := d.registry.Get(parsed.Name)
