@@ -15,6 +15,7 @@ const (
 	CodeWorldError       = "WORLD_ERROR"
 	CodeRateLimited      = "RATE_LIMITED"
 	CodeCircularAlias    = "CIRCULAR_ALIAS"
+	CodeNoCharacter      = "NO_CHARACTER"
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
@@ -63,6 +64,12 @@ func ErrCircularAlias(alias string) error {
 		Errorf("Alias rejected: circular reference detected (expansion depth exceeded)")
 }
 
+// ErrNoCharacter creates an error when command is executed without a character.
+func ErrNoCharacter() error {
+	return oops.Code(CodeNoCharacter).
+		Errorf("no character associated with session")
+}
+
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
 	if err == nil {
@@ -92,6 +99,8 @@ func PlayerMessage(err error) string {
 		return "Too many commands. Please slow down."
 	case CodeCircularAlias:
 		return "Alias rejected: circular reference detected (expansion depth exceeded)"
+	case CodeNoCharacter:
+		return "No character selected. Please select a character first."
 	default:
 		return "Something went wrong. Try again."
 	}

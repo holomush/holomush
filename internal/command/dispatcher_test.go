@@ -59,7 +59,10 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 	dispatcher := NewDispatcher(reg, mockAccess)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{Output: &output}
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+	}
 
 	err := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
 	require.Error(t, err)
@@ -108,7 +111,10 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 	dispatcher := NewDispatcher(reg, mockAccess)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{Output: &output}
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+	}
 
 	err := dispatcher.Dispatch(context.Background(), "", exec)
 	require.Error(t, err)
@@ -538,4 +544,34 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	err = dispatcher.Dispatch(context.Background(), "s this is my message", exec)
 	require.NoError(t, err)
 	assert.Equal(t, "this is my message", capturedArgs)
+}
+
+func TestDispatcher_NoCharacter(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	err := reg.Register(CommandEntry{
+		Name:         "test",
+		Capabilities: []string{},
+		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher := NewDispatcher(reg, mockAccess)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		// CharacterID intentionally left as zero value
+		Output: &output,
+	}
+
+	err = dispatcher.Dispatch(context.Background(), "test", exec)
+	require.Error(t, err)
+	assert.Contains(t, PlayerMessage(err), "character")
+
+	// Verify error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodeNoCharacter, oopsErr.Code())
 }

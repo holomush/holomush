@@ -6,6 +6,7 @@ package command
 import (
 	"context"
 
+	"github.com/oklog/ulid/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -39,6 +40,11 @@ func (d *Dispatcher) SetAliasCache(cache *AliasCache) {
 
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
+	// Validate execution context - commands require a character
+	if exec.CharacterID.Compare(ulid.ULID{}) == 0 {
+		return ErrNoCharacter()
+	}
+
 	// Resolve aliases if cache is configured
 	resolvedInput := input
 	wasAlias := false

@@ -38,10 +38,19 @@ function on_event(event)
         return nil
     end
 
-    -- Handle empty args gracefully
+    -- Validate required fields - these indicate a bug in the dispatcher if missing
+    if not character_name or character_name == "" then
+        -- Missing character_name is a fatal error - command context is invalid
+        return nil
+    end
+
+    if not location_id or location_id == "" then
+        -- Missing location_id is a fatal error - cannot emit to a stream
+        return nil
+    end
+
+    -- Handle empty args gracefully (empty message is valid, handled per-command)
     args = args or ""
-    character_name = character_name or "Someone"
-    location_id = location_id or ""
 
     local stream = "location:" .. location_id
 
