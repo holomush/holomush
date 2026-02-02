@@ -270,6 +270,47 @@ var _ = Describe("Communication Plugin Integration", func() {
 			})
 		})
 
+		Context("when pose uses invoked_as field from prefix alias", func() {
+			It("uses invoked_as=; for no-space variant", func() {
+				ctx := context.Background()
+				// Tests primary path: prefix alias sets invoked_as, args has no prefix marker
+				event := pluginpkg.Event{
+					ID:        "01GHI3",
+					Stream:    "char:char123",
+					Type:      pluginpkg.EventType("command"),
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char123",
+					Payload:   `{"name":"pose","args":"'s sword gleams.","character_name":"Conan","location_id":"loc456","invoked_as":";"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+				// ; prefix alias means no space between name and action
+				Expect(emits[0].Payload).To(ContainSubstring(`Conan's sword gleams.`))
+			})
+
+			It("uses invoked_as=: for space variant", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01GHI4",
+					Stream:    "char:char123",
+					Type:      pluginpkg.EventType("command"),
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char123",
+					Payload:   `{"name":"pose","args":"draws their blade.","character_name":"Conan","location_id":"loc456","invoked_as":":"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+				// : prefix alias means space between name and action
+				Expect(emits[0].Payload).To(ContainSubstring(`Conan draws their blade.`))
+			})
+		})
+
 		Context("when pose command has empty action", func() {
 			It("returns no events", func() {
 				ctx := context.Background()
