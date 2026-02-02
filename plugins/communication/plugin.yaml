@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: communication
+version: 1.0.0
+type: lua
+events:
+  - command
+capabilities:
+  - events.emit.location
+commands:
+  - name: say
+    capabilities:
+      - comms.say
+    help: "Send a message to the room"
+    usage: "say <message>"
+    helpText: |
+      ## Say
+
+      Speaks a message aloud to everyone in your current location.
+
+      Your message will be displayed as: `You say, "message"`
+      Others will see: `CharacterName says, "message"`
+
+      ### Examples
+
+      - `say Hello everyone!` - Says "Hello everyone!" to the room
+      - `say How are you?` - Says "How are you?" to the room
+
+  - name: pose
+    capabilities:
+      - comms.pose
+    help: "Perform an action in the room"
+    usage: "pose <action>"
+    helpText: |
+      ## Pose
+
+      Performs an emoted action visible to everyone in your current location.
+
+      Your character name is prepended to the action.
+
+      ### Examples
+
+      - `pose waves hello.` - Shows "CharacterName waves hello."
+      - `pose looks around curiously.` - Shows "CharacterName looks around curiously."
+
+  - name: emit
+    capabilities:
+      - comms.emit
+    help: "Emit raw text to the room (privileged)"
+    usage: "emit <text>"
+    helpText: |
+      ## Emit
+
+      Emits raw text to everyone in your current location without any prefix.
+
+      This command requires the `comms.emit` capability, typically granted to
+      storytellers and administrators for room descriptions or special effects.
+
+      ### Examples
+
+      - `emit The room shakes violently!` - Shows "The room shakes violently!"
+      - `emit A cold wind blows through.` - Shows "A cold wind blows through."
+
+lua-plugin:
+  entry: main.lua
