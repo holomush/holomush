@@ -14,7 +14,7 @@ dispatch system supporting both Go core commands and Lua plugin commands.
 
 ### Command Lifecycle
 
-```
+```text
 Input → Parse → Alias Resolution → Dispatch → Execute → Event Emission → Output
 ```
 
@@ -28,16 +28,16 @@ Input → Parse → Alias Resolution → Dispatch → Execute → Event Emission
 
 ### Design Principles
 
-- **Single registry**: All commands (Go and Lua) register in one central registry
-- **Manifest-declared**: Lua plugins declare commands in `plugin.yaml`
-- **Capability-gated**: Commands declare required capabilities; ABAC checks before execution
-- **Event-driven outcomes**: Commands that change state emit events as source of truth
+- **Single registry**: All commands (Go and Lua) MUST register in one central registry
+- **Manifest-declared**: Lua plugins MUST declare commands in `plugin.yaml`
+- **Capability-gated**: Commands MUST declare required capabilities; ABAC MUST check before execution
+- **Event-driven outcomes**: Commands that change state MUST emit events as source of truth
 
 ### Key Boundaries
 
-- Parser is protocol-agnostic (works for telnet and gRPC)
-- Command handlers receive validated, parsed input
-- Handlers operate on character context, not connection details
+- Parser MUST be protocol-agnostic (works for telnet and gRPC)
+- Command handlers MUST receive validated, parsed input
+- Handlers MUST operate on character context, not connection details
 
 ### Execution Context
 
@@ -88,6 +88,7 @@ type CommandExecution struct {
 
 // Services provides access to core services for command handlers.
 // Handlers MUST NOT store references to services beyond execution.
+// Handlers MUST access services only through exec.Services.
 type Services struct {
     World   world.Service     // world model queries and mutations
     Session core.SessionManager
@@ -146,6 +147,7 @@ commands:
 ```
 
 At plugin load:
+
 1. Read manifest `helpText` → store directly in `HelpText`
 2. If `helpFile` specified → read file contents → store in `HelpText`
 3. Missing file = plugin load error (fail fast)
@@ -159,18 +161,18 @@ Commands with neither get a default help message: "No detailed help available. U
 
 ### Storage
 
-Aliases are stored in PostgreSQL:
+Aliases MUST be stored in PostgreSQL:
 
 ```sql
 CREATE TABLE system_aliases (
     alias       TEXT PRIMARY KEY,
     command     TEXT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by  UUID REFERENCES players(id)
+    created_by  TEXT REFERENCES players(id)  -- ULID stored as TEXT
 );
 
 CREATE TABLE player_aliases (
-    player_id   UUID REFERENCES players(id),
+    player_id   TEXT REFERENCES players(id),  -- ULID stored as TEXT
     alias       TEXT NOT NULL,
     command     TEXT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -188,46 +190,66 @@ CREATE TABLE player_aliases (
 Aliases expand to full command strings, then re-parse. Example: `l` → `look` → parsed
 as command `look` with no args.
 
+### Per-Player Alias Rationale
+
+Aliases are scoped to players (not characters) for the following reasons:
+
+- **Muscle memory**: Players develop command shortcuts over time; these SHOULD persist
+  across all their characters
+- **Accessibility**: Players with accessibility needs MAY rely on custom aliases;
+  forcing per-character setup creates unnecessary friction
+- **Simplicity**: One alias namespace per player is easier to manage than per-character
+- **MUSH tradition**: Classic MUSHes scope aliases to connections/players, not characters
+
+If per-character aliases are needed in the future, they can be added as a separate
+lower-priority layer in the resolution order.
+
 ### Validation
 
-**Command names** may contain: `[a-zA-Z0-9_!?@#$%^+-]+` (any single word, max 20 chars)
+**Command names** MUST match: `^[a-zA-Z][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
+
+- MUST start with a letter (not digits or special characters)
+- MAY contain special characters after first char: `_!?@#$%^+-`
+- MUST NOT exceed 20 characters
+- Examples: `look`, `@create`, `+who`, `say!` are valid; `123go`, `*star` are invalid
 
 **Player aliases** MUST match: `^[a-zA-Z0-9][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
 
-- Must start with alphanumeric
-- May contain special characters after first char
-- Maximum 20 characters
+- MUST start with alphanumeric (letter or digit)
+- MAY contain special characters after first char
+- MUST NOT exceed 20 characters
 
-**System aliases** follow the same pattern as player aliases.
+**System aliases** MUST follow the same pattern as player aliases.
 
-Alias creation MUST detect and reject circular alias chains. The resolver tracks
-expansion depth and fails if it exceeds 10 expansions (indicating a cycle or
-excessively long chain).
+**Circular alias detection**: Alias creation MUST detect and reject circular alias chains.
+The resolver MUST track expansion depth and fail if it exceeds 10 expansions (indicating
+a cycle or excessively long chain). Circular aliases MUST be rejected with the error:
+"Alias rejected: circular reference detected (expansion depth exceeded)".
 
 ### Management Commands
 
-| Command | Capabilities | Description |
-|---------|--------------|-------------|
-| `alias add <alias>=<command>` | `player.alias` | Add player alias |
-| `alias remove <alias>` | `player.alias` | Remove player alias |
-| `alias list` | `player.alias` | List player aliases |
-| `sysalias add <alias>=<command>` | `admin.alias` | Add system alias |
-| `sysalias remove <alias>` | `admin.alias` | Remove system alias |
-| `sysalias list` | `admin.alias` | List system aliases |
+| Command                          | Capabilities   | Description         |
+| -------------------------------- | -------------- | ------------------- |
+| `alias add <alias>=<command>`    | `player.alias` | Add player alias    |
+| `alias remove <alias>`           | `player.alias` | Remove player alias |
+| `alias list`                     | `player.alias` | List player aliases |
+| `sysalias add <alias>=<command>` | `admin.alias`  | Add system alias    |
+| `sysalias remove <alias>`        | `admin.alias`  | Remove system alias |
+| `sysalias list`                  | `admin.alias`  | List system aliases |
 
 ### Shadow Warnings
 
-When creating an alias, warn if it shadows:
+When creating an alias, the system SHOULD warn if it shadows:
 
 - **Existing command**: "Warning: 'look' is an existing command. Your alias will override it."
 - **System alias** (for player aliases): "Warning: 'l' is a system alias for 'look'. Your alias will take precedence."
 - **Own existing alias**: "Warning: Replacing existing alias 'l' (was: 'look')."
 
-Warnings are informational - the operation still succeeds. Player has final say over
+Warnings are informational - the operation MUST still succeed. Player has final say over
 their own alias namespace.
 
-System alias creation warns if shadowing a command but MUST block if shadowing another
-system alias (use `sysalias remove` first).
+System alias creation SHOULD warn if shadowing a command but MUST block if shadowing
+another system alias (use `sysalias remove` first).
 
 ---
 
@@ -235,8 +257,8 @@ system alias (use `sysalias remove` first).
 
 ### Capability Model
 
-Every command declares required capabilities. The dispatcher checks the character has
-ALL capabilities before execution.
+Every command MUST declare required capabilities. The dispatcher MUST check the character
+has ALL capabilities before execution.
 
 ```go
 // In command dispatch
@@ -258,23 +280,40 @@ return entry.Handler(ctx, execution)
 
 Capabilities use dot-notation hierarchy:
 
-| Category | Examples |
-|----------|----------|
-| `world.*` | `world.look`, `world.move`, `world.examine` |
-| `comms.*` | `comms.say`, `comms.pose`, `comms.emit` |
-| `build.*` | `build.dig`, `build.create`, `build.link`, `build.describe` |
-| `player.*` | `player.alias`, `player.who`, `player.quit` |
-| `admin.*` | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
+| Category   | Examples                                                    |
+| ---------- | ----------------------------------------------------------- |
+| `world.*`  | `world.look`, `world.move`, `world.examine`                 |
+| `comms.*`  | `comms.say`, `comms.pose`, `comms.emit`                     |
+| `build.*`  | `build.dig`, `build.create`, `build.link`, `build.describe` |
+| `player.*` | `player.alias`, `player.who`, `player.quit`                 |
+| `admin.*`  | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
 
 ### Default Grants
 
-New characters receive a default capability set:
+New characters MUST receive a default capability set:
 
 - `world.*` - can look, move, examine
 - `comms.*` - can say, pose, emit
 - `player.*` - can manage own aliases, see who, quit
 
-Building and admin capabilities require explicit grants.
+Building and admin capabilities MUST require explicit grants.
+
+### Wildcard Capability Matching
+
+Wildcard capabilities use suffix matching with the `*` character:
+
+- `world.*` grants ALL capabilities in the `world` namespace (`world.look`, `world.move`, etc.)
+- `*` by itself MUST NOT be valid (no "grant everything" wildcard)
+- Wildcards MUST only appear at the end of a capability string
+- Wildcards MUST match complete segments: `world.*` matches `world.look` but NOT `worldwide.look`
+- Explicit capabilities take precedence: if a character has `world.*` but is explicitly denied
+  `world.teleport`, the denial MUST win
+
+Matching algorithm:
+
+1. Check for exact capability match first
+2. If no exact match, check for wildcard grants (e.g., `world.*` for `world.look`)
+3. Wildcards MUST be stored and checked as grants, not expanded at assignment time
 
 ### ABAC Integration
 
@@ -295,36 +334,48 @@ the evaluator without changing command dispatch.
 
 ### Error Categories
 
-| Category | Player Message | Log Level |
-|----------|----------------|-----------|
-| Unknown command | "Unknown command. Try 'help'." | Debug |
-| Permission denied | "You don't have permission to do that." | Info |
-| Invalid arguments | "Usage: {usage}" | Debug |
-| World state error | Descriptive (e.g., "There's no exit to the north.") | Debug |
-| Internal error | "Something went wrong. Try again." | Error |
+| Category          | Player Message                                      | Log Level |
+| ----------------- | --------------------------------------------------- | --------- |
+| Unknown command   | "Unknown command. Try 'help'."                      | Debug     |
+| Permission denied | "You don't have permission to do that."             | Info      |
+| Invalid arguments | "Usage: {usage}"                                    | Debug     |
+| World state error | Descriptive (e.g., "There's no exit to the north.") | Debug     |
+| Internal error    | "Something went wrong. Try again."                  | Error     |
 
 ### Error Types
 
-Command errors use the `oops` package for consistency with the codebase:
+Command errors MUST use the `oops` package for consistency with the codebase:
 
 ```go
-// Sentinel errors for dispatch failures
-var (
-    ErrUnknownCommand   = oops.Define(oops.Code("UNKNOWN_COMMAND"))
-    ErrPermissionDenied = oops.Define(oops.Code("PERMISSION_DENIED"))
-    ErrInvalidArgs      = oops.Define(oops.Code("INVALID_ARGS"))
-)
+// Error constructors for dispatch failures (oops doesn't have sentinel errors)
+func ErrUnknownCommand(cmd string) error {
+    return oops.Code("UNKNOWN_COMMAND").With("command", cmd).Errorf("unknown command: %s", cmd)
+}
+
+func ErrPermissionDenied(cmd, capability string) error {
+    return oops.Code("PERMISSION_DENIED").
+        With("command", cmd).
+        With("capability", capability).
+        Errorf("permission denied for command %s", cmd)
+}
+
+func ErrInvalidArgs(cmd, usage string) error {
+    return oops.Code("INVALID_ARGS").With("command", cmd).With("usage", usage).Errorf("invalid arguments")
+}
 
 // World state errors carry player-facing message and internal cause
-// Example: oops.Code("WORLD_ERROR").With("message", "There's no exit to the north.").Wrap(cause)
 func WorldError(message string, cause error) error {
     return oops.Code("WORLD_ERROR").With("message", message).Wrap(cause)
 }
 
 // Extract player-facing message from oops error
 func PlayerMessage(err error) string {
-    if msg, ok := oops.Get(err, "message").(string); ok {
-        return msg
+    if oopsErr, ok := oops.AsOops(err); ok {
+        if msg, exists := oopsErr.Values()["message"]; exists {
+            if s, ok := msg.(string); ok {
+                return s
+            }
+        }
     }
     return "Something went wrong. Try again."
 }
@@ -347,11 +398,11 @@ func PlayerMessage(err error) string {
 
 ### Logging
 
-All command executions logged with:
+All command executions MUST be logged with:
 
 - Character ID, command name, success/failure
 - Error details (full context) on failure
-- Player input at DEBUG level only (privacy)
+- Player input MUST be logged at DEBUG level only (privacy protection)
 
 ### Observability (OpenTelemetry)
 
@@ -395,7 +446,7 @@ to flow through Go → Lua → host function calls.
 The `help` command is implemented as a Lua plugin to prove the plugin model, querying
 the Go registry for command metadata via host functions.
 
-```
+```text
 help              → List all available commands (that player can use)
 help <command>    → Show detailed help for command
 help search <term> → Search help text for term (in-memory substring match)
@@ -403,7 +454,7 @@ help search <term> → Search help text for term (in-memory substring match)
 
 ### Capability Filtering
 
-Help only shows commands the player can execute:
+Help MUST only show commands the player can execute:
 
 ```go
 func AvailableCommands(ctx context.Context, charID ulid.ULID) []CommandEntry {
@@ -432,12 +483,31 @@ handling. They MUST NOT block on I/O, network calls, or other plugins. The regis
 queries above are in-memory lookups and complete in microseconds. This is distinct
 from async event delivery between plugins.
 
+**Error Handling**: Host function errors MUST be handled as follows:
+
+| Error Type        | Host Behavior                                | Lua Behavior                         |
+| ----------------- | -------------------------------------------- | ------------------------------------ |
+| Invalid arguments | Return error with code `HOST_INVALID_ARGS`   | Lua receives `nil, error_message`    |
+| Internal failure  | Return error with code `HOST_INTERNAL_ERROR` | Lua receives `nil, "internal error"` |
+| Not found         | Return empty result (not an error)           | Lua receives empty table/nil         |
+| Timeout           | N/A (host functions MUST NOT timeout)        | N/A                                  |
+
+Lua plugins SHOULD check return values and handle errors gracefully:
+
+```lua
+local commands, err = host.list_commands()
+if err then
+    log.error("failed to list commands: " .. err)
+    return {output = "Unable to display help. Try again later."}
+end
+```
+
 ### Rendering
 
-Help content is markdown. Rendering depends on client:
+Help content MUST be markdown. Rendering depends on client:
 
-- **Telnet**: Strip or convert markdown to plain text
-- **Web**: Render rich markdown
+- **Telnet**: MUST strip or convert markdown to plain text
+- **Web**: SHOULD render rich markdown
 
 ---
 
@@ -445,10 +515,10 @@ Help content is markdown. Rendering depends on client:
 
 ### Partitioning Strategy
 
-| Implementation | Commands | Rationale |
-|----------------|----------|-----------|
-| **Go** | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall` | Core engine, admin, performance-critical |
-| **Lua** | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable |
+| Implementation | Commands                                                           | Rationale                                |
+| -------------- | ------------------------------------------------------------------ | ---------------------------------------- |
+| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical |
+| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable        |
 
 ### Go Command Execution
 
@@ -519,7 +589,7 @@ end
 
 ### Basic Command Flow (Go)
 
-```
+```text
 ┌──────┐    ┌─────────┐    ┌──────────┐    ┌────────┐    ┌───────┐
 │Player│    │ Telnet  │    │ Registry │    │ Access │    │Handler│
 └──┬───┘    └────┬────┘    └────┬─────┘    └───┬────┘    └───┬───┘
@@ -543,7 +613,7 @@ end
 
 ### Lua Command Flow
 
-```
+```text
 ┌──────┐    ┌─────────┐    ┌──────────┐    ┌──────┐    ┌──────────┐
 │Player│    │ Telnet  │    │ Registry │    │ Host │    │Lua Plugin│
 └──┬───┘    └────┬────┘    └────┬─────┘    └──┬───┘    └────┬─────┘
@@ -570,7 +640,7 @@ end
 
 ### Alias Resolution Flow
 
-```
+```text
 ┌──────┐    ┌─────────┐    ┌───────────┐    ┌──────────┐
 │Player│    │ Telnet  │    │AliasStore │    │ Registry │
 └──┬───┘    └────┬────┘    └─────┬─────┘    └────┬─────┘
@@ -580,7 +650,7 @@ end
    │             │──────────────────────────────>│
    │             │      not found                │
    │             │<──────────────────────────────│
-   │             │ PlayerAlias(charID, "l")      │
+   │             │ PlayerAlias(playerID, "l")    │
    │             │──────────────>│               │
    │             │    not found  │               │
    │             │<──────────────│               │
@@ -601,12 +671,12 @@ end
 
 ### New Components
 
-| Component | Package | Description |
-|-----------|---------|-------------|
-| `CommandRegistry` | `internal/command` | Central dispatch table |
-| `CommandDispatcher` | `internal/command` | Parse → alias → dispatch → execute |
-| `AliasStore` | `internal/command` | Repository interface for alias persistence |
-| `AliasRepository` | `internal/store` | PostgreSQL implementation |
+| Component           | Package            | Description                                |
+| ------------------- | ------------------ | ------------------------------------------ |
+| `CommandRegistry`   | `internal/command` | Central dispatch table                     |
+| `CommandDispatcher` | `internal/command` | Parse → alias → dispatch → execute         |
+| `AliasStore`        | `internal/command` | Repository interface for alias persistence |
+| `AliasRepository`   | `internal/store`   | PostgreSQL implementation                  |
 
 ### Schema Changes
 
@@ -634,13 +704,13 @@ commands:
 
 ## ADRs Required
 
-| ADR | Decision | Rationale |
-|-----|----------|-----------|
-| Command Registry Storage | In-memory only | Small corpus, fast search, avoids DB sync complexity. Revisit for semantic search. |
-| Unified Command Registry | Single registry for Go + Lua | Uniform error handling, clean help introspection, plugins can override builtins if allowed. |
-| Command Declaration Model | Manifest-declared at load time | Commands visible at startup, clean unload, matches event subscription pattern. |
-| Command Security Model | Capability-based (fine-grained) | Integrates with ABAC, granular permissions, uniform for Go and Lua. |
-| Command Conflict Resolution | Last-loaded wins with warning | Plugins loaded after core can override commands. Server logs warning on startup. Plugins SHOULD NOT override core commands without explicit admin configuration. |
+| ADR                         | Decision                                               | Rationale                                                                                                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Command Registry Storage    | In-memory only                                         | Small corpus, fast search, avoids DB sync complexity. Revisit for semantic search.                                                                                                                                                                         |
+| Unified Command Registry    | Single registry for Go + Lua                           | Uniform error handling, clean help introspection, plugins can override builtins if allowed.                                                                                                                                                                |
+| Command Declaration Model   | Manifest-declared at load time                         | Commands visible at startup, clean unload, matches event subscription pattern.                                                                                                                                                                             |
+| Command Security Model      | Capability-based (fine-grained)                        | Integrates with ABAC, granular permissions, uniform for Go and Lua.                                                                                                                                                                                        |
+| Command Conflict Resolution | Alphabetical load order, last-loaded wins with warning | Plugins MUST load in alphabetical order by plugin name. Within a plugin, commands register in manifest order. Last registration wins. Server MUST log warning on conflict. Plugins SHOULD NOT override core commands without explicit admin configuration. |
 
 ---
 
