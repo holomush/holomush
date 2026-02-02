@@ -211,7 +211,7 @@ lower-priority layer in the resolution order.
 - MUST start with a letter (not digits or special characters)
 - MAY contain special characters after first char: `_!?@#$%^+-`
 - MUST NOT exceed 20 characters
-- Examples: `look`, `@create`, `+who`, `say!` are valid; `123go`, `*star` are invalid
+- Examples: `look`, `create`, `who`, `say!`, `cmd@test` are valid; `@create`, `+who`, `123go`, `*star` are invalid
 
 **Player aliases** MUST match: `^[a-zA-Z][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
 
