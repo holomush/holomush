@@ -39,6 +39,18 @@ Input → Parse → Alias Resolution → Dispatch → Execute → Event Emission
 - Command handlers receive validated, parsed input
 - Handlers operate on character context, not connection details
 
+### Execution Context
+
+Commands execute in the context of an authenticated player controlling a character:
+
+- **PlayerID**: The authenticated player (from Epic 5 auth). Used for session management,
+  rate limiting, and player-level settings like aliases.
+- **CharacterID**: The character being controlled. Used for world interactions,
+  capability checks, and game state.
+- **SessionID**: The active session. Used for `quit` command and output buffering.
+
+A player may have multiple characters but controls one at a time per session.
+
 ---
 
 ## Command Registry
@@ -67,8 +79,20 @@ type CommandExecution struct {
     CharacterID   ulid.ULID
     LocationID    ulid.ULID
     CharacterName string
+    PlayerID      ulid.ULID   // authenticated player (for session/auth context)
+    SessionID     ulid.ULID   // active session (for quit, output buffering)
     Args          string      // unparsed argument string
-    Output        io.Writer   // where to send player feedback
+    Output        io.Writer   // session-wrapped writer with buffering
+    Services      *Services   // injected dependencies for handlers
+}
+
+// Services provides access to core services for command handlers.
+// Handlers MUST NOT store references to services beyond execution.
+type Services struct {
+    World   world.Service     // world model queries and mutations
+    Session core.SessionManager
+    Access  access.Evaluator
+    Events  core.EventStore
 }
 ```
 
@@ -127,6 +151,7 @@ At plugin load:
 3. Missing file = plugin load error (fail fast)
 
 Manifest validation MUST reject commands with both `helpText` AND `helpFile` set.
+Commands with neither get a default help message: "No detailed help available. Usage: {usage}"
 
 ---
 
@@ -162,6 +187,18 @@ CREATE TABLE player_aliases (
 
 Aliases expand to full command strings, then re-parse. Example: `l` → `look` → parsed
 as command `look` with no args.
+
+### Alias Validation
+
+Aliases MUST match the pattern `^[a-z][a-z0-9]{0,31}$`:
+
+- Lowercase letters and digits only
+- Must start with a letter
+- Maximum 32 characters
+
+Alias creation MUST detect and reject circular alias chains. The resolver tracks
+expansion depth and fails if it exceeds 10 expansions (indicating a cycle or
+excessively long chain).
 
 ### Management Commands
 
@@ -264,17 +301,28 @@ the evaluator without changing command dispatch.
 
 ### Error Types
 
+Command errors use the `oops` package for consistency with the codebase:
+
 ```go
+// Sentinel errors for dispatch failures
 var (
-    ErrUnknownCommand   = errors.New("unknown command")
-    ErrPermissionDenied = errors.New("permission denied")
-    ErrInvalidArgs      = errors.New("invalid arguments")
+    ErrUnknownCommand   = oops.Define(oops.Code("UNKNOWN_COMMAND"))
+    ErrPermissionDenied = oops.Define(oops.Code("PERMISSION_DENIED"))
+    ErrInvalidArgs      = oops.Define(oops.Code("INVALID_ARGS"))
 )
 
-// World state errors carry context
-type WorldError struct {
-    Message string  // player-facing
-    Cause   error   // internal (logged, not shown)
+// World state errors carry player-facing message and internal cause
+// Example: oops.Code("WORLD_ERROR").With("message", "There's no exit to the north.").Wrap(cause)
+func WorldError(message string, cause error) error {
+    return oops.Code("WORLD_ERROR").With("message", message).Wrap(cause)
+}
+
+// Extract player-facing message from oops error
+func PlayerMessage(err error) string {
+    if msg, ok := oops.Get(err, "message").(string); ok {
+        return msg
+    }
+    return "Something went wrong. Try again."
 }
 ```
 
@@ -342,6 +390,11 @@ rpc ListCommands(ListCommandsRequest) returns (ListCommandsResponse);
 rpc GetCommandHelp(GetCommandHelpRequest) returns (GetCommandHelpResponse);
 ```
 
+**Blocking Semantics**: Host functions are synchronous calls executed during event
+handling. They MUST NOT block on I/O, network calls, or other plugins. The registry
+queries above are in-memory lookups and complete in microseconds. This is distinct
+from async event delivery between plugins.
+
 ### Rendering
 
 Help content is markdown. Rendering depends on client:
@@ -362,22 +415,26 @@ Help content is markdown. Rendering depends on client:
 
 ### Go Command Execution
 
-Direct function call:
+Direct function call with injected services:
 
 ```go
-func (h *LookHandler) Execute(ctx context.Context, exec *CommandExecution) error {
-    room, err := h.world.GetLocation(ctx, exec.LocationID)
+func LookHandler(ctx context.Context, exec *CommandExecution) error {
+    room, err := exec.Services.World.GetLocation(ctx, exec.LocationID)
     if err != nil {
-        return &WorldError{Message: "You can't see anything here."}
+        return WorldError("You can't see anything here.", err)
     }
     fmt.Fprintf(exec.Output, "%s\n%s\n", room.Name, room.Description)
     return nil
 }
 ```
 
+Handlers access services via `exec.Services` rather than storing dependencies.
+This keeps handlers stateless and testable.
+
 ### Lua Command Execution
 
-Registry holds a dispatcher that routes to plugin:
+Registry holds a dispatcher that routes to plugin. The dispatcher creates an internal
+`command` event type (not persisted to EventStore) to invoke the plugin handler:
 
 ```go
 func LuaDispatcher(pluginName, cmdName string, host plugin.Host) CommandHandler {
@@ -546,6 +603,7 @@ commands:
 | Unified Command Registry | Single registry for Go + Lua | Uniform error handling, clean help introspection, plugins can override builtins if allowed. |
 | Command Declaration Model | Manifest-declared at load time | Commands visible at startup, clean unload, matches event subscription pattern. |
 | Command Security Model | Capability-based (fine-grained) | Integrates with ABAC, granular permissions, uniform for Go and Lua. |
+| Command Conflict Resolution | Last-loaded wins with warning | Plugins loaded after core can override commands. Server logs warning on startup. Plugins SHOULD NOT override core commands without explicit admin configuration. |
 
 ---
 
