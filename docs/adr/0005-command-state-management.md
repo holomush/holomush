@@ -65,6 +65,9 @@ function handle_command(event)
     if step == 1 then
         host.session_set("create_room_step", 2)
         return {output = "Enter room name:"}
+    elseif step == 2 then
+        -- Continue wizard flow...
+        return {output = "Enter room description:"}
     end
 end
 ```
@@ -175,4 +178,4 @@ When implementing session-scoped state (post-v1):
 
 - [Commands & Behaviors Design](../specs/2026-02-02-commands-behaviors-design.md) - Parent spec
 - [Plugin System Design](../specs/2026-01-18-plugin-system-design.md) - Lua VM architecture
-- Implementation: `internal/plugin/lua_host.go`
+- Implementation: `internal/plugin/lua/host.go`
