@@ -43,6 +43,8 @@ packages:
       ObjectRepository:
       SceneRepository:
       CharacterRepository:
+      AccessControl:
+      EventEmitter:
   github.com/holomush/holomush/internal/auth:
     config:
       dir: "{{.InterfaceDir}}/mocks"
