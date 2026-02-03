@@ -81,6 +81,12 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 		for _, session := range sessions {
 			broadcastWallEvent(exec, session.CharacterID, announcement)
 		}
+	} else {
+		slog.Warn("broadcast skipped: Broadcaster is nil",
+			"operation", "wall",
+			"urgency", string(urgency),
+			"session_count", len(sessions),
+		)
 	}
 
 	// Notify the executor

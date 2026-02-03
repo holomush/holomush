@@ -52,6 +52,11 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 	// Broadcast warning to all players
 	if exec.Services.Broadcaster != nil {
 		broadcastShutdownWarning(exec, delaySeconds)
+	} else {
+		slog.Warn("broadcast skipped: Broadcaster is nil",
+			"operation", "shutdown",
+			"delay_seconds", delaySeconds,
+		)
 	}
 
 	// Log admin action

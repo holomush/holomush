@@ -61,6 +61,12 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Notify the target before disconnecting them
 	if exec.Services.Broadcaster != nil {
 		notifyTargetOfBoot(exec, targetCharID, exec.CharacterName, reason, isSelfBoot)
+	} else {
+		slog.Warn("broadcast skipped: Broadcaster is nil",
+			"operation", "boot",
+			"target_id", targetCharID.String(),
+			"target_name", targetCharName,
+		)
 	}
 
 	// End the target's session
