@@ -90,11 +90,18 @@ type CommandExecution struct {
 // Handlers MUST NOT store references to services beyond execution.
 // Handlers MUST access services only through exec.Services.
 type Services struct {
-    World   world.Service     // world model queries and mutations
-    Session core.SessionManager
-    Access  access.Evaluator
-    Events  core.EventStore
+    World       *world.Service       // world model queries and mutations
+    Session     core.SessionService  // session management
+    Access      access.AccessControl // authorization checks
+    Events      core.EventStore      // event persistence
+    Broadcaster *core.Broadcaster    // event broadcasting (for admin commands)
 }
+
+// NOTE: The Services struct uses concrete types rather than interfaces for
+// World and Broadcaster. This is intentional:
+// - World uses pointer type (*world.Service) because the service is stateful
+// - Broadcaster is needed by admin commands (boot, shutdown, wall) to
+//   broadcast messages to all connected sessions
 ```
 
 ### Go Command Registration
