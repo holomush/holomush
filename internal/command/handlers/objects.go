@@ -64,8 +64,9 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 			"character_id", exec.CharacterID,
 			"object_name", name,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Failed to create object: %v\n", err)
-		return nil
+		_, _ = fmt.Fprintln(exec.Output, "Failed to create object.")
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Failed to create object.", err)
 	}
 
 	if err := exec.Services.World.CreateObject(ctx, subjectID, obj); err != nil {
@@ -73,8 +74,9 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 			"character_id", exec.CharacterID,
 			"object_name", name,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Failed to create object: %v\n", err)
-		return nil
+		_, _ = fmt.Fprintln(exec.Output, "Failed to create object.")
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Failed to create object.", err)
 	}
 
 	_, _ = fmt.Fprintf(exec.Output, "Created object \"%s\" (#%s)\n", name, obj.ID)
@@ -89,8 +91,9 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 			"character_id", exec.CharacterID,
 			"location_name", name,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Failed to create location: %v\n", err)
-		return nil
+		_, _ = fmt.Fprintln(exec.Output, "Failed to create location.")
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Failed to create location.", err)
 	}
 
 	if err := exec.Services.World.CreateLocation(ctx, subjectID, loc); err != nil {
@@ -98,8 +101,9 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 			"character_id", exec.CharacterID,
 			"location_name", name,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Failed to create location: %v\n", err)
-		return nil
+		_, _ = fmt.Fprintln(exec.Output, "Failed to create location.")
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Failed to create location.", err)
 	}
 
 	_, _ = fmt.Fprintf(exec.Output, "Created location \"%s\" (#%s)\n", name, loc.ID)
@@ -140,7 +144,8 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"property_prefix", propertyPrefix,
 			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
-		return nil
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Property resolution failed.", err)
 	}
 
 	// Resolve target
@@ -151,7 +156,8 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"target", target,
 			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
-		return nil
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Target resolution failed.", err)
 	}
 
 	// Apply the property change
@@ -163,7 +169,8 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"property", prop.Name,
 			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
-		return nil
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return command.WorldError("Failed to apply property.", err)
 	}
 
 	_, _ = fmt.Fprintf(exec.Output, "Set %s of %s.\n", prop.Name, target)

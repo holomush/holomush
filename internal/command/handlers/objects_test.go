@@ -279,8 +279,10 @@ func TestSetHandler_PropertyNotFound(t *testing.T) {
 		Services:    &command.Services{World: worldService},
 	}
 
+	// Handler should return error (not nil) when property is not found
 	err := SetHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "property not found")
 
 	output := buf.String()
 	assert.Contains(t, output, "property not found")
@@ -305,8 +307,10 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 		Services:    &command.Services{World: worldService},
 	}
 
+	// Handler should return error (not nil) when target is not found
 	err := SetHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "target not found")
 
 	output := buf.String()
 	assert.Contains(t, output, "Error:")
@@ -481,13 +485,13 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 		Services:    &command.Services{World: worldService},
 	}
 
-	// Handler should return nil (error is swallowed and displayed to user)
+	// Handler should return error (not nil) when service fails
 	err := CreateHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "database unavailable")
 
 	output := buf.String()
 	assert.Contains(t, output, "Failed to create object")
-	assert.Contains(t, output, "database unavailable")
 }
 
 func TestCreateHandler_LocationServiceError(t *testing.T) {
@@ -518,13 +522,13 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 		Services:    &command.Services{World: worldService},
 	}
 
-	// Handler should return nil (error is swallowed and displayed to user)
+	// Handler should return error (not nil) when service fails
 	err := CreateHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "constraint violation")
 
 	output := buf.String()
 	assert.Contains(t, output, "Failed to create location")
-	assert.Contains(t, output, "creation failed")
 }
 
 func TestSetHandler_UpdateLocationFailure(t *testing.T) {
@@ -568,9 +572,10 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 		Services:    &command.Services{World: worldService},
 	}
 
-	// Handler should return nil (error is swallowed and displayed to user)
+	// Handler should return error (not nil) when service fails
 	err := SetHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "optimistic locking conflict")
 
 	output := buf.String()
 	assert.Contains(t, output, "Error:")
@@ -619,9 +624,10 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 		Services:    &command.Services{World: worldService},
 	}
 
-	// Handler should return nil (error is swallowed and displayed to user)
+	// Handler should return error (not nil) when service fails
 	err = SetHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "permission revoked")
 
 	output := buf.String()
 	assert.Contains(t, output, "Error:")
