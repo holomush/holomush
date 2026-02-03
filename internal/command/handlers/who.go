@@ -5,12 +5,15 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"time"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // playerInfo holds display information for a connected player.
@@ -37,7 +40,15 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		// Try to get character info - skip if not accessible
 		char, err := exec.Services.World.GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
-			// Character not found or access denied - skip
+			// Skip expected errors (not found, permission denied)
+			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+				continue
+			}
+			// Log unexpected errors (database failures, timeouts, etc.) but continue
+			slog.Error("unexpected error looking up character in who list",
+				"session_char_id", session.CharacterID.String(),
+				"error", err,
+			)
 			continue
 		}
 
