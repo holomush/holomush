@@ -284,8 +284,10 @@ func TestSetHandler_PropertyNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "property not found")
 
+	// User sees sanitized message, not internal error details
 	output := buf.String()
-	assert.Contains(t, output, "property not found")
+	assert.Contains(t, output, "Unknown property: xyz")
+	assert.NotContains(t, output, "property not found") // internal error not exposed
 }
 
 func TestSetHandler_InvalidTarget(t *testing.T) {
@@ -312,8 +314,10 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "target not found")
 
+	// User sees sanitized message, not internal error details
 	output := buf.String()
-	assert.Contains(t, output, "Error:")
+	assert.Contains(t, output, "Could not find target: nonexistent")
+	assert.NotContains(t, output, "target not found:") // internal error not exposed
 }
 
 func TestSetHandler_InvalidSyntax(t *testing.T) {
@@ -577,9 +581,11 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "optimistic locking conflict")
 
+	// User sees sanitized message, not internal error details
 	output := buf.String()
-	assert.Contains(t, output, "Error:")
-	assert.Contains(t, output, "update location failed")
+	assert.Contains(t, output, "Failed to set property. Please try again.")
+	assert.NotContains(t, output, "optimistic locking conflict") // internal error not exposed
+	assert.NotContains(t, output, "update location failed")      // internal error not exposed
 }
 
 func TestSetHandler_UpdateObjectFailure(t *testing.T) {
@@ -629,7 +635,9 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "permission revoked")
 
+	// User sees sanitized message, not internal error details
 	output := buf.String()
-	assert.Contains(t, output, "Error:")
-	assert.Contains(t, output, "update object failed")
+	assert.Contains(t, output, "Failed to set property. Please try again.")
+	assert.NotContains(t, output, "permission revoked")    // internal error not exposed
+	assert.NotContains(t, output, "update object failed")  // internal error not exposed
 }

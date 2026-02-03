@@ -143,7 +143,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"character_id", exec.CharacterID,
 			"property_prefix", propertyPrefix,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(exec.Output, "Unknown property: %s\n", propertyPrefix)
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Property resolution failed.", err)
 	}
@@ -155,7 +155,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"character_id", exec.CharacterID,
 			"target", target,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(exec.Output, "Could not find target: %s\n", target)
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Target resolution failed.", err)
 	}
@@ -168,7 +168,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"entity_id", entityID,
 			"property", prop.Name,
 			"error", err)
-		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
+		_, _ = fmt.Fprintln(exec.Output, "Failed to set property. Please try again.")
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Failed to apply property.", err)
 	}
