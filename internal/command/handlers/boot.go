@@ -6,6 +6,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // BootHandler disconnects a target player from the server.
@@ -140,7 +142,16 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 		// Get character info for this session
 		char, err := exec.Services.World.GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
-			// Skip inaccessible or missing characters
+			// Skip expected errors (not found, permission denied)
+			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+				continue
+			}
+			// Log unexpected errors (database failures, timeouts, etc.) but continue searching
+			slog.Error("unexpected error looking up character",
+				"target_name", targetName,
+				"session_char_id", session.CharacterID.String(),
+				"error", err,
+			)
 			continue
 		}
 

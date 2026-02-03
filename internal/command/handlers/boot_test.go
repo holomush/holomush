@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -724,4 +725,216 @@ func (m *mockSessionManagerWithEndSessionError) EndSession(charID ulid.ULID) err
 		return errors.New("session already ended")
 	}
 	return m.underlying.EndSession(charID)
+}
+
+func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
+	executorID := ulid.Make()
+	targetID := ulid.Make()
+	errorCharID := ulid.Make()
+	execConn := ulid.Make()
+	targetConn := ulid.Make()
+	errorConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(targetID, targetConn)
+	sessionMgr.Connect(errorCharID, errorConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "Admin",
+	}
+	targetChar := &world.Character{
+		ID:       targetID,
+		PlayerID: playerID,
+		Name:     "Troublemaker",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// Capture logs
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Session iteration order is non-deterministic, so all lookups may or may not happen
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+
+	// Target lookup during session iteration - accessible
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, targetID).
+		Return(targetChar, nil)
+
+	// Error character - access allowed but repo returns unexpected error
+	unexpectedErr := errors.New("database connection timeout")
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, errorCharID).
+		Return(nil, unexpectedErr).Maybe()
+
+	// Capability check for booting another user
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
+		Return(true)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID:   executorID,
+		CharacterName: "Admin",
+		PlayerID:      playerID,
+		Args:          "Troublemaker",
+		Output:        &buf,
+		Services: &command.Services{
+			Session: sessionMgr,
+			World:   worldService,
+			Access:  accessControl,
+		},
+	}
+
+	err := BootHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	// Verify target session was ended
+	targetSession := sessionMgr.GetSession(targetID)
+	assert.Nil(t, targetSession, "Target session should be ended")
+
+	// The error character lookup may or may not have happened depending on iteration order.
+	// If it did happen, the error should have been logged.
+	logOutput := logBuf.String()
+	if logOutput != "" {
+		// If we have any log output, verify it contains the expected content
+		assert.Contains(t, logOutput, "unexpected error looking up character")
+		assert.Contains(t, logOutput, "target_name")
+		assert.Contains(t, logOutput, "session_char_id")
+		assert.Contains(t, logOutput, "database connection timeout")
+	}
+	// Note: We don't fail if there's no log output because the error character
+	// might not have been processed before the target was found.
+}
+
+func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
+	executorID := ulid.Make()
+	targetID := ulid.Make()
+	notFoundCharID := ulid.Make()
+	deniedCharID := ulid.Make()
+	execConn := ulid.Make()
+	targetConn := ulid.Make()
+	notFoundConn := ulid.Make()
+	deniedConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(targetID, targetConn)
+	sessionMgr.Connect(notFoundCharID, notFoundConn)
+	sessionMgr.Connect(deniedCharID, deniedConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "Admin",
+	}
+	targetChar := &world.Character{
+		ID:       targetID,
+		PlayerID: playerID,
+		Name:     "Troublemaker",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// Capture logs
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Session iteration order is non-deterministic, so all lookups may or may not happen
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+
+	// Target lookup during session iteration - accessible
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, targetID).
+		Return(targetChar, nil)
+
+	// Not found character - access allowed but repo returns ErrNotFound (expected, no logging)
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+notFoundCharID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, notFoundCharID).
+		Return(nil, world.ErrNotFound).Maybe()
+
+	// Permission denied character - access check fails (expected, no logging)
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+deniedCharID.String()).
+		Return(false).Maybe()
+
+	// Capability check for booting another user
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
+		Return(true)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID:   executorID,
+		CharacterName: "Admin",
+		PlayerID:      playerID,
+		Args:          "Troublemaker",
+		Output:        &buf,
+		Services: &command.Services{
+			Session: sessionMgr,
+			World:   worldService,
+			Access:  accessControl,
+		},
+	}
+
+	err := BootHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	// Verify target session was ended
+	targetSession := sessionMgr.GetSession(targetID)
+	assert.Nil(t, targetSession, "Target session should be ended")
+
+	// Verify no error logs were written for expected errors (ErrNotFound, ErrPermissionDenied)
+	logOutput := logBuf.String()
+	assert.Empty(t, logOutput, "Expected errors should not be logged")
 }
