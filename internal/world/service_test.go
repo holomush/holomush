@@ -4442,3 +4442,77 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		mockAC.AssertExpectations(t)
 	})
 }
+
+func TestWorldService_FindLocationByName(t *testing.T) {
+	ctx := context.Background()
+	subjectID := "char:" + ulid.Make().String()
+	locID := ulid.Make()
+
+	t.Run("finds location when authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		expectedLoc := &world.Location{ID: locID, Name: "Test Room", Type: world.LocationTypePersistent}
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:*").Return(true)
+		mockRepo.EXPECT().FindByName(ctx, "Test Room").Return(expectedLoc, nil)
+
+		loc, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		require.NoError(t, err)
+		assert.Equal(t, locID, loc.ID)
+		assert.Equal(t, "Test Room", loc.Name)
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns permission denied when not authorized", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:*").Return(false)
+
+		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns not found when location does not exist", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo:  mockRepo,
+			AccessControl: mockAC,
+		})
+
+		mockAC.On("Check", ctx, subjectID, "read", "location:*").Return(true)
+		mockRepo.EXPECT().FindByName(ctx, "Non-Existent").Return(nil, world.ErrNotFound)
+
+		_, err := svc.FindLocationByName(ctx, subjectID, "Non-Existent")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+		mockAC.AssertExpectations(t)
+	})
+
+	t.Run("returns error when repository not configured", func(t *testing.T) {
+		mockAC := &mockAccessControl{}
+
+		svc := world.NewService(world.ServiceConfig{
+			AccessControl: mockAC,
+		})
+
+		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_FIND_FAILED")
+	})
+}

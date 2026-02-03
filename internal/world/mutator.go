@@ -47,6 +47,10 @@ type Mutator interface {
 
 	// UpdateObject updates an existing object after checking write authorization.
 	UpdateObject(ctx context.Context, subjectID string, obj *Object) error
+
+	// FindLocationByName searches for a location by name after checking read authorization.
+	// Returns ErrNotFound if no location matches.
+	FindLocationByName(ctx context.Context, subjectID, name string) (*Location, error)
 }
 
 // Compile-time check that Service implements Mutator.

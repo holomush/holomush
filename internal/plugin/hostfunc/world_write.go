@@ -15,17 +15,9 @@ import (
 	"github.com/holomush/holomush/pkg/holo"
 )
 
-// WorldMutator extends world.Mutator with additional methods needed by host functions.
-// This interface is used internally by the hostfunc package for type assertions.
-// The primary interface definition is in internal/world/mutator.go.
-type WorldMutator interface {
-	world.Mutator
-
-	// FindLocationByName searches for a location by name.
-	// Returns ErrNotFound if no location matches.
-	// Note: This method is not yet implemented on world.Service.
-	FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error)
-}
+// WorldMutator is an alias for world.Mutator used for type assertions.
+// The interface is defined in internal/world/mutator.go.
+type WorldMutator = world.Mutator
 
 // propertyRegistry is used to validate properties for entity types.
 // Uses the default registry from pkg/holo which defines standard properties.

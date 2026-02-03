@@ -37,6 +37,10 @@ type LocationRepository interface {
 
 	// GetShadowedBy returns scenes that shadow the given location.
 	GetShadowedBy(ctx context.Context, id ulid.ULID) ([]*Location, error)
+
+	// FindByName searches for a location by exact name match.
+	// Returns ErrNotFound if no location matches.
+	FindByName(ctx context.Context, name string) (*Location, error)
 }
 
 // ExitRepository manages exit persistence.
