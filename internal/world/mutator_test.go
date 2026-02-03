@@ -8,6 +8,7 @@ import "testing"
 // TestServiceImplementsMutator verifies that Service implements the Mutator interface.
 // This is a compile-time check to ensure the interface contract is maintained.
 func TestServiceImplementsMutator(t *testing.T) {
+	t.Helper()
 	// This test exists to verify the interface at test time.
 	// The actual compile-time check is in mutator.go via:
 	// var _ Mutator = (*Service)(nil)

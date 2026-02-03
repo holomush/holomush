@@ -7,54 +7,29 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/holo"
 )
 
-// WorldMutator extends WorldService with write operations.
-// Plugins that need to create or modify world entities must use a service
-// that implements this interface.
+// WorldMutator extends world.Mutator with additional methods needed by host functions.
+// This interface is used internally by the hostfunc package for type assertions.
+// The primary interface definition is in internal/world/mutator.go.
 type WorldMutator interface {
-	WorldService
-
-	// CreateLocation creates a new location.
-	CreateLocation(ctx context.Context, subjectID string, loc *world.Location) error
-
-	// CreateExit creates a new exit between locations.
-	CreateExit(ctx context.Context, subjectID string, exit *world.Exit) error
-
-	// CreateObject creates a new object with the given containment.
-	CreateObject(ctx context.Context, subjectID string, obj *world.Object) error
-
-	// UpdateLocation updates an existing location.
-	UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error
-
-	// UpdateObject updates an existing object.
-	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
+	world.Mutator
 
 	// FindLocationByName searches for a location by name.
 	// Returns ErrNotFound if no location matches.
+	// Note: This method is not yet implemented on world.Service.
 	FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error)
 }
 
-// validProperties defines the supported properties for each entity type.
-var validProperties = map[string][]string{
-	"location": {"name", "description"},
-	"object":   {"name", "description"},
-}
-
-// isValidProperty checks if a property is valid for an entity type.
-func isValidProperty(entityType, property string) bool {
-	props, ok := validProperties[entityType]
-	if !ok {
-		return false
-	}
-	return slices.Contains(props, property)
-}
+// propertyRegistry is used to validate properties for entity types.
+// Uses the default registry from pkg/holo which defines standard properties.
+var propertyRegistry = holo.DefaultRegistry()
 
 // createLocationFn returns a Lua function that creates a new location.
 // Lua signature: create_location(name, description, type) -> {id, name} or nil, error
@@ -424,8 +399,8 @@ func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		// Validate property
-		if !isValidProperty(entityType, property) {
+		// Validate property using PropertyRegistry
+		if !propertyRegistry.ValidFor(entityType, property) {
 			L.Push(lua.LNil)
 			L.Push(lua.LString("invalid property: " + property + " for " + entityType))
 			return 2
@@ -528,8 +503,8 @@ func (f *Functions) getPropertyFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		// Validate property
-		if !isValidProperty(entityType, property) {
+		// Validate property using PropertyRegistry
+		if !propertyRegistry.ValidFor(entityType, property) {
 			L.Push(lua.LNil)
 			L.Push(lua.LString("invalid property: " + property + " for " + entityType))
 			return 2
