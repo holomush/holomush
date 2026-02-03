@@ -127,7 +127,7 @@ Requires the ` + "`admin.boot`" + ` capability.`,
 		Handler:      ShutdownHandler,
 		Capabilities: []string{"admin.shutdown"},
 		Help:         "Shut down the server",
-		Usage:        "shutdown [delay] [reason]",
+		Usage:        "shutdown [delay_seconds]",
 		HelpText: `## Shutdown
 
 Initiate a server shutdown.
@@ -136,12 +136,11 @@ Initiate a server shutdown.
 
 - ` + "`shutdown`" + ` - Immediate shutdown
 - ` + "`shutdown <seconds>`" + ` - Shutdown after delay
-- ` + "`shutdown <seconds> <reason>`" + ` - Shutdown with message
 
 ### Examples
 
-- ` + "`shutdown 60 Server maintenance`" + `
-- ` + "`shutdown cancel`" + ` - Cancel a pending shutdown
+- ` + "`shutdown`" + ` - Shut down immediately
+- ` + "`shutdown 60`" + ` - Shut down in 60 seconds
 
 ### Permissions
 
