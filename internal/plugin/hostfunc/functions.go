@@ -144,6 +144,14 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
 	ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
 
+	// World mutations (capability required)
+	ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
+	ls.SetField(mod, "create_exit", ls.NewFunction(f.wrap(pluginName, "world.write.exit", f.createExitFn(pluginName))))
+	ls.SetField(mod, "create_object", ls.NewFunction(f.wrap(pluginName, "world.write.object", f.createObjectFn(pluginName))))
+	ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
+	ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
+	ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
+
 	ls.SetGlobal("holomush", mod)
 }
 
