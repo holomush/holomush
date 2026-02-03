@@ -4,6 +4,7 @@
 package command
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -11,6 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testHandler is a no-op handler for tests.
+func testHandler(_ context.Context, _ *CommandExecution) error {
+	return nil
+}
 
 func TestNewAliasCache(t *testing.T) {
 	cache := NewAliasCache()
@@ -205,8 +211,9 @@ func TestAliasCache_Resolve_RegisteredCommand(t *testing.T) {
 
 	// Register "look" as a command
 	err := registry.Register(CommandEntry{
-		Name:   "look",
-		Source: "core",
+		Name:    "look",
+		Handler: testHandler,
+		Source:  "core",
 	})
 	require.NoError(t, err)
 
@@ -455,7 +462,7 @@ func TestAliasCache_Resolve_PrefixAlias(t *testing.T) {
 
 	t.Run("prefix alias not matched when command exists", func(t *testing.T) {
 		reg := NewRegistry()
-		_ = reg.Register(CommandEntry{Name: ":debug", Source: "test"})
+		_ = reg.Register(CommandEntry{Name: ":debug", Handler: testHandler, Source: "test"})
 
 		result := cache.Resolve(playerID, ":debug stuff", reg)
 		// Should not expand because :debug is a registered command

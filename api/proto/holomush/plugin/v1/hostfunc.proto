@@ -37,6 +37,14 @@ service HostFunctions {
 
   // Log writes a log message through the host's logging system.
   rpc Log(LogRequest) returns (LogResponse);
+
+  // ListCommands returns all available commands.
+  // Requires capability: command.list
+  rpc ListCommands(ListCommandsRequest) returns (ListCommandsResponse);
+
+  // GetCommandHelp returns detailed help for a specific command.
+  // Requires capability: command.help
+  rpc GetCommandHelp(GetCommandHelpRequest) returns (GetCommandHelpResponse);
 }
 
 // LogLevel specifies the severity of a log message.
@@ -180,3 +188,56 @@ message LogRequest {
 
 // LogResponse is empty (logging is fire-and-forget).
 message LogResponse {}
+
+// ListCommandsRequest requests the list of available commands.
+message ListCommandsRequest {}
+
+// ListCommandsResponse contains the list of available commands.
+message ListCommandsResponse {
+  // Available commands.
+  repeated CommandInfo commands = 1;
+  // Error message if query failed.
+  string error = 2;
+}
+
+// CommandInfo contains basic command information for listing.
+message CommandInfo {
+  // Command name.
+  string name = 1;
+  // Short help description.
+  string help = 2;
+  // Usage pattern (e.g., "say <message>").
+  string usage = 3;
+  // Source plugin name or "core".
+  string source = 4;
+}
+
+// GetCommandHelpRequest requests detailed help for a command.
+message GetCommandHelpRequest {
+  // Command name to get help for.
+  string command_name = 1;
+}
+
+// GetCommandHelpResponse contains detailed command help.
+message GetCommandHelpResponse {
+  // Detailed command information (nil if not found).
+  CommandHelpInfo command = 1;
+  // Error message if query failed.
+  string error = 2;
+}
+
+// CommandHelpInfo contains detailed help for a command.
+message CommandHelpInfo {
+  // Command name.
+  string name = 1;
+  // Short help description.
+  string help = 2;
+  // Usage pattern.
+  string usage = 3;
+  // Detailed markdown help text.
+  string help_text = 4;
+  // Required capabilities for this command.
+  repeated string capabilities = 5;
+  // Source plugin name or "core".
+  string source = 6;
+}

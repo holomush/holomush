@@ -20,6 +20,18 @@ type Session struct {
 	LastActivity time.Time            // Last time the session had activity
 }
 
+// SessionService provides session management operations.
+// This interface allows command handlers to work with sessions while enabling
+// mocking for tests.
+type SessionService interface {
+	// ListActiveSessions returns copies of all active sessions.
+	ListActiveSessions() []*Session
+	// GetSession returns a copy of a character's session, or nil if none exists.
+	GetSession(charID ulid.ULID) *Session
+	// EndSession completely removes a character's session from the manager.
+	EndSession(charID ulid.ULID) error
+}
+
 // copySession returns a defensive copy of a session to prevent external modification.
 func copySession(s *Session) *Session {
 	cursors := make(map[string]ulid.ULID, len(s.EventCursors))

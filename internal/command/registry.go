@@ -25,7 +25,16 @@ func NewRegistry() *Registry {
 // Register adds a command to the registry.
 // If a command with the same name exists, it is overwritten and a warning is logged.
 // This follows ADR 0006 and ADR 0008: last-loaded wins with warning.
+//
+// Returns an error if the command entry is invalid (empty name or nil handler).
 func (r *Registry) Register(entry CommandEntry) error {
+	if entry.Name == "" {
+		return ErrEmptyCommandName
+	}
+	if entry.Handler == nil {
+		return ErrNilHandler
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

@@ -9,13 +9,28 @@ import (
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand   = "UNKNOWN_COMMAND"
-	CodePermissionDenied = "PERMISSION_DENIED"
-	CodeInvalidArgs      = "INVALID_ARGS"
-	CodeWorldError       = "WORLD_ERROR"
-	CodeRateLimited      = "RATE_LIMITED"
-	CodeCircularAlias    = "CIRCULAR_ALIAS"
-	CodeNoCharacter      = "NO_CHARACTER"
+	CodeUnknownCommand    = "UNKNOWN_COMMAND"
+	CodePermissionDenied  = "PERMISSION_DENIED"
+	CodeInvalidArgs       = "INVALID_ARGS"
+	CodeWorldError        = "WORLD_ERROR"
+	CodeRateLimited       = "RATE_LIMITED"
+	CodeCircularAlias     = "CIRCULAR_ALIAS"
+	CodeNoCharacter       = "NO_CHARACTER"
+	CodeTargetNotFound    = "TARGET_NOT_FOUND"
+	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
+)
+
+// Sentinel errors for special conditions.
+var (
+	// ErrShutdownRequested signals that a graceful shutdown has been requested.
+	// Command dispatchers should check for this error and initiate shutdown.
+	ErrShutdownRequested = oops.Code(CodeShutdownRequested).Errorf("shutdown requested")
+
+	// ErrEmptyCommandName is returned when registering a command with an empty name.
+	ErrEmptyCommandName = oops.Errorf("command name cannot be empty")
+
+	// ErrNilHandler is returned when registering a command with a nil handler.
+	ErrNilHandler = oops.Errorf("command handler cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
@@ -70,6 +85,13 @@ func ErrNoCharacter() error {
 		Errorf("no character associated with session")
 }
 
+// ErrTargetNotFound creates an error when a target player cannot be found.
+func ErrTargetNotFound(target string) error {
+	return oops.Code(CodeTargetNotFound).
+		With("target", target).
+		Errorf("player not found: %s", target)
+}
+
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
 	if err == nil {
@@ -101,6 +123,11 @@ func PlayerMessage(err error) string {
 		return "Alias rejected: circular reference detected (expansion depth exceeded)"
 	case CodeNoCharacter:
 		return "No character selected. Please select a character first."
+	case CodeTargetNotFound:
+		if target, ok := oopsErr.Context()["target"].(string); ok && target != "" {
+			return "Player not found: " + target
+		}
+		return "Player not found."
 	default:
 		return "Something went wrong. Try again."
 	}

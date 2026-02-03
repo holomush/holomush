@@ -37,9 +37,10 @@ type CapabilityChecker interface {
 
 // Functions provides host functions to Lua plugins.
 type Functions struct {
-	kvStore      KVStore
-	enforcer     CapabilityChecker
-	worldService WorldService
+	kvStore         KVStore
+	enforcer        CapabilityChecker
+	worldService    WorldService
+	commandRegistry CommandRegistry
 }
 
 // Option configures Functions.
@@ -151,6 +152,10 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
 	ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
 	ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
+
+	// Command registry functions (capability required)
+	ls.SetField(mod, "list_commands", ls.NewFunction(f.wrap(pluginName, "command.list", f.listCommandsFn(pluginName))))
+	ls.SetField(mod, "get_command_help", ls.NewFunction(f.wrap(pluginName, "command.help", f.getCommandHelpFn(pluginName))))
 
 	ls.SetGlobal("holomush", mod)
 }

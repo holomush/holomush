@@ -12,6 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// noopHandler is a test helper that does nothing.
+func noopHandler(_ context.Context, _ *CommandExecution) error {
+	return nil
+}
+
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	reg := NewRegistry()
 
@@ -49,8 +54,8 @@ func TestRegistry_GetNotFound(t *testing.T) {
 func TestRegistry_All(t *testing.T) {
 	reg := NewRegistry()
 
-	_ = reg.Register(CommandEntry{Name: "look", Source: "core"})
-	_ = reg.Register(CommandEntry{Name: "say", Source: "comms"})
+	_ = reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "say", Handler: noopHandler, Source: "comms"})
 
 	all := reg.All()
 	assert.Len(t, all, 2)
@@ -74,8 +79,8 @@ func TestRegistry_AllEmpty(t *testing.T) {
 func TestRegistry_ConflictWarning(t *testing.T) {
 	reg := NewRegistry()
 
-	_ = reg.Register(CommandEntry{Name: "look", Source: "core"})
-	err := reg.Register(CommandEntry{Name: "look", Source: "plugin-a"})
+	_ = reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "core"})
+	err := reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "plugin-a"})
 
 	// Should succeed but we can check it overwrote
 	require.NoError(t, err)
@@ -87,8 +92,8 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 	reg := NewRegistry()
 
 	// Pre-populate with some commands
-	for i := 0; i < 10; i++ {
-		_ = reg.Register(CommandEntry{Name: "cmd" + string(rune('a'+i)), Source: "test"})
+	for i := range 10 {
+		_ = reg.Register(CommandEntry{Name: "cmd" + string(rune('a'+i)), Handler: noopHandler, Source: "test"})
 	}
 
 	var wg sync.WaitGroup
@@ -96,11 +101,11 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 	const iterations = 100
 
 	// Concurrent reads and writes
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+			for j := range iterations {
 				if j%2 == 0 {
 					// Read operation
 					_, _ = reg.Get("cmda")
@@ -108,8 +113,9 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 				} else {
 					// Write operation
 					_ = reg.Register(CommandEntry{
-						Name:   "concurrent",
-						Source: "goroutine",
+						Name:    "concurrent",
+						Handler: noopHandler,
+						Source:  "goroutine",
 					})
 				}
 			}
@@ -125,7 +131,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 
 func TestRegistry_AllReturnsCopy(t *testing.T) {
 	reg := NewRegistry()
-	_ = reg.Register(CommandEntry{Name: "look", Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "core"})
 
 	all1 := reg.All()
 	all2 := reg.All()
@@ -138,4 +144,28 @@ func TestRegistry_AllReturnsCopy(t *testing.T) {
 	all3 := reg.All()
 	assert.Equal(t, "look", all3[0].Name)
 	assert.NotEqual(t, all1[0].Name, all2[0].Name) // all1 was modified, all2 was not
+}
+
+func TestRegistry_Register_EmptyName(t *testing.T) {
+	reg := NewRegistry()
+
+	err := reg.Register(CommandEntry{
+		Name:    "",
+		Handler: noopHandler,
+		Source:  "core",
+	})
+
+	assert.ErrorIs(t, err, ErrEmptyCommandName)
+}
+
+func TestRegistry_Register_NilHandler(t *testing.T) {
+	reg := NewRegistry()
+
+	err := reg.Register(CommandEntry{
+		Name:    "test",
+		Handler: nil,
+		Source:  "core",
+	})
+
+	assert.ErrorIs(t, err, ErrNilHandler)
 }
