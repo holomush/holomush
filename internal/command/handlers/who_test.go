@@ -411,6 +411,157 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// might not have been processed before successful character lookups completed.
 }
 
+func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
+	// Force deterministic test by having only the error case
+	errorCharID := ulid.Make()
+	errorConn := ulid.Make()
+	executorID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(errorCharID, errorConn)
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// errorChar - access allowed but repo returns unexpected error
+	unexpectedErr := errors.New("database connection timeout")
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, errorCharID).
+		Return(nil, unexpectedErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: executorID,
+		Output:      &buf,
+		Services: &command.Services{
+			Session: sessionMgr,
+			World:   worldService,
+		},
+	}
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should show warning about error
+	assert.Contains(t, output, "(Note: 1 player could not be displayed due to an error)")
+}
+
+func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
+	// Test plural form of warning message
+	errorChar1ID := ulid.Make()
+	errorChar2ID := ulid.Make()
+	errorConn1 := ulid.Make()
+	errorConn2 := ulid.Make()
+	executorID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(errorChar1ID, errorConn1)
+	sessionMgr.Connect(errorChar2ID, errorConn2)
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// Both characters return unexpected errors
+	unexpectedErr := errors.New("database connection timeout")
+
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorChar1ID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, errorChar1ID).
+		Return(nil, unexpectedErr)
+
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorChar2ID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, errorChar2ID).
+		Return(nil, unexpectedErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: executorID,
+		Output:      &buf,
+		Services: &command.Services{
+			Session: sessionMgr,
+			World:   worldService,
+		},
+	}
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should show warning about errors (plural)
+	assert.Contains(t, output, "(Note: 2 players could not be displayed due to errors)")
+}
+
+func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
+	// Verify that expected errors (NotFound, PermissionDenied) don't trigger warning
+	notFoundCharID := ulid.Make()
+	deniedCharID := ulid.Make()
+	notFoundConn := ulid.Make()
+	deniedConn := ulid.Make()
+	executorID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(notFoundCharID, notFoundConn)
+	sessionMgr.Connect(deniedCharID, deniedConn)
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// notFoundChar - access allowed but returns ErrNotFound
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+notFoundCharID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, notFoundCharID).
+		Return(nil, world.ErrNotFound)
+
+	// deniedChar - access denied
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+deniedCharID.String()).
+		Return(false)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: executorID,
+		Output:      &buf,
+		Services: &command.Services{
+			Session: sessionMgr,
+			World:   worldService,
+		},
+	}
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should NOT show warning for expected errors
+	assert.NotContains(t, output, "could not be displayed")
+	assert.NotContains(t, output, "Note:")
+}
+
 func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	executorID := ulid.Make()
 	char1ID := ulid.Make()

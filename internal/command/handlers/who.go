@@ -36,6 +36,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Collect visible players
 	var players []playerInfo
+	var errorCount int
 	for _, session := range sessions {
 		// Try to get character info - skip if not accessible
 		char, err := exec.Services.World.GetCharacter(ctx, subjectID, session.CharacterID)
@@ -49,6 +50,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 				"session_char_id", session.CharacterID.String(),
 				"error", err,
 			)
+			errorCount++
 			continue
 		}
 
@@ -60,6 +62,17 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	writeWhoOutput(exec.Output, players)
+
+	// Warn user if any characters couldn't be displayed due to errors.
+	// Output write errors are acceptable; warning display is best-effort.
+	//nolint:errcheck // output write error is acceptable; warning display is best-effort
+	if errorCount > 0 {
+		if errorCount == 1 {
+			fmt.Fprintln(exec.Output, "(Note: 1 player could not be displayed due to an error)")
+		} else {
+			fmt.Fprintf(exec.Output, "(Note: %d players could not be displayed due to errors)\n", errorCount)
+		}
+	}
 	return nil
 }
 
