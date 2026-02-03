@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // ErrPropertyNotFound indicates no property matched the given name/prefix.
@@ -92,7 +93,9 @@ func NewProperty(name string, propType PropertyType, capability string, appliesT
 }
 
 // PropertyRegistry manages known properties with prefix resolution.
+// It is safe for concurrent use by multiple goroutines.
 type PropertyRegistry struct {
+	mu         sync.RWMutex
 	properties map[string]Property
 }
 
@@ -106,6 +109,9 @@ func NewPropertyRegistry() *PropertyRegistry {
 // Register adds a property to the registry.
 // Returns ErrDuplicateProperty if a property with the same name already exists.
 func (r *PropertyRegistry) Register(p Property) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if _, exists := r.properties[p.Name]; exists {
 		return fmt.Errorf("%w: %s", ErrDuplicateProperty, p.Name)
 	}
@@ -117,6 +123,9 @@ func (r *PropertyRegistry) Register(p Property) error {
 // Returns AmbiguousPropertyError if multiple properties match.
 // Returns ErrPropertyNotFound if no properties match.
 func (r *PropertyRegistry) Resolve(nameOrPrefix string) (Property, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	// Exact match first
 	if p, ok := r.properties[nameOrPrefix]; ok {
 		return p, nil
@@ -143,6 +152,9 @@ func (r *PropertyRegistry) Resolve(nameOrPrefix string) (Property, error) {
 // ValidFor checks if a property is valid for a given entity type.
 // Returns false if the property doesn't exist or doesn't apply to the entity type.
 func (r *PropertyRegistry) ValidFor(entityType, propertyName string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	prop, ok := r.properties[propertyName]
 	if !ok {
 		return false

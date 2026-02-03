@@ -4,6 +4,8 @@
 package holo
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -448,4 +450,60 @@ func TestPropertyRegistry_MustRegister_Success(t *testing.T) {
 	prop, err := r.Resolve("test")
 	require.NoError(t, err)
 	assert.Equal(t, "test", prop.Name)
+}
+
+func TestPropertyRegistry_ConcurrentAccess(t *testing.T) {
+	r := NewPropertyRegistry()
+
+	// Pre-register some properties for reading
+	for i := 0; i < 10; i++ {
+		p := Property{
+			Name:      fmt.Sprintf("initial_%d", i),
+			Type:      PropertyTypeString,
+			AppliesTo: []string{"object", "location"},
+		}
+		require.NoError(t, r.Register(p))
+	}
+
+	const goroutines = 50
+	const opsPerGoroutine = 100
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for g := 0; g < goroutines; g++ {
+		go func(id int) {
+			defer wg.Done()
+
+			for i := 0; i < opsPerGoroutine; i++ {
+				// Mix of read and write operations
+				switch i % 4 {
+				case 0:
+					// Register new property (write)
+					p := Property{
+						Name:      fmt.Sprintf("prop_%d_%d", id, i),
+						Type:      PropertyTypeString,
+						AppliesTo: []string{"object"},
+					}
+					_ = r.Register(p) // Ignore duplicate errors
+				case 1:
+					// Resolve existing property (read)
+					_, _ = r.Resolve("initial_5")
+				case 2:
+					// Resolve with prefix (read)
+					_, _ = r.Resolve("initial_")
+				case 3:
+					// ValidFor check (read)
+					_ = r.ValidFor("object", "initial_3")
+				}
+			}
+		}(g)
+	}
+
+	wg.Wait()
+
+	// Verify registry is still functional after concurrent access
+	prop, err := r.Resolve("initial_0")
+	require.NoError(t, err)
+	assert.Equal(t, "initial_0", prop.Name)
 }
