@@ -214,7 +214,7 @@ func TestCreateLocationFn_ServiceDoesNotSupportMutations(t *testing.T) {
 
 func TestCreateLocationFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
-		createLocationErr: errors.New("database error"),
+		createLocationErr: errors.New("database connection timeout with stack trace"),
 	}
 	enforcer := capability.NewEnforcer()
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.location"}))
@@ -231,8 +231,13 @@ func TestCreateLocationFn_ServiceError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, result.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	// Error should be sanitized
-	assert.Contains(t, errVal.String(), "internal error")
+	// Error should be sanitized - verify internal details are NOT leaked
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error", "expected sanitized error message")
+	assert.NotContains(t, errStr, "database", "error should not leak internal details")
+	assert.NotContains(t, errStr, "connection", "error should not leak internal details")
+	assert.NotContains(t, errStr, "timeout", "error should not leak internal details")
+	assert.NotContains(t, errStr, "stack trace", "error should not leak internal details")
 }
 
 // --- create_exit tests ---
@@ -370,6 +375,38 @@ func TestCreateExitFn_NoWorldService(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
+func TestCreateExitFn_ServiceError(t *testing.T) {
+	mutator := &mockWorldMutatorService{
+		createExitErr: errors.New("database connection timeout with stack trace"),
+	}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
+
+	fromID := ulid.Make()
+	toID := ulid.Make()
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	code := fmt.Sprintf(`result, err = holomush.create_exit("%s", "%s", "north", {})`, fromID, toID)
+	err := L.DoString(code)
+	require.NoError(t, err)
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	// Error should be sanitized - verify internal details are NOT leaked
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error", "expected sanitized error message")
+	assert.NotContains(t, errStr, "database", "error should not leak internal details")
+	assert.NotContains(t, errStr, "connection", "error should not leak internal details")
+	assert.NotContains(t, errStr, "timeout", "error should not leak internal details")
+	assert.NotContains(t, errStr, "stack trace", "error should not leak internal details")
+}
+
 // --- create_object tests ---
 
 func TestCreateObjectFn_Success(t *testing.T) {
@@ -477,6 +514,37 @@ func TestCreateObjectFn_OptsNotATable(t *testing.T) {
 	assert.Contains(t, errVal.String(), "second argument must be an options table")
 }
 
+func TestCreateObjectFn_ServiceError(t *testing.T) {
+	mutator := &mockWorldMutatorService{
+		createObjectErr: errors.New("database connection timeout with stack trace"),
+	}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
+
+	locID := ulid.Make()
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	code := fmt.Sprintf(`result, err = holomush.create_object("Magic Sword", {location_id = "%s"})`, locID)
+	err := L.DoString(code)
+	require.NoError(t, err)
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	// Error should be sanitized - verify internal details are NOT leaked
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error", "expected sanitized error message")
+	assert.NotContains(t, errStr, "database", "error should not leak internal details")
+	assert.NotContains(t, errStr, "connection", "error should not leak internal details")
+	assert.NotContains(t, errStr, "timeout", "error should not leak internal details")
+	assert.NotContains(t, errStr, "stack trace", "error should not leak internal details")
+}
+
 // --- find_location tests ---
 
 func TestFindLocationFn_Success(t *testing.T) {
@@ -553,6 +621,36 @@ func TestFindLocationFn_CapabilityDenied(t *testing.T) {
 	err := L.DoString(`result, err = holomush.find_location("Test")`)
 	require.Error(t, err, "expected capability error")
 	assert.Contains(t, err.Error(), "capability denied")
+}
+
+func TestFindLocationFn_ServiceError(t *testing.T) {
+	mutator := &mockWorldMutatorService{
+		findLocationByNameFn: func(_ context.Context, _, _ string) (*world.Location, error) {
+			return nil, errors.New("database connection timeout with stack trace")
+		},
+	}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.read.location"}))
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	err := L.DoString(`result, err = holomush.find_location("Test Room")`)
+	require.NoError(t, err)
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	// Error should be sanitized - verify internal details are NOT leaked
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error", "expected sanitized error message")
+	assert.NotContains(t, errStr, "database", "error should not leak internal details")
+	assert.NotContains(t, errStr, "connection", "error should not leak internal details")
+	assert.NotContains(t, errStr, "timeout", "error should not leak internal details")
+	assert.NotContains(t, errStr, "stack trace", "error should not leak internal details")
 }
 
 // --- set_property tests ---
@@ -700,6 +798,45 @@ func TestSetPropertyFn_CapabilityDenied(t *testing.T) {
 	assert.Contains(t, err.Error(), "capability denied")
 }
 
+func TestSetPropertyFn_ServiceError(t *testing.T) {
+	locID := ulid.Make()
+	loc := &world.Location{
+		ID:          locID,
+		Name:        "Test Room",
+		Description: "Old description",
+		Type:        world.LocationTypePersistent,
+	}
+
+	mutator := &mockWorldMutatorService{
+		location:          loc,
+		updateLocationErr: errors.New("database connection timeout with stack trace"),
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	code := fmt.Sprintf(`result, err = holomush.set_property("location", "%s", "description", "New description")`, locID)
+	err := L.DoString(code)
+	require.NoError(t, err)
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	// Error should be sanitized - verify internal details are NOT leaked
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error", "expected sanitized error message")
+	assert.NotContains(t, errStr, "database", "error should not leak internal details")
+	assert.NotContains(t, errStr, "connection", "error should not leak internal details")
+	assert.NotContains(t, errStr, "timeout", "error should not leak internal details")
+	assert.NotContains(t, errStr, "stack trace", "error should not leak internal details")
+}
+
 // --- get_property tests ---
 
 func TestGetPropertyFn_LocationDescription(t *testing.T) {
@@ -800,6 +937,36 @@ func TestGetPropertyFn_CapabilityDenied(t *testing.T) {
 	err := L.DoString(code)
 	require.Error(t, err, "expected capability error")
 	assert.Contains(t, err.Error(), "capability denied")
+}
+
+func TestGetPropertyFn_ServiceError(t *testing.T) {
+	mutator := &mockWorldMutatorService{
+		err: errors.New("database connection timeout with stack trace"),
+	}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	locID := ulid.Make()
+	code := fmt.Sprintf(`result, err = holomush.get_property("location", "%s", "description")`, locID)
+	err := L.DoString(code)
+	require.NoError(t, err)
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type())
+	assert.Equal(t, lua.LTString, errVal.Type())
+	// Error should be sanitized - verify internal details are NOT leaked
+	errStr := errVal.String()
+	assert.Contains(t, errStr, "internal error", "expected sanitized error message")
+	assert.NotContains(t, errStr, "database", "error should not leak internal details")
+	assert.NotContains(t, errStr, "connection", "error should not leak internal details")
+	assert.NotContains(t, errStr, "timeout", "error should not leak internal details")
+	assert.NotContains(t, errStr, "stack trace", "error should not leak internal details")
 }
 
 // --- Additional coverage tests ---
