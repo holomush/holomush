@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -78,9 +79,12 @@ func (r *PostgresAliasRepository) SetSystemAlias(ctx context.Context, alias, com
 
 // DeleteSystemAlias removes a system-wide alias.
 func (r *PostgresAliasRepository) DeleteSystemAlias(ctx context.Context, alias string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM system_aliases WHERE alias = $1`, alias)
+	result, err := r.pool.Exec(ctx, `DELETE FROM system_aliases WHERE alias = $1`, alias)
 	if err != nil {
 		return oops.With("operation", "delete system alias").With("alias", alias).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		slog.Debug("delete system alias: no rows affected", "alias", alias)
 	}
 	return nil
 }
@@ -129,7 +133,7 @@ func (r *PostgresAliasRepository) SetPlayerAlias(ctx context.Context, playerID u
 
 // DeletePlayerAlias removes a player-specific alias.
 func (r *PostgresAliasRepository) DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error {
-	_, err := r.pool.Exec(ctx,
+	result, err := r.pool.Exec(ctx,
 		`DELETE FROM player_aliases WHERE player_id = $1 AND alias = $2`,
 		playerID.String(), alias)
 	if err != nil {
@@ -137,6 +141,11 @@ func (r *PostgresAliasRepository) DeletePlayerAlias(ctx context.Context, playerI
 			With("player_id", playerID.String()).
 			With("alias", alias).
 			Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		slog.Debug("delete player alias: no rows affected",
+			"player_id", playerID.String(),
+			"alias", alias)
 	}
 	return nil
 }
