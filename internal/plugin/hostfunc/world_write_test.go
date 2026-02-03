@@ -435,6 +435,48 @@ func TestCreateObjectFn_NoContainment(t *testing.T) {
 	assert.Contains(t, errVal.String(), "must specify exactly one containment")
 }
 
+func TestCreateObjectFn_MissingOptsTable(t *testing.T) {
+	mutator := &mockWorldMutatorService{}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	// Call create_object with only name argument, no opts table
+	err := L.DoString(`result, err = holomush.create_object("Sword")`)
+	require.NoError(t, err, "should not panic or error at Lua level")
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Contains(t, errVal.String(), "second argument must be an options table")
+}
+
+func TestCreateObjectFn_OptsNotATable(t *testing.T) {
+	mutator := &mockWorldMutatorService{}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	// Call create_object with a string instead of a table for opts
+	err := L.DoString(`result, err = holomush.create_object("Sword", "not-a-table")`)
+	require.NoError(t, err, "should not panic or error at Lua level")
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
+	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
+	assert.Contains(t, errVal.String(), "second argument must be an options table")
+}
+
 // --- find_location tests ---
 
 func TestFindLocationFn_Success(t *testing.T) {

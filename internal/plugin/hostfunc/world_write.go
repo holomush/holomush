@@ -208,7 +208,14 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 		}
 
 		name := L.CheckString(1)
-		opts := L.ToTable(2)
+
+		// Validate opts parameter is provided and is a table
+		opts, ok := L.Get(2).(*lua.LTable)
+		if !ok {
+			L.Push(lua.LNil)
+			L.Push(lua.LString("second argument must be an options table"))
+			return 2
+		}
 
 		// Parse containment from options
 		var containment world.Containment
