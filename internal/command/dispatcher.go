@@ -24,18 +24,34 @@ type Dispatcher struct {
 	aliasCache *AliasCache // optional, can be nil
 }
 
-// NewDispatcher creates a new command dispatcher.
-func NewDispatcher(registry *Registry, ac access.AccessControl) *Dispatcher {
-	return &Dispatcher{
-		registry: registry,
-		access:   ac,
+// DispatcherOption configures a Dispatcher during construction.
+type DispatcherOption func(*Dispatcher)
+
+// WithAliasCache configures the dispatcher to use the given alias cache for
+// command resolution. If not provided, alias resolution is disabled.
+func WithAliasCache(cache *AliasCache) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.aliasCache = cache
 	}
 }
 
-// SetAliasCache configures the dispatcher to resolve aliases.
-// If nil, alias resolution is disabled.
-func (d *Dispatcher) SetAliasCache(cache *AliasCache) {
-	d.aliasCache = cache
+// NewDispatcher creates a new command dispatcher with the given registry
+// and access control. Returns an error if registry or ac is nil.
+func NewDispatcher(registry *Registry, ac access.AccessControl, opts ...DispatcherOption) (*Dispatcher, error) {
+	if registry == nil {
+		return nil, ErrNilRegistry
+	}
+	if ac == nil {
+		return nil, ErrNilAccessControl
+	}
+	d := &Dispatcher{
+		registry: registry,
+		access:   ac,
+	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d, nil
 }
 
 // Dispatch parses and executes a command.

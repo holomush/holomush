@@ -39,7 +39,8 @@ func TestDispatcher_Dispatch(t *testing.T) {
 	charID := ulid.Make()
 	mockAccess.Grant("char:"+charID.String(), "execute", "test.echo")
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -56,7 +57,8 @@ func TestDispatcher_Dispatch(t *testing.T) {
 func TestDispatcher_UnknownCommand(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := accesstest.NewMockAccessControl()
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -64,12 +66,12 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 		Output:      &output,
 	}
 
-	err := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
-	require.Error(t, err)
-	assert.Contains(t, PlayerMessage(err), "Unknown command")
+	dispErr := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
+	require.Error(t, dispErr)
+	assert.Contains(t, PlayerMessage(dispErr), "Unknown command")
 
 	// Verify error code
-	oopsErr, ok := oops.AsOops(err)
+	oopsErr, ok := oops.AsOops(dispErr)
 	require.True(t, ok)
 	assert.Equal(t, CodeUnknownCommand, oopsErr.Code())
 }
@@ -87,7 +89,8 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	require.NoError(t, err)
 
 	// Don't grant capability
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -108,7 +111,8 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 func TestDispatcher_EmptyInput(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := accesstest.NewMockAccessControl()
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -116,11 +120,11 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 		Output:      &output,
 	}
 
-	err := dispatcher.Dispatch(context.Background(), "", exec)
-	require.Error(t, err)
+	dispErr := dispatcher.Dispatch(context.Background(), "", exec)
+	require.Error(t, dispErr)
 
 	// Verify it's a parse error
-	oopsErr, ok := oops.AsOops(err)
+	oopsErr, ok := oops.AsOops(dispErr)
 	require.True(t, ok)
 	assert.Equal(t, "EMPTY_INPUT", oopsErr.Code())
 }
@@ -144,7 +148,8 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	// Only grant one capability
 	mockAccess.Grant(subject, "execute", "admin.manage")
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -184,7 +189,8 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -213,7 +219,8 @@ func TestDispatcher_HandlerError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -229,18 +236,19 @@ func TestDispatcher_HandlerError(t *testing.T) {
 func TestDispatcher_WhitespaceInput(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := accesstest.NewMockAccessControl()
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{Output: &output}
 
 	// Only whitespace
-	err := dispatcher.Dispatch(context.Background(), "   ", exec)
-	require.Error(t, err)
+	dispErr := dispatcher.Dispatch(context.Background(), "   ", exec)
+	require.Error(t, dispErr)
 
 	// Tabs only
-	err = dispatcher.Dispatch(context.Background(), "\t\t", exec)
-	require.Error(t, err)
+	dispErr = dispatcher.Dispatch(context.Background(), "\t\t", exec)
+	require.Error(t, dispErr)
 }
 
 func TestDispatcher_CommandWithNoArgs(t *testing.T) {
@@ -259,7 +267,8 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -288,7 +297,8 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -301,21 +311,40 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	assert.Equal(t, "hello   world", capturedArgs)
 }
 
-func TestDispatcher_SetAliasCache(t *testing.T) {
+func TestNewDispatcher_NilRegistry(t *testing.T) {
+	mockAccess := accesstest.NewMockAccessControl()
+	dispatcher, err := NewDispatcher(nil, mockAccess)
+	require.Error(t, err)
+	assert.Nil(t, dispatcher)
+	assert.Equal(t, ErrNilRegistry, err)
+}
+
+func TestNewDispatcher_NilAccessControl(t *testing.T) {
+	reg := NewRegistry()
+	dispatcher, err := NewDispatcher(reg, nil)
+	require.Error(t, err)
+	assert.Nil(t, dispatcher)
+	assert.Equal(t, ErrNilAccessControl, err)
+}
+
+func TestNewDispatcher_WithAliasCache(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := accesstest.NewMockAccessControl()
-	dispatcher := NewDispatcher(reg, mockAccess)
 
-	// Initially nil
+	// Without option - no alias cache
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 	assert.Nil(t, dispatcher.aliasCache)
 
-	// Set cache
+	// With option - alias cache set
 	cache := NewAliasCache()
-	dispatcher.SetAliasCache(cache)
+	dispatcher, err = NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
 	assert.Equal(t, cache, dispatcher.aliasCache)
 
-	// Set to nil
-	dispatcher.SetAliasCache(nil)
+	// With nil cache option - alias cache nil (explicit)
+	dispatcher, err = NewDispatcher(reg, mockAccess, WithAliasCache(nil))
+	require.NoError(t, err)
 	assert.Nil(t, dispatcher.aliasCache)
 }
 
@@ -336,7 +365,8 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 	// No alias cache set
 
 	var output bytes.Buffer
@@ -367,14 +397,14 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
-
 	// Set up alias cache with some aliases that won't match
 	cache := NewAliasCache()
 	cache.LoadSystemAliases(map[string]string{
 		"l": "look",
 	})
-	dispatcher.SetAliasCache(cache)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -405,14 +435,14 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
-
 	// Set up alias cache with system alias
 	cache := NewAliasCache()
 	cache.LoadSystemAliases(map[string]string{
 		"l": "look",
 	})
-	dispatcher.SetAliasCache(cache)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -443,15 +473,15 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
-
 	// Set up alias cache with player alias
 	playerID := ulid.Make()
 	cache := NewAliasCache()
 	cache.LoadPlayerAliases(playerID, map[string]string{
 		"greet": "say Hello everyone!",
 	})
-	dispatcher.SetAliasCache(cache)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -482,8 +512,6 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
-
 	playerID := ulid.Make()
 	cache := NewAliasCache()
 	// System alias
@@ -494,7 +522,9 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	cache.LoadPlayerAliases(playerID, map[string]string{
 		"hi": "say hello from player",
 	})
-	dispatcher.SetAliasCache(cache)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -525,13 +555,13 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
-
 	cache := NewAliasCache()
 	cache.LoadSystemAliases(map[string]string{
 		"s": "say",
 	})
-	dispatcher.SetAliasCache(cache)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -558,7 +588,8 @@ func TestDispatcher_NoCharacter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := &CommandExecution{
@@ -597,7 +628,8 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 	playerID := ulid.Make()
 	mockAccess.Grant("char:"+charID.String(), "execute", "comms.pose")
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
 
 	t.Run("direct command sets InvokedAs to command name", func(t *testing.T) {
 		capturedInvokedAs = ""
@@ -618,7 +650,8 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 		cache.LoadSystemAliases(map[string]string{
 			";": "pose",
 		})
-		dispatcher.SetAliasCache(cache)
+		dispatcherWithAlias, dispErr := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+		require.NoError(t, dispErr)
 
 		capturedInvokedAs = ""
 		exec := &CommandExecution{
@@ -627,8 +660,8 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 			Output:      &bytes.Buffer{},
 		}
 
-		err := dispatcher.Dispatch(context.Background(), ";'s eyes widen", exec)
-		require.NoError(t, err)
+		dispatchErr := dispatcherWithAlias.Dispatch(context.Background(), ";'s eyes widen", exec)
+		require.NoError(t, dispatchErr)
 		assert.Equal(t, ";", capturedInvokedAs, "InvokedAs should be the original command before alias resolution")
 	})
 }

@@ -31,6 +31,12 @@ var (
 
 	// ErrNilHandler is returned when registering a command with a nil handler.
 	ErrNilHandler = oops.Errorf("command handler cannot be nil")
+
+	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
+	ErrNilRegistry = oops.Errorf("registry cannot be nil")
+
+	// ErrNilAccessControl is returned when creating a dispatcher with nil access control.
+	ErrNilAccessControl = oops.Errorf("access control cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
