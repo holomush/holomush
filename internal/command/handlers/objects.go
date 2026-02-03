@@ -6,6 +6,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -47,6 +48,9 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 	case "location":
 		return createLocation(ctx, exec, subjectID, name)
 	default:
+		slog.ErrorContext(ctx, "create: unknown entity type",
+			"character_id", exec.CharacterID,
+			"entity_type", entityType)
 		_, _ = fmt.Fprintf(exec.Output, "Unknown type: %s. Use: object, location\n", entityType)
 		return nil
 	}
@@ -56,11 +60,19 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 func createObject(ctx context.Context, exec *command.CommandExecution, subjectID, name string) error {
 	obj, err := world.NewObject(name, world.InLocation(exec.LocationID))
 	if err != nil {
+		slog.ErrorContext(ctx, "create object: NewObject failed",
+			"character_id", exec.CharacterID,
+			"object_name", name,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Failed to create object: %v\n", err)
 		return nil
 	}
 
 	if err := exec.Services.World.CreateObject(ctx, subjectID, obj); err != nil {
+		slog.ErrorContext(ctx, "create object: CreateObject failed",
+			"character_id", exec.CharacterID,
+			"object_name", name,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Failed to create object: %v\n", err)
 		return nil
 	}
@@ -73,11 +85,19 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 func createLocation(ctx context.Context, exec *command.CommandExecution, subjectID, name string) error {
 	loc, err := world.NewLocation(name, "", world.LocationTypePersistent)
 	if err != nil {
+		slog.ErrorContext(ctx, "create location: NewLocation failed",
+			"character_id", exec.CharacterID,
+			"location_name", name,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Failed to create location: %v\n", err)
 		return nil
 	}
 
 	if err := exec.Services.World.CreateLocation(ctx, subjectID, loc); err != nil {
+		slog.ErrorContext(ctx, "create location: CreateLocation failed",
+			"character_id", exec.CharacterID,
+			"location_name", name,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Failed to create location: %v\n", err)
 		return nil
 	}
@@ -115,6 +135,10 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	registry := holo.DefaultRegistry()
 	prop, err := registry.Resolve(propertyPrefix)
 	if err != nil {
+		slog.ErrorContext(ctx, "set: property resolution failed",
+			"character_id", exec.CharacterID,
+			"property_prefix", propertyPrefix,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
 		return nil
 	}
@@ -122,12 +146,22 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Resolve target
 	entityType, entityID, err := resolveTarget(ctx, exec, target)
 	if err != nil {
+		slog.ErrorContext(ctx, "set: target resolution failed",
+			"character_id", exec.CharacterID,
+			"target", target,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
 		return nil
 	}
 
 	// Apply the property change
 	if err := applyProperty(ctx, exec, entityType, entityID, prop.Name, value); err != nil {
+		slog.ErrorContext(ctx, "set: apply property failed",
+			"character_id", exec.CharacterID,
+			"entity_type", entityType,
+			"entity_id", entityID,
+			"property", prop.Name,
+			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Error: %v\n", err)
 		return nil
 	}
