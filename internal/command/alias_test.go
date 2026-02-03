@@ -471,6 +471,106 @@ func TestAliasCache_Resolve_PrefixAlias(t *testing.T) {
 	})
 }
 
+func TestAliasCache_ChainedExpansionPreservesArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupAliases   func(c *AliasCache)
+		input          string
+		expectedResult string
+		expectedAlias  string
+	}{
+		{
+			name: "2-level chain with args at each level",
+			setupAliases: func(c *AliasCache) {
+				// a → "b extra"
+				// b → "final"
+				// "a myarg" should become "final extra myarg"
+				require.NoError(t, c.SetSystemAlias("a", "b extra"))
+				require.NoError(t, c.SetSystemAlias("b", "final"))
+			},
+			input:          "a myarg",
+			expectedResult: "final extra myarg",
+			expectedAlias:  "a",
+		},
+		{
+			name: "3-level chain preserves all args",
+			setupAliases: func(c *AliasCache) {
+				// x → "y arg1"
+				// y → "z arg2"
+				// z → "done"
+				// "x userarg" should become "done arg2 arg1 userarg"
+				require.NoError(t, c.SetSystemAlias("x", "y arg1"))
+				require.NoError(t, c.SetSystemAlias("y", "z arg2"))
+				require.NoError(t, c.SetSystemAlias("z", "done"))
+			},
+			input:          "x userarg",
+			expectedResult: "done arg2 arg1 userarg",
+			expectedAlias:  "x",
+		},
+		{
+			name: "2-level chain no user args",
+			setupAliases: func(c *AliasCache) {
+				require.NoError(t, c.SetSystemAlias("short", "medium foo"))
+				require.NoError(t, c.SetSystemAlias("medium", "long"))
+			},
+			input:          "short",
+			expectedResult: "long foo",
+			expectedAlias:  "short",
+		},
+		{
+			name: "chain with multiple args per level",
+			setupAliases: func(c *AliasCache) {
+				// cmd1 → "cmd2 a b"
+				// cmd2 → "final"
+				// "cmd1 c d" should become "final a b c d"
+				require.NoError(t, c.SetSystemAlias("cmd1", "cmd2 a b"))
+				require.NoError(t, c.SetSystemAlias("cmd2", "final"))
+			},
+			input:          "cmd1 c d",
+			expectedResult: "final a b c d",
+			expectedAlias:  "cmd1",
+		},
+		{
+			name: "player alias chain with args",
+			setupAliases: func(c *AliasCache) {
+				playerID := ulid.MustNew(1, nil)
+				require.NoError(t, c.SetPlayerAlias(playerID, "pa", "pb arg1"))
+				require.NoError(t, c.SetPlayerAlias(playerID, "pb", "target"))
+			},
+			input:          "pa myarg",
+			expectedResult: "target arg1 myarg",
+			expectedAlias:  "pa",
+		},
+		{
+			name: "mixed player and system chain",
+			setupAliases: func(c *AliasCache) {
+				playerID := ulid.MustNew(1, nil)
+				// Player alias points to system alias
+				require.NoError(t, c.SetPlayerAlias(playerID, "player", "sys extra"))
+				require.NoError(t, c.SetSystemAlias("sys", "final"))
+			},
+			input:          "player userarg",
+			expectedResult: "final extra userarg",
+			expectedAlias:  "player",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cache := NewAliasCache()
+			tt.setupAliases(cache)
+
+			// Use playerID 1 for player alias tests, zero for system-only
+			playerID := ulid.MustNew(1, nil)
+			result := cache.Resolve(playerID, tt.input, nil)
+
+			assert.Equal(t, tt.expectedResult, result.Resolved)
+			assert.True(t, result.WasAlias)
+			assert.Equal(t, tt.expectedAlias, result.AliasUsed)
+		})
+	}
+}
+
 func BenchmarkAliasCache_Resolve(b *testing.B) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
