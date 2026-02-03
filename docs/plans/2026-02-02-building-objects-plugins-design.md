@@ -13,22 +13,22 @@ Implement building commands as two plugins with different implementation strateg
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Plugin split | building + objects | Separation of concerns: topology vs entity manipulation |
-| Building implementation | Lua | Proves Lua model per epic goal, simple command→API |
-| Objects implementation | Go | Core infrastructure, property system, type safety |
-| Property matching | Prefix-based | `desc`, `descr`, `description` all work if unique |
-| Entity references | ID or name | `#01ABC...` for ID, otherwise name lookup |
+| Decision                | Choice             | Rationale                                               |
+| ----------------------- | ------------------ | ------------------------------------------------------- |
+| Plugin split            | building + objects | Separation of concerns: topology vs entity manipulation |
+| Building implementation | Lua                | Proves Lua model per epic goal, simple command→API      |
+| Objects implementation  | Go                 | Core infrastructure, property system, type safety       |
+| Property matching       | Prefix-based       | `desc`, `descr`, `description` all work if unique       |
+| Entity references       | ID or name         | `#01ABC...` for ID, otherwise name lookup               |
 
 ## Building Plugin (Lua)
 
 ### Commands
 
-| Command | Syntax | Capabilities |
-|---------|--------|--------------|
-| `dig` | `dig <exit> to "<location>" [return <exit>]` | `build.location`, `build.exit` |
-| `link` | `link <exit> to <target>` | `build.exit` |
+| Command | Syntax                                       | Capabilities                   |
+| ------- | -------------------------------------------- | ------------------------------ |
+| `dig`   | `dig <exit> to "<location>" [return <exit>]` | `build.location`, `build.exit` |
+| `link`  | `link <exit> to <target>`                    | `build.exit`                   |
 
 ### Examples
 
@@ -48,10 +48,10 @@ link east to "Garden"
 
 ### Commands
 
-| Command | Syntax | Capabilities |
-|---------|--------|--------------|
-| `create` | `create <type> "<name>"` | `object.create.<type>` |
-| `set` | `set <property> of <target> to <value>` | `property.set.<property>` |
+| Command  | Syntax                                  | Capabilities              |
+| -------- | --------------------------------------- | ------------------------- |
+| `create` | `create <type> "<name>"`                | `object.create.<type>`    |
+| `set`    | `set <property> of <target> to <value>` | `property.set.<property>` |
 
 ### Examples
 
@@ -77,10 +77,10 @@ Error: Ambiguous property 'd' - matches: description, dark_mode
 
 **Property Registry:**
 
-| Property | Type | Capability | Applies To |
-|----------|------|------------|------------|
-| `description` | text | `property.set.description` | location, object, character, exit |
-| `name` | string | `property.set.name` | location, object, exit |
+| Property      | Type   | Capability                 | Applies To                        |
+| ------------- | ------ | -------------------------- | --------------------------------- |
+| `description` | text   | `property.set.description` | location, object, character, exit |
+| `name`        | string | `property.set.name`        | location, object, exit            |
 
 Future: Properties have visibility levels (all, owner, admin).
 
@@ -92,13 +92,13 @@ Future: Properties have visibility levels (all, owner, admin).
 
 New `holo.world.*` functions for Lua plugins:
 
-| Function | Signature | Returns |
-|----------|-----------|---------|
-| `create_location` | `(name, description, type)` | `{id, name}` or `nil, error` |
-| `create_exit` | `(from_id, to_id, name, opts)` | `{id, name}` or `nil, error` |
-| `find_location` | `(name)` | `{id, name}` or `nil, error` |
-| `set_property` | `(entity_type, entity_id, property, value)` | `true` or `nil, error` |
-| `get_property` | `(entity_type, entity_id, property)` | `value` or `nil, error` |
+| Function          | Signature                                   | Returns                      |
+| ----------------- | ------------------------------------------- | ---------------------------- |
+| `create_location` | `(name, description, type)`                 | `{id, name}` or `nil, error` |
+| `create_exit`     | `(from_id, to_id, name, opts)`              | `{id, name}` or `nil, error` |
+| `find_location`   | `(name)`                                    | `{id, name}` or `nil, error` |
+| `set_property`    | `(entity_type, entity_id, property, value)` | `true` or `nil, error`       |
+| `get_property`    | `(entity_type, entity_id, property)`        | `value` or `nil, error`      |
 
 All functions check capabilities via the adapter pattern.
 
@@ -106,14 +106,14 @@ All functions check capabilities via the adapter pattern.
 
 ## Implementation Tasks
 
-| # | Task | Type | Files |
-|---|------|------|-------|
-| 1 | World mutation host functions | Go | `internal/plugin/hostfunc/world_write.go` |
-| 2 | Property registry with prefix matching | Go | `pkg/holo/property.go` |
-| 3 | Building plugin manifest | YAML | `plugins/building/plugin.yaml` |
-| 4 | Building plugin handlers (dig, link) | Lua | `plugins/building/main.lua` |
-| 5 | Objects plugin (create, set) | Go | `internal/command/handlers/objects.go` |
-| 6 | Integration tests | Go | `*_test.go` |
+| # | Task                                   | Type | Files                                     |
+| - | -------------------------------------- | ---- | ----------------------------------------- |
+| 1 | World mutation host functions          | Go   | `internal/plugin/hostfunc/world_write.go` |
+| 2 | Property registry with prefix matching | Go   | `pkg/holo/property.go`                    |
+| 3 | Building plugin manifest               | YAML | `plugins/building/plugin.yaml`            |
+| 4 | Building plugin handlers (dig, link)   | Lua  | `plugins/building/main.lua`               |
+| 5 | Objects plugin (create, set)           | Go   | `internal/command/handlers/objects.go`    |
+| 6 | Integration tests                      | Go   | `*_test.go`                               |
 
 ### Task Dependencies
 

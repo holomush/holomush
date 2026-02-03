@@ -160,9 +160,9 @@ func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
 // Mock types for testing
 type mockSessionService struct{}
 
-func (m *mockSessionService) ListActiveSessions() []*core.Session   { return nil }
-func (m *mockSessionService) GetSession(_ ulid.ULID) *core.Session  { return nil }
-func (m *mockSessionService) EndSession(_ ulid.ULID) error          { return nil }
+func (m *mockSessionService) ListActiveSessions() []*core.Session  { return nil }
+func (m *mockSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
+func (m *mockSessionService) EndSession(_ ulid.ULID) error         { return nil }
 
 type mockAccessControl struct{}
 
@@ -174,9 +174,11 @@ func (m *mockEventStore) Append(_ context.Context, _ core.Event) error { return 
 func (m *mockEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
 	return nil, nil
 }
+
 func (m *mockEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
 	return ulid.ULID{}, nil
 }
+
 func (m *mockEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
 }

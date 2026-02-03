@@ -299,4 +299,3 @@ func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "Initiating server shutdown")
 }
-

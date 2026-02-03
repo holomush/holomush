@@ -157,8 +157,8 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 Add after line 145 in `functions.go`:
 
 ```go
-    // World mutations (capability required)
-    ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
+// World mutations (capability required)
+ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
 ```
 
 **Step 5: Run tests to verify they pass**
@@ -275,6 +275,7 @@ func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 **Step 8: Write tests for find_location and set_property**
 
 Similar pattern for:
+
 - `find_location(name)` - searches by name
 - `set_property(entity_type, entity_id, property, value)` - updates property
 - `get_property(entity_type, entity_id, property)` - reads property
@@ -282,13 +283,13 @@ Similar pattern for:
 **Step 9: Add all registrations to functions.go**
 
 ```go
-    // World mutations (capability required)
-    ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
-    ls.SetField(mod, "create_exit", ls.NewFunction(f.wrap(pluginName, "world.write.exit", f.createExitFn(pluginName))))
-    ls.SetField(mod, "create_object", ls.NewFunction(f.wrap(pluginName, "world.write.object", f.createObjectFn(pluginName))))
-    ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
-    ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
-    ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
+// World mutations (capability required)
+ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
+ls.SetField(mod, "create_exit", ls.NewFunction(f.wrap(pluginName, "world.write.exit", f.createExitFn(pluginName))))
+ls.SetField(mod, "create_object", ls.NewFunction(f.wrap(pluginName, "world.write.object", f.createObjectFn(pluginName))))
+ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
+ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
+ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
 ```
 
 **Step 10: Run all tests**
