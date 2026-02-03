@@ -13,6 +13,7 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/holomush/holomush/internal/access/accesstest"
 )
@@ -605,6 +606,113 @@ func TestDispatcher_NoCharacter(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, CodeNoCharacter, oopsErr.Code())
+}
+
+func TestDispatcher_ContextCancellation(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	// Channel to signal handler received cancellation
+	handlerStarted := make(chan struct{})
+	handlerDone := make(chan struct{})
+	var receivedCtxErr error
+
+	err := reg.Register(CommandEntry{
+		Name:         "slow",
+		Capabilities: nil,
+		Handler: func(ctx context.Context, _ *CommandExecution) error {
+			close(handlerStarted)
+			// Wait for context cancellation or timeout
+			<-ctx.Done()
+			receivedCtxErr = ctx.Err()
+			close(handlerDone)
+			return ctx.Err()
+		},
+		Source: "test",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+	}
+
+	// Create cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Run dispatch in goroutine since handler blocks
+	dispatchDone := make(chan error)
+	go func() {
+		dispatchDone <- dispatcher.Dispatch(ctx, "slow", exec)
+	}()
+
+	// Wait for handler to start
+	<-handlerStarted
+
+	// Cancel context
+	cancel()
+
+	// Wait for handler to complete
+	<-handlerDone
+
+	// Verify handler received cancellation
+	assert.Equal(t, context.Canceled, receivedCtxErr)
+
+	// Verify dispatch returned the cancellation error
+	dispatchErr := <-dispatchDone
+	assert.ErrorIs(t, dispatchErr, context.Canceled)
+}
+
+func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	var receivedCtx context.Context
+	err := reg.Register(CommandEntry{
+		Name:         "check",
+		Capabilities: nil,
+		Handler: func(ctx context.Context, _ *CommandExecution) error {
+			receivedCtx = ctx
+			// Return immediately if already cancelled
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return nil
+		},
+		Source: "test",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+	}
+
+	// Create already-cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Dispatch with cancelled context
+	dispatchErr := dispatcher.Dispatch(ctx, "check", exec)
+
+	// Handler should have received the cancelled context
+	require.NotNil(t, receivedCtx)
+	assert.Equal(t, context.Canceled, receivedCtx.Err())
+
+	// Dispatch should return cancellation error
+	assert.ErrorIs(t, dispatchErr, context.Canceled)
 }
 
 func TestDispatcher_InvokedAs(t *testing.T) {
