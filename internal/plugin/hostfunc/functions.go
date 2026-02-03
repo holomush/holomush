@@ -122,6 +122,9 @@ func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
 
 // Register adds host functions to a Lua state.
 func (f *Functions) Register(ls *lua.LState, pluginName string) {
+	// Register the holo.* stdlib (fmt, emit namespaces)
+	RegisterStdlib(ls)
+
 	mod := ls.NewTable()
 
 	// Logging (no capability required)

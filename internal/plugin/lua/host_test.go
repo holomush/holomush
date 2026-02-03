@@ -587,3 +587,243 @@ func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
 
 	_ = pluginlua.NewHostWithFunctions(nil)
 }
+
+func TestLuaHost_DeliverEvent_OnCommand_CommandEvent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with on_command handler that echoes context fields
+	mainLua := `
+function on_command(ctx)
+    return {
+        {
+            stream = "location:" .. ctx.location_id,
+            type = "echo",
+            payload = ctx.name .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
+                      ctx.character_name .. "|" .. ctx.character_id .. "|" ..
+                      ctx.location_id .. "|" .. ctx.player_id
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "on-command-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{
+		ID:        "01ABC",
+		Stream:    "char:char123",
+		Type:      pluginpkg.EventType("command"),
+		Timestamp: 1705591234000,
+		ActorKind: pluginpkg.ActorCharacter,
+		ActorID:   "char123",
+		Payload:   `{"name":"say","args":"Hello everyone!","invoked_as":";","character_name":"Alice","character_id":"01CHAR","location_id":"01LOC","player_id":"01PLAYER"}`,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "on-command-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+
+	// Verify all context fields were received correctly
+	expected := "say|Hello everyone!|;|Alice|01CHAR|01LOC|01PLAYER"
+	assert.Equal(t, expected, emits[0].Payload)
+	assert.Equal(t, "location:01LOC", emits[0].Stream)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_FallbackToOnEvent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with only on_event (no on_command)
+	mainLua := `
+function on_event(event)
+    if event.type == "command" then
+        return {
+            {
+                stream = "fallback:1",
+                type = "echo",
+                payload = "fell_back_to_on_event"
+            }
+        }
+    end
+    return nil
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "fallback-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	// Command event should fall back to on_event
+	event := pluginpkg.Event{
+		ID:      "01ABC",
+		Stream:  "char:char123",
+		Type:    pluginpkg.EventType("command"),
+		Payload: `{"name":"say","args":"test"}`,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "fallback-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "fell_back_to_on_event", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_NonCommandEventUsesOnEvent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with both on_command and on_event
+	mainLua := `
+function on_command(ctx)
+    return {
+        {
+            stream = "on_command:1",
+            type = "echo",
+            payload = "on_command_called"
+        }
+    }
+end
+
+function on_event(event)
+    return {
+        {
+            stream = "on_event:1",
+            type = "echo",
+            payload = "on_event_called"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "both-handlers",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	// Non-command event should use on_event, not on_command
+	event := pluginpkg.Event{
+		ID:     "01ABC",
+		Stream: "location:123",
+		Type:   pluginpkg.EventTypeSay,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "both-handlers", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "on_event_called", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_EmptyArgs(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_command(ctx)
+    local args_value = ctx.args
+    if args_value == "" then
+        args_value = "EMPTY"
+    end
+    return {
+        {
+            stream = "test:1",
+            type = "echo",
+            payload = "args=" .. args_value
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "empty-args-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{
+		ID:      "01ABC",
+		Type:    pluginpkg.EventType("command"),
+		Payload: `{"name":"look","args":"","character_name":"Bob","location_id":"loc1"}`,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "empty-args-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "args=EMPTY", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_InvalidPayload(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_command(ctx)
+    -- Even with invalid payload, ctx should have empty strings
+    return {
+        {
+            stream = "test:1",
+            type = "echo",
+            payload = "name=" .. (ctx.name or "nil")
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "invalid-payload-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{
+		ID:      "01ABC",
+		Type:    pluginpkg.EventType("command"),
+		Payload: "not valid json",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "invalid-payload-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	// With invalid JSON, ctx.name should be empty string
+	assert.Equal(t, "name=", emits[0].Payload)
+}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/pkg/holo"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -103,7 +104,9 @@ func (h *Host) Unload(_ context.Context, name string) error {
 	return nil
 }
 
-// DeliverEvent executes the plugin's on_event function.
+// DeliverEvent executes the plugin's event handler.
+// For command events, it calls on_command(ctx) if defined, falling back to on_event(event).
+// For non-command events, it calls on_event(event).
 func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
 	h.mu.RLock()
 	p, ok := h.plugins[name]
@@ -132,6 +135,15 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	// Load plugin code
 	if err := L.DoString(code); err != nil {
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").Hint("failed to load code").Wrap(err)
+	}
+
+	// For command events, try on_command first
+	if event.Type == "command" {
+		onCommand := L.GetGlobal("on_command")
+		if onCommand.Type() != lua.LTNil {
+			return h.callOnCommand(L, name, event, onCommand)
+		}
+		// Fall through to on_event if on_command not defined
 	}
 
 	// Check if on_event exists
@@ -178,6 +190,43 @@ func (h *Host) Close(_ context.Context) error {
 	h.closed = true
 	h.plugins = nil
 	return nil
+}
+
+// callOnCommand calls the on_command handler with a typed CommandContext.
+func (h *Host) callOnCommand(state *lua.LState, name string, event pluginpkg.Event, onCommand lua.LValue) ([]pluginpkg.EmitEvent, error) {
+	// Parse command payload into CommandContext
+	cmdCtx := holo.ParseCommandPayload(event.Payload)
+
+	// Build Lua context table
+	ctxTable := h.buildContextTable(state, cmdCtx)
+
+	// Call on_command(ctx)
+	if err := state.CallByParam(lua.P{
+		Fn:      onCommand,
+		NRet:    1,
+		Protect: true,
+	}, ctxTable); err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "on_command").Wrap(err)
+	}
+
+	// Get return value
+	ret := state.Get(-1)
+	state.Pop(1)
+
+	return h.parseEmitEvents(ret), nil
+}
+
+// buildContextTable creates a Lua table from a CommandContext.
+func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lua.LTable {
+	t := state.NewTable()
+	state.SetField(t, "name", lua.LString(ctx.Name))
+	state.SetField(t, "args", lua.LString(ctx.Args))
+	state.SetField(t, "invoked_as", lua.LString(ctx.InvokedAs))
+	state.SetField(t, "character_name", lua.LString(ctx.CharacterName))
+	state.SetField(t, "character_id", lua.LString(ctx.CharacterID))
+	state.SetField(t, "location_id", lua.LString(ctx.LocationID))
+	state.SetField(t, "player_id", lua.LString(ctx.PlayerID))
+	return t
 }
 
 func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LTable {
