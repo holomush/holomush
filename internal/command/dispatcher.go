@@ -5,6 +5,7 @@ package command
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	"go.opentelemetry.io/otel"
@@ -130,5 +131,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	exec.Args = parsed.Args
 	exec.InvokedAs = invokedAs
 	err = entry.Handler(ctx, exec)
+	if err != nil {
+		slog.WarnContext(ctx, "command execution failed",
+			"command", parsed.Name,
+			"character_id", exec.CharacterID.String(),
+			"error", err,
+		)
+	}
 	return err
 }

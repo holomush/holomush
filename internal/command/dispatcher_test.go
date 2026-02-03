@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -224,14 +225,58 @@ func TestDispatcher_HandlerError(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
+	charID := ulid.Make()
 	exec := &CommandExecution{
-		CharacterID: ulid.Make(),
+		CharacterID: charID,
 		Output:      &output,
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "failing", exec)
 	require.Error(t, err)
 	assert.Equal(t, handlerErr, err)
+}
+
+func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	handlerErr := errors.New("handler failed")
+	err := reg.Register(CommandEntry{
+		Name:         "failing",
+		Capabilities: nil,
+		Handler: func(_ context.Context, _ *CommandExecution) error {
+			return handlerErr
+		},
+		Source: "test",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(oldLogger)
+
+	var output bytes.Buffer
+	charID := ulid.Make()
+	exec := &CommandExecution{
+		CharacterID: charID,
+		Output:      &output,
+	}
+
+	dispatchErr := dispatcher.Dispatch(context.Background(), "failing", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify log output
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "command execution failed")
+	assert.Contains(t, logOutput, "failing")
+	assert.Contains(t, logOutput, charID.String())
+	assert.Contains(t, logOutput, "handler failed")
 }
 
 func TestDispatcher_WhitespaceInput(t *testing.T) {
