@@ -40,6 +40,13 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 			continue
 		}
 
+		// Check if exit is locked
+		if exit.Locked {
+			return oops.Code(command.CodeWorldError).
+				With("message", "The exit is locked.").
+				Errorf("exit %q is locked", exit.Name)
+		}
+
 		// Move the character
 		if err := exec.Services.World.MoveCharacter(ctx, subjectID, exec.CharacterID, exit.ToLocationID); err != nil {
 			return oops.Code(command.CodeWorldError).

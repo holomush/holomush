@@ -483,6 +483,50 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 	assert.Equal(t, "Something prevents you from going that way.", oopsErr.Context()["message"])
 }
 
+func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+	exitID := ulid.Make()
+
+	// Create a locked exit
+	exit, err := world.NewExitWithID(exitID, locationID, ulid.Make(), "north")
+	require.NoError(t, err)
+	err = exit.SetLocked(true, world.LockTypeKey, map[string]any{"key_id": "golden-key"})
+	require.NoError(t, err)
+
+	exitRepo := worldtest.NewMockExitRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	subjectID := "char:" + characterID.String()
+
+	accessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+locationID.String()).
+		Return(true)
+	exitRepo.EXPECT().
+		ListFromLocation(mock.Anything, locationID).
+		Return([]*world.Exit{exit}, nil)
+
+	worldService := world.NewService(world.ServiceConfig{
+		ExitRepo:      exitRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "north",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err = MoveHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	msg := command.PlayerMessage(err)
+	assert.Contains(t, msg, "locked")
+}
+
 func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 	characterID := ulid.Make()
 	fromLocationID := ulid.Make()
