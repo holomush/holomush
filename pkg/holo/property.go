@@ -13,6 +13,15 @@ import (
 // ErrPropertyNotFound indicates no property matched the given name/prefix.
 var ErrPropertyNotFound = errors.New("property not found")
 
+// ErrInvalidPropertyName indicates the property name is empty or invalid.
+var ErrInvalidPropertyName = errors.New("property name cannot be empty")
+
+// ErrInvalidPropertyType indicates the property type is not a valid PropertyType.
+var ErrInvalidPropertyType = errors.New("invalid property type")
+
+// ErrDuplicateProperty indicates a property with the same name already exists.
+var ErrDuplicateProperty = errors.New("property already registered")
+
 // AmbiguousPropertyError indicates multiple properties match a prefix.
 type AmbiguousPropertyError struct {
 	Prefix  string
@@ -26,12 +35,60 @@ func (e *AmbiguousPropertyError) Error() string {
 	return fmt.Sprintf("ambiguous property '%s' - matches: %s", e.Prefix, strings.Join(sorted, ", "))
 }
 
+// PropertyType defines the valid types for property values.
+type PropertyType string
+
+// Property type constants for valid property value types.
+const (
+	PropertyTypeString PropertyType = "string" // Short single-line text
+	PropertyTypeText   PropertyType = "text"   // Multi-line text
+	PropertyTypeNumber PropertyType = "number" // Numeric value
+	PropertyTypeBool   PropertyType = "bool"   // Boolean value
+)
+
+// validPropertyTypes is the set of allowed property types.
+var validPropertyTypes = map[PropertyType]struct{}{
+	PropertyTypeString: {},
+	PropertyTypeText:   {},
+	PropertyTypeNumber: {},
+	PropertyTypeBool:   {},
+}
+
+// IsValid returns true if the PropertyType is one of the allowed values.
+func (pt PropertyType) IsValid() bool {
+	_, ok := validPropertyTypes[pt]
+	return ok
+}
+
+// String returns the string representation of the PropertyType.
+func (pt PropertyType) String() string {
+	return string(pt)
+}
+
 // Property defines a settable property on game entities.
 type Property struct {
-	Name       string   // Full property name (e.g., "description")
-	Type       string   // Property type: "string", "text", "number", "bool"
-	Capability string   // Required capability to set (e.g., "property.set.description")
-	AppliesTo  []string // Entity types this property applies to
+	Name       string       // Full property name (e.g., "description")
+	Type       PropertyType // Property type: "string", "text", "number", "bool"
+	Capability string       // Required capability to set (e.g., "property.set.description")
+	AppliesTo  []string     // Entity types this property applies to
+}
+
+// NewProperty creates a validated Property.
+// Returns ErrInvalidPropertyName if name is empty or whitespace-only.
+// Returns ErrInvalidPropertyType if propType is not a valid PropertyType.
+func NewProperty(name string, propType PropertyType, capability string, appliesTo []string) (Property, error) {
+	if strings.TrimSpace(name) == "" {
+		return Property{}, ErrInvalidPropertyName
+	}
+	if !propType.IsValid() {
+		return Property{}, ErrInvalidPropertyType
+	}
+	return Property{
+		Name:       name,
+		Type:       propType,
+		Capability: capability,
+		AppliesTo:  appliesTo,
+	}, nil
 }
 
 // PropertyRegistry manages known properties with prefix resolution.
@@ -47,8 +104,13 @@ func NewPropertyRegistry() *PropertyRegistry {
 }
 
 // Register adds a property to the registry.
-func (r *PropertyRegistry) Register(p Property) {
+// Returns ErrDuplicateProperty if a property with the same name already exists.
+func (r *PropertyRegistry) Register(p Property) error {
+	if _, exists := r.properties[p.Name]; exists {
+		return fmt.Errorf("%w: %s", ErrDuplicateProperty, p.Name)
+	}
 	r.properties[p.Name] = p
+	return nil
 }
 
 // Resolve finds a property by exact name or unique prefix.
@@ -93,18 +155,26 @@ func (r *PropertyRegistry) ValidFor(entityType, propertyName string) bool {
 	return false
 }
 
+// MustRegister adds a property to the registry, panicking if registration fails.
+// Use this only for known-valid properties during initialization.
+func (r *PropertyRegistry) MustRegister(p Property) {
+	if err := r.Register(p); err != nil {
+		panic(err)
+	}
+}
+
 // DefaultRegistry returns a registry with standard properties.
 func DefaultRegistry() *PropertyRegistry {
 	r := NewPropertyRegistry()
-	r.Register(Property{
+	r.MustRegister(Property{
 		Name:       "description",
-		Type:       "text",
+		Type:       PropertyTypeText,
 		Capability: "property.set.description",
 		AppliesTo:  []string{"location", "object", "character", "exit"},
 	})
-	r.Register(Property{
+	r.MustRegister(Property{
 		Name:       "name",
-		Type:       "string",
+		Type:       PropertyTypeString,
 		Capability: "property.set.name",
 		AppliesTo:  []string{"location", "object", "exit"},
 	})
