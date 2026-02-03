@@ -4,7 +4,9 @@
 package command
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -86,6 +88,26 @@ func TestRegistry_ConflictWarning(t *testing.T) {
 	require.NoError(t, err)
 	got, _ := reg.Get("look")
 	assert.Equal(t, "plugin-a", got.Source)
+}
+
+func TestRegistry_ConflictWarning_LogOutput(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, nil)
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	reg := NewRegistry()
+	_ = reg.Register(CommandEntry{Name: "testcmd", Handler: noopHandler, Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "testcmd", Handler: noopHandler, Source: "plugin-override"})
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "command conflict: overwriting existing command")
+	assert.Contains(t, logOutput, "testcmd")
+	assert.Contains(t, logOutput, "previous_source")
+	assert.Contains(t, logOutput, "core")
+	assert.Contains(t, logOutput, "new_source")
+	assert.Contains(t, logOutput, "plugin-override")
 }
 
 func TestRegistry_ConcurrentAccess(t *testing.T) {
