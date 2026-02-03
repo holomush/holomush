@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
@@ -52,6 +53,20 @@ type CommandExecution struct {
 	InvokedAs string
 }
 
+// Error code for service validation failures.
+const (
+	CodeNilService = "NIL_SERVICE"
+)
+
+// ServicesConfig holds the dependencies for constructing a Services instance.
+type ServicesConfig struct {
+	World       *world.Service       // world model queries and mutations
+	Session     core.SessionService  // session management
+	Access      access.AccessControl // authorization checks
+	Events      core.EventStore      // event persistence
+	Broadcaster *core.Broadcaster    // event broadcasting
+}
+
 // Services provides access to core services for command handlers.
 // Handlers MUST NOT store references to services beyond execution.
 // Handlers MUST access services only through exec.Services.
@@ -61,4 +76,42 @@ type Services struct {
 	Access      access.AccessControl // authorization checks
 	Events      core.EventStore      // event persistence
 	Broadcaster *core.Broadcaster    // event broadcasting
+}
+
+// NewServices creates a validated Services instance.
+// Returns an error if any required service is nil.
+func NewServices(cfg ServicesConfig) (*Services, error) {
+	if cfg.World == nil {
+		return nil, oops.Code(CodeNilService).
+			With("service", "World").
+			Errorf("World service is required")
+	}
+	if cfg.Session == nil {
+		return nil, oops.Code(CodeNilService).
+			With("service", "Session").
+			Errorf("Session service is required")
+	}
+	if cfg.Access == nil {
+		return nil, oops.Code(CodeNilService).
+			With("service", "Access").
+			Errorf("Access service is required")
+	}
+	if cfg.Events == nil {
+		return nil, oops.Code(CodeNilService).
+			With("service", "Events").
+			Errorf("Events service is required")
+	}
+	if cfg.Broadcaster == nil {
+		return nil, oops.Code(CodeNilService).
+			With("service", "Broadcaster").
+			Errorf("Broadcaster service is required")
+	}
+
+	return &Services{
+		World:       cfg.World,
+		Session:     cfg.Session,
+		Access:      cfg.Access,
+		Events:      cfg.Events,
+		Broadcaster: cfg.Broadcaster,
+	}, nil
 }
