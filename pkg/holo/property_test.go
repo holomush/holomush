@@ -171,3 +171,66 @@ func TestProperty_Fields(t *testing.T) {
 	assert.Equal(t, "property.set.test_prop", p.Capability)
 	assert.Equal(t, []string{"object", "character"}, p.AppliesTo)
 }
+
+func TestPropertyRegistry_ValidFor(t *testing.T) {
+	tests := []struct {
+		name       string
+		entityType string
+		property   string
+		want       bool
+	}{
+		// Properties that apply to specific entity types
+		{"description applies to location", "location", "description", true},
+		{"description applies to object", "object", "description", true},
+		{"description applies to character", "character", "description", true},
+		{"description applies to exit", "exit", "description", true},
+		{"name applies to location", "location", "name", true},
+		{"name applies to object", "object", "name", true},
+		{"name applies to exit", "exit", "name", true},
+
+		// name does NOT apply to character (per DefaultRegistry)
+		{"name does not apply to character", "character", "name", false},
+
+		// Unknown entity types
+		{"valid property unknown entity", "unknown", "description", false},
+		{"valid property empty entity", "", "description", false},
+
+		// Unknown properties
+		{"unknown property", "location", "unknown_prop", false},
+		{"empty property", "location", "", false},
+	}
+
+	r := DefaultRegistry()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := r.ValidFor(tt.entityType, tt.property)
+			assert.Equal(t, tt.want, got, "ValidFor(%q, %q)", tt.entityType, tt.property)
+		})
+	}
+}
+
+func TestPropertyRegistry_ValidFor_EmptyRegistry(t *testing.T) {
+	r := NewPropertyRegistry()
+
+	// Empty registry should return false for any property
+	assert.False(t, r.ValidFor("location", "description"))
+	assert.False(t, r.ValidFor("object", "name"))
+}
+
+func TestPropertyRegistry_ValidFor_CustomProperty(t *testing.T) {
+	r := NewPropertyRegistry()
+	r.Register(Property{
+		Name:      "custom",
+		Type:      "string",
+		AppliesTo: []string{"location", "character"},
+	})
+
+	// Custom property applies to registered entity types
+	assert.True(t, r.ValidFor("location", "custom"))
+	assert.True(t, r.ValidFor("character", "custom"))
+
+	// Custom property does not apply to unregistered entity types
+	assert.False(t, r.ValidFor("object", "custom"))
+	assert.False(t, r.ValidFor("exit", "custom"))
+}

@@ -78,6 +78,21 @@ func (r *PropertyRegistry) Resolve(nameOrPrefix string) (Property, error) {
 	}
 }
 
+// ValidFor checks if a property is valid for a given entity type.
+// Returns false if the property doesn't exist or doesn't apply to the entity type.
+func (r *PropertyRegistry) ValidFor(entityType, propertyName string) bool {
+	prop, ok := r.properties[propertyName]
+	if !ok {
+		return false
+	}
+	for _, et := range prop.AppliesTo {
+		if et == entityType {
+			return true
+		}
+	}
+	return false
+}
+
 // DefaultRegistry returns a registry with standard properties.
 func DefaultRegistry() *PropertyRegistry {
 	r := NewPropertyRegistry()
