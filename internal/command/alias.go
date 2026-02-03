@@ -169,6 +169,17 @@ type AliasResult struct {
 	AliasUsed string // The alias that was matched (empty if no alias)
 }
 
+// aliasLookupResult holds the result of a locked alias lookup.
+// This intermediate type allows the Resolve method to perform all map lookups
+// under a single RLock, then release the lock before building the final result.
+type aliasLookupResult struct {
+	resolvedCmd string // The resolved command (or prefix command)
+	expanded    bool   // Whether any alias was expanded
+	aliasUsed   string // The alias that was matched
+	isPrefix    bool   // Whether this was a prefix alias match
+	rest        string // For prefix aliases: the text after the prefix
+}
+
 // Resolve expands an input string through alias resolution.
 // Resolution order:
 // 1. Check if input matches a registered command name → return unchanged
@@ -178,6 +189,11 @@ type AliasResult struct {
 // 5. No match → return original input unchanged
 //
 // Returns the resolved string, whether an alias was expanded, and which alias was used.
+//
+// Locking strategy: All map lookups are performed in lookupAliasLocked() under
+// a single RLock acquisition. The lock is released before any string building
+// or result assembly. This ensures exactly one lock/unlock pair per call and
+// makes the locking behavior predictable for future modifications.
 func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registry) AliasResult {
 	if input == "" {
 		return AliasResult{Resolved: input}
@@ -196,50 +212,80 @@ func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registr
 		}
 	}
 
-	// Resolve with depth tracking to prevent circular aliases
-	c.mu.RLock()
-	resolvedCmd, expanded := c.resolveWithDepth(playerID, firstWord, 0)
+	// Step 2-4: Look up aliases under lock, then build result outside the lock
+	lookup := c.lookupAliasLocked(playerID, firstWord)
 
-	// If first word didn't match, check for single-character prefix aliases.
-	// This handles MUSH-style shortcuts like ":waves" or ";'s eyes widen"
-	// where the alias is a single character attached to the text.
-	if !expanded && len(firstWord) > 1 {
-		prefix := firstWord[:1]
-		// Check player prefix aliases first
-		if playerAliases, ok := c.playerAliases[playerID]; ok {
-			if prefixCmd, ok := playerAliases[prefix]; ok {
-				rest := firstWord[1:]
-				c.mu.RUnlock()
-				resolved := prefixCmd + " " + rest
-				if args != "" {
-					resolved = prefixCmd + " " + rest + " " + args
-				}
-				return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: prefix}
-			}
-		}
-		// Check system prefix aliases
-		if prefixCmd, ok := c.systemAliases[prefix]; ok {
-			rest := firstWord[1:]
-			c.mu.RUnlock()
-			resolved := prefixCmd + " " + rest
-			if args != "" {
-				resolved = prefixCmd + " " + rest + " " + args
-			}
-			return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: prefix}
-		}
-	}
-	c.mu.RUnlock()
-
-	if !expanded {
+	if !lookup.expanded {
 		return AliasResult{Resolved: input}
 	}
 
-	// Reassemble with original args
-	resolved := resolvedCmd
-	if args != "" {
-		resolved = resolvedCmd + " " + args
+	// Build the resolved string (no lock needed)
+	if lookup.isPrefix {
+		resolved := lookup.resolvedCmd + " " + lookup.rest
+		if args != "" {
+			resolved = lookup.resolvedCmd + " " + lookup.rest + " " + args
+		}
+		return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: lookup.aliasUsed}
 	}
-	return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: firstWord}
+
+	// Regular alias: reassemble with original args
+	resolved := lookup.resolvedCmd
+	if args != "" {
+		resolved = lookup.resolvedCmd + " " + args
+	}
+	return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: lookup.aliasUsed}
+}
+
+// lookupAliasLocked performs all alias map lookups under a single RLock.
+// It checks regular aliases first (player then system), then prefix aliases.
+// The lock is acquired at entry and released before return.
+func (c *AliasCache) lookupAliasLocked(playerID ulid.ULID, firstWord string) aliasLookupResult {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// Try regular alias resolution first
+	resolvedCmd, expanded := c.resolveWithDepth(playerID, firstWord, 0)
+	if expanded {
+		return aliasLookupResult{
+			resolvedCmd: resolvedCmd,
+			expanded:    true,
+			aliasUsed:   firstWord,
+		}
+	}
+
+	// Check for single-character prefix aliases.
+	// This handles MUSH-style shortcuts like ":waves" or ";'s eyes widen"
+	// where the alias is a single character attached to the text.
+	if len(firstWord) > 1 {
+		prefix := firstWord[:1]
+		rest := firstWord[1:]
+
+		// Check player prefix aliases first
+		if playerAliases, ok := c.playerAliases[playerID]; ok {
+			if prefixCmd, ok := playerAliases[prefix]; ok {
+				return aliasLookupResult{
+					resolvedCmd: prefixCmd,
+					expanded:    true,
+					aliasUsed:   prefix,
+					isPrefix:    true,
+					rest:        rest,
+				}
+			}
+		}
+
+		// Check system prefix aliases
+		if prefixCmd, ok := c.systemAliases[prefix]; ok {
+			return aliasLookupResult{
+				resolvedCmd: prefixCmd,
+				expanded:    true,
+				aliasUsed:   prefix,
+				isPrefix:    true,
+				rest:        rest,
+			}
+		}
+	}
+
+	return aliasLookupResult{expanded: false}
 }
 
 // resolveWithDepth performs alias resolution with depth tracking.
