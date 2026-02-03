@@ -6,6 +6,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -450,4 +451,179 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "Set description")
+}
+
+func TestCreateHandler_ObjectServiceError(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	objectRepo := worldtest.NewMockObjectRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "write", "object:*").
+		Return(true)
+	objectRepo.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(errors.New("database unavailable"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		ObjectRepo:    objectRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        `object "Iron Sword"`,
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	// Handler should return nil (error is swallowed and displayed to user)
+	err := CreateHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Failed to create object")
+	assert.Contains(t, output, "database unavailable")
+}
+
+func TestCreateHandler_LocationServiceError(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "write", "location:*").
+		Return(true)
+	locationRepo.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(errors.New("creation failed: constraint violation"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  locationRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        `location "Secret Room"`,
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	// Handler should return nil (error is swallowed and displayed to user)
+	err := CreateHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Failed to create location")
+	assert.Contains(t, output, "creation failed")
+}
+
+func TestSetHandler_UpdateLocationFailure(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// For GetLocation - succeeds
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Return(true)
+	locationRepo.EXPECT().
+		Get(mock.Anything, locationID).
+		Return(&world.Location{
+			ID:   locationID,
+			Name: "Test Room",
+			Type: world.LocationTypePersistent,
+		}, nil)
+
+	// For UpdateLocation - fails (e.g., optimistic locking conflict)
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Return(true)
+	locationRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(errors.New("optimistic locking conflict"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  locationRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of here to A cozy room.",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	// Handler should return nil (error is swallowed and displayed to user)
+	err := SetHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Error:")
+	assert.Contains(t, output, "update location failed")
+}
+
+func TestSetHandler_UpdateObjectFailure(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+	objectID := ulid.Make()
+
+	// Create a properly constructed object with containment
+	obj, err := world.NewObjectWithID(objectID, "Test Object", world.InLocation(locationID))
+	require.NoError(t, err)
+
+	objectRepo := worldtest.NewMockObjectRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// For GetObject - succeeds
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
+		Return(true)
+	objectRepo.EXPECT().
+		Get(mock.Anything, objectID).
+		Return(obj, nil)
+
+	// For UpdateObject - fails (e.g., access control change)
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "write", "object:"+objectID.String()).
+		Return(true)
+	objectRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(errors.New("access denied: permission revoked"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		ObjectRepo:    objectRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of #" + objectID.String() + " to A shiny object.",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	// Handler should return nil (error is swallowed and displayed to user)
+	err = SetHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Error:")
+	assert.Contains(t, output, "update object failed")
 }
