@@ -24,10 +24,10 @@ func TestAliasCache_LoadSystemAliases(t *testing.T) {
 	cache := NewAliasCache()
 
 	aliases := map[string]string{
-		"l":  "look",
-		"q":  "quit",
-		"n":  "north",
-		"s":  "south",
+		"l": "look",
+		"q": "quit",
+		"n": "north",
+		"s": "south",
 	}
 
 	cache.LoadSystemAliases(aliases)

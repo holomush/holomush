@@ -183,7 +183,6 @@ var _ = Describe("Communication Plugin Integration", func() {
 			})
 		})
 
-
 		Context("when say command has empty message", func() {
 			It("returns no events", func() {
 				ctx := context.Background()

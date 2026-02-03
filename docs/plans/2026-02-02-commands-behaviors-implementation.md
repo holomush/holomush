@@ -192,22 +192,22 @@ Expected: ADR documents conflict resolution strategy
 package command
 
 import (
-	"testing"
+    "testing"
 
-	"github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/assert"
 )
 
 func TestCommandExecution_HasServices(t *testing.T) {
-	exec := &CommandExecution{}
-	assert.Nil(t, exec.Services, "Services should be nil when not set")
+    exec := &CommandExecution{}
+    assert.Nil(t, exec.Services, "Services should be nil when not set")
 }
 
 func TestServices_HasAllDependencies(t *testing.T) {
-	svc := &Services{}
-	assert.Nil(t, svc.World, "World service should be nil when not set")
-	assert.Nil(t, svc.Session, "Session service should be nil when not set")
-	assert.Nil(t, svc.Access, "Access service should be nil when not set")
-	assert.Nil(t, svc.Events, "Events service should be nil when not set")
+    svc := &Services{}
+    assert.Nil(t, svc.World, "World service should be nil when not set")
+    assert.Nil(t, svc.Session, "Session service should be nil when not set")
+    assert.Nil(t, svc.Access, "Access service should be nil when not set")
+    assert.Nil(t, svc.Events, "Events service should be nil when not set")
 }
 ```
 
@@ -227,14 +227,14 @@ Expected: FAIL with "package internal/command is not in std"
 package command
 
 import (
-	"context"
-	"io"
+    "context"
+    "io"
 
-	"github.com/oklog/ulid/v2"
+    "github.com/oklog/ulid/v2"
 
-	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/world"
+    "github.com/holomush/holomush/internal/access"
+    "github.com/holomush/holomush/internal/core"
+    "github.com/holomush/holomush/internal/world"
 )
 
 // CommandHandler is the function signature for command handlers.
@@ -242,33 +242,33 @@ type CommandHandler func(ctx context.Context, exec *CommandExecution) error
 
 // CommandEntry represents a registered command.
 type CommandEntry struct {
-	Name         string         // canonical name (e.g., "say")
-	Handler      CommandHandler // Go handler or Lua dispatcher
-	Capabilities []string       // ALL required capabilities (AND logic)
-	Help         string         // short description (one line)
-	Usage        string         // usage pattern (e.g., "say <message>")
-	HelpText     string         // detailed markdown help
-	Source       string         // "core" or plugin name
+    Name         string         // canonical name (e.g., "say")
+    Handler      CommandHandler // Go handler or Lua dispatcher
+    Capabilities []string       // ALL required capabilities (AND logic)
+    Help         string         // short description (one line)
+    Usage        string         // usage pattern (e.g., "say <message>")
+    HelpText     string         // detailed markdown help
+    Source       string         // "core" or plugin name
 }
 
 // CommandExecution provides context for command execution.
 type CommandExecution struct {
-	CharacterID   ulid.ULID
-	LocationID    ulid.ULID
-	CharacterName string
-	PlayerID      ulid.ULID
-	SessionID     ulid.ULID
-	Args          string
-	Output        io.Writer
-	Services      *Services
+    CharacterID   ulid.ULID
+    LocationID    ulid.ULID
+    CharacterName string
+    PlayerID      ulid.ULID
+    SessionID     ulid.ULID
+    Args          string
+    Output        io.Writer
+    Services      *Services
 }
 
 // Services provides access to core services for command handlers.
 type Services struct {
-	World   world.Service
-	Session core.SessionManager
-	Access  access.AccessControl
-	Events  core.EventStore
+    World   world.Service
+    Session core.SessionManager
+    Access  access.AccessControl
+    Events  core.EventStore
 }
 ```
 
@@ -302,64 +302,64 @@ Expected: Command types defined with proper dependencies
 package command
 
 import (
-	"context"
-	"testing"
+    "context"
+    "testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 )
 
 func TestRegistry_RegisterAndGet(t *testing.T) {
-	reg := NewRegistry()
+    reg := NewRegistry()
 
-	handler := func(ctx context.Context, exec *CommandExecution) error {
-		return nil
-	}
+    handler := func(ctx context.Context, exec *CommandExecution) error {
+        return nil
+    }
 
-	entry := CommandEntry{
-		Name:         "look",
-		Handler:      handler,
-		Capabilities: []string{"world.look"},
-		Help:         "Look at your surroundings",
-		Usage:        "look [target]",
-		Source:       "core",
-	}
+    entry := CommandEntry{
+        Name:         "look",
+        Handler:      handler,
+        Capabilities: []string{"world.look"},
+        Help:         "Look at your surroundings",
+        Usage:        "look [target]",
+        Source:       "core",
+    }
 
-	err := reg.Register(entry)
-	require.NoError(t, err)
+    err := reg.Register(entry)
+    require.NoError(t, err)
 
-	got, ok := reg.Get("look")
-	assert.True(t, ok)
-	assert.Equal(t, "look", got.Name)
-	assert.Equal(t, []string{"world.look"}, got.Capabilities)
+    got, ok := reg.Get("look")
+    assert.True(t, ok)
+    assert.Equal(t, "look", got.Name)
+    assert.Equal(t, []string{"world.look"}, got.Capabilities)
 }
 
 func TestRegistry_GetNotFound(t *testing.T) {
-	reg := NewRegistry()
-	_, ok := reg.Get("nonexistent")
-	assert.False(t, ok)
+    reg := NewRegistry()
+    _, ok := reg.Get("nonexistent")
+    assert.False(t, ok)
 }
 
 func TestRegistry_All(t *testing.T) {
-	reg := NewRegistry()
+    reg := NewRegistry()
 
-	reg.Register(CommandEntry{Name: "look", Source: "core"})
-	reg.Register(CommandEntry{Name: "say", Source: "comms"})
+    reg.Register(CommandEntry{Name: "look", Source: "core"})
+    reg.Register(CommandEntry{Name: "say", Source: "comms"})
 
-	all := reg.All()
-	assert.Len(t, all, 2)
+    all := reg.All()
+    assert.Len(t, all, 2)
 }
 
 func TestRegistry_ConflictWarning(t *testing.T) {
-	reg := NewRegistry()
+    reg := NewRegistry()
 
-	reg.Register(CommandEntry{Name: "look", Source: "core"})
-	err := reg.Register(CommandEntry{Name: "look", Source: "plugin-a"})
+    reg.Register(CommandEntry{Name: "look", Source: "core"})
+    err := reg.Register(CommandEntry{Name: "look", Source: "plugin-a"})
 
-	// Should succeed but we can check it overwrote
-	require.NoError(t, err)
-	got, _ := reg.Get("look")
-	assert.Equal(t, "plugin-a", got.Source)
+    // Should succeed but we can check it overwrote
+    require.NoError(t, err)
+    got, _ := reg.Get("look")
+    assert.Equal(t, "plugin-a", got.Source)
 }
 ```
 
@@ -378,59 +378,59 @@ Expected: FAIL with "undefined: NewRegistry"
 package command
 
 import (
-	"log/slog"
-	"sync"
+    "log/slog"
+    "sync"
 )
 
 // Registry manages command registration and lookup.
 type Registry struct {
-	commands map[string]CommandEntry
-	mu       sync.RWMutex
+    commands map[string]CommandEntry
+    mu       sync.RWMutex
 }
 
 // NewRegistry creates a new command registry.
 func NewRegistry() *Registry {
-	return &Registry{
-		commands: make(map[string]CommandEntry),
-	}
+    return &Registry{
+        commands: make(map[string]CommandEntry),
+    }
 }
 
 // Register adds a command to the registry.
 // If a command with the same name exists, it is overwritten and a warning is logged.
 func (r *Registry) Register(entry CommandEntry) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+    r.mu.Lock()
+    defer r.mu.Unlock()
 
-	if existing, ok := r.commands[entry.Name]; ok {
-		slog.Warn("command conflict: overwriting existing command",
-			"command", entry.Name,
-			"previous_source", existing.Source,
-			"new_source", entry.Source)
-	}
+    if existing, ok := r.commands[entry.Name]; ok {
+        slog.Warn("command conflict: overwriting existing command",
+            "command", entry.Name,
+            "previous_source", existing.Source,
+            "new_source", entry.Source)
+    }
 
-	r.commands[entry.Name] = entry
-	return nil
+    r.commands[entry.Name] = entry
+    return nil
 }
 
 // Get retrieves a command by name.
 func (r *Registry) Get(name string) (CommandEntry, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+    r.mu.RLock()
+    defer r.mu.RUnlock()
 
-	entry, ok := r.commands[name]
-	return entry, ok
+    entry, ok := r.commands[name]
+    return entry, ok
 }
 
 // All returns all registered commands.
 func (r *Registry) All() []CommandEntry {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+    r.mu.RLock()
+    defer r.mu.RUnlock()
 
-	entries := make([]CommandEntry, 0, len(r.commands))
-	for _, e := range r.commands {
-		entries = append(entries, e)
-	}
-	return entries
+    entries := make([]CommandEntry, 0, len(r.commands))
+    for _, e := range r.commands {
+        entries = append(entries, e)
+    }
+    return entries
 }
 ```
 
@@ -464,64 +464,64 @@ Expected: Registry with register/get/all operations
 package command
 
 import (
-	"testing"
+    "testing"
 
-	"github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/assert"
 )
 
 func TestValidateCommandName(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-	}{
-		{"simple lowercase", "look", false},
-		{"with at prefix", "@create", false},
-		{"with plus prefix", "+who", false},
-		{"with underscore", "my_cmd", false},
-		{"with question mark", "say?", false},
-		{"max length 20", "abcdefghijklmnopqrst", false},
-		{"too long 21", "abcdefghijklmnopqrstu", true},
-		{"starts with digit", "123go", true},
-		{"starts with star", "*star", true},
-		{"empty", "", true},
-		{"only spaces", "   ", true},
-	}
+    tests := []struct {
+        name    string
+        input   string
+        wantErr bool
+    }{
+        {"simple lowercase", "look", false},
+        {"with at prefix", "@create", false},
+        {"with plus prefix", "+who", false},
+        {"with underscore", "my_cmd", false},
+        {"with question mark", "say?", false},
+        {"max length 20", "abcdefghijklmnopqrst", false},
+        {"too long 21", "abcdefghijklmnopqrstu", true},
+        {"starts with digit", "123go", true},
+        {"starts with star", "*star", true},
+        {"empty", "", true},
+        {"only spaces", "   ", true},
+    }
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateCommandName(tt.input)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            err := ValidateCommandName(tt.input)
+            if tt.wantErr {
+                assert.Error(t, err)
+            } else {
+                assert.NoError(t, err)
+            }
+        })
+    }
 }
 
 func TestValidateAliasName(t *testing.T) {
-	// Aliases follow same rules as commands
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-	}{
-		{"single letter", "l", false},
-		{"lowercase", "look", false},
-		{"starts with digit", "1look", true},
-	}
+    // Aliases follow same rules as commands
+    tests := []struct {
+        name    string
+        input   string
+        wantErr bool
+    }{
+        {"single letter", "l", false},
+        {"lowercase", "look", false},
+        {"starts with digit", "1look", true},
+    }
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateAliasName(tt.input)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            err := ValidateAliasName(tt.input)
+            if tt.wantErr {
+                assert.Error(t, err)
+            } else {
+                assert.NoError(t, err)
+            }
+        })
+    }
 }
 ```
 
@@ -540,15 +540,15 @@ Expected: FAIL with "undefined: ValidateCommandName"
 package command
 
 import (
-	"regexp"
-	"strings"
+    "regexp"
+    "strings"
 
-	"github.com/samber/oops"
+    "github.com/samber/oops"
 )
 
 const (
-	// MaxNameLength is the maximum length for command and alias names.
-	MaxNameLength = 20
+    // MaxNameLength is the maximum length for command and alias names.
+    MaxNameLength = 20
 )
 
 // namePattern validates command/alias names: must start with letter,
@@ -557,38 +557,38 @@ var namePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_!?@#$%^+\-]{0,19}$`)
 
 // ValidateCommandName validates a command name.
 func ValidateCommandName(name string) error {
-	return validateName(name, "command")
+    return validateName(name, "command")
 }
 
 // ValidateAliasName validates an alias name.
 func ValidateAliasName(name string) error {
-	return validateName(name, "alias")
+    return validateName(name, "alias")
 }
 
 func validateName(name, kind string) error {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return oops.Code("INVALID_NAME").
-			With("kind", kind).
-			Errorf("%s name cannot be empty", kind)
-	}
+    trimmed := strings.TrimSpace(name)
+    if trimmed == "" {
+        return oops.Code("INVALID_NAME").
+            With("kind", kind).
+            Errorf("%s name cannot be empty", kind)
+    }
 
-	if len(trimmed) > MaxNameLength {
-		return oops.Code("INVALID_NAME").
-			With("kind", kind).
-			With("length", len(trimmed)).
-			With("max", MaxNameLength).
-			Errorf("%s name exceeds maximum length of %d", kind, MaxNameLength)
-	}
+    if len(trimmed) > MaxNameLength {
+        return oops.Code("INVALID_NAME").
+            With("kind", kind).
+            With("length", len(trimmed)).
+            With("max", MaxNameLength).
+            Errorf("%s name exceeds maximum length of %d", kind, MaxNameLength)
+    }
 
-	if !namePattern.MatchString(trimmed) {
-		return oops.Code("INVALID_NAME").
-			With("kind", kind).
-			With("name", trimmed).
-			Errorf("%s name must start with a letter and contain only letters, digits, or _!?@#$%%^+-", kind)
-	}
+    if !namePattern.MatchString(trimmed) {
+        return oops.Code("INVALID_NAME").
+            With("kind", kind).
+            With("name", trimmed).
+            Errorf("%s name must start with a letter and contain only letters, digits, or _!?@#$%%^+-", kind)
+    }
 
-	return nil
+    return nil
 }
 ```
 
@@ -622,75 +622,75 @@ Expected: Validation with regex pattern matching spec
 package command
 
 import (
-	"testing"
+    "testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 )
 
 func TestParse(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       string
-		wantCmd     string
-		wantArgs    string
-		wantErr     bool
-	}{
-		{
-			name:     "simple command",
-			input:    "look",
-			wantCmd:  "look",
-			wantArgs: "",
-		},
-		{
-			name:     "command with args",
-			input:    "say hello world",
-			wantCmd:  "say",
-			wantArgs: "hello world",
-		},
-		{
-			name:     "command with leading whitespace",
-			input:    "   look",
-			wantCmd:  "look",
-			wantArgs: "",
-		},
-		{
-			name:     "command with trailing whitespace",
-			input:    "look   ",
-			wantCmd:  "look",
-			wantArgs: "",
-		},
-		{
-			name:     "preserves internal arg whitespace",
-			input:    "say   hello    world",
-			wantCmd:  "say",
-			wantArgs: "hello    world",
-		},
-		{
-			name:    "empty input",
-			input:   "",
-			wantErr: true,
-		},
-		{
-			name:    "whitespace only",
-			input:   "   ",
-			wantErr: true,
-		},
-	}
+    tests := []struct {
+        name        string
+        input       string
+        wantCmd     string
+        wantArgs    string
+        wantErr     bool
+    }{
+        {
+            name:     "simple command",
+            input:    "look",
+            wantCmd:  "look",
+            wantArgs: "",
+        },
+        {
+            name:     "command with args",
+            input:    "say hello world",
+            wantCmd:  "say",
+            wantArgs: "hello world",
+        },
+        {
+            name:     "command with leading whitespace",
+            input:    "   look",
+            wantCmd:  "look",
+            wantArgs: "",
+        },
+        {
+            name:     "command with trailing whitespace",
+            input:    "look   ",
+            wantCmd:  "look",
+            wantArgs: "",
+        },
+        {
+            name:     "preserves internal arg whitespace",
+            input:    "say   hello    world",
+            wantCmd:  "say",
+            wantArgs: "hello    world",
+        },
+        {
+            name:    "empty input",
+            input:   "",
+            wantErr: true,
+        },
+        {
+            name:    "whitespace only",
+            input:   "   ",
+            wantErr: true,
+        },
+    }
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			parsed, err := Parse(tt.input)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantCmd, parsed.Name)
-			assert.Equal(t, tt.wantArgs, parsed.Args)
-			assert.Equal(t, tt.input, parsed.Raw)
-		})
-	}
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            parsed, err := Parse(tt.input)
+            if tt.wantErr {
+                require.Error(t, err)
+                return
+            }
+            require.NoError(t, err)
+            assert.Equal(t, tt.wantCmd, parsed.Name)
+            assert.Equal(t, tt.wantArgs, parsed.Args)
+            assert.Equal(t, tt.input, parsed.Raw)
+        })
+    }
 }
 ```
 
@@ -709,42 +709,42 @@ Expected: FAIL with "undefined: Parse"
 package command
 
 import (
-	"strings"
+    "strings"
 
-	"github.com/samber/oops"
+    "github.com/samber/oops"
 )
 
 // ParsedCommand represents a parsed command input.
 type ParsedCommand struct {
-	Name string // command name
-	Args string // unparsed argument string
-	Raw  string // original input
+    Name string // command name
+    Args string // unparsed argument string
+    Raw  string // original input
 }
 
 // Parse splits raw input into command name and arguments.
 // The command name is the first whitespace-delimited token.
 // Arguments preserve internal whitespace.
 func Parse(input string) (*ParsedCommand, error) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" {
-		return nil, oops.Code("EMPTY_INPUT").Errorf("no command provided")
-	}
+    trimmed := strings.TrimSpace(input)
+    if trimmed == "" {
+        return nil, oops.Code("EMPTY_INPUT").Errorf("no command provided")
+    }
 
-	// Split on first whitespace
-	parts := strings.SplitN(trimmed, " ", 2)
-	name := parts[0]
+    // Split on first whitespace
+    parts := strings.SplitN(trimmed, " ", 2)
+    name := parts[0]
 
-	var args string
-	if len(parts) > 1 {
-		// Trim leading whitespace from args but preserve internal whitespace
-		args = strings.TrimLeft(parts[1], " \t")
-	}
+    var args string
+    if len(parts) > 1 {
+        // Trim leading whitespace from args but preserve internal whitespace
+        args = strings.TrimLeft(parts[1], " \t")
+    }
 
-	return &ParsedCommand{
-		Name: name,
-		Args: args,
-		Raw:  input,
-	}, nil
+    return &ParsedCommand{
+        Name: name,
+        Args: args,
+        Raw:  input,
+    }, nil
 }
 ```
 
@@ -778,64 +778,64 @@ Expected: Parser splits input into command + args
 package command
 
 import (
-	"testing"
+    "testing"
 
-	"github.com/samber/oops"
-	"github.com/stretchr/testify/assert"
+    "github.com/samber/oops"
+    "github.com/stretchr/testify/assert"
 )
 
 func TestErrUnknownCommand(t *testing.T) {
-	err := ErrUnknownCommand("foo")
-	assert.Error(t, err)
+    err := ErrUnknownCommand("foo")
+    assert.Error(t, err)
 
-	oopsErr, ok := oops.AsOops(err)
-	assert.True(t, ok)
-	assert.Equal(t, "UNKNOWN_COMMAND", oopsErr.Code())
-	assert.Equal(t, "foo", oopsErr.Context()["command"])
+    oopsErr, ok := oops.AsOops(err)
+    assert.True(t, ok)
+    assert.Equal(t, "UNKNOWN_COMMAND", oopsErr.Code())
+    assert.Equal(t, "foo", oopsErr.Context()["command"])
 }
 
 func TestErrPermissionDenied(t *testing.T) {
-	err := ErrPermissionDenied("boot", "admin.boot")
-	oopsErr, _ := oops.AsOops(err)
-	assert.Equal(t, "PERMISSION_DENIED", oopsErr.Code())
-	assert.Equal(t, "boot", oopsErr.Context()["command"])
-	assert.Equal(t, "admin.boot", oopsErr.Context()["capability"])
+    err := ErrPermissionDenied("boot", "admin.boot")
+    oopsErr, _ := oops.AsOops(err)
+    assert.Equal(t, "PERMISSION_DENIED", oopsErr.Code())
+    assert.Equal(t, "boot", oopsErr.Context()["command"])
+    assert.Equal(t, "admin.boot", oopsErr.Context()["capability"])
 }
 
 func TestPlayerMessage(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected string
-	}{
-		{
-			name:     "world error with message",
-			err:      WorldError("There's no exit to the north.", nil),
-			expected: "There's no exit to the north.",
-		},
-		{
-			name:     "unknown command",
-			err:      ErrUnknownCommand("foo"),
-			expected: "Unknown command. Try 'help'.",
-		},
-		{
-			name:     "permission denied",
-			err:      ErrPermissionDenied("boot", "admin.boot"),
-			expected: "You don't have permission to do that.",
-		},
-		{
-			name:     "generic error",
-			err:      oops.Errorf("something broke"),
-			expected: "Something went wrong. Try again.",
-		},
-	}
+    tests := []struct {
+        name     string
+        err      error
+        expected string
+    }{
+        {
+            name:     "world error with message",
+            err:      WorldError("There's no exit to the north.", nil),
+            expected: "There's no exit to the north.",
+        },
+        {
+            name:     "unknown command",
+            err:      ErrUnknownCommand("foo"),
+            expected: "Unknown command. Try 'help'.",
+        },
+        {
+            name:     "permission denied",
+            err:      ErrPermissionDenied("boot", "admin.boot"),
+            expected: "You don't have permission to do that.",
+        },
+        {
+            name:     "generic error",
+            err:      oops.Errorf("something broke"),
+            expected: "Something went wrong. Try again.",
+        },
+    }
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg := PlayerMessage(tt.err)
-			assert.Equal(t, tt.expected, msg)
-		})
-	}
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            msg := PlayerMessage(tt.err)
+            assert.Equal(t, tt.expected, msg)
+        })
+    }
 }
 ```
 
@@ -854,84 +854,84 @@ Expected: FAIL with "undefined: ErrUnknownCommand"
 package command
 
 import (
-	"github.com/samber/oops"
+    "github.com/samber/oops"
 )
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand   = "UNKNOWN_COMMAND"
-	CodePermissionDenied = "PERMISSION_DENIED"
-	CodeInvalidArgs      = "INVALID_ARGS"
-	CodeWorldError       = "WORLD_ERROR"
-	CodeRateLimited      = "RATE_LIMITED"
+    CodeUnknownCommand   = "UNKNOWN_COMMAND"
+    CodePermissionDenied = "PERMISSION_DENIED"
+    CodeInvalidArgs      = "INVALID_ARGS"
+    CodeWorldError       = "WORLD_ERROR"
+    CodeRateLimited      = "RATE_LIMITED"
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
 func ErrUnknownCommand(cmd string) error {
-	return oops.Code(CodeUnknownCommand).
-		With("command", cmd).
-		Errorf("unknown command: %s", cmd)
+    return oops.Code(CodeUnknownCommand).
+        With("command", cmd).
+        Errorf("unknown command: %s", cmd)
 }
 
 // ErrPermissionDenied creates an error for permission denial.
 func ErrPermissionDenied(cmd, capability string) error {
-	return oops.Code(CodePermissionDenied).
-		With("command", cmd).
-		With("capability", capability).
-		Errorf("permission denied for command %s", cmd)
+    return oops.Code(CodePermissionDenied).
+        With("command", cmd).
+        With("capability", capability).
+        Errorf("permission denied for command %s", cmd)
 }
 
 // ErrInvalidArgs creates an error for invalid arguments.
 func ErrInvalidArgs(cmd, usage string) error {
-	return oops.Code(CodeInvalidArgs).
-		With("command", cmd).
-		With("usage", usage).
-		Errorf("invalid arguments")
+    return oops.Code(CodeInvalidArgs).
+        With("command", cmd).
+        With("usage", usage).
+        Errorf("invalid arguments")
 }
 
 // WorldError creates an error for world state issues with a player-facing message.
 func WorldError(message string, cause error) error {
-	builder := oops.Code(CodeWorldError).With("message", message)
-	if cause != nil {
-		return builder.Wrap(cause)
-	}
-	return builder.Errorf("%s", message)
+    builder := oops.Code(CodeWorldError).With("message", message)
+    if cause != nil {
+        return builder.Wrap(cause)
+    }
+    return builder.Errorf("%s", message)
 }
 
 // ErrRateLimited creates an error for rate limiting.
 func ErrRateLimited(cooldownMs int64) error {
-	return oops.Code(CodeRateLimited).
-		With("cooldown_ms", cooldownMs).
-		Errorf("Too many commands. Please slow down.")
+    return oops.Code(CodeRateLimited).
+        With("cooldown_ms", cooldownMs).
+        Errorf("Too many commands. Please slow down.")
 }
 
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
-	oopsErr, ok := oops.AsOops(err)
-	if !ok {
-		return "Something went wrong. Try again."
-	}
+    oopsErr, ok := oops.AsOops(err)
+    if !ok {
+        return "Something went wrong. Try again."
+    }
 
-	switch oopsErr.Code() {
-	case CodeUnknownCommand:
-		return "Unknown command. Try 'help'."
-	case CodePermissionDenied:
-		return "You don't have permission to do that."
-	case CodeInvalidArgs:
-		if usage, ok := oopsErr.Context()["usage"].(string); ok && usage != "" {
-			return "Usage: " + usage
-		}
-		return "Invalid arguments."
-	case CodeWorldError:
-		if msg, ok := oopsErr.Context()["message"].(string); ok {
-			return msg
-		}
-		return "Something went wrong. Try again."
-	case CodeRateLimited:
-		return "Too many commands. Please slow down."
-	default:
-		return "Something went wrong. Try again."
-	}
+    switch oopsErr.Code() {
+    case CodeUnknownCommand:
+        return "Unknown command. Try 'help'."
+    case CodePermissionDenied:
+        return "You don't have permission to do that."
+    case CodeInvalidArgs:
+        if usage, ok := oopsErr.Context()["usage"].(string); ok && usage != "" {
+            return "Usage: " + usage
+        }
+        return "Invalid arguments."
+    case CodeWorldError:
+        if msg, ok := oopsErr.Context()["message"].(string); ok {
+            return msg
+        }
+        return "Something went wrong. Try again."
+    case CodeRateLimited:
+        return "Too many commands. Please slow down."
+    default:
+        return "Something went wrong. Try again."
+    }
 }
 ```
 
@@ -965,88 +965,88 @@ Expected: Error constructors and PlayerMessage extractor
 package command
 
 import (
-	"bytes"
-	"context"
-	"testing"
+    "bytes"
+    "context"
+    "testing"
 
-	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/oklog/ulid/v2"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+    "github.com/holomush/holomush/internal/access/accesstest"
 )
 
 func TestDispatcher_Dispatch(t *testing.T) {
-	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+    reg := NewRegistry()
+    mockAccess := accesstest.NewMockAccessControl()
 
-	// Register a test command
-	var capturedArgs string
-	reg.Register(CommandEntry{
-		Name:         "echo",
-		Capabilities: []string{"test.echo"},
-		Handler: func(ctx context.Context, exec *CommandExecution) error {
-			capturedArgs = exec.Args
-			exec.Output.Write([]byte("echoed: " + exec.Args))
-			return nil
-		},
-		Source: "test",
-	})
+    // Register a test command
+    var capturedArgs string
+    reg.Register(CommandEntry{
+        Name:         "echo",
+        Capabilities: []string{"test.echo"},
+        Handler: func(ctx context.Context, exec *CommandExecution) error {
+            capturedArgs = exec.Args
+            exec.Output.Write([]byte("echoed: " + exec.Args))
+            return nil
+        },
+        Source: "test",
+    })
 
-	// Grant capability
-	charID := ulid.Make()
-	mockAccess.Grant(charID.String(), "test.echo")
+    // Grant capability
+    charID := ulid.Make()
+    mockAccess.Grant(charID.String(), "test.echo")
 
-	dispatcher := NewDispatcher(reg, mockAccess)
+    dispatcher := NewDispatcher(reg, mockAccess)
 
-	var output bytes.Buffer
-	exec := &CommandExecution{
-		CharacterID: charID,
-		Output:      &output,
-	}
+    var output bytes.Buffer
+    exec := &CommandExecution{
+        CharacterID: charID,
+        Output:      &output,
+    }
 
-	err := dispatcher.Dispatch(context.Background(), "echo hello world", exec)
-	require.NoError(t, err)
-	assert.Equal(t, "hello world", capturedArgs)
-	assert.Equal(t, "echoed: hello world", output.String())
+    err := dispatcher.Dispatch(context.Background(), "echo hello world", exec)
+    require.NoError(t, err)
+    assert.Equal(t, "hello world", capturedArgs)
+    assert.Equal(t, "echoed: hello world", output.String())
 }
 
 func TestDispatcher_UnknownCommand(t *testing.T) {
-	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
-	dispatcher := NewDispatcher(reg, mockAccess)
+    reg := NewRegistry()
+    mockAccess := accesstest.NewMockAccessControl()
+    dispatcher := NewDispatcher(reg, mockAccess)
 
-	var output bytes.Buffer
-	exec := &CommandExecution{Output: &output}
+    var output bytes.Buffer
+    exec := &CommandExecution{Output: &output}
 
-	err := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
-	require.Error(t, err)
-	assert.Contains(t, PlayerMessage(err), "Unknown command")
+    err := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
+    require.Error(t, err)
+    assert.Contains(t, PlayerMessage(err), "Unknown command")
 }
 
 func TestDispatcher_PermissionDenied(t *testing.T) {
-	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+    reg := NewRegistry()
+    mockAccess := accesstest.NewMockAccessControl()
 
-	reg.Register(CommandEntry{
-		Name:         "admin",
-		Capabilities: []string{"admin.manage"},
-		Handler:      func(ctx context.Context, exec *CommandExecution) error { return nil },
-		Source:       "core",
-	})
+    reg.Register(CommandEntry{
+        Name:         "admin",
+        Capabilities: []string{"admin.manage"},
+        Handler:      func(ctx context.Context, exec *CommandExecution) error { return nil },
+        Source:       "core",
+    })
 
-	// Don't grant capability
-	dispatcher := NewDispatcher(reg, mockAccess)
+    // Don't grant capability
+    dispatcher := NewDispatcher(reg, mockAccess)
 
-	var output bytes.Buffer
-	exec := &CommandExecution{
-		CharacterID: ulid.Make(),
-		Output:      &output,
-	}
+    var output bytes.Buffer
+    exec := &CommandExecution{
+        CharacterID: ulid.Make(),
+        Output:      &output,
+    }
 
-	err := dispatcher.Dispatch(context.Background(), "admin", exec)
-	require.Error(t, err)
-	assert.Contains(t, PlayerMessage(err), "permission")
+    err := dispatcher.Dispatch(context.Background(), "admin", exec)
+    require.Error(t, err)
+    assert.Contains(t, PlayerMessage(err), "permission")
 }
 ```
 
@@ -1065,78 +1065,78 @@ Expected: FAIL with "undefined: NewDispatcher"
 package command
 
 import (
-	"context"
-	"log/slog"
+    "context"
+    "log/slog"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/attribute"
+    "go.opentelemetry.io/otel/trace"
 
-	"github.com/holomush/holomush/internal/access"
+    "github.com/holomush/holomush/internal/access"
 )
 
 var tracer = otel.Tracer("holomush/command")
 
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
-	registry *Registry
-	access   access.AccessControl
+    registry *Registry
+    access   access.AccessControl
 }
 
 // NewDispatcher creates a new command dispatcher.
 func NewDispatcher(registry *Registry, ac access.AccessControl) *Dispatcher {
-	return &Dispatcher{
-		registry: registry,
-		access:   ac,
-	}
+    return &Dispatcher{
+        registry: registry,
+        access:   ac,
+    }
 }
 
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) error {
-	// Parse input
-	parsed, err := Parse(input)
-	if err != nil {
-		return err
-	}
+    // Parse input
+    parsed, err := Parse(input)
+    if err != nil {
+        return err
+    }
 
-	// Start trace span
-	ctx, span := tracer.Start(ctx, "command.execute",
-		trace.WithAttributes(
-			attribute.String("command.name", parsed.Name),
-			attribute.String("character.id", exec.CharacterID.String()),
-		),
-	)
-	defer span.End()
+    // Start trace span
+    ctx, span := tracer.Start(ctx, "command.execute",
+        trace.WithAttributes(
+            attribute.String("command.name", parsed.Name),
+            attribute.String("character.id", exec.CharacterID.String()),
+        ),
+    )
+    defer span.End()
 
-	// Look up command
-	entry, ok := d.registry.Get(parsed.Name)
-	if !ok {
-		return ErrUnknownCommand(parsed.Name)
-	}
+    // Look up command
+    entry, ok := d.registry.Get(parsed.Name)
+    if !ok {
+        return ErrUnknownCommand(parsed.Name)
+    }
 
-	span.SetAttributes(attribute.String("command.source", entry.Source))
+    span.SetAttributes(attribute.String("command.source", entry.Source))
 
-	// Check capabilities
-	for _, cap := range entry.Capabilities {
-		allowed, err := d.access.Check(ctx, access.Request{
-			Subject:    exec.CharacterID.String(),
-			Permission: cap,
-		})
-		if err != nil {
-			slog.Error("capability check failed",
-				"command", parsed.Name,
-				"capability", cap,
-				"error", err)
-			return ErrPermissionDenied(parsed.Name, cap)
-		}
-		if !allowed {
-			return ErrPermissionDenied(parsed.Name, cap)
-		}
-	}
+    // Check capabilities
+    for _, cap := range entry.Capabilities {
+        allowed, err := d.access.Check(ctx, access.Request{
+            Subject:    exec.CharacterID.String(),
+            Permission: cap,
+        })
+        if err != nil {
+            slog.Error("capability check failed",
+                "command", parsed.Name,
+                "capability", cap,
+                "error", err)
+            return ErrPermissionDenied(parsed.Name, cap)
+        }
+        if !allowed {
+            return ErrPermissionDenied(parsed.Name, cap)
+        }
+    }
 
-	// Execute
-	exec.Args = parsed.Args
-	return entry.Handler(ctx, exec)
+    // Execute
+    exec.Args = parsed.Args
+    return entry.Handler(ctx, exec)
 }
 ```
 
@@ -1227,68 +1227,68 @@ Expected: Migration creates alias tables
 package command
 
 import (
-	"context"
-	"testing"
+    "context"
+    "testing"
 
-	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
+    "github.com/oklog/ulid/v2"
+    "github.com/stretchr/testify/assert"
 )
 
 func TestAliasCache_SystemAliases(t *testing.T) {
-	cache := NewAliasCache()
+    cache := NewAliasCache()
 
-	cache.SetSystemAlias("l", "look")
-	cache.SetSystemAlias("n", "move north")
+    cache.SetSystemAlias("l", "look")
+    cache.SetSystemAlias("n", "move north")
 
-	cmd, ok := cache.ResolveSystemAlias("l")
-	assert.True(t, ok)
-	assert.Equal(t, "look", cmd)
+    cmd, ok := cache.ResolveSystemAlias("l")
+    assert.True(t, ok)
+    assert.Equal(t, "look", cmd)
 
-	_, ok = cache.ResolveSystemAlias("nonexistent")
-	assert.False(t, ok)
+    _, ok = cache.ResolveSystemAlias("nonexistent")
+    assert.False(t, ok)
 }
 
 func TestAliasCache_PlayerAliases(t *testing.T) {
-	cache := NewAliasCache()
-	playerID := ulid.Make()
+    cache := NewAliasCache()
+    playerID := ulid.Make()
 
-	cache.SetPlayerAlias(playerID, "ll", "look long")
+    cache.SetPlayerAlias(playerID, "ll", "look long")
 
-	cmd, ok := cache.ResolvePlayerAlias(playerID, "ll")
-	assert.True(t, ok)
-	assert.Equal(t, "look long", cmd)
+    cmd, ok := cache.ResolvePlayerAlias(playerID, "ll")
+    assert.True(t, ok)
+    assert.Equal(t, "look long", cmd)
 
-	// Different player shouldn't see the alias
-	otherPlayer := ulid.Make()
-	_, ok = cache.ResolvePlayerAlias(otherPlayer, "ll")
-	assert.False(t, ok)
+    // Different player shouldn't see the alias
+    otherPlayer := ulid.Make()
+    _, ok = cache.ResolvePlayerAlias(otherPlayer, "ll")
+    assert.False(t, ok)
 }
 
 func TestAliasResolver_ResolutionOrder(t *testing.T) {
-	cache := NewAliasCache()
-	reg := NewRegistry()
+    cache := NewAliasCache()
+    reg := NewRegistry()
 
-	// Register a real command
-	reg.Register(CommandEntry{Name: "look", Source: "core"})
+    // Register a real command
+    reg.Register(CommandEntry{Name: "look", Source: "core"})
 
-	// Set up aliases
-	playerID := ulid.Make()
-	cache.SetSystemAlias("l", "look")
-	cache.SetPlayerAlias(playerID, "l", "look at me") // Player overrides system
+    // Set up aliases
+    playerID := ulid.Make()
+    cache.SetSystemAlias("l", "look")
+    cache.SetPlayerAlias(playerID, "l", "look at me") // Player overrides system
 
-	resolver := NewAliasResolver(cache, reg)
+    resolver := NewAliasResolver(cache, reg)
 
-	// Player alias takes precedence over system
-	resolved := resolver.Resolve(context.Background(), "l", playerID)
-	assert.Equal(t, "look at me", resolved)
+    // Player alias takes precedence over system
+    resolved := resolver.Resolve(context.Background(), "l", playerID)
+    assert.Equal(t, "look at me", resolved)
 
-	// Command name is not expanded
-	resolved = resolver.Resolve(context.Background(), "look", playerID)
-	assert.Equal(t, "look", resolved)
+    // Command name is not expanded
+    resolved = resolver.Resolve(context.Background(), "look", playerID)
+    assert.Equal(t, "look", resolved)
 
-	// Unknown stays as-is
-	resolved = resolver.Resolve(context.Background(), "unknown", playerID)
-	assert.Equal(t, "unknown", resolved)
+    // Unknown stays as-is
+    resolved = resolver.Resolve(context.Background(), "unknown", playerID)
+    assert.Equal(t, "unknown", resolved)
 }
 ```
 
@@ -1307,125 +1307,125 @@ Expected: FAIL with "undefined: NewAliasCache"
 package command
 
 import (
-	"context"
-	"sync"
+    "context"
+    "sync"
 
-	"github.com/oklog/ulid/v2"
+    "github.com/oklog/ulid/v2"
 )
 
 // AliasRepository defines persistence operations for aliases.
 type AliasRepository interface {
-	// System aliases
-	GetSystemAliases(ctx context.Context) (map[string]string, error)
-	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
-	DeleteSystemAlias(ctx context.Context, alias string) error
+    // System aliases
+    GetSystemAliases(ctx context.Context) (map[string]string, error)
+    SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
+    DeleteSystemAlias(ctx context.Context, alias string) error
 
-	// Player aliases
-	GetPlayerAliases(ctx context.Context, playerID ulid.ULID) (map[string]string, error)
-	SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, command string) error
-	DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error
+    // Player aliases
+    GetPlayerAliases(ctx context.Context, playerID ulid.ULID) (map[string]string, error)
+    SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, command string) error
+    DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error
 }
 
 // AliasCache provides in-memory alias resolution.
 type AliasCache struct {
-	systemAliases map[string]string
-	playerAliases map[ulid.ULID]map[string]string
-	mu            sync.RWMutex
+    systemAliases map[string]string
+    playerAliases map[ulid.ULID]map[string]string
+    mu            sync.RWMutex
 }
 
 // NewAliasCache creates a new alias cache.
 func NewAliasCache() *AliasCache {
-	return &AliasCache{
-		systemAliases: make(map[string]string),
-		playerAliases: make(map[ulid.ULID]map[string]string),
-	}
+    return &AliasCache{
+        systemAliases: make(map[string]string),
+        playerAliases: make(map[ulid.ULID]map[string]string),
+    }
 }
 
 // SetSystemAlias adds or updates a system alias.
 func (c *AliasCache) SetSystemAlias(alias, command string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.systemAliases[alias] = command
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.systemAliases[alias] = command
 }
 
 // DeleteSystemAlias removes a system alias.
 func (c *AliasCache) DeleteSystemAlias(alias string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.systemAliases, alias)
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    delete(c.systemAliases, alias)
 }
 
 // ResolveSystemAlias looks up a system alias.
 func (c *AliasCache) ResolveSystemAlias(alias string) (string, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	cmd, ok := c.systemAliases[alias]
-	return cmd, ok
+    c.mu.RLock()
+    defer c.mu.RUnlock()
+    cmd, ok := c.systemAliases[alias]
+    return cmd, ok
 }
 
 // SetPlayerAlias adds or updates a player alias.
 func (c *AliasCache) SetPlayerAlias(playerID ulid.ULID, alias, command string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.playerAliases[playerID] == nil {
-		c.playerAliases[playerID] = make(map[string]string)
-	}
-	c.playerAliases[playerID][alias] = command
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    if c.playerAliases[playerID] == nil {
+        c.playerAliases[playerID] = make(map[string]string)
+    }
+    c.playerAliases[playerID][alias] = command
 }
 
 // DeletePlayerAlias removes a player alias.
 func (c *AliasCache) DeletePlayerAlias(playerID ulid.ULID, alias string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if aliases, ok := c.playerAliases[playerID]; ok {
-		delete(aliases, alias)
-	}
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    if aliases, ok := c.playerAliases[playerID]; ok {
+        delete(aliases, alias)
+    }
 }
 
 // ResolvePlayerAlias looks up a player alias.
 func (c *AliasCache) ResolvePlayerAlias(playerID ulid.ULID, alias string) (string, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if aliases, ok := c.playerAliases[playerID]; ok {
-		cmd, found := aliases[alias]
-		return cmd, found
-	}
-	return "", false
+    c.mu.RLock()
+    defer c.mu.RUnlock()
+    if aliases, ok := c.playerAliases[playerID]; ok {
+        cmd, found := aliases[alias]
+        return cmd, found
+    }
+    return "", false
 }
 
 // ClearPlayer removes all aliases for a player (on session end).
 func (c *AliasCache) ClearPlayer(playerID ulid.ULID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.playerAliases, playerID)
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    delete(c.playerAliases, playerID)
 }
 
 // LoadSystemAliases bulk loads system aliases.
 func (c *AliasCache) LoadSystemAliases(aliases map[string]string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.systemAliases = aliases
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.systemAliases = aliases
 }
 
 // LoadPlayerAliases bulk loads player aliases.
 func (c *AliasCache) LoadPlayerAliases(playerID ulid.ULID, aliases map[string]string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.playerAliases[playerID] = aliases
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.playerAliases[playerID] = aliases
 }
 
 // AliasResolver handles alias expansion with proper precedence.
 type AliasResolver struct {
-	cache    *AliasCache
-	registry *Registry
+    cache    *AliasCache
+    registry *Registry
 }
 
 // NewAliasResolver creates a new alias resolver.
 func NewAliasResolver(cache *AliasCache, registry *Registry) *AliasResolver {
-	return &AliasResolver{
-		cache:    cache,
-		registry: registry,
-	}
+    return &AliasResolver{
+        cache:    cache,
+        registry: registry,
+    }
 }
 
 // MaxExpansionDepth prevents circular alias chains.
@@ -1433,45 +1433,45 @@ const MaxExpansionDepth = 10
 
 // Resolve expands an alias following precedence: command > player alias > system alias.
 func (r *AliasResolver) Resolve(ctx context.Context, input string, playerID ulid.ULID) string {
-	return r.resolveWithDepth(input, playerID, 0)
+    return r.resolveWithDepth(input, playerID, 0)
 }
 
 func (r *AliasResolver) resolveWithDepth(input string, playerID ulid.ULID, depth int) string {
-	if depth >= MaxExpansionDepth {
-		return input // Prevent infinite loops
-	}
+    if depth >= MaxExpansionDepth {
+        return input // Prevent infinite loops
+    }
 
-	// Parse to get command name
-	parsed, err := Parse(input)
-	if err != nil {
-		return input
-	}
+    // Parse to get command name
+    parsed, err := Parse(input)
+    if err != nil {
+        return input
+    }
 
-	// 1. Exact command match - don't expand
-	if _, ok := r.registry.Get(parsed.Name); ok {
-		return input
-	}
+    // 1. Exact command match - don't expand
+    if _, ok := r.registry.Get(parsed.Name); ok {
+        return input
+    }
 
-	// 2. Player alias
-	if cmd, ok := r.cache.ResolvePlayerAlias(playerID, parsed.Name); ok {
-		expanded := cmd
-		if parsed.Args != "" {
-			expanded = cmd + " " + parsed.Args
-		}
-		return r.resolveWithDepth(expanded, playerID, depth+1)
-	}
+    // 2. Player alias
+    if cmd, ok := r.cache.ResolvePlayerAlias(playerID, parsed.Name); ok {
+        expanded := cmd
+        if parsed.Args != "" {
+            expanded = cmd + " " + parsed.Args
+        }
+        return r.resolveWithDepth(expanded, playerID, depth+1)
+    }
 
-	// 3. System alias
-	if cmd, ok := r.cache.ResolveSystemAlias(parsed.Name); ok {
-		expanded := cmd
-		if parsed.Args != "" {
-			expanded = cmd + " " + parsed.Args
-		}
-		return r.resolveWithDepth(expanded, playerID, depth+1)
-	}
+    // 3. System alias
+    if cmd, ok := r.cache.ResolveSystemAlias(parsed.Name); ok {
+        expanded := cmd
+        if parsed.Args != "" {
+            expanded = cmd + " " + parsed.Args
+        }
+        return r.resolveWithDepth(expanded, playerID, depth+1)
+    }
 
-	// 4. No alias found
-	return input
+    // 4. No alias found
+    return input
 }
 ```
 
@@ -1505,21 +1505,21 @@ Expected: Alias system with cache and resolution
 package store
 
 import (
-	"context"
-	"testing"
+    "context"
+    "testing"
 
-	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/oklog/ulid/v2"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
 )
 
 func TestAliasRepository_SystemAliases(t *testing.T) {
-	// This would be an integration test with testcontainers
-	t.Skip("Requires database - run with integration tag")
+    // This would be an integration test with testcontainers
+    t.Skip("Requires database - run with integration tag")
 }
 
 func TestAliasRepository_PlayerAliases(t *testing.T) {
-	t.Skip("Requires database - run with integration tag")
+    t.Skip("Requires database - run with integration tag")
 }
 ```
 
@@ -1533,113 +1533,113 @@ func TestAliasRepository_PlayerAliases(t *testing.T) {
 package store
 
 import (
-	"context"
+    "context"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oklog/ulid/v2"
-	"github.com/samber/oops"
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/oklog/ulid/v2"
+    "github.com/samber/oops"
 )
 
 // AliasRepository implements command.AliasRepository with PostgreSQL.
 type AliasRepository struct {
-	pool *pgxpool.Pool
+    pool *pgxpool.Pool
 }
 
 // NewAliasRepository creates a new alias repository.
 func NewAliasRepository(pool *pgxpool.Pool) *AliasRepository {
-	return &AliasRepository{pool: pool}
+    return &AliasRepository{pool: pool}
 }
 
 // GetSystemAliases retrieves all system aliases.
 func (r *AliasRepository) GetSystemAliases(ctx context.Context) (map[string]string, error) {
-	rows, err := r.pool.Query(ctx, `SELECT alias, command FROM system_aliases`)
-	if err != nil {
-		return nil, oops.In("alias").Code("DB_ERROR").Wrap(err)
-	}
-	defer rows.Close()
+    rows, err := r.pool.Query(ctx, `SELECT alias, command FROM system_aliases`)
+    if err != nil {
+        return nil, oops.In("alias").Code("DB_ERROR").Wrap(err)
+    }
+    defer rows.Close()
 
-	aliases := make(map[string]string)
-	for rows.Next() {
-		var alias, command string
-		if err := rows.Scan(&alias, &command); err != nil {
-			return nil, oops.In("alias").Code("DB_ERROR").Wrap(err)
-		}
-		aliases[alias] = command
-	}
-	return aliases, rows.Err()
+    aliases := make(map[string]string)
+    for rows.Next() {
+        var alias, command string
+        if err := rows.Scan(&alias, &command); err != nil {
+            return nil, oops.In("alias").Code("DB_ERROR").Wrap(err)
+        }
+        aliases[alias] = command
+    }
+    return aliases, rows.Err()
 }
 
 // SetSystemAlias creates or updates a system alias.
 func (r *AliasRepository) SetSystemAlias(ctx context.Context, alias, command, createdBy string) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO system_aliases (alias, command, created_by)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (alias) DO UPDATE SET command = $2
-	`, alias, command, createdBy)
-	if err != nil {
-		return oops.In("alias").Code("DB_ERROR").With("alias", alias).Wrap(err)
-	}
-	return nil
+    _, err := r.pool.Exec(ctx, `
+        INSERT INTO system_aliases (alias, command, created_by)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (alias) DO UPDATE SET command = $2
+    `, alias, command, createdBy)
+    if err != nil {
+        return oops.In("alias").Code("DB_ERROR").With("alias", alias).Wrap(err)
+    }
+    return nil
 }
 
 // DeleteSystemAlias removes a system alias.
 func (r *AliasRepository) DeleteSystemAlias(ctx context.Context, alias string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM system_aliases WHERE alias = $1`, alias)
-	if err != nil {
-		return oops.In("alias").Code("DB_ERROR").With("alias", alias).Wrap(err)
-	}
-	return nil
+    _, err := r.pool.Exec(ctx, `DELETE FROM system_aliases WHERE alias = $1`, alias)
+    if err != nil {
+        return oops.In("alias").Code("DB_ERROR").With("alias", alias).Wrap(err)
+    }
+    return nil
 }
 
 // GetPlayerAliases retrieves all aliases for a player.
 func (r *AliasRepository) GetPlayerAliases(ctx context.Context, playerID ulid.ULID) (map[string]string, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT alias, command FROM player_aliases WHERE player_id = $1
-	`, playerID.String())
-	if err != nil {
-		return nil, oops.In("alias").Code("DB_ERROR").With("player_id", playerID).Wrap(err)
-	}
-	defer rows.Close()
+    rows, err := r.pool.Query(ctx, `
+        SELECT alias, command FROM player_aliases WHERE player_id = $1
+    `, playerID.String())
+    if err != nil {
+        return nil, oops.In("alias").Code("DB_ERROR").With("player_id", playerID).Wrap(err)
+    }
+    defer rows.Close()
 
-	aliases := make(map[string]string)
-	for rows.Next() {
-		var alias, command string
-		if err := rows.Scan(&alias, &command); err != nil {
-			return nil, oops.In("alias").Code("DB_ERROR").Wrap(err)
-		}
-		aliases[alias] = command
-	}
-	return aliases, rows.Err()
+    aliases := make(map[string]string)
+    for rows.Next() {
+        var alias, command string
+        if err := rows.Scan(&alias, &command); err != nil {
+            return nil, oops.In("alias").Code("DB_ERROR").Wrap(err)
+        }
+        aliases[alias] = command
+    }
+    return aliases, rows.Err()
 }
 
 // SetPlayerAlias creates or updates a player alias.
 func (r *AliasRepository) SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, command string) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO player_aliases (player_id, alias, command)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (player_id, alias) DO UPDATE SET command = $3
-	`, playerID.String(), alias, command)
-	if err != nil {
-		return oops.In("alias").Code("DB_ERROR").With("player_id", playerID).With("alias", alias).Wrap(err)
-	}
-	return nil
+    _, err := r.pool.Exec(ctx, `
+        INSERT INTO player_aliases (player_id, alias, command)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (player_id, alias) DO UPDATE SET command = $3
+    `, playerID.String(), alias, command)
+    if err != nil {
+        return oops.In("alias").Code("DB_ERROR").With("player_id", playerID).With("alias", alias).Wrap(err)
+    }
+    return nil
 }
 
 // DeletePlayerAlias removes a player alias.
 func (r *AliasRepository) DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error {
-	_, err := r.pool.Exec(ctx, `
-		DELETE FROM player_aliases WHERE player_id = $1 AND alias = $2
-	`, playerID.String(), alias)
-	if err != nil {
-		return oops.In("alias").Code("DB_ERROR").With("player_id", playerID).With("alias", alias).Wrap(err)
-	}
-	return nil
+    _, err := r.pool.Exec(ctx, `
+        DELETE FROM player_aliases WHERE player_id = $1 AND alias = $2
+    `, playerID.String(), alias)
+    if err != nil {
+        return oops.In("alias").Code("DB_ERROR").With("player_id", playerID).With("alias", alias).Wrap(err)
+    }
+    return nil
 }
 
 // Ensure AliasRepository implements the interface (compile-time check would go in command package).
 var _ interface {
-	GetSystemAliases(ctx context.Context) (map[string]string, error)
+    GetSystemAliases(ctx context.Context) (map[string]string, error)
 } = (*AliasRepository)(nil)
 ```
 
@@ -1666,42 +1666,42 @@ Expected: PostgreSQL implementation for alias storage
 ```go
 // Add to dispatcher_test.go
 func TestDispatcher_AliasResolution(t *testing.T) {
-	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
-	cache := NewAliasCache()
+    reg := NewRegistry()
+    mockAccess := accesstest.NewMockAccessControl()
+    cache := NewAliasCache()
 
-	// Register look command
-	reg.Register(CommandEntry{
-		Name:         "look",
-		Capabilities: []string{"world.look"},
-		Handler: func(ctx context.Context, exec *CommandExecution) error {
-			exec.Output.Write([]byte("You look around."))
-			return nil
-		},
-		Source: "core",
-	})
+    // Register look command
+    reg.Register(CommandEntry{
+        Name:         "look",
+        Capabilities: []string{"world.look"},
+        Handler: func(ctx context.Context, exec *CommandExecution) error {
+            exec.Output.Write([]byte("You look around."))
+            return nil
+        },
+        Source: "core",
+    })
 
-	// Set up alias
-	cache.SetSystemAlias("l", "look")
+    // Set up alias
+    cache.SetSystemAlias("l", "look")
 
-	charID := ulid.Make()
-	playerID := ulid.Make()
-	mockAccess.Grant(charID.String(), "world.look")
+    charID := ulid.Make()
+    playerID := ulid.Make()
+    mockAccess.Grant(charID.String(), "world.look")
 
-	dispatcher := NewDispatcher(reg, mockAccess)
-	dispatcher.SetAliasResolver(NewAliasResolver(cache, reg))
+    dispatcher := NewDispatcher(reg, mockAccess)
+    dispatcher.SetAliasResolver(NewAliasResolver(cache, reg))
 
-	var output bytes.Buffer
-	exec := &CommandExecution{
-		CharacterID: charID,
-		PlayerID:    playerID,
-		Output:      &output,
-	}
+    var output bytes.Buffer
+    exec := &CommandExecution{
+        CharacterID: charID,
+        PlayerID:    playerID,
+        Output:      &output,
+    }
 
-	// Use alias
-	err := dispatcher.Dispatch(context.Background(), "l", exec)
-	require.NoError(t, err)
-	assert.Equal(t, "You look around.", output.String())
+    // Use alias
+    err := dispatcher.Dispatch(context.Background(), "l", exec)
+    require.NoError(t, err)
+    assert.Equal(t, "You look around.", output.String())
 }
 ```
 
@@ -1716,27 +1716,27 @@ Expected: FAIL with "dispatcher.SetAliasResolver undefined"
 // Update dispatcher.go - add alias resolver field and method
 
 type Dispatcher struct {
-	registry      *Registry
-	access        access.AccessControl
-	aliasResolver *AliasResolver
+    registry      *Registry
+    access        access.AccessControl
+    aliasResolver *AliasResolver
 }
 
 // SetAliasResolver sets the alias resolver for command expansion.
 func (d *Dispatcher) SetAliasResolver(resolver *AliasResolver) {
-	d.aliasResolver = resolver
+    d.aliasResolver = resolver
 }
 
 // Update Dispatch to use alias resolution
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) error {
-	// Resolve aliases if resolver is set
-	resolvedInput := input
-	if d.aliasResolver != nil {
-		resolvedInput = d.aliasResolver.Resolve(ctx, input, exec.PlayerID)
-	}
+    // Resolve aliases if resolver is set
+    resolvedInput := input
+    if d.aliasResolver != nil {
+        resolvedInput = d.aliasResolver.Resolve(ctx, input, exec.PlayerID)
+    }
 
-	// Parse resolved input
-	parsed, err := Parse(resolvedInput)
-	// ... rest of dispatch logic
+    // Parse resolved input
+    parsed, err := Parse(resolvedInput)
+    // ... rest of dispatch logic
 }
 ```
 
@@ -1770,7 +1770,7 @@ Expected: Dispatcher resolves aliases before dispatch
 ```go
 // Add to manifest_test.go
 func TestManifest_Commands(t *testing.T) {
-	yaml := `
+    yaml := `
 name: communication
 version: 1.0.0
 type: lua
@@ -1786,21 +1786,21 @@ commands:
       ## Say
       Speaks a message aloud.
 `
-	m, err := ParseManifest([]byte(yaml))
-	require.NoError(t, err)
-	require.Len(t, m.Commands, 1)
+    m, err := ParseManifest([]byte(yaml))
+    require.NoError(t, err)
+    require.Len(t, m.Commands, 1)
 
-	cmd := m.Commands[0]
-	assert.Equal(t, "say", cmd.Name)
-	assert.Equal(t, []string{"comms.say"}, cmd.Capabilities)
-	assert.Equal(t, "Send a message to the room", cmd.Help)
-	assert.Equal(t, "say <message>", cmd.Usage)
-	assert.Contains(t, cmd.HelpText, "Speaks a message")
+    cmd := m.Commands[0]
+    assert.Equal(t, "say", cmd.Name)
+    assert.Equal(t, []string{"comms.say"}, cmd.Capabilities)
+    assert.Equal(t, "Send a message to the room", cmd.Help)
+    assert.Equal(t, "say <message>", cmd.Usage)
+    assert.Contains(t, cmd.HelpText, "Speaks a message")
 }
 
 func TestManifest_CommandValidation(t *testing.T) {
-	// Both helpText and helpFile is invalid
-	yaml := `
+    // Both helpText and helpFile is invalid
+    yaml := `
 name: test
 version: 1.0.0
 type: lua
@@ -1813,9 +1813,9 @@ commands:
     helpText: "inline help"
     helpFile: "help/say.md"
 `
-	_, err := ParseManifest([]byte(yaml))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "both helpText and helpFile")
+    _, err := ParseManifest([]byte(yaml))
+    require.Error(t, err)
+    assert.Contains(t, err.Error(), "both helpText and helpFile")
 }
 ```
 
@@ -1831,34 +1831,34 @@ Expected: FAIL (Commands field not defined)
 
 // CommandSpec defines a command declared in a plugin manifest.
 type CommandSpec struct {
-	Name         string   `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=20"`
-	Capabilities []string `yaml:"capabilities" json:"capabilities"`
-	Help         string   `yaml:"help" json:"help" jsonschema:"required"`
-	Usage        string   `yaml:"usage" json:"usage" jsonschema:"required"`
-	HelpText     string   `yaml:"helpText,omitempty" json:"helpText,omitempty"`
-	HelpFile     string   `yaml:"helpFile,omitempty" json:"helpFile,omitempty"`
+    Name         string   `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=20"`
+    Capabilities []string `yaml:"capabilities" json:"capabilities"`
+    Help         string   `yaml:"help" json:"help" jsonschema:"required"`
+    Usage        string   `yaml:"usage" json:"usage" jsonschema:"required"`
+    HelpText     string   `yaml:"helpText,omitempty" json:"helpText,omitempty"`
+    HelpFile     string   `yaml:"helpFile,omitempty" json:"helpFile,omitempty"`
 }
 
 // Update Manifest struct to include Commands
 type Manifest struct {
-	// ... existing fields ...
-	Commands []CommandSpec `yaml:"commands,omitempty" json:"commands,omitempty"`
+    // ... existing fields ...
+    Commands []CommandSpec `yaml:"commands,omitempty" json:"commands,omitempty"`
 }
 
 // Add validation in Validate()
 func (m *Manifest) Validate() error {
-	// ... existing validation ...
+    // ... existing validation ...
 
-	// Validate commands
-	for i, cmd := range m.Commands {
-		if cmd.Name == "" {
-			return oops.In("manifest").With("index", i).New("command name is required")
-		}
-		if cmd.HelpText != "" && cmd.HelpFile != "" {
-			return oops.In("manifest").With("command", cmd.Name).New("cannot specify both helpText and helpFile")
-		}
-	}
-	return nil
+    // Validate commands
+    for i, cmd := range m.Commands {
+        if cmd.Name == "" {
+            return oops.In("manifest").With("index", i).New("command name is required")
+        }
+        if cmd.HelpText != "" && cmd.HelpFile != "" {
+            return oops.In("manifest").With("command", cmd.Name).New("cannot specify both helpText and helpFile")
+        }
+    }
+    return nil
 }
 ```
 
@@ -1894,44 +1894,44 @@ Expected: Manifest supports command declarations
 package handlers
 
 import (
-	"bytes"
-	"context"
-	"testing"
+    "bytes"
+    "context"
+    "testing"
 
-	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+    "github.com/oklog/ulid/v2"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/mock"
+    "github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/world"
-	worldmocks "github.com/holomush/holomush/internal/world/mocks"
+    "github.com/holomush/holomush/internal/command"
+    "github.com/holomush/holomush/internal/world"
+    worldmocks "github.com/holomush/holomush/internal/world/mocks"
 )
 
 func TestLookHandler_CurrentRoom(t *testing.T) {
-	mockWorld := worldmocks.NewMockService(t)
-	locationID := ulid.Make()
+    mockWorld := worldmocks.NewMockService(t)
+    locationID := ulid.Make()
 
-	mockWorld.EXPECT().GetLocation(mock.Anything, locationID).Return(&world.Location{
-		ID:          locationID,
-		Name:        "The Library",
-		Description: "A dusty room filled with ancient tomes.",
-	}, nil)
+    mockWorld.EXPECT().GetLocation(mock.Anything, locationID).Return(&world.Location{
+        ID:          locationID,
+        Name:        "The Library",
+        Description: "A dusty room filled with ancient tomes.",
+    }, nil)
 
-	var output bytes.Buffer
-	exec := &command.CommandExecution{
-		CharacterID: ulid.Make(),
-		LocationID:  locationID,
-		Output:      &output,
-		Services: &command.Services{
-			World: mockWorld,
-		},
-	}
+    var output bytes.Buffer
+    exec := &command.CommandExecution{
+        CharacterID: ulid.Make(),
+        LocationID:  locationID,
+        Output:      &output,
+        Services: &command.Services{
+            World: mockWorld,
+        },
+    }
 
-	err := Look(context.Background(), exec)
-	require.NoError(t, err)
-	assert.Contains(t, output.String(), "The Library")
-	assert.Contains(t, output.String(), "dusty room")
+    err := Look(context.Background(), exec)
+    require.NoError(t, err)
+    assert.Contains(t, output.String(), "The Library")
+    assert.Contains(t, output.String(), "dusty room")
 }
 ```
 
@@ -1951,24 +1951,24 @@ Expected: FAIL with "undefined: Look"
 package handlers
 
 import (
-	"context"
-	"fmt"
+    "context"
+    "fmt"
 
-	"github.com/holomush/holomush/internal/command"
+    "github.com/holomush/holomush/internal/command"
 )
 
 // Look implements the look command - examine current location or target.
 func Look(ctx context.Context, exec *command.CommandExecution) error {
-	// TODO: Parse args for target
-	// For now, just look at current room
+    // TODO: Parse args for target
+    // For now, just look at current room
 
-	room, err := exec.Services.World.GetLocation(ctx, exec.LocationID)
-	if err != nil {
-		return command.WorldError("You can't see anything here.", err)
-	}
+    room, err := exec.Services.World.GetLocation(ctx, exec.LocationID)
+    if err != nil {
+        return command.WorldError("You can't see anything here.", err)
+    }
 
-	fmt.Fprintf(exec.Output, "%s\n%s\n", room.Name, room.Description)
-	return nil
+    fmt.Fprintf(exec.Output, "%s\n%s\n", room.Name, room.Description)
+    return nil
 }
 ```
 
@@ -2002,37 +2002,37 @@ Expected: Look command shows room name and description
 package handlers
 
 import (
-	"bytes"
-	"context"
-	"testing"
+    "bytes"
+    "context"
+    "testing"
 
-	"github.com/oklog/ulid/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+    "github.com/oklog/ulid/v2"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/mock"
+    "github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core/mocks"
+    "github.com/holomush/holomush/internal/command"
+    "github.com/holomush/holomush/internal/core/mocks"
 )
 
 func TestQuitHandler(t *testing.T) {
-	mockSession := mocks.NewMockSessionManager(t)
-	sessionID := ulid.Make()
+    mockSession := mocks.NewMockSessionManager(t)
+    sessionID := ulid.Make()
 
-	mockSession.EXPECT().EndSession(mock.Anything, sessionID).Return(nil)
+    mockSession.EXPECT().EndSession(mock.Anything, sessionID).Return(nil)
 
-	var output bytes.Buffer
-	exec := &command.CommandExecution{
-		SessionID: sessionID,
-		Output:    &output,
-		Services: &command.Services{
-			Session: mockSession,
-		},
-	}
+    var output bytes.Buffer
+    exec := &command.CommandExecution{
+        SessionID: sessionID,
+        Output:    &output,
+        Services: &command.Services{
+            Session: mockSession,
+        },
+    }
 
-	err := Quit(context.Background(), exec)
-	require.NoError(t, err)
-	assert.Contains(t, output.String(), "Goodbye")
+    err := Quit(context.Background(), exec)
+    require.NoError(t, err)
+    assert.Contains(t, output.String(), "Goodbye")
 }
 ```
 
@@ -2051,21 +2051,21 @@ Expected: FAIL with "undefined: Quit"
 package handlers
 
 import (
-	"context"
-	"fmt"
+    "context"
+    "fmt"
 
-	"github.com/holomush/holomush/internal/command"
+    "github.com/holomush/holomush/internal/command"
 )
 
 // Quit implements the quit command - ends the player's session.
 func Quit(ctx context.Context, exec *command.CommandExecution) error {
-	fmt.Fprintln(exec.Output, "Goodbye! See you next time.")
+    fmt.Fprintln(exec.Output, "Goodbye! See you next time.")
 
-	if err := exec.Services.Session.EndSession(ctx, exec.SessionID); err != nil {
-		return command.WorldError("Failed to end session cleanly.", err)
-	}
+    if err := exec.Services.Session.EndSession(ctx, exec.SessionID); err != nil {
+        return command.WorldError("Failed to end session cleanly.", err)
+    }
 
-	return nil
+    return nil
 }
 ```
 

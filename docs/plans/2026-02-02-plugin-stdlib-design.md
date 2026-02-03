@@ -10,17 +10,17 @@ This document defines the plugin standard library (stdlib) for HoloMUSH. The std
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Implementation | Go-core, Lua-surface | Single implementation, two interfaces. Lua calls Go via host functions. |
-| Output targeting | Dual-target (semantic) | Plugins emit semantic structure; output layer renders per client type. |
-| Formatting scope | Standard | Text styling, lists, tables, columns, headers. Rich formatting deferred. |
-| Data handling | Typed command context | Pre-parsed context object eliminates JSON handling in plugins. |
-| Namespace | Nested tables | `holo.fmt.*`, `holo.emit.*` mirrors Go package structure. |
+| Decision         | Choice                 | Rationale                                                                |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------ |
+| Implementation   | Go-core, Lua-surface   | Single implementation, two interfaces. Lua calls Go via host functions.  |
+| Output targeting | Dual-target (semantic) | Plugins emit semantic structure; output layer renders per client type.   |
+| Formatting scope | Standard               | Text styling, lists, tables, columns, headers. Rich formatting deferred. |
+| Data handling    | Typed command context  | Pre-parsed context object eliminates JSON handling in plugins.           |
+| Namespace        | Nested tables          | `holo.fmt.*`, `holo.emit.*` mirrors Go package structure.                |
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                   Lua Plugin                        │
 │  on_command(ctx)                                    │
@@ -45,14 +45,14 @@ This document defines the plugin standard library (stdlib) for HoloMUSH. The std
 
 ### Key Files
 
-| Path | Purpose |
-|------|---------|
-| `pkg/holo/fmt.go` | Formatting primitives + %x code parsing |
-| `pkg/holo/emit.go` | Event emitter |
-| `pkg/holo/context.go` | CommandContext struct |
-| `pkg/holo/codes.go` | MU* format code definitions |
-| `internal/plugin/hostfunc/stdlib.go` | Lua bindings for stdlib |
-| `internal/plugin/lua/context.go` | Typed CommandContext builder |
+| Path                                 | Purpose                                 |
+| ------------------------------------ | --------------------------------------- |
+| `pkg/holo/fmt.go`                    | Formatting primitives + %x code parsing |
+| `pkg/holo/emit.go`                   | Event emitter                           |
+| `pkg/holo/context.go`                | CommandContext struct                   |
+| `pkg/holo/codes.go`                  | MU* format code definitions             |
+| `internal/plugin/hostfunc/stdlib.go` | Lua bindings for stdlib                 |
+| `internal/plugin/lua/context.go`     | Typed CommandContext builder            |
 
 ## Typed Command Context
 
@@ -61,6 +61,7 @@ Command handlers receive a pre-parsed context object instead of raw events.
 ### Lua Handler Signature
 
 **Before (current):**
+
 ```lua
 function on_event(event)
     if event.type ~= "command" then return nil end
@@ -71,6 +72,7 @@ end
 ```
 
 **After (with stdlib):**
+
 ```lua
 function on_command(ctx)
     -- ctx.name           "say"
@@ -143,31 +145,31 @@ local msg = "This is %xhbold%xn and %xrred%xn text."
 
 #### Style Codes
 
-| Code | Effect | Code | Effect |
-|------|--------|------|--------|
-| `%xn` | Reset/normal | `%xh` | Bold |
-| `%xu` | Underline | `%xi` | Italic |
-| `%xd` | Dim | | |
+| Code  | Effect       | Code  | Effect |
+| ----- | ------------ | ----- | ------ |
+| `%xn` | Reset/normal | `%xh` | Bold   |
+| `%xu` | Underline    | `%xi` | Italic |
+| `%xd` | Dim          |       |        |
 
 #### Color Codes
 
-| Code | Color | Code | Bright |
-|------|-------|------|--------|
-| `%xr` | Red | `%xR` | Bright red |
-| `%xg` | Green | `%xG` | Bright green |
-| `%xb` | Blue | `%xB` | Bright blue |
-| `%xc` | Cyan | `%xC` | Bright cyan |
-| `%xm` | Magenta | `%xM` | Bright magenta |
-| `%xy` | Yellow | `%xY` | Bright yellow |
-| `%xw` | White | `%xW` | Bright white |
-| `%xx` | Black | `%x##` | 256-color |
+| Code  | Color   | Code   | Bright         |
+| ----- | ------- | ------ | -------------- |
+| `%xr` | Red     | `%xR`  | Bright red     |
+| `%xg` | Green   | `%xG`  | Bright green   |
+| `%xb` | Blue    | `%xB`  | Bright blue    |
+| `%xc` | Cyan    | `%xC`  | Bright cyan    |
+| `%xm` | Magenta | `%xM`  | Bright magenta |
+| `%xy` | Yellow  | `%xY`  | Bright yellow  |
+| `%xw` | White   | `%xW`  | Bright white   |
+| `%xx` | Black   | `%x##` | 256-color      |
 
 #### Whitespace Codes
 
-| Code | Effect |
-|------|--------|
-| `%r` | Newline |
-| `%b` | Space |
+| Code | Effect         |
+| ---- | -------------- |
+| `%r` | Newline        |
+| `%b` | Space          |
 | `%t` | Tab (4 spaces) |
 
 ### Rendering
@@ -219,6 +221,7 @@ return emitter.Flush(), nil
 ### Benefits Over Current Approach
 
 **Before (boilerplate):**
+
 ```lua
 return {
     {
@@ -230,19 +233,21 @@ return {
 ```
 
 **After (stdlib):**
+
 ```lua
 holo.emit.location(ctx.location_id, "say", {message = msg, speaker = ctx.character_name})
 return holo.emit.flush()
 ```
 
 The stdlib handles:
+
 - Stream name construction
 - JSON encoding with proper escaping
 - Event accumulation
 
 ## Go Package Structure
 
-```
+```text
 pkg/holo/
 ├── fmt.go        // Fmt.Bold(), Fmt.Table(), Fmt.Parse()
 ├── emit.go       // Emitter, Location(), Character(), Global()
@@ -254,13 +259,13 @@ Go plugins import `pkg/holo` directly. Lua plugins access the same functionality
 
 ## Implementation Phases
 
-| Phase | Scope | Dependencies |
-|-------|-------|--------------|
-| 1 | `pkg/holo/fmt.go` — formatting primitives + %x codes | None |
-| 2 | `pkg/holo/emit.go` — event emitter | None |
-| 3 | `internal/plugin/hostfunc/stdlib.go` — Lua bindings | Phases 1-2 |
-| 4 | `internal/plugin/lua/context.go` — typed CommandContext | Phase 3 |
-| 5 | Migrate communication plugin, update tests | Phase 4 |
+| Phase | Scope                                                   | Dependencies |
+| ----- | ------------------------------------------------------- | ------------ |
+| 1     | `pkg/holo/fmt.go` — formatting primitives + %x codes    | None         |
+| 2     | `pkg/holo/emit.go` — event emitter                      | None         |
+| 3     | `internal/plugin/hostfunc/stdlib.go` — Lua bindings     | Phases 1-2   |
+| 4     | `internal/plugin/lua/context.go` — typed CommandContext | Phase 3      |
+| 5     | Migrate communication plugin, update tests              | Phase 4      |
 
 ## Out of Scope (Backlog)
 

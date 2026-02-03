@@ -143,13 +143,13 @@ has ALL declared capabilities before invoking the handler.
 
 Capabilities use dot-notation hierarchy organized by domain:
 
-| Namespace  | Purpose                              | Examples                                            |
-| ---------- | ------------------------------------ | --------------------------------------------------- |
-| `world.*`  | World navigation and observation     | `world.look`, `world.move`, `world.examine`         |
-| `comms.*`  | Communication with other characters  | `comms.say`, `comms.pose`, `comms.emit`             |
-| `build.*`  | World construction and modification  | `build.dig`, `build.create`, `build.link`           |
-| `player.*` | Player self-management               | `player.alias`, `player.who`, `player.quit`         |
-| `admin.*`  | Server administration                | `admin.boot`, `admin.shutdown`, `admin.wall`        |
+| Namespace  | Purpose                             | Examples                                     |
+| ---------- | ----------------------------------- | -------------------------------------------- |
+| `world.*`  | World navigation and observation    | `world.look`, `world.move`, `world.examine`  |
+| `comms.*`  | Communication with other characters | `comms.say`, `comms.pose`, `comms.emit`      |
+| `build.*`  | World construction and modification | `build.dig`, `build.create`, `build.link`    |
+| `player.*` | Player self-management              | `player.alias`, `player.who`, `player.quit`  |
+| `admin.*`  | Server administration               | `admin.boot`, `admin.shutdown`, `admin.wall` |
 
 Plugins MAY define additional namespaces for their commands (e.g., `rpg.combat.*`).
 

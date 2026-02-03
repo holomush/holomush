@@ -164,9 +164,9 @@ func (c *AliasCache) ClearPlayer(playerID ulid.ULID) {
 
 // AliasResult contains the result of alias resolution.
 type AliasResult struct {
-	Resolved   string // The resolved command string
-	WasAlias   bool   // Whether an alias was expanded
-	AliasUsed  string // The alias that was matched (empty if no alias)
+	Resolved  string // The resolved command string
+	WasAlias  bool   // Whether an alias was expanded
+	AliasUsed string // The alias that was matched (empty if no alias)
 }
 
 // Resolve expands an input string through alias resolution.
