@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -414,4 +415,159 @@ func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
 
 	msg := command.PlayerMessage(err)
 	assert.NotEmpty(t, msg)
+}
+
+func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
+	characterID := ulid.Make()
+	fromLocationID := ulid.Make()
+	toLocationID := ulid.Make()
+	exitID := ulid.Make()
+
+	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "north")
+	require.NoError(t, err)
+
+	char := &world.Character{
+		ID:         characterID,
+		Name:       "TestChar",
+		LocationID: &fromLocationID,
+	}
+
+	exitRepo := worldtest.NewMockExitRepository(t)
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	subjectID := "char:" + characterID.String()
+
+	// GetExitsByLocation succeeds
+	accessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+		Return(true)
+	exitRepo.EXPECT().
+		ListFromLocation(mock.Anything, fromLocationID).
+		Return([]*world.Exit{exit}, nil)
+
+	// MoveCharacter fails (e.g., concurrent modification or access denied)
+	accessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+		Return(true)
+	characterRepo.EXPECT().
+		Get(mock.Anything, characterID).
+		Return(char, nil)
+	locationRepo.EXPECT().
+		Get(mock.Anything, toLocationID).
+		Return(nil, errors.New("concurrent modification: location deleted"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  locationRepo,
+		ExitRepo:      exitRepo,
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  fromLocationID,
+		Args:        "north",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err = MoveHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Verify the error is wrapped with player-facing message in context
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be an oops error")
+	assert.Equal(t, "Something prevents you from going that way.", oopsErr.Context()["message"])
+}
+
+func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
+	characterID := ulid.Make()
+	fromLocationID := ulid.Make()
+	toLocationID := ulid.Make()
+	exitID := ulid.Make()
+
+	toLoc := &world.Location{
+		ID:          toLocationID,
+		Name:        "Destination Room",
+		Description: "A room that will disappear.",
+		Type:        world.LocationTypePersistent,
+	}
+
+	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "north")
+	require.NoError(t, err)
+
+	char := &world.Character{
+		ID:         characterID,
+		Name:       "TestChar",
+		LocationID: &fromLocationID,
+	}
+
+	exitRepo := worldtest.NewMockExitRepository(t)
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+	eventEmitter := worldtest.NewMockEventEmitter(t)
+
+	subjectID := "char:" + characterID.String()
+
+	// GetExitsByLocation succeeds
+	accessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+		Return(true)
+	exitRepo.EXPECT().
+		ListFromLocation(mock.Anything, fromLocationID).
+		Return([]*world.Exit{exit}, nil)
+
+	// MoveCharacter succeeds
+	accessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+		Return(true).Once()
+	characterRepo.EXPECT().
+		Get(mock.Anything, characterID).
+		Return(char, nil).Once()
+	locationRepo.EXPECT().
+		Get(mock.Anything, toLocationID).
+		Return(toLoc, nil).Once()
+	characterRepo.EXPECT().
+		UpdateLocation(mock.Anything, characterID, &toLocationID).
+		Return(nil).Once()
+	eventEmitter.EXPECT().
+		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	// GetLocation for display fails (location deleted between move and lookup)
+	accessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+toLocationID.String()).
+		Return(true).Once()
+	locationRepo.EXPECT().
+		Get(mock.Anything, toLocationID).
+		Return(nil, errors.New("location not found: deleted between move and lookup")).Once()
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  locationRepo,
+		ExitRepo:      exitRepo,
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+		EventEmitter:  eventEmitter,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  fromLocationID,
+		Args:        "north",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err = MoveHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Verify the error is wrapped with player-facing message in context
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be an oops error")
+	assert.Equal(t, "You arrive somewhere strange...", oopsErr.Context()["message"])
 }
