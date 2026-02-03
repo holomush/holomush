@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
@@ -52,12 +53,7 @@ func isValidProperty(entityType, property string) bool {
 	if !ok {
 		return false
 	}
-	for _, p := range props {
-		if p == property {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(props, property)
 }
 
 // createLocationFn returns a Lua function that creates a new location.
