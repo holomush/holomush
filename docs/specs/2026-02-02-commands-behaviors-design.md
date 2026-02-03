@@ -112,12 +112,24 @@ Core commands register at server startup:
 registry.Register(CommandEntry{
     Name:         "look",
     Handler:      handlers.Look,
-    Capabilities: []string{"world.look"},
+    Capabilities: nil, // Core navigation commands are intentionally unrestricted
     Help:         "Look at your surroundings",
     Usage:        "look [target]",
     Source:       "core",
 })
 ```
+
+**Core Command Capability Decision**: Basic player commands (`look`, `move`, `quit`, `who`)
+are intentionally registered without capability requirements. These are fundamental actions
+that all players MUST be able to perform regardless of their granted capabilities:
+
+- `look` - Players MUST always be able to see their surroundings
+- `move` - Players MUST always be able to navigate between locations
+- `quit` - Players MUST always be able to disconnect their session
+- `who` - Players MUST always be able to see who is online
+
+Restricting basic navigation would break the core gameplay loop. Admin commands (`boot`,
+`shutdown`, `wall`) still require appropriate `admin.*` capabilities.
 
 ### Lua Command Registration
 
@@ -597,10 +609,16 @@ Help content MUST be markdown. Rendering depends on client:
 
 ### Partitioning Strategy
 
-| Implementation | Commands                                                           | Rationale                                |
-| -------------- | ------------------------------------------------------------------ | ---------------------------------------- |
-| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical |
-| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable        |
+| Implementation | Commands                                                           | Rationale                                         |
+| -------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical          |
+| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable                 |
+
+**Capability Requirements**:
+
+- Core navigation (`look`, `move`, `quit`, `who`): **Unrestricted** - no capability check
+- Admin commands (`boot`, `shutdown`, `wall`): Require `admin.*` capabilities
+- Lua plugin commands: Require capabilities declared in `plugin.yaml`
 
 ### Go Command Execution
 
