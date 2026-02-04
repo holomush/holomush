@@ -271,12 +271,20 @@ type aliasLookupResult struct {
 }
 
 // Resolve expands an input string through alias resolution.
+//
 // Resolution order:
-// 1. Check if input matches a registered command name → return unchanged
-// 2. Check player aliases for the given playerID
-// 3. Check system aliases
-// 4. Check single-character prefix aliases (e.g., ":" or ";" for poses)
-// 5. No match → return original input unchanged
+//  1. Check if input matches a registered command name → return unchanged
+//  2. Check player aliases for the given playerID
+//  3. Check system aliases
+//  4. Check single-character prefix aliases (player then system)
+//  5. No match → return original input unchanged
+//
+// Prefix alias semantics: A single-character alias like ":" is treated as a
+// prefix when it appears attached to text without whitespace. For example,
+// if ":" is aliased to "pose", then ":waves" resolves to "pose waves". The
+// first character is the prefix, and the rest becomes an argument. This
+// enables MUSH-style shortcuts like ":waves" (pose) or ";" (say variants).
+// Prefix matching only occurs when the first word has 2+ characters.
 //
 // Returns the resolved string, whether an alias was expanded, and which alias was used.
 //
