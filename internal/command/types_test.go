@@ -379,6 +379,64 @@ func TestServices_BroadcastSystemMessage_NilBroadcaster_IsNoOp(t *testing.T) {
 	})
 }
 
+// Tests for CommandEntry.GetCapabilities defensive copy
+
+func TestCommandEntry_GetCapabilities_ReturnsDefensiveCopy(t *testing.T) {
+	t.Parallel()
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:         "test",
+		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Capabilities: []string{"cap:one", "cap:two"},
+	})
+	require.NoError(t, err)
+
+	// Get capabilities
+	caps1 := entry.GetCapabilities()
+	caps2 := entry.GetCapabilities()
+
+	// Verify values match
+	assert.Equal(t, []string{"cap:one", "cap:two"}, caps1)
+	assert.Equal(t, []string{"cap:one", "cap:two"}, caps2)
+
+	// Modify returned slice
+	caps1[0] = "cap:modified"
+
+	// Original should be unchanged
+	caps3 := entry.GetCapabilities()
+	assert.Equal(t, []string{"cap:one", "cap:two"}, caps3,
+		"Modifying returned slice should not affect entry")
+}
+
+func TestCommandEntry_GetCapabilities_NilCapabilities_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "test",
+		Handler: func(_ context.Context, _ *CommandExecution) error { return nil },
+		// No capabilities set
+	})
+	require.NoError(t, err)
+
+	caps := entry.GetCapabilities()
+	assert.Nil(t, caps, "Should return nil when no capabilities set")
+}
+
+func TestCommandEntry_GetCapabilities_EmptyCapabilities_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:         "test",
+		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Capabilities: []string{}, // Explicitly empty
+	})
+	require.NoError(t, err)
+
+	caps := entry.GetCapabilities()
+	assert.NotNil(t, caps, "Should return non-nil empty slice")
+	assert.Empty(t, caps, "Should return empty slice")
+}
+
 func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {
 	// Create a real broadcaster so we can subscribe and capture the event
 	broadcaster := core.NewBroadcaster()

@@ -123,9 +123,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	span.SetAttributes(attribute.String("command.source", entry.Source))
 
-	// Check capabilities
+	// Check capabilities using getter to ensure defensive copy
 	subject := "char:" + exec.CharacterID.String()
-	for _, cap := range entry.Capabilities {
+	for _, cap := range entry.GetCapabilities() {
 		if !d.access.Check(ctx, subject, "execute", cap) {
 			err = ErrPermissionDenied(parsed.Name, cap)
 			return err

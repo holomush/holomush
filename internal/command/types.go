@@ -87,11 +87,18 @@ type CommandEntryConfig struct {
 
 // CommandEntry represents a registered command in the unified registry.
 //
+// Immutability Contract:
+// CommandEntry is conceptually immutable after construction via NewCommandEntry.
+// The Registry stores entries by value, so modifications to a CommandEntry
+// after registration do not affect the registered command. However, callers
+// SHOULD NOT modify fields after calling NewCommandEntry. Use GetCapabilities()
+// to access capabilities safely (returns a defensive copy).
+//
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")
 	Handler      CommandHandler // Go handler or Lua dispatcher
-	Capabilities []string       // ALL required capabilities (AND logic)
+	Capabilities []string       // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g., "say <message>")
 	HelpText     string         // detailed markdown help
@@ -106,6 +113,19 @@ const (
 	CodeZeroID     = "ZERO_ID"
 	CodeNilOutput  = "NIL_OUTPUT"
 )
+
+// GetCapabilities returns a defensive copy of the command's required capabilities.
+// This prevents external modification of the entry's internal state.
+// Returns nil if no capabilities are set, or an empty slice if explicitly set to empty.
+func (e *CommandEntry) GetCapabilities() []string {
+	if e.Capabilities == nil {
+		return nil
+	}
+	// Preserve distinction between nil and empty slice
+	result := make([]string, len(e.Capabilities))
+	copy(result, e.Capabilities)
+	return result
+}
 
 // NewCommandEntry creates a validated CommandEntry.
 // Returns an error if Name is empty or Handler is nil.
@@ -148,6 +168,12 @@ type CommandExecutionConfig struct {
 }
 
 // CommandExecution provides context for command execution.
+//
+// Mutability Note:
+// CommandExecution is mutable during dispatch. The dispatcher sets Args and
+// InvokedAs after parsing. Handlers MAY read all fields but SHOULD NOT modify
+// CharacterID, LocationID, PlayerID, SessionID, or Services. Modifying Args
+// is allowed but rarely necessary.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandExecution struct {
@@ -213,8 +239,13 @@ type ServicesConfig struct {
 }
 
 // Services provides access to core services for command handlers.
-// Handlers MUST NOT store references to services beyond execution.
-// Handlers MUST access services only through exec.Services.
+//
+// Immutability Contract:
+// Services is conceptually immutable after construction via NewServices.
+// Handlers MUST NOT modify any fields or store references beyond execution.
+// Handlers MUST access services only through exec.Services within the
+// command handler's execution context. The Services struct is shared across
+// all command executions; modifying it would affect all handlers.
 type Services struct {
 	World       WorldService         // world model queries and mutations
 	Session     core.SessionService  // session management
