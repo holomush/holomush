@@ -452,6 +452,61 @@ func TestPropertyRegistry_MustRegister_Success(t *testing.T) {
 	assert.Equal(t, "test", prop.Name)
 }
 
+// Tests for Property.GetAppliesTo defensive copy
+
+func TestProperty_GetAppliesTo_ReturnsDefensiveCopy(t *testing.T) {
+	p, err := NewProperty("test", PropertyTypeString, "cap", []string{"object", "location"})
+	require.NoError(t, err)
+
+	// Get AppliesTo twice
+	at1 := p.GetAppliesTo()
+	at2 := p.GetAppliesTo()
+
+	// Verify values match
+	assert.Equal(t, []string{"object", "location"}, at1)
+	assert.Equal(t, []string{"object", "location"}, at2)
+
+	// Modify the first returned slice
+	at1[0] = "modified"
+
+	// Original should be unchanged
+	at3 := p.GetAppliesTo()
+	assert.Equal(t, []string{"object", "location"}, at3,
+		"Modifying returned slice should not affect property")
+}
+
+func TestProperty_GetAppliesTo_NilAppliesTo_ReturnsNil(t *testing.T) {
+	p, err := NewProperty("test", PropertyTypeString, "cap", nil)
+	require.NoError(t, err)
+
+	at := p.GetAppliesTo()
+	assert.Nil(t, at, "Should return nil when no appliesTo set")
+}
+
+func TestProperty_GetAppliesTo_EmptyAppliesTo_ReturnsEmpty(t *testing.T) {
+	p, err := NewProperty("test", PropertyTypeString, "cap", []string{})
+	require.NoError(t, err)
+
+	at := p.GetAppliesTo()
+	assert.NotNil(t, at, "Should return non-nil empty slice")
+	assert.Empty(t, at, "Should return empty slice")
+}
+
+func TestNewProperty_DefensiveCopy_OriginalSliceMutation(t *testing.T) {
+	// Create a slice and use it to create a property
+	original := []string{"object", "location"}
+	p, err := NewProperty("test", PropertyTypeString, "cap", original)
+	require.NoError(t, err)
+
+	// Mutate the original slice after property creation
+	original[0] = "mutated"
+
+	// Property should not be affected
+	at := p.GetAppliesTo()
+	assert.Equal(t, []string{"object", "location"}, at,
+		"Mutating original slice after NewProperty should not affect property")
+}
+
 func TestPropertyRegistry_ConcurrentAccess(t *testing.T) {
 	r := NewPropertyRegistry()
 

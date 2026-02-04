@@ -67,16 +67,31 @@ func (pt PropertyType) String() string {
 }
 
 // Property defines a settable property on game entities.
+// Property is conceptually immutable after construction via NewProperty.
+// Use GetAppliesTo() to access the AppliesTo field safely (returns a defensive copy).
 type Property struct {
 	Name       string       // Full property name (e.g., "description")
 	Type       PropertyType // Property type: "string", "text", "number", "bool"
 	Capability string       // Required capability to set (e.g., "property.set.description")
-	AppliesTo  []string     // Entity types this property applies to
+	AppliesTo  []string     // Entity types this property applies to - use GetAppliesTo() for safe access
+}
+
+// GetAppliesTo returns a defensive copy of the entity types this property applies to.
+// This prevents external modification of the property's internal state.
+// Returns nil if no entity types are set.
+func (p *Property) GetAppliesTo() []string {
+	if p.AppliesTo == nil {
+		return nil
+	}
+	result := make([]string, len(p.AppliesTo))
+	copy(result, p.AppliesTo)
+	return result
 }
 
 // NewProperty creates a validated Property.
 // Returns ErrInvalidPropertyName if name is empty or whitespace-only.
 // Returns ErrInvalidPropertyType if propType is not a valid PropertyType.
+// The appliesTo slice is defensively copied to prevent external mutation.
 func NewProperty(name string, propType PropertyType, capability string, appliesTo []string) (Property, error) {
 	if strings.TrimSpace(name) == "" {
 		return Property{}, ErrInvalidPropertyName
@@ -84,11 +99,17 @@ func NewProperty(name string, propType PropertyType, capability string, appliesT
 	if !propType.IsValid() {
 		return Property{}, ErrInvalidPropertyType
 	}
+	// Defensive copy of appliesTo to prevent external mutation
+	var appliesCopy []string
+	if appliesTo != nil {
+		appliesCopy = make([]string, len(appliesTo))
+		copy(appliesCopy, appliesTo)
+	}
 	return Property{
 		Name:       name,
 		Type:       propType,
 		Capability: capability,
-		AppliesTo:  appliesTo,
+		AppliesTo:  appliesCopy,
 	}, nil
 }
 
