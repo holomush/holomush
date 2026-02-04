@@ -31,8 +31,8 @@ func errNoAliasCache() error {
 //   - If alias shadows a system alias
 //   - If alias replaces an existing player alias
 func AliasAddHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache()
-	registry := exec.Services.Registry()
+	cache := exec.Services().AliasCache()
+	registry := exec.Services().Registry()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -67,15 +67,15 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 	}
 
 	// Check if replacing own existing alias
-	if existingCmd, exists := cache.GetPlayerAlias(exec.PlayerID, alias); exists {
+	if existingCmd, exists := cache.GetPlayerAlias(exec.PlayerID(), alias); exists {
 		warnings = append(warnings, "Warning: Replacing existing alias '"+alias+"' (was: '"+existingCmd+"').")
 	}
 
 	// Persist to database first (if repository is available)
 	// Database write must succeed before updating cache to maintain consistency
-	repo := exec.Services.AliasRepo()
+	repo := exec.Services().AliasRepo()
 	if repo != nil {
-		if err := repo.SetPlayerAlias(ctx, exec.PlayerID, alias, cmd); err != nil {
+		if err := repo.SetPlayerAlias(ctx, exec.PlayerID(), alias, cmd); err != nil {
 			return oops.With("operation", "persist player alias").
 				With("alias", alias).
 				Wrap(err)
@@ -83,13 +83,13 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 	}
 
 	// Attempt to set the alias in cache (may fail due to circular reference)
-	if err := cache.SetPlayerAlias(exec.PlayerID, alias, cmd); err != nil {
+	if err := cache.SetPlayerAlias(exec.PlayerID(), alias, cmd); err != nil {
 		// Rollback: delete from database since cache update failed
 		if repo != nil {
-			if rollbackErr := repo.DeletePlayerAlias(ctx, exec.PlayerID, alias); rollbackErr != nil {
+			if rollbackErr := repo.DeletePlayerAlias(ctx, exec.PlayerID(), alias); rollbackErr != nil {
 				slog.ErrorContext(ctx, "failed to rollback alias after cache error",
 					"alias", alias,
-					"player_id", exec.PlayerID.String(),
+					"player_id", exec.PlayerID().String(),
 					"cache_error", err.Error(),
 					"rollback_error", rollbackErr.Error())
 			}
@@ -109,7 +109,7 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 // AliasRemoveHandler removes a player alias.
 // Usage: alias remove <alias>
 func AliasRemoveHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache()
+	cache := exec.Services().AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -127,22 +127,22 @@ func aliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cache 
 	}
 
 	// Check if alias exists before removing
-	if _, exists := cache.GetPlayerAlias(exec.PlayerID, alias); !exists {
+	if _, exists := cache.GetPlayerAlias(exec.PlayerID(), alias); !exists {
 		writeOutputf(ctx, exec, "alias", "No alias '%s' found.\n", alias)
 		return nil
 	}
 
 	// Delete from database first (if repository is available)
 	// Database delete must succeed before updating cache to maintain consistency
-	if repo := exec.Services.AliasRepo(); repo != nil {
-		if err := repo.DeletePlayerAlias(ctx, exec.PlayerID, alias); err != nil {
+	if repo := exec.Services().AliasRepo(); repo != nil {
+		if err := repo.DeletePlayerAlias(ctx, exec.PlayerID(), alias); err != nil {
 			return oops.With("operation", "delete player alias").
 				With("alias", alias).
 				Wrap(err)
 		}
 	}
 
-	cache.RemovePlayerAlias(exec.PlayerID, alias)
+	cache.RemovePlayerAlias(exec.PlayerID(), alias)
 	writeOutputf(ctx, exec, "alias", "Alias '%s' removed.\n", alias)
 
 	return nil
@@ -151,7 +151,7 @@ func aliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cache 
 // AliasListHandler lists all player aliases.
 // Usage: alias list
 func AliasListHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache()
+	cache := exec.Services().AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -162,7 +162,7 @@ func AliasListHandler(ctx context.Context, exec *command.CommandExecution) error
 
 // aliasListImpl contains the implementation for player alias list.
 func aliasListImpl(ctx context.Context, exec *command.CommandExecution, cache *command.AliasCache) error {
-	aliases := cache.ListPlayerAliases(exec.PlayerID)
+	aliases := cache.ListPlayerAliases(exec.PlayerID())
 
 	if len(aliases) == 0 {
 		writeOutput(ctx, exec, "alias", "You have no aliases defined.")
@@ -192,8 +192,8 @@ func aliasListImpl(ctx context.Context, exec *command.CommandExecution, cache *c
 //
 // Warns if shadowing a command, but BLOCKS if shadowing another system alias.
 func SysaliasAddHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache()
-	registry := exec.Services.Registry()
+	cache := exec.Services().AliasCache()
+	registry := exec.Services().Registry()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -229,9 +229,9 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 
 	// Persist to database first (if repository is available)
 	// Database write must succeed before updating cache to maintain consistency
-	repo := exec.Services.AliasRepo()
+	repo := exec.Services().AliasRepo()
 	if repo != nil {
-		createdBy := exec.CharacterID.String()
+		createdBy := exec.CharacterID().String()
 		if err := repo.SetSystemAlias(ctx, alias, cmd, createdBy); err != nil {
 			return oops.With("operation", "persist system alias").
 				With("alias", alias).
@@ -265,7 +265,7 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 // SysaliasRemoveHandler removes a system alias.
 // Usage: sysalias remove <alias>
 func SysaliasRemoveHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache()
+	cache := exec.Services().AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -290,7 +290,7 @@ func sysaliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cac
 
 	// Delete from database first (if repository is available)
 	// Database delete must succeed before updating cache to maintain consistency
-	if repo := exec.Services.AliasRepo(); repo != nil {
+	if repo := exec.Services().AliasRepo(); repo != nil {
 		if err := repo.DeleteSystemAlias(ctx, alias); err != nil {
 			return oops.With("operation", "delete system alias").
 				With("alias", alias).
@@ -307,7 +307,7 @@ func sysaliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cac
 // SysaliasListHandler lists all system aliases.
 // Usage: sysalias list
 func SysaliasListHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache()
+	cache := exec.Services().AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()

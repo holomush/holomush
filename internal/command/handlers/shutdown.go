@@ -39,12 +39,12 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 
 	// Broadcast warning to all players
 	message := formatShutdownMessage(delaySeconds)
-	exec.Services.BroadcastSystemMessage("system", message)
+	exec.Services().BroadcastSystemMessage("system", message)
 
 	// Log admin action
 	slog.Info("admin shutdown",
-		"admin_id", exec.CharacterID.String(),
-		"admin_name", exec.CharacterName,
+		"admin_id", exec.CharacterID().String(),
+		"admin_name", exec.CharacterName(),
 		"delay_seconds", delaySeconds,
 	)
 

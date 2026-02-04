@@ -74,7 +74,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 		Capabilities: []string{"test.echo"},
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
-			_, _ = exec.Output.Write([]byte("echoed: " + exec.Args))
+			_, _ = exec.Output().Write([]byte("echoed: " + exec.Args))
 			return nil
 		},
 		Source: "test",
@@ -89,11 +89,11 @@ func TestDispatcher_Dispatch(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: charID,
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "echo hello world", exec)
 	require.NoError(t, err)
@@ -108,11 +108,11 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	dispErr := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
 	require.Error(t, dispErr)
@@ -141,11 +141,11 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "admin", exec)
 	require.Error(t, err)
@@ -164,11 +164,11 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	dispErr := dispatcher.Dispatch(context.Background(), "", exec)
 	require.Error(t, dispErr)
@@ -202,11 +202,11 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: charID,
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Should fail - missing admin.danger
 	err = dispatcher.Dispatch(context.Background(), "dangerous", exec)
@@ -244,11 +244,11 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Should succeed without any grants
 	err = dispatcher.Dispatch(context.Background(), "public", exec)
@@ -276,11 +276,11 @@ func TestDispatcher_HandlerError(t *testing.T) {
 
 	var output bytes.Buffer
 	charID := ulid.Make()
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: charID,
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "failing", exec)
 	require.Error(t, err)
@@ -314,11 +314,11 @@ func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 
 	var output bytes.Buffer
 	charID := ulid.Make()
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: charID,
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	dispatchErr := dispatcher.Dispatch(context.Background(), "failing", exec)
 	require.Error(t, dispatchErr)
@@ -338,11 +338,11 @@ func TestDispatcher_WhitespaceInput(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Only whitespace
 	dispErr := dispatcher.Dispatch(context.Background(), "   ", exec)
@@ -373,11 +373,11 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "look", exec)
 	require.NoError(t, err)
@@ -404,11 +404,11 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "say hello   world", exec)
 	require.NoError(t, err)
@@ -474,12 +474,12 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 	// No alias cache set
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "look here", exec)
 	require.NoError(t, err)
@@ -512,12 +512,12 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Input is an actual command, not an alias
 	err = dispatcher.Dispatch(context.Background(), "look here", exec)
@@ -551,12 +551,12 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Use alias 'l' which should expand to 'look'
 	err = dispatcher.Dispatch(context.Background(), "l around", exec)
@@ -591,12 +591,12 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    playerID,
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Use alias 'greet' which should expand to 'say Hello everyone!'
 	err = dispatcher.Dispatch(context.Background(), "greet", exec)
@@ -635,12 +635,12 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    playerID,
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Player alias should take precedence
 	err = dispatcher.Dispatch(context.Background(), "hi", exec)
@@ -673,12 +673,12 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// 's' expands to 'say', with extra args appended
 	err = dispatcher.Dispatch(context.Background(), "s this is my message", exec)
@@ -702,10 +702,10 @@ func TestDispatcher_NoCharacter(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		// CharacterID intentionally left as zero value
 		Output: &output,
-	}
+	})
 
 	err = dispatcher.Dispatch(context.Background(), "test", exec)
 	require.Error(t, err)
@@ -747,11 +747,11 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Create cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -805,11 +805,11 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    stubServices(),
-	}
+	})
 
 	// Create already-cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -836,7 +836,7 @@ func TestDispatcher_NilServices(t *testing.T) {
 		Capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			// This would panic if Services is nil
-			_ = exec.Services.World()
+			_ = exec.Services().World()
 			return nil
 		},
 		Source: "core",
@@ -847,11 +847,11 @@ func TestDispatcher_NilServices(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		Output:      &output,
 		Services:    nil, // Explicitly nil Services
-	}
+	})
 
 	// Dispatch should return an error instead of panicking
 	dispatchErr := dispatcher.Dispatch(context.Background(), "checkservices", exec)
@@ -887,12 +887,12 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 		// Execute many commands - should all succeed (no rate limiting)
 		for i := 0; i < 20; i++ {
-			exec := &CommandExecution{
+			exec := NewTestExecution(CommandExecutionConfig{
 				CharacterID: ulid.Make(),
 				SessionID:   ulid.Make(),
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(context.Background(), "test", exec)
 			require.NoError(t, err)
 		}
@@ -927,23 +927,23 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 		// First two commands should succeed
 		for i := 0; i < 2; i++ {
-			exec := &CommandExecution{
+			exec := NewTestExecution(CommandExecutionConfig{
 				CharacterID: ulid.Make(),
 				SessionID:   sessionID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			dispatchErr := dispatcher.Dispatch(context.Background(), "test", exec)
 			require.NoError(t, dispatchErr)
 		}
 
 		// Third command should be rate limited
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			SessionID:   sessionID,
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		err = dispatcher.Dispatch(context.Background(), "test", exec)
 		require.Error(t, err)
 
@@ -981,12 +981,12 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		session2 := ulid.Make()
 
 		// Session 1 uses its token
-		exec1 := &CommandExecution{
+		exec1 := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			SessionID:   session1,
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		err = dispatcher.Dispatch(context.Background(), "test", exec1)
 		require.NoError(t, err)
 
@@ -996,12 +996,12 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		assert.Contains(t, PlayerMessage(err), "slow down")
 
 		// Session 2 should still have its token
-		exec2 := &CommandExecution{
+		exec2 := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			SessionID:   session2,
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		err = dispatcher.Dispatch(context.Background(), "test", exec2)
 		require.NoError(t, err)
 	})
@@ -1040,12 +1040,12 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 		// Should be able to execute many commands despite rate limit
 		for i := 0; i < 10; i++ {
-			exec := &CommandExecution{
+			exec := NewTestExecution(CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   sessionID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(context.Background(), "test", exec)
 			require.NoError(t, err)
 		}
@@ -1087,13 +1087,13 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		playerID := ulid.Make()
 
 		// Use alias - should succeed (alias resolved, command executed)
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			SessionID:   sessionID,
 			PlayerID:    playerID,
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		err = dispatcher.Dispatch(context.Background(), "l around", exec)
 		require.NoError(t, err)
 		assert.Equal(t, "around", capturedArgs)
@@ -1133,12 +1133,12 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 
 	t.Run("direct command sets InvokedAs to command name", func(t *testing.T) {
 		capturedInvokedAs = ""
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: charID,
 			PlayerID:    playerID,
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 
 		err := dispatcher.Dispatch(context.Background(), "pose waves", exec)
 		require.NoError(t, err)
@@ -1155,12 +1155,12 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 		require.NoError(t, dispErr)
 
 		capturedInvokedAs = ""
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: charID,
 			PlayerID:    playerID,
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 
 		dispatchErr := dispatcherWithAlias.Dispatch(context.Background(), ";'s eyes widen", exec)
 		require.NoError(t, dispatchErr)
@@ -1221,41 +1221,41 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 	}))
 
 	t.Run("records success metric", func(t *testing.T) {
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		dispatchErr := dispatcher.Dispatch(context.Background(), "metrics_success", exec)
 		require.NoError(t, dispatchErr)
 	})
 
 	t.Run("records error metric", func(t *testing.T) {
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		dispatchErr := dispatcher.Dispatch(context.Background(), "metrics_failing", exec)
 		require.Error(t, dispatchErr)
 	})
 
 	t.Run("records not_found metric", func(t *testing.T) {
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		dispatchErr := dispatcher.Dispatch(context.Background(), "metrics_nonexistent", exec)
 		require.Error(t, dispatchErr)
 	})
 
 	t.Run("records permission_denied metric", func(t *testing.T) {
-		exec := &CommandExecution{
+		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
-		}
+		})
 		// Don't grant admin.manage capability
 		dispatchErr := dispatcher.Dispatch(context.Background(), "metrics_protected", exec)
 		require.Error(t, dispatchErr)
@@ -1314,12 +1314,12 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 	before := testutil.ToFloat64(AliasExpansions.With(prometheus.Labels{"alias": "la"}))
 
 	// Use the alias
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &bytes.Buffer{},
 		Services:    stubServices(),
-	}
+	})
 	err = dispatcher.Dispatch(context.Background(), "la around", exec)
 	require.NoError(t, err)
 
@@ -1365,12 +1365,12 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	}))
 
 	// First command succeeds
-	exec := &CommandExecution{
+	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
 		SessionID:   sessionID,
 		Output:      &bytes.Buffer{},
 		Services:    stubServices(),
-	}
+	})
 	err = dispatcher.Dispatch(context.Background(), "ratelimit_test", exec)
 	require.NoError(t, err)
 

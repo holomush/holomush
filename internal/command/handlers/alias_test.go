@@ -32,13 +32,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -62,13 +62,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "look=examine",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -87,13 +87,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=list",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -112,13 +112,13 @@ func TestAliasAddHandler(t *testing.T) {
 		require.NoError(t, cache.SetPlayerAlias(playerID, "l", "look"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=list",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -138,13 +138,13 @@ func TestAliasAddHandler(t *testing.T) {
 		require.NoError(t, cache.SetPlayerAlias(playerID, "b", "c"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "c=a",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -157,13 +157,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "123invalid=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -175,13 +175,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "aliasonly",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -193,13 +193,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -211,13 +211,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -229,13 +229,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "  l = look  ",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasCache: cache}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -251,13 +251,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "   =look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -269,13 +269,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=   ",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -287,13 +287,13 @@ func TestAliasAddHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "   ",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -301,13 +301,13 @@ func TestAliasAddHandler(t *testing.T) {
 
 	t.Run("returns error when alias cache is nil", func(t *testing.T) {
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    ulid.Make(),
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}), // No AliasCache
-		}
+		})
 
 		err := AliasAddHandler(context.Background(), exec)
 		require.Error(t, err)
@@ -322,13 +322,13 @@ func TestAliasRemoveHandler(t *testing.T) {
 		require.NoError(t, cache.SetPlayerAlias(playerID, "l", "look"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -345,13 +345,13 @@ func TestAliasRemoveHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "nonexistent",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -364,13 +364,13 @@ func TestAliasRemoveHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
 		require.Error(t, err)
@@ -385,12 +385,12 @@ func TestAliasListHandler(t *testing.T) {
 		require.NoError(t, cache.SetPlayerAlias(playerID, "n", "north"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasListImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -408,12 +408,12 @@ func TestAliasListHandler(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := aliasListImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -430,12 +430,12 @@ func TestSysaliasAddHandler(t *testing.T) {
 		registry := command.NewRegistry()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -458,12 +458,12 @@ func TestSysaliasAddHandler(t *testing.T) {
 		}))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "look=examine",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -480,12 +480,12 @@ func TestSysaliasAddHandler(t *testing.T) {
 		require.NoError(t, cache.SetSystemAlias("l", "look"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "l=list",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -499,12 +499,12 @@ func TestSysaliasAddHandler(t *testing.T) {
 		require.NoError(t, cache.SetSystemAlias("b", "c"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "c=a",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -516,12 +516,12 @@ func TestSysaliasAddHandler(t *testing.T) {
 		registry := command.NewRegistry()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "123invalid=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -534,12 +534,12 @@ func TestSysaliasRemoveHandler(t *testing.T) {
 		require.NoError(t, cache.SetSystemAlias("l", "look"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "l",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasRemoveImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -555,12 +555,12 @@ func TestSysaliasRemoveHandler(t *testing.T) {
 		cache := command.NewAliasCache()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "nonexistent",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasRemoveImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -576,11 +576,11 @@ func TestSysaliasListHandler(t *testing.T) {
 		require.NoError(t, cache.SetSystemAlias("n", "north"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasListImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -597,11 +597,11 @@ func TestSysaliasListHandler(t *testing.T) {
 		cache := command.NewAliasCache()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}),
-		}
+		})
 
 		err := sysaliasListImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -625,13 +625,13 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 			Return(nil)
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -654,13 +654,13 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 			Return(errors.New("database connection failed"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -677,13 +677,13 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{}), // No AliasRepo
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -714,13 +714,13 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 			Return(nil)
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -746,13 +746,13 @@ func TestAliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 			Return(nil)
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -776,13 +776,13 @@ func TestAliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 			Return(errors.New("database connection failed"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Args:        "l",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
 		require.Error(t, err)
@@ -808,12 +808,12 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 			Return(nil)
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: charID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.NoError(t, err)
@@ -836,12 +836,12 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 			Return(errors.New("database connection failed"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: charID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -873,12 +873,12 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 			Return(nil)
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: charID,
 			Args:        "l=look",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
 		require.Error(t, err)
@@ -903,12 +903,12 @@ func TestSysaliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 			Return(nil)
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "l",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := sysaliasRemoveImpl(context.Background(), exec, cache)
 		require.NoError(t, err)
@@ -931,12 +931,12 @@ func TestSysaliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 			Return(errors.New("database connection failed"))
 
 		var buf bytes.Buffer
-		exec := &command.CommandExecution{
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
 			CharacterID: ulid.Make(),
 			Args:        "l",
 			Output:      &buf,
 			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
-		}
+		})
 
 		err := sysaliasRemoveImpl(context.Background(), exec, cache)
 		require.Error(t, err)

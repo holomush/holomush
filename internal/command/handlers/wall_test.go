@@ -23,14 +23,14 @@ func TestWallHandler_NoArgs(t *testing.T) {
 	playerID := ulid.Make()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
 		Args:          "",
 		Output:        &buf,
 		Services:      command.NewTestServices(command.ServicesConfig{}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -45,14 +45,14 @@ func TestWallHandler_WhitespaceOnlyArgs(t *testing.T) {
 	playerID := ulid.Make()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
 		Args:          "   ",
 		Output:        &buf,
 		Services:      command.NewTestServices(command.ServicesConfig{}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -87,7 +87,7 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 	ch3 := broadcaster.Subscribe("session:" + targetID2.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -98,7 +98,7 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -146,7 +146,7 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -190,7 +190,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "SuperAdmin",
 		PlayerID:      playerID,
@@ -225,7 +225,7 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -254,7 +254,7 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -265,7 +265,7 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -298,7 +298,7 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 	_ = broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -309,7 +309,7 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -330,7 +330,7 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -341,7 +341,7 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 			Access:  accessControl,
 			// Broadcaster is nil
 		}),
-	}
+	})
 
 	// Should not panic, but also won't broadcast
 	err := WallHandler(context.Background(), exec)
@@ -366,7 +366,7 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -377,7 +377,7 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -417,7 +417,7 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -446,7 +446,7 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -457,7 +457,7 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -486,7 +486,7 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -497,7 +497,7 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -526,7 +526,7 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -537,7 +537,7 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -566,7 +566,7 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -577,7 +577,7 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)

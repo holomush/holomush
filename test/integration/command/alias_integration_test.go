@@ -156,7 +156,7 @@ var _ = Describe("Alias Management Integration", func() {
 				Help:         "Look around",
 				Capabilities: nil,
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
-					_, _ = exec.Output.Write([]byte("You look around."))
+					_, _ = exec.Output().Write([]byte("You look around."))
 					return nil
 				},
 				Source: "core",
@@ -175,14 +175,14 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Add alias using the handler directly
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "l=look",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -196,13 +196,13 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Verify dispatching through alias works
 			buf.Reset()
-			dispExec := &command.CommandExecution{
+			dispExec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Output:      &buf,
 				Services:    stubServices(),
-			}
+			})
 			err = dispatcher.Dispatch(ctx, "l", dispExec)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(buf.String()).To(ContainSubstring("You look around"))
@@ -217,13 +217,13 @@ var _ = Describe("Alias Management Integration", func() {
 			Expect(aliasCache.SetPlayerAlias(playerID, "n", "north")).To(Succeed())
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasListHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -248,14 +248,14 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Remove it
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "l",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasRemoveHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -291,7 +291,7 @@ var _ = Describe("Alias Management Integration", func() {
 				Help:         "Look around",
 				Capabilities: nil,
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
-					_, _ = exec.Output.Write([]byte("You look around."))
+					_, _ = exec.Output().Write([]byte("You look around."))
 					return nil
 				},
 				Source: "core",
@@ -309,13 +309,13 @@ var _ = Describe("Alias Management Integration", func() {
 			defer cancel()
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Args:        "l=look",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.SysaliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -337,12 +337,12 @@ var _ = Describe("Alias Management Integration", func() {
 			Expect(aliasCache.SetSystemAlias("q", "quit")).To(Succeed())
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.SysaliasListHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -367,13 +367,13 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Remove it
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Args:        "l",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.SysaliasRemoveHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -418,14 +418,14 @@ var _ = Describe("Alias Management Integration", func() {
 			defer cancel()
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "look=examine",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -445,14 +445,14 @@ var _ = Describe("Alias Management Integration", func() {
 			Expect(aliasCache.SetSystemAlias("l", "look")).To(Succeed())
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "l=list",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -472,14 +472,14 @@ var _ = Describe("Alias Management Integration", func() {
 			Expect(aliasCache.SetPlayerAlias(playerID, "l", "look")).To(Succeed())
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "l=list",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -496,13 +496,13 @@ var _ = Describe("Alias Management Integration", func() {
 			defer cancel()
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Args:        "look=examine",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.SysaliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -535,13 +535,13 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Try to add another system alias with the same name
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Args:        "l=list",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.SysaliasAddHandler(ctx, exec)
 			Expect(err).To(HaveOccurred())
@@ -568,26 +568,26 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Player 1 adds alias l=look
 			var buf1 bytes.Buffer
-			exec1 := &command.CommandExecution{
+			exec1 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: ulid.Make(),
 				PlayerID:    player1,
 				SessionID:   ulid.Make(),
 				Args:        "l=look",
 				Output:      &buf1,
 				Services:    services,
-			}
+			})
 			Expect(handlers.AliasAddHandler(ctx, exec1)).To(Succeed())
 
 			// Player 2 adds alias l=list (same alias name, different command)
 			var buf2 bytes.Buffer
-			exec2 := &command.CommandExecution{
+			exec2 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: ulid.Make(),
 				PlayerID:    player2,
 				SessionID:   ulid.Make(),
 				Args:        "l=list",
 				Output:      &buf2,
 				Services:    services,
-			}
+			})
 			Expect(handlers.AliasAddHandler(ctx, exec2)).To(Succeed())
 
 			// Verify each player has their own alias
@@ -644,14 +644,14 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Try to create a cycle: c -> a
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "c=a",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.AliasAddHandler(ctx, exec)
 			Expect(err).To(HaveOccurred())
@@ -672,13 +672,13 @@ var _ = Describe("Alias Management Integration", func() {
 
 			// Try to create a cycle: z -> x
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Args:        "z=x",
 				Output:      &buf,
 				Services:    services,
-			}
+			})
 
 			err := handlers.SysaliasAddHandler(ctx, exec)
 			Expect(err).To(HaveOccurred())
@@ -724,14 +724,14 @@ var _ = Describe("Alias Persistence Integration", func() {
 
 			// Add a player alias
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				PlayerID:    playerID,
 				SessionID:   ulid.Make(),
 				Args:        "l=look",
 				Output:      &buf,
 				Services:    services1,
-			}
+			})
 
 			err = handlers.AliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())
@@ -777,13 +777,13 @@ var _ = Describe("Alias Persistence Integration", func() {
 
 			// Add a system alias
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   ulid.Make(),
 				Args:        "q=quit",
 				Output:      &buf,
 				Services:    services1,
-			}
+			})
 
 			err = handlers.SysaliasAddHandler(ctx, exec)
 			Expect(err).NotTo(HaveOccurred())

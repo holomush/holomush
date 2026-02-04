@@ -34,7 +34,7 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 	ch := broadcaster.Subscribe("system")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -44,7 +44,7 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := ShutdownHandler(context.Background(), exec)
 
@@ -78,7 +78,7 @@ func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 	ch := broadcaster.Subscribe("system")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -88,7 +88,7 @@ func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := ShutdownHandler(context.Background(), exec)
 
@@ -124,7 +124,7 @@ func TestShutdownHandler_InvalidDelay_NotANumber(t *testing.T) {
 	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -133,7 +133,7 @@ func TestShutdownHandler_InvalidDelay_NotANumber(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Access: accessControl,
 		}),
-	}
+	})
 
 	err := ShutdownHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -151,7 +151,7 @@ func TestShutdownHandler_InvalidDelay_Negative(t *testing.T) {
 	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -160,7 +160,7 @@ func TestShutdownHandler_InvalidDelay_Negative(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Access: accessControl,
 		}),
-	}
+	})
 
 	err := ShutdownHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -185,7 +185,7 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -195,7 +195,7 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := ShutdownHandler(context.Background(), exec)
 	// Handler should execute successfully (returning shutdown signal)
@@ -217,7 +217,7 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 	systemCh := broadcaster.Subscribe("system")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -227,7 +227,7 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := ShutdownHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -252,7 +252,7 @@ func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -262,7 +262,7 @@ func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: nil, // No broadcaster
 		}),
-	}
+	})
 
 	// Should still work, just skip broadcast
 	err := ShutdownHandler(context.Background(), exec)

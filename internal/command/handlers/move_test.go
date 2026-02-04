@@ -93,13 +93,13 @@ func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  fromLocationID,
 		Args:        "north",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -179,13 +179,13 @@ func TestMoveHandler_MatchesExitAlias(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  fromLocationID,
 		Args:        "n", // Using alias
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -221,13 +221,13 @@ func TestMoveHandler_InvalidDirectionReturnsError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "south", // Invalid - no south exit
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -258,13 +258,13 @@ func TestMoveHandler_NoExitsReturnsError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "north",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -282,13 +282,13 @@ func TestMoveHandler_NoDirectionReturnsError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -366,13 +366,13 @@ func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  fromLocationID,
 		Args:        "NORTH", // uppercase
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -402,13 +402,13 @@ func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "north",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -466,13 +466,13 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  fromLocationID,
 		Args:        "north",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -512,13 +512,13 @@ func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "north",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -599,13 +599,13 @@ func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  fromLocationID,
 		Args:        "north",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = MoveHandler(context.Background(), exec)
 	require.Error(t, err)

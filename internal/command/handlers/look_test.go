@@ -46,12 +46,12 @@ func TestLookHandler_OutputsRoomNameAndDescription(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := LookHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -81,12 +81,12 @@ func TestLookHandler_ReturnsWorldErrorOnFailure(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := LookHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -113,12 +113,12 @@ func TestLookHandler_ReturnsWorldErrorOnAccessDenied(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := LookHandler(context.Background(), exec)
 	require.Error(t, err)

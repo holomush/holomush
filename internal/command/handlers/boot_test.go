@@ -28,14 +28,14 @@ func TestBootHandler_NoArgs(t *testing.T) {
 	playerID := ulid.Make()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
 		Args:          "",
 		Output:        &buf,
 		Services:      command.NewTestServices(command.ServicesConfig{}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -76,7 +76,7 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -87,7 +87,7 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 			World:       worldService,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -146,7 +146,7 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 			World:       worldService,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -207,7 +207,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "RegularUser",
 		PlayerID:      playerID,
@@ -218,7 +218,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 			World:   worldService,
 			Access:  accessControl,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -263,7 +263,7 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -273,7 +273,7 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -345,7 +345,7 @@ func TestBootHandler_Success(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -357,7 +357,7 @@ func TestBootHandler_Success(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -432,7 +432,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -444,7 +444,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 			Access:      accessControl,
 			Broadcaster: broadcaster,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -522,7 +522,7 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -533,7 +533,7 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 			World:   worldService,
 			Access:  accessControl,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -614,7 +614,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 			World:   worldService,
 			Access:  accessControl,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -689,7 +689,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -700,7 +700,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 			World:   worldService,
 			Access:  accessControl,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -809,7 +809,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -820,7 +820,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 			World:   worldService,
 			Access:  accessControl,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -895,7 +895,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -905,7 +905,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -1002,7 +1002,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
 		CharacterName: "Admin",
 		PlayerID:      playerID,
@@ -1013,7 +1013,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 			World:   worldService,
 			Access:  accessControl,
 		}),
-	}
+	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)

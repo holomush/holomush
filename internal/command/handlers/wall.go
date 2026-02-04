@@ -48,16 +48,16 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Get all active sessions
-	sessions := exec.Services.Session().ListActiveSessions()
+	sessions := exec.Services().Session().ListActiveSessions()
 
 	// Format the announcement message
 	prefix := urgencyPrefixes[urgency]
-	announcement := fmt.Sprintf("%s %s: %s", prefix, exec.CharacterName, message)
+	announcement := fmt.Sprintf("%s %s: %s", prefix, exec.CharacterName(), message)
 
 	// Log admin action
 	slog.Info("admin wall",
-		"admin_id", exec.CharacterID.String(),
-		"admin_name", exec.CharacterName,
+		"admin_id", exec.CharacterID().String(),
+		"admin_name", exec.CharacterName(),
 		"urgency", string(urgency),
 		"message", message,
 		"session_count", len(sessions),
@@ -66,7 +66,7 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Broadcast to all sessions
 	for _, session := range sessions {
 		stream := "session:" + session.CharacterID.String()
-		exec.Services.BroadcastSystemMessage(stream, announcement)
+		exec.Services().BroadcastSystemMessage(stream, announcement)
 	}
 
 	// Notify the executor

@@ -82,12 +82,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}()
 
 	// Validate execution context - commands require a character
-	if exec.CharacterID.Compare(ulid.ULID{}) == 0 {
+	if exec.CharacterID().Compare(ulid.ULID{}) == 0 {
 		return ErrNoCharacter()
 	}
 
 	// Validate Services is non-nil to prevent handler panics
-	if exec.Services == nil {
+	if exec.Services() == nil {
 		return ErrNilServices()
 	}
 
@@ -102,7 +102,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	resolvedInput := input
 	aliasResult := AliasResult{}
 	if d.aliasCache != nil {
-		aliasResult = d.aliasCache.Resolve(exec.PlayerID, input, d.registry)
+		aliasResult = d.aliasCache.Resolve(exec.PlayerID(), input, d.registry)
 		resolvedInput = aliasResult.Resolved
 		// If an alias was used, set InvokedAs to the actual alias (not the parsed word)
 		if aliasResult.WasAlias && aliasResult.AliasUsed != "" {
@@ -125,7 +125,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	ctx, span := tracer.Start(ctx, "command.execute",
 		trace.WithAttributes(
 			attribute.String("command.name", parsed.Name),
-			attribute.String("character.id", exec.CharacterID.String()),
+			attribute.String("character.id", exec.CharacterID().String()),
 		),
 	)
 	defer func() {
@@ -144,12 +144,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
-	subject := "char:" + exec.CharacterID.String()
+	subject := "char:" + exec.CharacterID().String()
 	if d.rateLimiter != nil {
 		// Check if character has bypass capability
 		hasBypass := d.access.Check(ctx, subject, "execute", CapabilityRateLimitBypass)
 		if !hasBypass {
-			allowed, cooldownMs := d.rateLimiter.Allow(exec.SessionID)
+			allowed, cooldownMs := d.rateLimiter.Allow(exec.SessionID())
 			if !allowed {
 				span.SetAttributes(attribute.Bool("command.rate_limited", true))
 				span.SetAttributes(attribute.Int64("command.cooldown_ms", cooldownMs))
@@ -190,7 +190,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		metricsStatus = StatusError
 		slog.WarnContext(ctx, "command execution failed",
 			"command", parsed.Name,
-			"character_id", exec.CharacterID.String(),
+			"character_id", exec.CharacterID().String(),
 			"error", err,
 		)
 	} else {

@@ -42,13 +42,13 @@ func TestCreateHandler_Object(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        `object "Iron Sword"`,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := CreateHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -80,13 +80,13 @@ func TestCreateHandler_Location(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        `location "Secret Room"`,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := CreateHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -107,13 +107,13 @@ func TestCreateHandler_InvalidType(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        `invalid "Test"`,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := CreateHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -149,13 +149,13 @@ func TestCreateHandler_InvalidSyntax(t *testing.T) {
 			})
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: characterID,
 				LocationID:  locationID,
 				Args:        tt.args,
 				Output:      &buf,
 				Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-			}
+			})
 
 			err := CreateHandler(context.Background(), exec)
 			require.Error(t, err)
@@ -205,13 +205,13 @@ func TestSetHandler_Description(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of here to A cozy room.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := SetHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -253,13 +253,13 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "desc of here to Short description.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := SetHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -280,13 +280,13 @@ func TestSetHandler_PropertyNotFound(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "xyz of here to value",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when property is not found
 	err := SetHandler(context.Background(), exec)
@@ -310,13 +310,13 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of nonexistent to value",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when target is not found
 	err := SetHandler(context.Background(), exec)
@@ -346,13 +346,13 @@ func TestSetHandler_InvalidIDFormat(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of #invalid-id to value",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when ID is invalid
 	err := SetHandler(context.Background(), exec)
@@ -394,13 +394,13 @@ func TestSetHandler_InvalidSyntax(t *testing.T) {
 			})
 
 			var buf bytes.Buffer
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: characterID,
 				LocationID:  locationID,
 				Args:        tt.args,
 				Output:      &buf,
 				Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-			}
+			})
 
 			err := SetHandler(context.Background(), exec)
 			require.Error(t, err)
@@ -450,13 +450,13 @@ func TestSetHandler_SetName(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "name of here to New Room Name",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := SetHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -501,13 +501,13 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of #" + objectID.String() + " to A shiny object.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err = SetHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -536,13 +536,13 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        `object "Iron Sword"`,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when service fails
 	err := CreateHandler(context.Background(), exec)
@@ -573,13 +573,13 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        `location "Secret Room"`,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when service fails
 	err := CreateHandler(context.Background(), exec)
@@ -623,13 +623,13 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of here to A cozy room.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when service fails
 	err := SetHandler(context.Background(), exec)
@@ -689,13 +689,13 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of #" + objectID.String() + " to A shiny object.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	// Handler should return error (not nil) when service fails
 	err = SetHandler(context.Background(), exec)
@@ -742,13 +742,13 @@ func TestSetHandler_GetLocationFailure(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of here to A cozy room.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := SetHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -792,13 +792,13 @@ func TestSetHandler_GetObjectFailure(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of #" + objectID.String() + " to A shiny object.",
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := SetHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -835,13 +835,13 @@ func TestSetHandler_UnsupportedEntityType(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        "description of me to Some bio text.", // "me" resolves to character type
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := SetHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -882,13 +882,13 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 	longName := string(longNameBytes)
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Args:        `object "` + longName + `"`,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	}
+	})
 
 	err := CreateHandler(context.Background(), exec)
 	require.Error(t, err)

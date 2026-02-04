@@ -24,11 +24,11 @@ func TestQuitHandler_OutputsGoodbyeMessage(t *testing.T) {
 	sessionManager.Connect(characterID, connID)
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
-	}
+	})
 
 	err := QuitHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -46,11 +46,11 @@ func TestQuitHandler_EndsSession(t *testing.T) {
 	require.NotNil(t, sessionManager.GetSession(characterID), "Session should exist before quit")
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
-	}
+	})
 
 	err := QuitHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -66,11 +66,11 @@ func TestQuitHandler_ReturnsErrorOnSessionEndFailure(t *testing.T) {
 	sessionManager := core.NewSessionManager()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
-	}
+	})
 
 	err := QuitHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -87,11 +87,11 @@ func TestQuitHandler_OutputsGoodbyeBeforeError(t *testing.T) {
 	sessionManager := core.NewSessionManager()
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
-	}
+	})
 
 	// Even though there's an error, goodbye should still be output
 	_ = QuitHandler(context.Background(), exec)

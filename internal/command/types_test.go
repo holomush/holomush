@@ -37,21 +37,26 @@ func TestCommandEntry_HasRequiredFields(t *testing.T) {
 }
 
 func TestCommandExecution_HasRequiredFields(t *testing.T) {
-	exec := &CommandExecution{}
+	// Create a minimal valid CommandExecution to test field access via getters
+	exec, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &mockWriter{},
+		Services:    NewTestServices(ServicesConfig{}),
+	})
+	require.NoError(t, err)
 
-	// Verify all ULID fields are zero when not set
-	assert.True(t, exec.CharacterID.IsZero(), "CharacterID should be zero when not set")
-	assert.True(t, exec.LocationID.IsZero(), "LocationID should be zero when not set")
-	assert.True(t, exec.PlayerID.IsZero(), "PlayerID should be zero when not set")
-	assert.True(t, exec.SessionID.IsZero(), "SessionID should be zero when not set")
+	// Verify getter methods exist and work (this validates the API)
+	_ = exec.CharacterID()
+	_ = exec.LocationID()
+	_ = exec.CharacterName()
+	_ = exec.PlayerID()
+	_ = exec.SessionID()
+	_ = exec.Output()
+	_ = exec.Services()
 
-	// Verify string fields
-	assert.Empty(t, exec.CharacterName, "CharacterName should be empty when not set")
-	assert.Empty(t, exec.Args, "Args should be empty when not set")
-
-	// Verify pointer fields
-	assert.Nil(t, exec.Output, "Output should be nil when not set")
-	assert.Nil(t, exec.Services, "Services should be nil when not set")
+	// Verify public fields are accessible
+	_ = exec.Args
+	_ = exec.InvokedAs
 }
 
 func TestServices_HasAllDependencies(t *testing.T) {
@@ -281,14 +286,14 @@ func TestNewCommandExecution_ValidInput_ReturnsExecution(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, charID, exec.CharacterID)
-	assert.Equal(t, locID, exec.LocationID)
-	assert.Equal(t, "Alice", exec.CharacterName)
-	assert.Equal(t, playerID, exec.PlayerID)
-	assert.Equal(t, sessionID, exec.SessionID)
+	assert.Equal(t, charID, exec.CharacterID())
+	assert.Equal(t, locID, exec.LocationID())
+	assert.Equal(t, "Alice", exec.CharacterName())
+	assert.Equal(t, playerID, exec.PlayerID())
+	assert.Equal(t, sessionID, exec.SessionID())
 	assert.Equal(t, "hello world", exec.Args)
-	assert.Same(t, output, exec.Output)
-	assert.Same(t, services, exec.Services)
+	assert.Same(t, output, exec.Output())
+	assert.Same(t, services, exec.Services())
 	assert.Equal(t, "say", exec.InvokedAs)
 }
 
@@ -344,16 +349,73 @@ func TestNewCommandExecution_MinimalValid_ReturnsExecution(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, charID, exec.CharacterID)
-	assert.Same(t, output, exec.Output)
-	assert.Same(t, services, exec.Services)
+	assert.Equal(t, charID, exec.CharacterID())
+	assert.Same(t, output, exec.Output())
+	assert.Same(t, services, exec.Services())
 	// Optional fields should be zero/empty
-	assert.True(t, exec.LocationID.IsZero())
-	assert.Empty(t, exec.CharacterName)
-	assert.True(t, exec.PlayerID.IsZero())
-	assert.True(t, exec.SessionID.IsZero())
+	assert.True(t, exec.LocationID().IsZero())
+	assert.Empty(t, exec.CharacterName())
+	assert.True(t, exec.PlayerID().IsZero())
+	assert.True(t, exec.SessionID().IsZero())
 	assert.Empty(t, exec.Args)
 	assert.Empty(t, exec.InvokedAs)
+}
+
+// Tests for CommandExecution getters - verify immutability
+
+func TestCommandExecution_Getters_ReturnCorrectValues(t *testing.T) {
+	t.Parallel()
+
+	charID := ulid.Make()
+	locID := ulid.Make()
+	playerID := ulid.Make()
+	sessionID := ulid.Make()
+	output := &mockWriter{}
+	services := NewTestServices(ServicesConfig{})
+
+	exec, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID:   charID,
+		LocationID:    locID,
+		CharacterName: "TestChar",
+		PlayerID:      playerID,
+		SessionID:     sessionID,
+		Args:          "test args",
+		Output:        output,
+		Services:      services,
+		InvokedAs:     "testcmd",
+	})
+	require.NoError(t, err)
+
+	// Verify all getters return correct values
+	assert.Equal(t, charID, exec.CharacterID())
+	assert.Equal(t, locID, exec.LocationID())
+	assert.Equal(t, "TestChar", exec.CharacterName())
+	assert.Equal(t, playerID, exec.PlayerID())
+	assert.Equal(t, sessionID, exec.SessionID())
+	assert.Same(t, output, exec.Output())
+	assert.Same(t, services, exec.Services())
+
+	// Public fields should still be accessible directly
+	assert.Equal(t, "test args", exec.Args)
+	assert.Equal(t, "testcmd", exec.InvokedAs)
+}
+
+func TestCommandExecution_PublicFields_AreModifiable(t *testing.T) {
+	t.Parallel()
+
+	exec, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &mockWriter{},
+		Services:    NewTestServices(ServicesConfig{}),
+	})
+	require.NoError(t, err)
+
+	// Args and InvokedAs should be modifiable by dispatcher
+	exec.Args = "new args"
+	exec.InvokedAs = "alias"
+
+	assert.Equal(t, "new args", exec.Args)
+	assert.Equal(t, "alias", exec.InvokedAs)
 }
 
 // mockWriter implements io.Writer for testing

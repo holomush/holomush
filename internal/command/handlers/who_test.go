@@ -29,11 +29,11 @@ func TestWhoHandler_NoConnectedPlayers(t *testing.T) {
 	// No sessions connected
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionMgr}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -72,14 +72,14 @@ func TestWhoHandler_SinglePlayer(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -128,14 +128,14 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -181,14 +181,14 @@ func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: characterID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -236,14 +236,14 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -328,14 +328,14 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -395,14 +395,14 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -447,14 +447,14 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -502,14 +502,14 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -553,14 +553,14 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -627,14 +627,14 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	exec := &command.CommandExecution{
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: executorID,
 		Output:      &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 		}),
-	}
+	})
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)

@@ -197,28 +197,59 @@ type CommandExecutionConfig struct {
 
 // CommandExecution provides context for command execution.
 //
-// Mutability Note:
-// CommandExecution is mutable during dispatch. The dispatcher sets Args and
-// InvokedAs after parsing. Handlers MAY read all fields but SHOULD NOT modify
-// CharacterID, LocationID, PlayerID, SessionID, or Services. Modifying Args
-// is allowed but rarely necessary.
+// Immutability Contract:
+// Critical fields are private with getter methods to prevent accidental modification
+// by handlers. The dispatcher sets Args and InvokedAs after parsing, so these remain
+// public. All other fields are set via NewCommandExecution and cannot be changed.
+//
+// Public fields (dispatcher sets after construction):
+//   - Args: command arguments after parsing
+//   - InvokedAs: original command name before alias resolution
+//
+// Private fields (read-only via getters):
+//   - characterID, locationID, characterName, playerID, sessionID
+//   - output, services
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandExecution struct {
-	CharacterID   ulid.ULID
-	LocationID    ulid.ULID
-	CharacterName string
-	PlayerID      ulid.ULID
-	SessionID     ulid.ULID
-	Args          string
-	Output        io.Writer  // MUST be non-nil; command handlers write output here
-	Services      *Services
+	// Private read-only fields - use getters
+	characterID   ulid.ULID
+	locationID    ulid.ULID
+	characterName string
+	playerID      ulid.ULID
+	sessionID     ulid.ULID
+	output        io.Writer
+	services      *Services
+
+	// Public fields - dispatcher sets these after construction
+	Args string
 	// InvokedAs is the original command name as typed by the user, before alias
 	// resolution. For example, if "say'" is an alias for "say", InvokedAs will
 	// be "say'" while the handler is for "say". Plugins can use this to detect
 	// which variant was invoked.
 	InvokedAs string
 }
+
+// CharacterID returns the executing character's ID.
+func (e *CommandExecution) CharacterID() ulid.ULID { return e.characterID }
+
+// LocationID returns the character's current location ID.
+func (e *CommandExecution) LocationID() ulid.ULID { return e.locationID }
+
+// CharacterName returns the executing character's name.
+func (e *CommandExecution) CharacterName() string { return e.characterName }
+
+// PlayerID returns the player's ID (account owner of the character).
+func (e *CommandExecution) PlayerID() ulid.ULID { return e.playerID }
+
+// SessionID returns the session ID for the current connection.
+func (e *CommandExecution) SessionID() ulid.ULID { return e.sessionID }
+
+// Output returns the writer for command output. MUST be non-nil.
+func (e *CommandExecution) Output() io.Writer { return e.output }
+
+// Services returns the service dependencies for command handlers.
+func (e *CommandExecution) Services() *Services { return e.services }
 
 // NewCommandExecution creates a validated CommandExecution.
 // Returns an error if CharacterID is zero, Services is nil, or Output is nil.
@@ -240,14 +271,14 @@ func NewCommandExecution(cfg CommandExecutionConfig) (*CommandExecution, error) 
 	}
 
 	return &CommandExecution{
-		CharacterID:   cfg.CharacterID,
-		LocationID:    cfg.LocationID,
-		CharacterName: cfg.CharacterName,
-		PlayerID:      cfg.PlayerID,
-		SessionID:     cfg.SessionID,
+		characterID:   cfg.CharacterID,
+		locationID:    cfg.LocationID,
+		characterName: cfg.CharacterName,
+		playerID:      cfg.PlayerID,
+		sessionID:     cfg.SessionID,
 		Args:          cfg.Args,
-		Output:        cfg.Output,
-		Services:      cfg.Services,
+		output:        cfg.Output,
+		services:      cfg.Services,
 		InvokedAs:     cfg.InvokedAs,
 	}, nil
 }
@@ -398,5 +429,23 @@ func NewTestServices(cfg ServicesConfig) *Services {
 		aliasCache:  cfg.AliasCache,
 		aliasRepo:   cfg.AliasRepo,
 		registry:    cfg.Registry,
+	}
+}
+
+// NewTestExecution creates a CommandExecution instance for testing purposes.
+// Unlike NewCommandExecution, this function does not validate required fields,
+// allowing tests to create minimal executions with only the fields they need.
+// This function should only be used in tests.
+func NewTestExecution(cfg CommandExecutionConfig) *CommandExecution {
+	return &CommandExecution{
+		characterID:   cfg.CharacterID,
+		locationID:    cfg.LocationID,
+		characterName: cfg.CharacterName,
+		playerID:      cfg.PlayerID,
+		sessionID:     cfg.SessionID,
+		Args:          cfg.Args,
+		output:        cfg.Output,
+		services:      cfg.Services,
+		InvokedAs:     cfg.InvokedAs,
 	}
 }

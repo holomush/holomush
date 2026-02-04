@@ -38,7 +38,7 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	entityType := strings.ToLower(matches[1])
 	name := matches[2]
-	subjectID := "char:" + exec.CharacterID.String()
+	subjectID := "char:" + exec.CharacterID().String()
 
 	switch entityType {
 	case "object":
@@ -47,7 +47,7 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 		return createLocation(ctx, exec, subjectID, name)
 	default:
 		slog.DebugContext(ctx, "create: unknown entity type",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"entity_type", entityType)
 		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
 		return command.ErrInvalidArgs("create", "create <type> \"<name>\" (valid types: object, location)")
@@ -55,10 +55,10 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 }
 
 func createObject(ctx context.Context, exec *command.CommandExecution, subjectID, name string) error {
-	obj, err := world.NewObject(name, world.InLocation(exec.LocationID))
+	obj, err := world.NewObject(name, world.InLocation(exec.LocationID()))
 	if err != nil {
 		slog.ErrorContext(ctx, "create object: NewObject failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"object_name", name,
 			"error", err)
 		writeOutput(ctx, exec, "create", "Failed to create object.")
@@ -66,9 +66,9 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 		return command.WorldError("Failed to create object.", err)
 	}
 
-	if err := exec.Services.World().CreateObject(ctx, subjectID, obj); err != nil {
+	if err := exec.Services().World().CreateObject(ctx, subjectID, obj); err != nil {
 		slog.ErrorContext(ctx, "create object: CreateObject failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"object_name", name,
 			"error", err)
 		writeOutput(ctx, exec, "create", "Failed to create object.")
@@ -84,7 +84,7 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 	loc, err := world.NewLocation(name, "", world.LocationTypePersistent)
 	if err != nil {
 		slog.ErrorContext(ctx, "create location: NewLocation failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"location_name", name,
 			"error", err)
 		writeOutput(ctx, exec, "create", "Failed to create location.")
@@ -92,9 +92,9 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 		return command.WorldError("Failed to create location.", err)
 	}
 
-	if err := exec.Services.World().CreateLocation(ctx, subjectID, loc); err != nil {
+	if err := exec.Services().World().CreateLocation(ctx, subjectID, loc); err != nil {
 		slog.ErrorContext(ctx, "create location: CreateLocation failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"location_name", name,
 			"error", err)
 		writeOutput(ctx, exec, "create", "Failed to create location.")
@@ -134,7 +134,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	prop, err := registry.Resolve(propertyPrefix)
 	if err != nil {
 		slog.DebugContext(ctx, "set: property resolution failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"property_prefix", propertyPrefix,
 			"error", err)
 		writeOutputf(ctx, exec, "set", "Unknown property: %s\n", propertyPrefix)
@@ -146,7 +146,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	entityType, entityID, err := resolveTarget(ctx, exec, target)
 	if err != nil {
 		slog.DebugContext(ctx, "set: target resolution failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"target", target,
 			"error", err)
 		writeOutputf(ctx, exec, "set", "Could not find target: %s\n", target)
@@ -156,7 +156,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Apply the property change
 	if err := applyProperty(ctx, exec, entityType, entityID, prop.Name, value); err != nil {
 		slog.ErrorContext(ctx, "set: apply property failed",
-			"character_id", exec.CharacterID,
+			"character_id", exec.CharacterID(),
 			"entity_type", entityType,
 			"entity_id", entityID,
 			"property", prop.Name,
@@ -173,11 +173,11 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 func resolveTarget(ctx context.Context, exec *command.CommandExecution, target string) (string, ulid.ULID, error) {
 	// "here" -> current location
 	if target == "here" {
-		return "location", exec.LocationID, nil
+		return "location", exec.LocationID(), nil
 	}
 	// "me" -> current character
 	if target == "me" {
-		return "character", exec.CharacterID, nil
+		return "character", exec.CharacterID(), nil
 	}
 	// #<id> -> direct ID reference (assume object by default, could be extended)
 	if strings.HasPrefix(target, "#") {
@@ -198,15 +198,15 @@ func resolveTarget(ctx context.Context, exec *command.CommandExecution, target s
 	// Future: implement object search by name in current location
 	slog.DebugContext(ctx, "resolveTarget: target not found",
 		"target", target,
-		"character_id", exec.CharacterID,
-		"location_id", exec.LocationID)
+		"character_id", exec.CharacterID(),
+		"location_id", exec.LocationID())
 	return "", ulid.ULID{}, oops.Code(command.CodeTargetNotFound).
 		With("target", target).
 		Errorf("target not found: %s", target)
 }
 
 func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName, value string) error {
-	subjectID := "char:" + exec.CharacterID.String()
+	subjectID := "char:" + exec.CharacterID().String()
 
 	switch entityType {
 	case "location":
@@ -227,7 +227,7 @@ func applyProperty(ctx context.Context, exec *command.CommandExecution, entityTy
 }
 
 func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
-	loc, err := exec.Services.World().GetLocation(ctx, subjectID, entityID)
+	loc, err := exec.Services().World().GetLocation(ctx, subjectID, entityID)
 	if err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
@@ -247,7 +247,7 @@ func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution
 			With("property", propName).
 			Errorf("property %s not applicable to location", propName)
 	}
-	if err := exec.Services.World().UpdateLocation(ctx, subjectID, loc); err != nil {
+	if err := exec.Services().World().UpdateLocation(ctx, subjectID, loc); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
 			With("entity_id", entityID.String()).
@@ -259,7 +259,7 @@ func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution
 }
 
 func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
-	obj, err := exec.Services.World().GetObject(ctx, subjectID, entityID)
+	obj, err := exec.Services().World().GetObject(ctx, subjectID, entityID)
 	if err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
@@ -279,7 +279,7 @@ func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, 
 			With("property", propName).
 			Errorf("property %s not applicable to object", propName)
 	}
-	if err := exec.Services.World().UpdateObject(ctx, subjectID, obj); err != nil {
+	if err := exec.Services().World().UpdateObject(ctx, subjectID, obj); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
 			With("entity_id", entityID.String()).
