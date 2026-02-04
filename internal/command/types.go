@@ -16,6 +16,52 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
+// WorldService defines the world model operations required by command handlers.
+// This interface follows the "accept interfaces" Go idiom, enabling handlers to
+// depend only on the methods they actually use rather than the full world.Service.
+type WorldService interface {
+	// GetLocation retrieves a location by ID after checking read authorization.
+	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+
+	// GetExitsByLocation retrieves all exits from a location after checking read authorization.
+	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
+
+	// MoveCharacter moves a character to a new location.
+	MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error
+
+	// GetCharacter retrieves a character by ID after checking read authorization.
+	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
+
+	// CreateLocation creates a new location after checking write authorization.
+	CreateLocation(ctx context.Context, subjectID string, loc *world.Location) error
+
+	// UpdateLocation updates an existing location after checking write authorization.
+	UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error
+
+	// CreateObject creates a new object after checking write authorization.
+	CreateObject(ctx context.Context, subjectID string, obj *world.Object) error
+
+	// GetObject retrieves an object by ID after checking read authorization.
+	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
+
+	// UpdateObject updates an existing object after checking write authorization.
+	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
+}
+
+// EventBroadcaster defines the broadcast operations required by command handlers.
+// This interface allows handlers to send events without depending on the concrete
+// Broadcaster implementation.
+type EventBroadcaster interface {
+	// Broadcast sends an event to all subscribers of its stream.
+	Broadcast(event core.Event)
+}
+
+// Compile-time interface checks to ensure concrete types implement the interfaces.
+var (
+	_ WorldService     = (*world.Service)(nil)
+	_ EventBroadcaster = (*core.Broadcaster)(nil)
+)
+
 // CommandHandler is the function signature for command handlers.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
@@ -60,22 +106,22 @@ const (
 
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
-	World       *world.Service       // world model queries and mutations
+	World       WorldService         // world model queries and mutations
 	Session     core.SessionService  // session management
 	Access      access.AccessControl // authorization checks
 	Events      core.EventStore      // event persistence
-	Broadcaster *core.Broadcaster    // event broadcasting
+	Broadcaster EventBroadcaster     // event broadcasting
 }
 
 // Services provides access to core services for command handlers.
 // Handlers MUST NOT store references to services beyond execution.
 // Handlers MUST access services only through exec.Services.
 type Services struct {
-	World       *world.Service       // world model queries and mutations
+	World       WorldService         // world model queries and mutations
 	Session     core.SessionService  // session management
 	Access      access.AccessControl // authorization checks
 	Events      core.EventStore      // event persistence
-	Broadcaster *core.Broadcaster    // event broadcasting
+	Broadcaster EventBroadcaster     // event broadcasting
 }
 
 // NewServices creates a validated Services instance.
