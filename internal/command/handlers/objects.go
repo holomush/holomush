@@ -49,7 +49,7 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 	case "location":
 		return createLocation(ctx, exec, subjectID, name)
 	default:
-		slog.ErrorContext(ctx, "create: unknown entity type",
+		slog.DebugContext(ctx, "create: unknown entity type",
 			"character_id", exec.CharacterID,
 			"entity_type", entityType)
 		_, _ = fmt.Fprintf(exec.Output, "Unknown type: %s. Use: object, location\n", entityType)
@@ -140,7 +140,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	registry := holo.DefaultRegistry()
 	prop, err := registry.Resolve(propertyPrefix)
 	if err != nil {
-		slog.ErrorContext(ctx, "set: property resolution failed",
+		slog.DebugContext(ctx, "set: property resolution failed",
 			"character_id", exec.CharacterID,
 			"property_prefix", propertyPrefix,
 			"error", err)
@@ -152,7 +152,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Resolve target
 	entityType, entityID, err := resolveTarget(ctx, exec, target)
 	if err != nil {
-		slog.ErrorContext(ctx, "set: target resolution failed",
+		slog.DebugContext(ctx, "set: target resolution failed",
 			"character_id", exec.CharacterID,
 			"target", target,
 			"error", err)

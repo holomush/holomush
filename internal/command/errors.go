@@ -4,6 +4,8 @@
 package command
 
 import (
+	"log/slog"
+
 	"github.com/samber/oops"
 )
 
@@ -144,6 +146,9 @@ func PlayerMessage(err error) string {
 	case CodeNilServices:
 		return "Internal error: services unavailable."
 	default:
+		slog.Warn("unhandled error code in PlayerMessage",
+			"code", oopsErr.Code(),
+			"error", err)
 		return "Something went wrong. Try again."
 	}
 }
