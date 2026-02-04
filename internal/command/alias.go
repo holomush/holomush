@@ -4,6 +4,7 @@
 package command
 
 import (
+	"log/slog"
 	"maps"
 	"strings"
 	"sync"
@@ -67,6 +68,10 @@ func (c *AliasCache) SetSystemAlias(alias, command string) error {
 		} else {
 			delete(c.systemAliases, alias)
 		}
+		slog.Debug("circular system alias rejected",
+			slog.String("alias", alias),
+			slog.String("command", command),
+		)
 		return ErrCircularAlias(alias)
 	}
 
@@ -94,6 +99,11 @@ func (c *AliasCache) SetPlayerAlias(playerID ulid.ULID, alias, command string) e
 		} else {
 			delete(c.playerAliases[playerID], alias)
 		}
+		slog.Debug("circular player alias rejected",
+			slog.String("alias", alias),
+			slog.String("command", command),
+			slog.String("player_id", playerID.String()),
+		)
 		return ErrCircularAlias(alias)
 	}
 
@@ -120,38 +130,56 @@ func (c *AliasCache) RemovePlayerAlias(playerID ulid.ULID, alias string) {
 
 // wouldBeCircularLocked checks if an alias would create a circular reference.
 // Must be called with Lock held (not RLock) since it's used during mutation.
+//
+// Algorithm: Uses a visited set to detect true cycles. This distinguishes between:
+//   - Circular references (A→B→C→A): Detected by revisiting a node already in visited set
+//   - Deep chains (A→B→C→...→Z): Valid as long as no node repeats
+//
+// The depth limit (MaxExpansionDepth) serves as a safety bound to prevent runaway
+// expansion, not as a cycle detection mechanism.
 func (c *AliasCache) wouldBeCircularLocked(playerID ulid.ULID, alias string) bool {
-	// Track the expansion chain
-	_, expanded := c.resolveWithDepth(playerID, alias, 0)
-	// If we expanded at all and hit the depth limit, it's circular
-	// We check by seeing if resolving the alias leads back through a long chain
+	visited := make(map[string]bool)
 	cmd := alias
+
 	for depth := 0; depth < MaxExpansionDepth; depth++ {
-		// Check player alias first
+		// Check for cycle: if we've seen this command before, it's circular
+		if visited[cmd] {
+			return true
+		}
+		visited[cmd] = true
+
+		// Check player alias first (player aliases override system aliases)
 		if playerAliases, ok := c.playerAliases[playerID]; ok {
 			if next, ok := playerAliases[cmd]; ok {
 				nextFirst, _ := splitFirstWord(next)
 				if nextFirst == "" {
+					// Empty expansion - chain terminates
 					return false
 				}
 				cmd = nextFirst
 				continue
 			}
 		}
+
 		// Check system alias
 		if next, ok := c.systemAliases[cmd]; ok {
 			nextFirst, _ := splitFirstWord(next)
 			if nextFirst == "" {
+				// Empty expansion - chain terminates
 				return false
 			}
 			cmd = nextFirst
 			continue
 		}
-		// No more aliases - not circular
+
+		// No more aliases - chain terminates at a real command (or unknown)
 		return false
 	}
-	// Hit depth limit - circular or too long
-	return expanded
+
+	// Hit depth limit without finding a cycle or termination.
+	// This is a safety bound - the chain is too deep but not necessarily circular.
+	// We treat this as "circular" to prevent potential DoS from extremely deep chains.
+	return true
 }
 
 // ClearPlayer removes all aliases for a player (typically on session termination).
