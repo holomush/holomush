@@ -281,6 +281,15 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, command.CodeTargetNotFound, oopsErr.Code())
+
+	// Verify target name is captured in context
+	target, ok := oopsErr.Context()["target"].(string)
+	require.True(t, ok)
+	assert.Equal(t, "NonexistentPlayer", target)
+
+	// Verify PlayerMessage returns appropriate user-facing message
+	playerMsg := command.PlayerMessage(err)
+	assert.Equal(t, "Target not found: NonexistentPlayer", playerMsg)
 }
 
 func TestBootHandler_Success(t *testing.T) {

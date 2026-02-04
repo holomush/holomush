@@ -68,6 +68,18 @@ func TestErrCircularAlias(t *testing.T) {
 	assert.Contains(t, err.Error(), "circular reference detected")
 }
 
+func TestErrTargetNotFound(t *testing.T) {
+	err := ErrTargetNotFound("NonexistentPlayer")
+	assert.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	assert.True(t, ok)
+	assert.Equal(t, "TARGET_NOT_FOUND", oopsErr.Code())
+	assert.Equal(t, "NonexistentPlayer", oopsErr.Context()["target"])
+	assert.Contains(t, err.Error(), "player not found")
+	assert.Contains(t, err.Error(), "NonexistentPlayer")
+}
+
 func TestPlayerMessage(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -103,6 +115,16 @@ func TestPlayerMessage(t *testing.T) {
 			name:     "circular alias",
 			err:      ErrCircularAlias("loop"),
 			expected: "Alias rejected: circular reference detected (expansion depth exceeded)",
+		},
+		{
+			name:     "target not found with name",
+			err:      ErrTargetNotFound("Alice"),
+			expected: "Target not found: Alice",
+		},
+		{
+			name:     "no character",
+			err:      ErrNoCharacter(),
+			expected: "No character selected. Please select a character first.",
 		},
 		{
 			name:     "generic error",
