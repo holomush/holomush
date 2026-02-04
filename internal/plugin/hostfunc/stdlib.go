@@ -260,6 +260,7 @@ func registerEmit(ls *lua.LState, holoTable *lua.LTable) {
 }
 
 // getEmitter retrieves the per-state emitter from the Lua state.
+// Returns nil if emitter not found, indicating RegisterStdlib was not called.
 func getEmitter(ls *lua.LState) *holo.Emitter {
 	ud := ls.GetGlobal(emitterRegistryKey)
 	if ud.Type() == lua.LTUserData {
@@ -270,16 +271,12 @@ func getEmitter(ls *lua.LState) *holo.Emitter {
 			}
 		}
 	}
-	// Create a new emitter if not found - this indicates RegisterStdlib was not called,
-	// which is a critical initialization bug. Events may accumulate in this fallback
-	// emitter and never be flushed or flushed to the wrong destination.
-	slog.Error("emitter not found in Lua state registry, creating fallback emitter",
-		"registry_key", emitterRegistryKey)
-	emitter := holo.NewEmitter()
-	newUD := ls.NewUserData()
-	newUD.Value = emitter
-	ls.SetGlobal(emitterRegistryKey, newUD)
-	return emitter
+	// Emitter not found - this indicates RegisterStdlib was not called.
+	// Return nil so callers can raise an appropriate Lua error.
+	slog.Error("emitter not found in Lua state registry",
+		"registry_key", emitterRegistryKey,
+		"hint", "RegisterStdlib must be called before emit functions")
+	return nil
 }
 
 // emitLocation wraps holo.Emitter.Location.
@@ -290,6 +287,10 @@ func emitLocation(ls *lua.LState) int {
 	payload := ls.CheckTable(3)
 
 	emitter := getEmitter(ls)
+	if emitter == nil {
+		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
+		return 0
+	}
 	emitter.Location(locationID, plugin.EventType(eventType), luaTableToPayload(payload))
 
 	return 0
@@ -303,6 +304,10 @@ func emitCharacter(ls *lua.LState) int {
 	payload := ls.CheckTable(3)
 
 	emitter := getEmitter(ls)
+	if emitter == nil {
+		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
+		return 0
+	}
 	emitter.Character(characterID, plugin.EventType(eventType), luaTableToPayload(payload))
 
 	return 0
@@ -315,6 +320,10 @@ func emitGlobal(ls *lua.LState) int {
 	payload := ls.CheckTable(2)
 
 	emitter := getEmitter(ls)
+	if emitter == nil {
+		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
+		return 0
+	}
 	emitter.Global(plugin.EventType(eventType), luaTableToPayload(payload))
 
 	return 0
@@ -325,6 +334,10 @@ func emitGlobal(ls *lua.LState) int {
 // Returns a table of events or nil if no events were accumulated.
 func emitFlush(ls *lua.LState) int {
 	emitter := getEmitter(ls)
+	if emitter == nil {
+		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
+		return 0
+	}
 	events := emitter.Flush()
 
 	if len(events) == 0 {
