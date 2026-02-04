@@ -849,7 +849,9 @@ func TestSetHandler_UnsupportedEntityType(t *testing.T) {
 
 func TestCreateHandler_Object_InvalidName(t *testing.T) {
 	// Tests that CreateHandler properly handles validation errors from world.NewObject.
-	// An empty name triggers a ValidationError during object construction.
+	// A name exceeding MaxNameLength (100 chars) triggers a ValidationError during object construction.
+	// Note: Empty names are rejected at the regex parsing level (createPattern requires at least one char),
+	// so we need a name that passes parsing but fails validation.
 
 	characterID := ulid.Make()
 	locationID := ulid.Make()
@@ -860,18 +862,25 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 		AccessControl: accessControl,
 	})
 
+	// Create a name that exceeds MaxNameLength (100 chars)
+	longNameBytes := make([]byte, world.MaxNameLength+1)
+	for i := range longNameBytes {
+		longNameBytes[i] = 'a'
+	}
+	longName := string(longNameBytes)
+
 	var buf bytes.Buffer
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		LocationID:  locationID,
-		Args:        `object ""`, // empty name triggers validation error
+		Args:        `object "` + longName + `"`,
 		Output:      &buf,
 		Services:    &command.Services{World: worldService},
 	}
 
 	err := CreateHandler(context.Background(), exec)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot be empty")
+	assert.Contains(t, err.Error(), "exceeds maximum length")
 
 	// Verify structured error code
 	oopsErr, ok := oops.AsOops(err)
@@ -881,5 +890,5 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 	// User sees sanitized message, not internal error details
 	output := buf.String()
 	assert.Contains(t, output, "Failed to create object.")
-	assert.NotContains(t, output, "cannot be empty") // internal error not exposed
+	assert.NotContains(t, output, "exceeds maximum length") // internal error not exposed
 }
