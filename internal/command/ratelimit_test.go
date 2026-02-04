@@ -66,6 +66,22 @@ func TestNewRateLimiter(t *testing.T) {
 		assert.Equal(t, DefaultSustainedRate, rl2.sustainedRate)
 	})
 
+	t.Run("sustained rate below minimum is clamped to minimum", func(t *testing.T) {
+		// Test a value between 0 and MinSustainedRate (0.1)
+		rl := NewRateLimiter(RateLimiterConfig{
+			SustainedRate: 0.05, // Below minimum
+		})
+		defer rl.Close()
+		assert.Equal(t, MinSustainedRate, rl.sustainedRate, "rate below minimum should be clamped")
+
+		// Test exactly at minimum
+		rl2 := NewRateLimiter(RateLimiterConfig{
+			SustainedRate: MinSustainedRate,
+		})
+		defer rl2.Close()
+		assert.Equal(t, MinSustainedRate, rl2.sustainedRate, "rate at minimum should be preserved")
+	})
+
 	t.Run("zero cleanup interval uses default", func(t *testing.T) {
 		rl := NewRateLimiter(RateLimiterConfig{
 			CleanupInterval: 0,
