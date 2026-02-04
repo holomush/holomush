@@ -190,7 +190,11 @@ message LogRequest {
 message LogResponse {}
 
 // ListCommandsRequest requests the list of available commands.
-message ListCommandsRequest {}
+// Commands are filtered by the character's capabilities.
+message ListCommandsRequest {
+  // Character identifier for capability filtering.
+  string character_id = 1;
+}
 
 // ListCommandsResponse contains the list of available commands.
 message ListCommandsResponse {
