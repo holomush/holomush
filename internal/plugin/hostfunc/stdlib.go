@@ -4,6 +4,8 @@
 package hostfunc
 
 import (
+	"log/slog"
+
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/pkg/holo"
@@ -268,7 +270,11 @@ func getEmitter(ls *lua.LState) *holo.Emitter {
 			}
 		}
 	}
-	// Create a new emitter if not found (shouldn't happen if RegisterStdlib was called)
+	// Create a new emitter if not found - this indicates RegisterStdlib was not called,
+	// which is a critical initialization bug. Events may accumulate in this fallback
+	// emitter and never be flushed or flushed to the wrong destination.
+	slog.Error("emitter not found in Lua state registry, creating fallback emitter",
+		"registry_key", emitterRegistryKey)
 	emitter := holo.NewEmitter()
 	newUD := ls.NewUserData()
 	newUD.Value = emitter
