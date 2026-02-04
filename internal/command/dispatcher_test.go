@@ -71,7 +71,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "echo",
-		Capabilities: []string{"test.echo"},
+		capabilities: []string{"test.echo"},
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			_, _ = exec.Output().Write([]byte("echoed: " + exec.Args))
@@ -130,7 +130,7 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
-		Capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin.manage"},
 		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -186,7 +186,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	// Register command requiring multiple capabilities
 	err := reg.Register(CommandEntry{
 		Name:         "dangerous",
-		Capabilities: []string{"admin.manage", "admin.danger"},
+		capabilities: []string{"admin.manage", "admin.danger"},
 		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -231,7 +231,7 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	executed := false
 	err := reg.Register(CommandEntry{
 		Name:         "public",
-		Capabilities: nil, // No capabilities required
+		capabilities: nil, // No capabilities required
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			executed = true
 			return nil
@@ -263,7 +263,7 @@ func TestDispatcher_HandlerError(t *testing.T) {
 	handlerErr := errors.New("handler failed")
 	err := reg.Register(CommandEntry{
 		Name:         "failing",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return handlerErr
 		},
@@ -294,7 +294,7 @@ func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 	handlerErr := errors.New("handler failed")
 	err := reg.Register(CommandEntry{
 		Name:         "failing",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return handlerErr
 		},
@@ -360,7 +360,7 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "look",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -391,7 +391,7 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "say",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -460,7 +460,7 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "look",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -493,7 +493,7 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "look",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -532,7 +532,7 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "look",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -571,7 +571,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "say",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -611,7 +611,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "say",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -655,7 +655,7 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
 		Name:         "say",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedArgs = exec.Args
 			return nil
@@ -692,7 +692,7 @@ func TestDispatcher_NoCharacter(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "test",
-		Capabilities: []string{},
+		capabilities: []string{},
 		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -730,7 +730,7 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "slow",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(ctx context.Context, _ *CommandExecution) error {
 			close(handlerStarted)
 			// Wait for context cancellation or timeout
@@ -788,7 +788,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	var receivedCtx context.Context
 	err := reg.Register(CommandEntry{
 		Name:         "check",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(ctx context.Context, _ *CommandExecution) error {
 			receivedCtx = ctx
 			// Return immediately if already cancelled
@@ -833,7 +833,7 @@ func TestDispatcher_NilServices(t *testing.T) {
 	// Register a command that accesses Services.World (would panic if nil)
 	err := reg.Register(CommandEntry{
 		Name:         "checkservices",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			// This would panic if Services is nil
 			_ = exec.Services().World()
@@ -872,7 +872,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		var executed int
 		err := reg.Register(CommandEntry{
 			Name:         "test",
-			Capabilities: nil,
+			capabilities: nil,
 			Handler: func(_ context.Context, _ *CommandExecution) error {
 				executed++
 				return nil
@@ -905,7 +905,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 		err := reg.Register(CommandEntry{
 			Name:         "test",
-			Capabilities: nil,
+			capabilities: nil,
 			Handler: func(_ context.Context, _ *CommandExecution) error {
 				return nil
 			},
@@ -960,7 +960,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 		err := reg.Register(CommandEntry{
 			Name:         "test",
-			Capabilities: nil,
+			capabilities: nil,
 			Handler: func(_ context.Context, _ *CommandExecution) error {
 				return nil
 			},
@@ -1013,7 +1013,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		var executed int
 		err := reg.Register(CommandEntry{
 			Name:         "test",
-			Capabilities: nil,
+			capabilities: nil,
 			Handler: func(_ context.Context, _ *CommandExecution) error {
 				executed++
 				return nil
@@ -1059,7 +1059,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		var capturedArgs string
 		err := reg.Register(CommandEntry{
 			Name:         "look",
-			Capabilities: nil,
+			capabilities: nil,
 			Handler: func(_ context.Context, exec *CommandExecution) error {
 				capturedArgs = exec.Args
 				return nil
@@ -1115,7 +1115,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 	var capturedInvokedAs string
 	err := reg.Register(CommandEntry{
 		Name:         "pose",
-		Capabilities: []string{"comms.pose"},
+		capabilities: []string{"comms.pose"},
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			capturedInvokedAs = exec.InvokedAs
 			return nil
@@ -1175,7 +1175,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 	// Register test commands
 	err := reg.Register(CommandEntry{
 		Name:         "metrics_success",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1185,7 +1185,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 	err = reg.Register(CommandEntry{
 		Name:         "metrics_failing",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return errors.New("handler error")
 		},
@@ -1195,7 +1195,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 	err = reg.Register(CommandEntry{
 		Name:         "metrics_protected",
-		Capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin.manage"},
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1293,7 +1293,7 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "look",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1334,7 +1334,7 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "ratelimit_test",
-		Capabilities: nil,
+		capabilities: nil,
 		Handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},

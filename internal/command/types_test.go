@@ -20,7 +20,7 @@ import (
 func TestCommandEntry_HasRequiredFields(t *testing.T) {
 	entry := &CommandEntry{
 		Name:         "say",
-		Capabilities: []string{"rp:speak"},
+		capabilities: []string{"rp:speak"},
 		Help:         "Say something to the room",
 		Usage:        "say <message>",
 		HelpText:     "Speaks a message to everyone in the current location.",
@@ -28,7 +28,7 @@ func TestCommandEntry_HasRequiredFields(t *testing.T) {
 	}
 
 	assert.Equal(t, "say", entry.Name)
-	assert.Equal(t, []string{"rp:speak"}, entry.Capabilities)
+	assert.Equal(t, []string{"rp:speak"}, entry.GetCapabilities())
 	assert.Equal(t, "Say something to the room", entry.Help)
 	assert.Equal(t, "say <message>", entry.Usage)
 	assert.Equal(t, "Speaks a message to everyone in the current location.", entry.HelpText)
@@ -216,7 +216,7 @@ func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "say", entry.Name)
 	assert.NotNil(t, entry.Handler)
-	assert.Equal(t, []string{"rp:speak"}, entry.Capabilities)
+	assert.Equal(t, []string{"rp:speak"}, entry.GetCapabilities())
 	assert.Equal(t, "Say something to the room", entry.Help)
 	assert.Equal(t, "say <message>", entry.Usage)
 	assert.Equal(t, "Speaks a message to everyone in the current location.", entry.HelpText)
@@ -256,7 +256,7 @@ func TestNewCommandEntry_MinimalValid_ReturnsEntry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "say", entry.Name)
 	assert.NotNil(t, entry.Handler)
-	assert.Empty(t, entry.Capabilities)
+	assert.Empty(t, entry.GetCapabilities())
 	assert.Empty(t, entry.Help)
 	assert.Empty(t, entry.Usage)
 	assert.Empty(t, entry.HelpText)

@@ -63,7 +63,7 @@ func TestRegisterAll_AdminCommandsHaveCapabilities(t *testing.T) {
 	for _, tc := range adminCommands {
 		cmd, ok := reg.Get(tc.name)
 		require.True(t, ok, "command %s should be registered", tc.name)
-		assert.Contains(t, cmd.Capabilities, tc.capability,
+		assert.Contains(t, cmd.GetCapabilities(), tc.capability,
 			"command %s should require capability %s", tc.name, tc.capability)
 	}
 }
@@ -84,7 +84,7 @@ func TestRegisterAll_ObjectCommandsHaveCapabilities(t *testing.T) {
 	for _, tc := range objectCommands {
 		cmd, ok := reg.Get(tc.name)
 		require.True(t, ok, "command %s should be registered", tc.name)
-		assert.Contains(t, cmd.Capabilities, tc.capability,
+		assert.Contains(t, cmd.GetCapabilities(), tc.capability,
 			"command %s should require capability %s", tc.name, tc.capability)
 	}
 }

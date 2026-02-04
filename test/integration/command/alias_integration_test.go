@@ -142,7 +142,6 @@ var _ = Describe("Alias Management Integration", func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "alias",
 				Help:         "Manage player aliases",
-				Capabilities: nil,
 				Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 					return nil // Subcommand placeholder
 				},
@@ -154,7 +153,6 @@ var _ = Describe("Alias Management Integration", func() {
 			err = registry.Register(command.CommandEntry{
 				Name:         "look",
 				Help:         "Look around",
-				Capabilities: nil,
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
 					_, _ = exec.Output().Write([]byte("You look around."))
 					return nil
@@ -277,7 +275,6 @@ var _ = Describe("Alias Management Integration", func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "sysalias",
 				Help:         "Manage system aliases",
-				Capabilities: nil,
 				Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 					return nil // Subcommand placeholder
 				},
@@ -289,7 +286,6 @@ var _ = Describe("Alias Management Integration", func() {
 			err = registry.Register(command.CommandEntry{
 				Name:         "look",
 				Help:         "Look around",
-				Capabilities: nil,
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
 					_, _ = exec.Output().Write([]byte("You look around."))
 					return nil
@@ -399,7 +395,6 @@ var _ = Describe("Alias Management Integration", func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "look",
 				Help:         "Look around",
-				Capabilities: nil,
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},

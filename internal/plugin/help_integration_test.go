@@ -30,30 +30,30 @@ type mockHelpCommandRegistry struct{}
 
 func (m *mockHelpCommandRegistry) All() []command.CommandEntry {
 	return []command.CommandEntry{
-		{
+		command.NewTestEntry(command.CommandEntryConfig{
 			Name:         "say",
 			Help:         "Say something to the room",
 			Usage:        "say <message>",
 			HelpText:     "## Say\n\nSpeak a message to everyone in your location.",
 			Capabilities: []string{"comms.say"},
 			Source:       "communication",
-		},
-		{
+		}),
+		command.NewTestEntry(command.CommandEntryConfig{
 			Name:         "look",
 			Help:         "Look at your surroundings",
 			Usage:        "look [target]",
 			HelpText:     "## Look\n\nExamine your surroundings or a specific target.",
 			Capabilities: []string{},
 			Source:       "core",
-		},
-		{
+		}),
+		command.NewTestEntry(command.CommandEntryConfig{
 			Name:         "dig",
 			Help:         "Create a new room or exit",
 			Usage:        "dig <direction> = <room name>",
 			HelpText:     "## Dig\n\nCreate new rooms and connections.",
 			Capabilities: []string{"building.dig"},
 			Source:       "building",
-		},
+		}),
 	}
 }
 

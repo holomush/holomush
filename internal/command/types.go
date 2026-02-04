@@ -111,22 +111,18 @@ type CommandEntryConfig struct {
 // CommandEntry is conceptually immutable after construction via NewCommandEntry.
 // The Registry stores entries by value, so modifications to a CommandEntry
 // after registration do not affect the registered command. However, callers
-// SHOULD NOT modify fields after calling NewCommandEntry. Use GetCapabilities()
-// to access capabilities safely (returns a defensive copy).
+// SHOULD NOT modify fields after calling NewCommandEntry.
 //
-// Design Note - Why Not Compile-Time Enforcement:
-// Making fields private would require getters for all fields, significantly
-// increasing API surface and boilerplate. The by-value storage in Registry
-// already provides implicit protection against post-registration mutation.
-// Only Capabilities needs a defensive copy getter since slices are reference
-// types. This pragmatic approach balances safety with Go idioms and API
-// ergonomics for this codebase.
+// The capabilities field is private to enforce immutability at compile time
+// for slice types (which are reference types). Use GetCapabilities() to access
+// capabilities safely; it returns a defensive copy. Other fields remain public
+// since by-value storage in Registry already provides implicit protection.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")
 	Handler      CommandHandler // Go handler or Lua dispatcher
-	Capabilities []string       // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
+	capabilities []string       // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g., "say <message>")
 	HelpText     string         // detailed markdown help
@@ -146,12 +142,12 @@ const (
 // This prevents external modification of the entry's internal state.
 // Returns nil if no capabilities are set, or an empty slice if explicitly set to empty.
 func (e *CommandEntry) GetCapabilities() []string {
-	if e.Capabilities == nil {
+	if e.capabilities == nil {
 		return nil
 	}
 	// Preserve distinction between nil and empty slice
-	result := make([]string, len(e.Capabilities))
-	copy(result, e.Capabilities)
+	result := make([]string, len(e.capabilities))
+	copy(result, e.capabilities)
 	return result
 }
 
@@ -172,7 +168,7 @@ func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
 	return &CommandEntry{
 		Name:         cfg.Name,
 		Handler:      cfg.Handler,
-		Capabilities: cfg.Capabilities,
+		capabilities: cfg.Capabilities,
 		Help:         cfg.Help,
 		Usage:        cfg.Usage,
 		HelpText:     cfg.HelpText,
@@ -429,6 +425,23 @@ func NewTestServices(cfg ServicesConfig) *Services {
 		aliasCache:  cfg.AliasCache,
 		aliasRepo:   cfg.AliasRepo,
 		registry:    cfg.Registry,
+	}
+}
+
+// NewTestEntry creates a CommandEntry for testing purposes.
+// Unlike NewCommandEntry, this function does not validate required fields,
+// allowing tests to create entries without a handler. This is useful for
+// mock registries in external test packages.
+// This function should only be used in tests.
+func NewTestEntry(cfg CommandEntryConfig) CommandEntry {
+	return CommandEntry{
+		Name:         cfg.Name,
+		Handler:      cfg.Handler,
+		capabilities: cfg.Capabilities,
+		Help:         cfg.Help,
+		Usage:        cfg.Usage,
+		HelpText:     cfg.HelpText,
+		Source:       cfg.Source,
 	}
 }
 

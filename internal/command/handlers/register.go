@@ -11,14 +11,18 @@ import (
 // Core commands are those implemented in Go as part of the server.
 // Panics if any registration fails (indicates a programming error).
 func RegisterAll(reg *command.Registry) {
-	mustRegister := func(entry command.CommandEntry) {
-		if err := reg.Register(entry); err != nil {
-			panic("failed to register core command " + entry.Name + ": " + err.Error())
+	mustRegister := func(cfg command.CommandEntryConfig) {
+		entry, err := command.NewCommandEntry(cfg)
+		if err != nil {
+			panic("failed to create core command " + cfg.Name + ": " + err.Error())
+		}
+		if err := reg.Register(*entry); err != nil {
+			panic("failed to register core command " + cfg.Name + ": " + err.Error())
 		}
 	}
 
 	// Navigation commands
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:    "look",
 		Handler: LookHandler,
 		Help:    "Look at your surroundings or a target",
@@ -39,7 +43,7 @@ Examine your surroundings or a specific target.
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:    "move",
 		Handler: MoveHandler,
 		Help:    "Move through an exit",
@@ -61,7 +65,7 @@ Move through an exit to another location.
 	})
 
 	// Session commands
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:    "quit",
 		Handler: QuitHandler,
 		Help:    "Disconnect from the game",
@@ -78,7 +82,7 @@ Your character remains in-world but becomes inactive.
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:    "who",
 		Handler: WhoHandler,
 		Help:    "See who is online",
@@ -96,7 +100,7 @@ Shows character names and their idle times (time since last activity).
 	})
 
 	// Admin commands
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "boot",
 		Handler:      BootHandler,
 		Capabilities: []string{"admin.boot"},
@@ -122,7 +126,7 @@ Requires the ` + "`admin.boot`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "shutdown",
 		Handler:      ShutdownHandler,
 		Capabilities: []string{"admin.shutdown"},
@@ -148,7 +152,7 @@ Requires the ` + "`admin.shutdown`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "wall",
 		Handler:      WallHandler,
 		Capabilities: []string{"admin.wall"},
@@ -183,7 +187,7 @@ Requires the ` + "`admin.wall`" + ` capability.`,
 	})
 
 	// Object commands
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "create",
 		Handler:      CreateHandler,
 		Capabilities: []string{"objects.create"},
@@ -213,7 +217,7 @@ Requires the ` + "`objects.create`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "set",
 		Handler:      SetHandler,
 		Capabilities: []string{"objects.set"},
@@ -242,7 +246,7 @@ Requires the ` + "`objects.set`" + ` capability.`,
 	})
 
 	// Player alias commands
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "alias",
 		Handler:      AliasAddHandler,
 		Capabilities: []string{"player.alias"},
@@ -274,7 +278,7 @@ Requires the ` + "`player.alias`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "unalias",
 		Handler:      AliasRemoveHandler,
 		Capabilities: []string{"player.alias"},
@@ -298,7 +302,7 @@ Requires the ` + "`player.alias`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "aliases",
 		Handler:      AliasListHandler,
 		Capabilities: []string{"player.alias"},
@@ -319,7 +323,7 @@ Requires the ` + "`player.alias`" + ` capability.`,
 	})
 
 	// System alias commands
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "sysalias",
 		Handler:      SysaliasAddHandler,
 		Capabilities: []string{"admin.alias"},
@@ -351,7 +355,7 @@ Requires the ` + "`admin.alias`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "sysunsalias",
 		Handler:      SysaliasRemoveHandler,
 		Capabilities: []string{"admin.alias"},
@@ -375,7 +379,7 @@ Requires the ` + "`admin.alias`" + ` capability.`,
 		Source: "core",
 	})
 
-	mustRegister(command.CommandEntry{
+	mustRegister(command.CommandEntryConfig{
 		Name:         "sysaliases",
 		Handler:      SysaliasListHandler,
 		Capabilities: []string{"admin.alias"},

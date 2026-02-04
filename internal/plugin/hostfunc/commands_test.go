@@ -147,14 +147,14 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 	// Given: a registry with a command that has detailed help
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			{
+			command.NewTestEntry(command.CommandEntryConfig{
 				Name:         "say",
 				Help:         "Say something to the room",
 				Usage:        "say <message>",
 				HelpText:     "# Say Command\n\nSay something that everyone in the room can hear.",
 				Capabilities: []string{"communication.say"},
 				Source:       "communication",
-			},
+			}),
 		},
 	}
 
@@ -295,10 +295,10 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 	// Given: a registry with commands having different capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"},
-			{Name: "look", Help: "Look around", Capabilities: nil, Source: "core"},                                   // No capabilities required
-			{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"},             // Admin only
-			{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}, // Multiple caps
+			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
+			{Name: "look", Help: "Look around", Source: "core"},                                                                                                           // No capabilities required
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),                   // Admin only
+			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}), // Multiple caps
 		},
 	}
 
@@ -350,8 +350,8 @@ func TestListCommands_EmptyCapabilitiesAlwaysIncluded(t *testing.T) {
 	// Given: commands with empty capabilities slice (not nil)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			{Name: "help", Help: "Get help", Capabilities: []string{}, Source: "core"}, // Empty slice
-			{Name: "quit", Help: "Quit", Capabilities: nil, Source: "core"},            // Nil slice
+			command.NewTestEntry(command.CommandEntryConfig{Name: "help", Help: "Get help", Capabilities: []string{}, Source: "core"}), // Empty slice
+			{Name: "quit", Help: "Quit", Source: "core"}, // Nil slice (no capabilities)
 		},
 	}
 
@@ -389,7 +389,7 @@ func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
 	// Given: a command requiring multiple capabilities (AND logic)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"},
+			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}),
 		},
 	}
 
@@ -430,7 +430,7 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 	// Given: a command requiring multiple capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"},
+			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}),
 		},
 	}
 
@@ -527,7 +527,7 @@ func TestListCommands_NoAccessControlConfigured(t *testing.T) {
 	// Given: no AccessControl configured (nil)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}},
+			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}}),
 		},
 	}
 

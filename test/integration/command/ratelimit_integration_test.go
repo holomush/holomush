@@ -83,9 +83,8 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Register a test command
 			err := registry.Register(command.CommandEntry{
-				Name:         "test",
-				Help:         "Test command for rate limiting",
-				Capabilities: nil, // No capabilities required
+				Name: "test",
+				Help: "Test command for rate limiting",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					executed++
 					return nil
@@ -260,7 +259,6 @@ var _ = Describe("Rate Limiting Integration", func() {
 		BeforeEach(func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "test",
-				Capabilities: nil,
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
@@ -362,7 +360,6 @@ var _ = Describe("Rate Limiting Integration", func() {
 		BeforeEach(func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "test",
-				Capabilities: nil,
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
@@ -465,7 +462,6 @@ var _ = Describe("Rate Limiting Integration", func() {
 		BeforeEach(func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "look",
-				Capabilities: nil,
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
