@@ -25,16 +25,15 @@ type playerInfo struct {
 // WhoHandler displays a list of connected players with idle times.
 func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	sessions := exec.Services.Session.ListActiveSessions()
-	charID := exec.CharacterID.String()
 
 	if len(sessions) == 0 {
 		if n, err := writeWhoOutput(exec.Output, nil); err != nil {
-			logOutputError(ctx, "who", charID, n, err)
+			logOutputError(ctx, "who", exec.CharacterID.String(), n, err)
 		}
 		return nil
 	}
 
-	subjectID := "char:" + charID
+	subjectID := "char:" + exec.CharacterID.String()
 	now := time.Now()
 
 	// Collect visible players
@@ -65,21 +64,16 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	if n, err := writeWhoOutput(exec.Output, players); err != nil {
-		logOutputError(ctx, "who", charID, n, err)
+		logOutputError(ctx, "who", exec.CharacterID.String(), n, err)
 	}
 
 	// Warn user if any characters couldn't be displayed due to errors.
 	// Output write errors are logged but don't fail the command.
 	if errorCount > 0 {
-		var n int
-		var err error
 		if errorCount == 1 {
-			n, err = fmt.Fprintln(exec.Output, "(Note: 1 player could not be displayed due to an error)")
+			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to an error)")
 		} else {
-			n, err = fmt.Fprintf(exec.Output, "(Note: %d players could not be displayed due to errors)\n", errorCount)
-		}
-		if err != nil {
-			logOutputError(ctx, "who", charID, n, err)
+			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to errors)\n", errorCount)
 		}
 	}
 	return nil

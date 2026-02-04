@@ -49,15 +49,10 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 	)
 
 	// Notify the executor - output write errors are logged but don't fail the shutdown
-	var n int
-	var err error
 	if delaySeconds == 0 {
-		n, err = fmt.Fprintln(exec.Output, "Initiating server shutdown...")
+		writeOutput(ctx, exec, "shutdown", "Initiating server shutdown...")
 	} else {
-		n, err = fmt.Fprintf(exec.Output, "Initiating server shutdown in %d seconds...\n", delaySeconds)
-	}
-	if err != nil {
-		logOutputError(ctx, "shutdown", exec.CharacterID.String(), n, err)
+		writeOutputf(ctx, exec, "shutdown", "Initiating server shutdown in %d seconds...\n", delaySeconds)
 	}
 
 	// Return shutdown signal with delay context

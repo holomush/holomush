@@ -5,7 +5,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -25,26 +24,21 @@ var createPattern = regexp.MustCompile(`^(\w+)\s+"([^"]+)"$`)
 // Syntax: create <type> "<name>"
 // Types: object, location
 func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
-	charID := exec.CharacterID.String()
 	args := strings.TrimSpace(exec.Args)
 	if args == "" {
-		if n, err := fmt.Fprintln(exec.Output, "Usage: create <type> \"<name>\""); err != nil {
-			logOutputError(ctx, "create", charID, n, err)
-		}
+		writeOutput(ctx, exec, "create", "Usage: create <type> \"<name>\"")
 		return nil
 	}
 
 	matches := createPattern.FindStringSubmatch(args)
 	if matches == nil {
-		if n, err := fmt.Fprintln(exec.Output, "Usage: create <type> \"<name>\""); err != nil {
-			logOutputError(ctx, "create", charID, n, err)
-		}
+		writeOutput(ctx, exec, "create", "Usage: create <type> \"<name>\"")
 		return nil
 	}
 
 	entityType := strings.ToLower(matches[1])
 	name := matches[2]
-	subjectID := "char:" + charID
+	subjectID := "char:" + exec.CharacterID.String()
 
 	switch entityType {
 	case "object":
@@ -55,24 +49,19 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 		slog.DebugContext(ctx, "create: unknown entity type",
 			"character_id", exec.CharacterID,
 			"entity_type", entityType)
-		if n, err := fmt.Fprintf(exec.Output, "Unknown type: %s. Use: object, location\n", entityType); err != nil {
-			logOutputError(ctx, "create", charID, n, err)
-		}
+		writeOutputf(ctx, exec, "create", "Unknown type: %s. Use: object, location\n", entityType)
 		return nil
 	}
 }
 
 func createObject(ctx context.Context, exec *command.CommandExecution, subjectID, name string) error {
-	charID := exec.CharacterID.String()
 	obj, err := world.NewObject(name, world.InLocation(exec.LocationID))
 	if err != nil {
 		slog.ErrorContext(ctx, "create object: NewObject failed",
 			"character_id", exec.CharacterID,
 			"object_name", name,
 			"error", err)
-		if n, writeErr := fmt.Fprintln(exec.Output, "Failed to create object."); writeErr != nil {
-			logOutputError(ctx, "create", charID, n, writeErr)
-		}
+		writeOutput(ctx, exec, "create", "Failed to create object.")
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Failed to create object.", err)
 	}
@@ -82,30 +71,23 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 			"character_id", exec.CharacterID,
 			"object_name", name,
 			"error", err)
-		if n, writeErr := fmt.Fprintln(exec.Output, "Failed to create object."); writeErr != nil {
-			logOutputError(ctx, "create", charID, n, writeErr)
-		}
+		writeOutput(ctx, exec, "create", "Failed to create object.")
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Failed to create object.", err)
 	}
 
-	if n, err := fmt.Fprintf(exec.Output, "Created object \"%s\" (#%s)\n", name, obj.ID); err != nil {
-		logOutputError(ctx, "create", charID, n, err)
-	}
+	writeOutputf(ctx, exec, "create", "Created object \"%s\" (#%s)\n", name, obj.ID)
 	return nil
 }
 
 func createLocation(ctx context.Context, exec *command.CommandExecution, subjectID, name string) error {
-	charID := exec.CharacterID.String()
 	loc, err := world.NewLocation(name, "", world.LocationTypePersistent)
 	if err != nil {
 		slog.ErrorContext(ctx, "create location: NewLocation failed",
 			"character_id", exec.CharacterID,
 			"location_name", name,
 			"error", err)
-		if n, writeErr := fmt.Fprintln(exec.Output, "Failed to create location."); writeErr != nil {
-			logOutputError(ctx, "create", charID, n, writeErr)
-		}
+		writeOutput(ctx, exec, "create", "Failed to create location.")
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Failed to create location.", err)
 	}
@@ -115,16 +97,12 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 			"character_id", exec.CharacterID,
 			"location_name", name,
 			"error", err)
-		if n, writeErr := fmt.Fprintln(exec.Output, "Failed to create location."); writeErr != nil {
-			logOutputError(ctx, "create", charID, n, writeErr)
-		}
+		writeOutput(ctx, exec, "create", "Failed to create location.")
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Failed to create location.", err)
 	}
 
-	if n, err := fmt.Fprintf(exec.Output, "Created location \"%s\" (#%s)\n", name, loc.ID); err != nil {
-		logOutputError(ctx, "create", charID, n, err)
-	}
+	writeOutputf(ctx, exec, "create", "Created location \"%s\" (#%s)\n", name, loc.ID)
 	return nil
 }
 
@@ -135,20 +113,15 @@ var setPattern = regexp.MustCompile(`^(\w+)\s+of\s+(\S+)\s+to\s+(.+)$`)
 // Syntax: set <property> of <target> to <value>
 // Properties support prefix matching (desc -> description).
 func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
-	charID := exec.CharacterID.String()
 	args := strings.TrimSpace(exec.Args)
 	if args == "" {
-		if n, err := fmt.Fprintln(exec.Output, "Usage: set <property> of <target> to <value>"); err != nil {
-			logOutputError(ctx, "set", charID, n, err)
-		}
+		writeOutput(ctx, exec, "set", "Usage: set <property> of <target> to <value>")
 		return nil
 	}
 
 	matches := setPattern.FindStringSubmatch(args)
 	if matches == nil {
-		if n, err := fmt.Fprintln(exec.Output, "Usage: set <property> of <target> to <value>"); err != nil {
-			logOutputError(ctx, "set", charID, n, err)
-		}
+		writeOutput(ctx, exec, "set", "Usage: set <property> of <target> to <value>")
 		return nil
 	}
 
@@ -164,9 +137,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"character_id", exec.CharacterID,
 			"property_prefix", propertyPrefix,
 			"error", err)
-		if n, writeErr := fmt.Fprintf(exec.Output, "Unknown property: %s\n", propertyPrefix); writeErr != nil {
-			logOutputError(ctx, "set", charID, n, writeErr)
-		}
+		writeOutputf(ctx, exec, "set", "Unknown property: %s\n", propertyPrefix)
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Property resolution failed.", err)
 	}
@@ -178,9 +149,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"character_id", exec.CharacterID,
 			"target", target,
 			"error", err)
-		if n, writeErr := fmt.Fprintf(exec.Output, "Could not find target: %s\n", target); writeErr != nil {
-			logOutputError(ctx, "set", charID, n, writeErr)
-		}
+		writeOutputf(ctx, exec, "set", "Could not find target: %s\n", target)
 		return err
 	}
 
@@ -192,16 +161,12 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"entity_id", entityID,
 			"property", prop.Name,
 			"error", err)
-		if n, writeErr := fmt.Fprintln(exec.Output, "Failed to set property. Please try again."); writeErr != nil {
-			logOutputError(ctx, "set", charID, n, writeErr)
-		}
+		writeOutput(ctx, exec, "set", "Failed to set property. Please try again.")
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return command.WorldError("Failed to apply property.", err)
 	}
 
-	if n, err := fmt.Fprintf(exec.Output, "Set %s of %s.\n", prop.Name, target); err != nil {
-		logOutputError(ctx, "set", charID, n, err)
-	}
+	writeOutputf(ctx, exec, "set", "Set %s of %s.\n", prop.Name, target)
 	return nil
 }
 

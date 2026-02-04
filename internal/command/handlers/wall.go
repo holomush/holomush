@@ -75,10 +75,7 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 		sessionWord = "session"
 	}
 	// Output write errors are logged but don't fail the command - the broadcast succeeded
-	n, err := fmt.Fprintf(exec.Output, "Announcement sent to %d %s.\n", len(sessions), sessionWord)
-	if err != nil {
-		logOutputError(ctx, "wall", exec.CharacterID.String(), n, err)
-	}
+	writeOutputf(ctx, exec, "wall", "Announcement sent to %d %s.\n", len(sessions), sessionWord)
 
 	return nil
 }
