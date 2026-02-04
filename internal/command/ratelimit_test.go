@@ -349,6 +349,25 @@ func TestRateLimiter_Close(t *testing.T) {
 			t.Fatal("Close did not return in time")
 		}
 	})
+
+	t.Run("is idempotent and does not panic on double close", func(t *testing.T) {
+		rl := NewRateLimiter(RateLimiterConfig{
+			CleanupInterval: 10 * time.Millisecond,
+		})
+
+		// First close should work
+		rl.Close()
+
+		// Second close should not panic
+		assert.NotPanics(t, func() {
+			rl.Close()
+		})
+
+		// Third close should also not panic
+		assert.NotPanics(t, func() {
+			rl.Close()
+		})
+	})
 }
 
 func TestRateLimiter_WithRegistry(t *testing.T) {

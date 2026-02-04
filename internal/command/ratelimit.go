@@ -71,6 +71,7 @@ type sessionBucket struct {
 //
 // The RateLimiter runs a background goroutine to periodically clean up stale
 // sessions. Call Close() to stop the goroutine and release resources.
+// Close() is idempotent and safe to call multiple times.
 type RateLimiter struct {
 	mu            sync.Mutex
 	sessions      map[ulid.ULID]*sessionBucket
@@ -79,8 +80,9 @@ type RateLimiter struct {
 	sessionMaxAge time.Duration
 
 	// Background cleanup
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	stopChan  chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 
 	// Metrics gauge for session count (nil if no registry provided)
 	sessionGauge prometheus.Gauge
@@ -246,7 +248,10 @@ func (rl *RateLimiter) cleanupLoop(interval time.Duration) {
 
 // Close stops the background cleanup goroutine and releases resources.
 // It blocks until the goroutine has stopped.
+// Close is idempotent and safe to call multiple times.
 func (rl *RateLimiter) Close() {
-	close(rl.stopChan)
+	rl.closeOnce.Do(func() {
+		close(rl.stopChan)
+	})
 	rl.wg.Wait()
 }
