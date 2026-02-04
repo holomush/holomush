@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -314,10 +315,52 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "target not found")
 
+	// Verify structured error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, command.CodeTargetNotFound, oopsErr.Code())
+	assert.Equal(t, "nonexistent", oopsErr.Context()["target"])
+
 	// User sees sanitized message, not internal error details
 	output := buf.String()
 	assert.Contains(t, output, "Could not find target: nonexistent")
 	assert.NotContains(t, output, "target not found:") // internal error not exposed
+}
+
+func TestSetHandler_InvalidIDFormat(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	worldService := world.NewService(world.ServiceConfig{
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of #invalid-id to value",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	// Handler should return error (not nil) when ID is invalid
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid target ID format")
+
+	// Verify structured error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+	assert.Equal(t, "#invalid-id", oopsErr.Context()["target"])
+
+	// User sees sanitized message, not internal error details
+	output := buf.String()
+	assert.Contains(t, output, "Could not find target: #invalid-id")
+	assert.NotContains(t, output, "invalid target ID format") // internal error not exposed
 }
 
 func TestSetHandler_InvalidSyntax(t *testing.T) {

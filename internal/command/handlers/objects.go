@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
@@ -156,8 +157,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 			"target", target,
 			"error", err)
 		_, _ = fmt.Fprintf(exec.Output, "Could not find target: %s\n", target)
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Target resolution failed.", err)
+		return err
 	}
 
 	// Apply the property change
@@ -177,7 +177,7 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	return nil
 }
 
-func resolveTarget(_ context.Context, exec *command.CommandExecution, target string) (string, ulid.ULID, error) {
+func resolveTarget(ctx context.Context, exec *command.CommandExecution, target string) (string, ulid.ULID, error) {
 	// "here" -> current location
 	if target == "here" {
 		return "location", exec.LocationID, nil
@@ -190,7 +190,12 @@ func resolveTarget(_ context.Context, exec *command.CommandExecution, target str
 	if strings.HasPrefix(target, "#") {
 		id, err := ulid.Parse(target[1:])
 		if err != nil {
-			return "", ulid.ULID{}, fmt.Errorf("invalid ID: %s", target)
+			slog.DebugContext(ctx, "resolveTarget: invalid ID format",
+				"target", target,
+				"error", err)
+			return "", ulid.ULID{}, oops.Code(command.CodeInvalidArgs).
+				With("target", target).
+				Wrapf(err, "invalid target ID format")
 		}
 		// For now, assume objects for direct ID references
 		// Future: could query world to determine entity type
@@ -198,7 +203,13 @@ func resolveTarget(_ context.Context, exec *command.CommandExecution, target str
 	}
 	// Otherwise, target not found
 	// Future: implement object search by name in current location
-	return "", ulid.ULID{}, fmt.Errorf("target not found: %s", target)
+	slog.DebugContext(ctx, "resolveTarget: target not found",
+		"target", target,
+		"character_id", exec.CharacterID,
+		"location_id", exec.LocationID)
+	return "", ulid.ULID{}, oops.Code(command.CodeTargetNotFound).
+		With("target", target).
+		Errorf("target not found: %s", target)
 }
 
 func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName, value string) error {
