@@ -7,7 +7,7 @@
 // reducing boilerplate and ensuring consistent behavior. Key features:
 //
 //   - Event emission with stream targeting (location, character, global)
-//   - Formatting primitives with MU*-compatible %x codes
+//   - Formatting primitives with MU*-compatible %x codes (via [Fmt.Parse])
 //   - Typed command context for pre-parsed handler arguments
 //
 // Go plugins import this package directly. Lua plugins access the same

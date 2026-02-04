@@ -16,8 +16,7 @@ import (
 	"github.com/holomush/holomush/pkg/holo"
 )
 
-// WorldMutator is an alias for world.Mutator used for type assertions.
-// The interface is defined in internal/world/mutator.go.
+// WorldMutator is an alias for [world.Mutator] used for type assertions.
 type WorldMutator = world.Mutator
 
 // propertyRegistry is used to validate properties for entity types.

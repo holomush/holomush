@@ -18,7 +18,8 @@ import (
 )
 
 // BootHandler disconnects a target player from the server.
-// Self-boot: allowed for all users (like "quit with reason").
+// Self-boot bypasses the admin.boot capability check (implemented in handler),
+// allowing any user to boot themselves (like "quit with reason").
 // Boot others: requires admin.boot capability.
 // Usage: boot <player> [reason]
 func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
