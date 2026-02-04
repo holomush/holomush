@@ -59,7 +59,11 @@ function list_commands(ctx)
     -- Group commands by source
     local by_source = {}
     for _, cmd in ipairs(commands) do
-        local source = cmd.source or "other"
+        local source = cmd.source
+        if not source or source == "" then
+            holomush.log("warn", "command '" .. cmd.name .. "' has no source set; displaying in 'other' category")
+            source = "other"
+        end
         if not by_source[source] then
             by_source[source] = {}
         end
