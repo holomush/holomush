@@ -218,19 +218,22 @@ Requires the ` + "`objects.create`" + ` capability.`,
 		Handler:      SetHandler,
 		Capabilities: []string{"objects.set"},
 		Help:         "Set a property on an object",
-		Usage:        "set <object>=<property>:<value>",
+		Usage:        "set <property> of <target> to <value>",
 		HelpText: `## Set
 
 Modify a property on an object, location, or character.
 
 ### Usage
 
-- ` + "`set <target>=<property>:<value>`" + `
+- ` + "`set <property> of <target> to <value>`" + `
+
+The property name supports prefix matching (e.g., "desc" matches "description").
 
 ### Examples
 
-- ` + "`set here=description:A cozy room.`" + ` - Set room description
-- ` + "`set sword=description:A gleaming blade.`" + ` - Set object description
+- ` + "`set description of here to \"A dusty room\"`" + ` - Set room description
+- ` + "`set description of sword to \"A gleaming blade\"`" + ` - Set object description
+- ` + "`set desc of #123 to \"A mysterious place\"`" + ` - Set description using object ID
 
 ### Permissions
 
