@@ -220,19 +220,14 @@ func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registr
 	}
 
 	// Build the resolved string (no lock needed)
+	parts := []string{lookup.resolvedCmd}
 	if lookup.isPrefix {
-		resolved := lookup.resolvedCmd + " " + lookup.rest
-		if args != "" {
-			resolved = lookup.resolvedCmd + " " + lookup.rest + " " + args
-		}
-		return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: lookup.aliasUsed}
+		parts = append(parts, lookup.rest)
 	}
-
-	// Regular alias: reassemble with original args
-	resolved := lookup.resolvedCmd
 	if args != "" {
-		resolved = lookup.resolvedCmd + " " + args
+		parts = append(parts, args)
 	}
+	resolved := strings.Join(parts, " ")
 	return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: lookup.aliasUsed}
 }
 
