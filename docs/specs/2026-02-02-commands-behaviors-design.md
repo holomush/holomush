@@ -429,7 +429,7 @@ The error SHOULD include cooldown duration in context for client display.
 
 **Observability**:
 
-- Metric: `holomush.command.rate_limited` (counter, labels: `command`)
+- Metric: `holomush_command_rate_limited_total` (counter, labels: `command`)
 
 ---
 
@@ -533,9 +533,9 @@ defer span.End()
 
 **Metrics**: Command dispatcher exports:
 
-- `holomush.command.executions` (counter) - by command name, source, status
-- `holomush.command.duration` (histogram) - execution latency by command
-- `holomush.alias.expansions` (counter) - alias usage patterns
+- `holomush_command_executions_total` (counter) - by command name, source, status
+- `holomush_command_duration_seconds` (histogram) - execution latency by command
+- `holomush_alias_expansions_total` (counter) - alias usage patterns
 
 Lua plugin command execution inherits the parent span context, allowing traces
 to flow through Go → Lua → host function calls.
