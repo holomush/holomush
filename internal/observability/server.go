@@ -125,6 +125,13 @@ func (s *Server) Metrics() *Metrics {
 	return s.metrics
 }
 
+// MustRegister registers additional Prometheus collectors with the server's registry.
+// This allows other packages to register their metrics without creating import cycles.
+// Panics if registration fails (following prometheus convention for MustRegister).
+func (s *Server) MustRegister(cs ...prometheus.Collector) {
+	s.registry.MustRegister(cs...)
+}
+
 // Start begins serving observability endpoints.
 // It returns an error channel that will receive any errors from the HTTP server
 // after it starts. The channel is closed when the server stops gracefully.

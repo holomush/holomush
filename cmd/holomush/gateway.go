@@ -16,6 +16,7 @@ import (
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 
+	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -212,6 +213,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	if cfg.metricsAddr != "" {
 		// For gateway, we're ready once telnet listener is up
 		obsServer = deps.ObservabilityServerFactory(cfg.metricsAddr, func() bool { return true })
+		// Register command package metrics with the observability server
+		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
 		obsErrChan, err := obsServer.Start()
 		if err != nil {
 			if closeErr := telnetListener.Close(); closeErr != nil {

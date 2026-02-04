@@ -8,6 +8,8 @@ import (
 	cryptotls "crypto/tls"
 	"net"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -98,6 +100,7 @@ type ObservabilityServer interface {
 	Start() (<-chan error, error)
 	Stop(ctx context.Context) error
 	Addr() string
+	MustRegister(cs ...prometheus.Collector)
 }
 
 // GRPCClient interface wraps the methods used from holoGRPC.Client.
