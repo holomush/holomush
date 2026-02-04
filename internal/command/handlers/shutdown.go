@@ -5,18 +5,14 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core"
 )
 
 // ShutdownHandler initiates a graceful server shutdown.
@@ -50,14 +46,8 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 	}
 
 	// Broadcast warning to all players
-	if exec.Services.Broadcaster != nil {
-		broadcastShutdownWarning(exec, delaySeconds)
-	} else {
-		slog.Warn("broadcast skipped: Broadcaster is nil",
-			"operation", "shutdown",
-			"delay_seconds", delaySeconds,
-		)
-	}
+	message := formatShutdownMessage(delaySeconds)
+	exec.Services.BroadcastSystemMessage("system", message)
 
 	// Log admin action
 	slog.Info("admin shutdown",
@@ -81,31 +71,10 @@ func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error 
 		Wrap(command.ErrShutdownRequested)
 }
 
-// broadcastShutdownWarning sends a system-wide shutdown warning to all players.
-func broadcastShutdownWarning(exec *command.CommandExecution, delaySeconds int64) {
-	var message string
+// formatShutdownMessage creates the appropriate shutdown warning message.
+func formatShutdownMessage(delaySeconds int64) string {
 	if delaySeconds == 0 {
-		message = "[SHUTDOWN] Server shutting down NOW."
-	} else {
-		message = fmt.Sprintf("[SHUTDOWN] Server shutting down in %d seconds...", delaySeconds)
+		return "[SHUTDOWN] Server shutting down NOW."
 	}
-
-	//nolint:errcheck // json.Marshal cannot fail for map[string]string
-	payload, _ := json.Marshal(map[string]string{
-		"message": message,
-	})
-
-	event := core.Event{
-		ID:        ulid.Make(),
-		Stream:    "system",
-		Type:      core.EventTypeSystem,
-		Timestamp: time.Now(),
-		Actor: core.Actor{
-			Kind: core.ActorSystem,
-			ID:   "system",
-		},
-		Payload: payload,
-	}
-
-	exec.Services.Broadcaster.Broadcast(event)
+	return fmt.Sprintf("[SHUTDOWN] Server shutting down in %d seconds...", delaySeconds)
 }

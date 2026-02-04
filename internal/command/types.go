@@ -6,7 +6,9 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -160,4 +162,32 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 		Events:      cfg.Events,
 		Broadcaster: cfg.Broadcaster,
 	}, nil
+}
+
+// BroadcastSystemMessage creates and broadcasts a system event with the given message.
+// This is a convenience method for handlers that need to send system messages.
+// If the Broadcaster is nil, this method is a no-op.
+func (s *Services) BroadcastSystemMessage(stream, message string) {
+	if s.Broadcaster == nil {
+		return
+	}
+
+	//nolint:errcheck // json.Marshal cannot fail for map[string]string
+	payload, _ := json.Marshal(map[string]string{
+		"message": message,
+	})
+
+	event := core.Event{
+		ID:        ulid.Make(),
+		Stream:    stream,
+		Type:      core.EventTypeSystem,
+		Timestamp: time.Now(),
+		Actor: core.Actor{
+			Kind: core.ActorSystem,
+			ID:   "system",
+		},
+		Payload: payload,
+	}
+
+	s.Broadcaster.Broadcast(event)
 }

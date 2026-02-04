@@ -5,16 +5,11 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
-
-	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core"
 )
 
 // WallUrgency represents the urgency level of a wall message.
@@ -77,16 +72,9 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	)
 
 	// Broadcast to all sessions
-	if exec.Services.Broadcaster != nil {
-		for _, session := range sessions {
-			broadcastWallEvent(exec, session.CharacterID, announcement)
-		}
-	} else {
-		slog.Warn("broadcast skipped: Broadcaster is nil",
-			"operation", "wall",
-			"urgency", string(urgency),
-			"session_count", len(sessions),
-		)
+	for _, session := range sessions {
+		stream := "session:" + session.CharacterID.String()
+		exec.Services.BroadcastSystemMessage(stream, announcement)
 	}
 
 	// Notify the executor
@@ -122,26 +110,4 @@ func parseWallArgs(args string) (urgency WallUrgency, message string) {
 		// First word is not an urgency level, treat entire args as message
 		return WallUrgencyInfo, args
 	}
-}
-
-// broadcastWallEvent sends a system event to a specific session stream.
-func broadcastWallEvent(exec *command.CommandExecution, charID ulid.ULID, message string) {
-	//nolint:errcheck // json.Marshal cannot fail for map[string]string
-	payload, _ := json.Marshal(map[string]string{
-		"message": message,
-	})
-
-	event := core.Event{
-		ID:        ulid.Make(),
-		Stream:    "session:" + charID.String(),
-		Type:      core.EventTypeSystem,
-		Timestamp: time.Now(),
-		Actor: core.Actor{
-			Kind: core.ActorSystem,
-			ID:   "system",
-		},
-		Payload: payload,
-	}
-
-	exec.Services.Broadcaster.Broadcast(event)
 }

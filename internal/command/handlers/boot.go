@@ -5,18 +5,15 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -59,15 +56,9 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Notify the target before disconnecting them
-	if exec.Services.Broadcaster != nil {
-		notifyTargetOfBoot(exec, targetCharID, exec.CharacterName, reason, isSelfBoot)
-	} else {
-		slog.Warn("broadcast skipped: Broadcaster is nil",
-			"operation", "boot",
-			"target_id", targetCharID.String(),
-			"target_name", targetCharName,
-		)
-	}
+	message := formatBootMessage(exec.CharacterName, reason, isSelfBoot)
+	stream := "session:" + targetCharID.String()
+	exec.Services.BroadcastSystemMessage(stream, message)
 
 	// End the target's session
 	if err := exec.Services.Session.EndSession(targetCharID); err != nil {
@@ -101,42 +92,18 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	return nil
 }
 
-// notifyTargetOfBoot sends a system event to the target player's session stream
-// to notify them they are being booted.
-func notifyTargetOfBoot(exec *command.CommandExecution, targetCharID ulid.ULID, adminName, reason string, isSelfBoot bool) {
-	var message string
+// formatBootMessage creates the appropriate boot notification message.
+func formatBootMessage(adminName, reason string, isSelfBoot bool) string {
 	if isSelfBoot {
 		if reason != "" {
-			message = fmt.Sprintf("Disconnecting: %s", reason)
-		} else {
-			message = "Disconnecting..."
+			return fmt.Sprintf("Disconnecting: %s", reason)
 		}
-	} else {
-		if reason != "" {
-			message = fmt.Sprintf("You have been disconnected by %s. Reason: %s", adminName, reason)
-		} else {
-			message = fmt.Sprintf("You have been disconnected by %s.", adminName)
-		}
+		return "Disconnecting..."
 	}
-
-	//nolint:errcheck // json.Marshal cannot fail for map[string]string
-	payload, _ := json.Marshal(map[string]string{
-		"message": message,
-	})
-
-	event := core.Event{
-		ID:        ulid.Make(),
-		Stream:    "session:" + targetCharID.String(),
-		Type:      core.EventTypeSystem,
-		Timestamp: time.Now(),
-		Actor: core.Actor{
-			Kind: core.ActorSystem,
-			ID:   "system",
-		},
-		Payload: payload,
+	if reason != "" {
+		return fmt.Sprintf("You have been disconnected by %s. Reason: %s", adminName, reason)
 	}
-
-	exec.Services.Broadcaster.Broadcast(event)
+	return fmt.Sprintf("You have been disconnected by %s.", adminName)
 }
 
 // findCharacterByName searches active sessions for a character with the given name.
