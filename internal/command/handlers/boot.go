@@ -48,7 +48,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		allowed := exec.Services.Access.Check(ctx, subjectID, "execute", "admin.boot")
+		allowed := exec.Services.Access().Check(ctx, subjectID, "execute", "admin.boot")
 		if !allowed {
 			//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
 			return command.ErrPermissionDenied("boot", "admin.boot")
@@ -61,7 +61,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	exec.Services.BroadcastSystemMessage(stream, message)
 
 	// End the target's session
-	if err := exec.Services.Session.EndSession(targetCharID); err != nil {
+	if err := exec.Services.Session().EndSession(targetCharID); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("message", "Unable to boot player. Session may have already ended.").
 			Wrap(err)
@@ -110,13 +110,13 @@ func formatBootMessage(adminName, reason string, isSelfBoot bool) string {
 // If unexpected errors occur during search (database failures, timeouts), returns a
 // system error instead of "not found" to avoid misleading the user.
 func findCharacterByName(ctx context.Context, exec *command.CommandExecution, subjectID, targetName string) (ulid.ULID, string, error) {
-	sessions := exec.Services.Session.ListActiveSessions()
+	sessions := exec.Services.Session().ListActiveSessions()
 
 	var errorCount int
 
 	for _, session := range sessions {
 		// Get character info for this session
-		char, err := exec.Services.World.GetCharacter(ctx, subjectID, session.CharacterID)
+		char, err := exec.Services.World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {

@@ -24,7 +24,7 @@ type playerInfo struct {
 
 // WhoHandler displays a list of connected players with idle times.
 func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
-	sessions := exec.Services.Session.ListActiveSessions()
+	sessions := exec.Services.Session().ListActiveSessions()
 
 	if len(sessions) == 0 {
 		if n, err := writeWhoOutput(exec.Output, nil); err != nil {
@@ -41,7 +41,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	var errorCount int
 	for _, session := range sessions {
 		// Try to get character info - skip if not accessible
-		char, err := exec.Services.World.GetCharacter(ctx, subjectID, session.CharacterID)
+		char, err := exec.Services.World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {

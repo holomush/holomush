@@ -34,7 +34,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "l=look",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -64,7 +64,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "look=examine",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -89,7 +89,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "l=list",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -114,7 +114,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "l=list",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -140,7 +140,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "c=a",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -159,7 +159,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "123invalid=look",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -177,7 +177,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "aliasonly",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -195,7 +195,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "=look",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -213,7 +213,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "l=",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasAddImpl(context.Background(), exec, cache, registry)
@@ -227,7 +227,7 @@ func TestAliasAddHandler(t *testing.T) {
 			PlayerID:    ulid.Make(),
 			Args:        "l=look",
 			Output:      &buf,
-			Services:    &command.Services{}, // No AliasCache
+			Services:    command.NewTestServices(command.ServicesConfig{}), // No AliasCache
 		}
 
 		err := AliasAddHandler(context.Background(), exec)
@@ -248,7 +248,7 @@ func TestAliasRemoveHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "l",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
@@ -271,7 +271,7 @@ func TestAliasRemoveHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "nonexistent",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
@@ -290,7 +290,7 @@ func TestAliasRemoveHandler(t *testing.T) {
 			PlayerID:    playerID,
 			Args:        "",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasRemoveImpl(context.Background(), exec, cache)
@@ -310,7 +310,7 @@ func TestAliasListHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasListImpl(context.Background(), exec, cache)
@@ -333,7 +333,7 @@ func TestAliasListHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			PlayerID:    playerID,
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := aliasListImpl(context.Background(), exec, cache)
@@ -355,7 +355,7 @@ func TestSysaliasAddHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "l=look",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
@@ -383,7 +383,7 @@ func TestSysaliasAddHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "look=examine",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
@@ -405,7 +405,7 @@ func TestSysaliasAddHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "l=list",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
@@ -424,7 +424,7 @@ func TestSysaliasAddHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "c=a",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
@@ -441,7 +441,7 @@ func TestSysaliasAddHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "123invalid=look",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
@@ -459,7 +459,7 @@ func TestSysaliasRemoveHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "l",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasRemoveImpl(context.Background(), exec, cache)
@@ -480,7 +480,7 @@ func TestSysaliasRemoveHandler(t *testing.T) {
 			CharacterID: ulid.Make(),
 			Args:        "nonexistent",
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasRemoveImpl(context.Background(), exec, cache)
@@ -500,7 +500,7 @@ func TestSysaliasListHandler(t *testing.T) {
 		exec := &command.CommandExecution{
 			CharacterID: ulid.Make(),
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasListImpl(context.Background(), exec, cache)
@@ -521,7 +521,7 @@ func TestSysaliasListHandler(t *testing.T) {
 		exec := &command.CommandExecution{
 			CharacterID: ulid.Make(),
 			Output:      &buf,
-			Services:    &command.Services{},
+			Services:    command.NewTestServices(command.ServicesConfig{}),
 		}
 
 		err := sysaliasListImpl(context.Background(), exec, cache)

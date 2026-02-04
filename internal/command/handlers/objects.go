@@ -66,7 +66,7 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 		return command.WorldError("Failed to create object.", err)
 	}
 
-	if err := exec.Services.World.CreateObject(ctx, subjectID, obj); err != nil {
+	if err := exec.Services.World().CreateObject(ctx, subjectID, obj); err != nil {
 		slog.ErrorContext(ctx, "create object: CreateObject failed",
 			"character_id", exec.CharacterID,
 			"object_name", name,
@@ -92,7 +92,7 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 		return command.WorldError("Failed to create location.", err)
 	}
 
-	if err := exec.Services.World.CreateLocation(ctx, subjectID, loc); err != nil {
+	if err := exec.Services.World().CreateLocation(ctx, subjectID, loc); err != nil {
 		slog.ErrorContext(ctx, "create location: CreateLocation failed",
 			"character_id", exec.CharacterID,
 			"location_name", name,
@@ -227,7 +227,7 @@ func applyProperty(ctx context.Context, exec *command.CommandExecution, entityTy
 }
 
 func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
-	loc, err := exec.Services.World.GetLocation(ctx, subjectID, entityID)
+	loc, err := exec.Services.World().GetLocation(ctx, subjectID, entityID)
 	if err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
@@ -247,7 +247,7 @@ func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution
 			With("property", propName).
 			Errorf("property %s not applicable to location", propName)
 	}
-	if err := exec.Services.World.UpdateLocation(ctx, subjectID, loc); err != nil {
+	if err := exec.Services.World().UpdateLocation(ctx, subjectID, loc); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
 			With("entity_id", entityID.String()).
@@ -259,7 +259,7 @@ func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution
 }
 
 func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
-	obj, err := exec.Services.World.GetObject(ctx, subjectID, entityID)
+	obj, err := exec.Services.World().GetObject(ctx, subjectID, entityID)
 	if err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
@@ -279,7 +279,7 @@ func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, 
 			With("property", propName).
 			Errorf("property %s not applicable to object", propName)
 	}
-	if err := exec.Services.World.UpdateObject(ctx, subjectID, obj); err != nil {
+	if err := exec.Services.World().UpdateObject(ctx, subjectID, obj); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
 			With("entity_id", entityID.String()).

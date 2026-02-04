@@ -29,7 +29,7 @@ func TestWallHandler_NoArgs(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "",
 		Output:        &buf,
-		Services:      &command.Services{},
+		Services:      command.NewTestServices(command.ServicesConfig{}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -51,7 +51,7 @@ func TestWallHandler_WhitespaceOnlyArgs(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "   ",
 		Output:        &buf,
-		Services:      &command.Services{},
+		Services:      command.NewTestServices(command.ServicesConfig{}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -93,11 +93,11 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Server going down in 5 minutes",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -141,11 +141,11 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Test message",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -185,11 +185,11 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Nobody will hear this",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -220,11 +220,11 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Important announcement",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -260,11 +260,11 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Test",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -304,11 +304,11 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Logged message",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -336,11 +336,11 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Test",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			Access:  accessControl,
 			// Broadcaster is nil
-		},
+		}),
 	}
 
 	// Should not panic, but also won't broadcast
@@ -372,11 +372,11 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "  Message with   extra   spaces  ",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -412,11 +412,11 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "info Test message",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -452,11 +452,11 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "warning Server maintenance soon",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -492,11 +492,11 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "critical EMERGENCY: Server going down NOW",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -532,11 +532,11 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "crit Database issue detected",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)
@@ -572,11 +572,11 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Hello everyone", // No urgency prefix, defaults to info
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := WallHandler(context.Background(), exec)

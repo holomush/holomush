@@ -48,7 +48,7 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Get all active sessions
-	sessions := exec.Services.Session.ListActiveSessions()
+	sessions := exec.Services.Session().ListActiveSessions()
 
 	// Format the announcement message
 	prefix := urgencyPrefixes[urgency]

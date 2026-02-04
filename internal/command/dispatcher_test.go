@@ -836,7 +836,7 @@ func TestDispatcher_NilServices(t *testing.T) {
 		Capabilities: nil,
 		Handler: func(_ context.Context, exec *CommandExecution) error {
 			// This would panic if Services is nil
-			_ = exec.Services.World
+			_ = exec.Services.World()
 			return nil
 		},
 		Source: "core",

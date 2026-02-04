@@ -32,7 +32,7 @@ func TestWhoHandler_NoConnectedPlayers(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services:    &command.Services{Session: sessionMgr},
+		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionMgr}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -75,10 +75,10 @@ func TestWhoHandler_SinglePlayer(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -131,10 +131,10 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -184,10 +184,10 @@ func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -239,10 +239,10 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -331,10 +331,10 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -398,10 +398,10 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -450,10 +450,10 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -505,10 +505,10 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -556,10 +556,10 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)
@@ -630,10 +630,10 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: executorID,
 		Output:      &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := WhoHandler(context.Background(), exec)

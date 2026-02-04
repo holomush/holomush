@@ -98,7 +98,7 @@ func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
 		LocationID:  fromLocationID,
 		Args:        "north",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)
@@ -184,7 +184,7 @@ func TestMoveHandler_MatchesExitAlias(t *testing.T) {
 		LocationID:  fromLocationID,
 		Args:        "n", // Using alias
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)
@@ -226,7 +226,7 @@ func TestMoveHandler_InvalidDirectionReturnsError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "south", // Invalid - no south exit
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)
@@ -263,7 +263,7 @@ func TestMoveHandler_NoExitsReturnsError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "north",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := MoveHandler(context.Background(), exec)
@@ -287,7 +287,7 @@ func TestMoveHandler_NoDirectionReturnsError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := MoveHandler(context.Background(), exec)
@@ -371,7 +371,7 @@ func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
 		LocationID:  fromLocationID,
 		Args:        "NORTH", // uppercase
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)
@@ -407,7 +407,7 @@ func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "north",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := MoveHandler(context.Background(), exec)
@@ -471,7 +471,7 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 		LocationID:  fromLocationID,
 		Args:        "north",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)
@@ -517,7 +517,7 @@ func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "north",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)
@@ -604,7 +604,7 @@ func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 		LocationID:  fromLocationID,
 		Args:        "north",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = MoveHandler(context.Background(), exec)

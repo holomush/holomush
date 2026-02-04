@@ -251,20 +251,41 @@ type ServicesConfig struct {
 // Services provides access to core services for command handlers.
 //
 // Immutability Contract:
-// Services is conceptually immutable after construction via NewServices.
-// Handlers MUST NOT modify any fields or store references beyond execution.
-// Handlers MUST access services only through exec.Services within the
-// command handler's execution context. The Services struct is shared across
-// all command executions; modifying it would affect all handlers.
+// Services is immutable after construction via NewServices. All fields are
+// private with getter methods to enforce compile-time immutability.
+// Handlers MUST access services only through exec.Services getters within
+// the command handler's execution context. The Services struct is shared
+// across all command executions.
 type Services struct {
-	World       WorldService         // world model queries and mutations
-	Session     core.SessionService  // session management
-	Access      access.AccessControl // authorization checks
-	Events      core.EventStore      // event persistence
-	Broadcaster EventBroadcaster     // event broadcasting
-	AliasCache  *AliasCache          // alias management (optional, for alias commands)
-	Registry    *Registry            // command registry (optional, for alias shadow detection)
+	world       WorldService         // world model queries and mutations
+	session     core.SessionService  // session management
+	access      access.AccessControl // authorization checks
+	events      core.EventStore      // event persistence
+	broadcaster EventBroadcaster     // event broadcasting
+	aliasCache  *AliasCache          // alias management (optional, for alias commands)
+	registry    *Registry            // command registry (optional, for alias shadow detection)
 }
+
+// World returns the world service for model queries and mutations.
+func (s *Services) World() WorldService { return s.world }
+
+// Session returns the session service for session management.
+func (s *Services) Session() core.SessionService { return s.session }
+
+// Access returns the access control service for authorization checks.
+func (s *Services) Access() access.AccessControl { return s.access }
+
+// Events returns the event store for event persistence.
+func (s *Services) Events() core.EventStore { return s.events }
+
+// Broadcaster returns the event broadcaster for broadcasting events.
+func (s *Services) Broadcaster() EventBroadcaster { return s.broadcaster }
+
+// AliasCache returns the alias cache for alias management (may be nil).
+func (s *Services) AliasCache() *AliasCache { return s.aliasCache }
+
+// Registry returns the command registry for alias shadow detection (may be nil).
+func (s *Services) Registry() *Registry { return s.registry }
 
 // NewServices creates a validated Services instance.
 // Returns an error if any required service is nil.
@@ -296,13 +317,13 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 	}
 
 	return &Services{
-		World:       cfg.World,
-		Session:     cfg.Session,
-		Access:      cfg.Access,
-		Events:      cfg.Events,
-		Broadcaster: cfg.Broadcaster,
-		AliasCache:  cfg.AliasCache,
-		Registry:    cfg.Registry,
+		world:       cfg.World,
+		session:     cfg.Session,
+		access:      cfg.Access,
+		events:      cfg.Events,
+		broadcaster: cfg.Broadcaster,
+		aliasCache:  cfg.AliasCache,
+		registry:    cfg.Registry,
 	}, nil
 }
 
@@ -310,7 +331,7 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 // This is a convenience method for handlers that need to send system messages.
 // If the Broadcaster is nil, this method is a no-op.
 func (s *Services) BroadcastSystemMessage(stream, message string) {
-	if s.Broadcaster == nil {
+	if s.broadcaster == nil {
 		return
 	}
 
@@ -331,5 +352,21 @@ func (s *Services) BroadcastSystemMessage(stream, message string) {
 		Payload: payload,
 	}
 
-	s.Broadcaster.Broadcast(event)
+	s.broadcaster.Broadcast(event)
+}
+
+// NewTestServices creates a Services instance for testing purposes.
+// Unlike NewServices, this function does not validate that required services are non-nil,
+// allowing tests to create minimal Services with only the dependencies they need.
+// This function should only be used in tests.
+func NewTestServices(cfg ServicesConfig) *Services {
+	return &Services{
+		world:       cfg.World,
+		session:     cfg.Session,
+		access:      cfg.Access,
+		events:      cfg.Events,
+		broadcaster: cfg.Broadcaster,
+		aliasCache:  cfg.AliasCache,
+		registry:    cfg.Registry,
+	}
 }

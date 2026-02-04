@@ -26,7 +26,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 	subjectID := "char:" + exec.CharacterID.String()
 
 	// Get exits from current location
-	exits, err := exec.Services.World.GetExitsByLocation(ctx, subjectID, exec.LocationID)
+	exits, err := exec.Services.World().GetExitsByLocation(ctx, subjectID, exec.LocationID)
 	if err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("message", "You can't see any way out.").
@@ -47,14 +47,14 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 		}
 
 		// Move the character
-		if err := exec.Services.World.MoveCharacter(ctx, subjectID, exec.CharacterID, exit.ToLocationID); err != nil {
+		if err := exec.Services.World().MoveCharacter(ctx, subjectID, exec.CharacterID, exit.ToLocationID); err != nil {
 			return oops.Code(command.CodeWorldError).
 				With("message", "Something prevents you from going that way.").
 				Wrap(err)
 		}
 
 		// Show the new location
-		loc, err := exec.Services.World.GetLocation(ctx, subjectID, exit.ToLocationID)
+		loc, err := exec.Services.World().GetLocation(ctx, subjectID, exit.ToLocationID)
 		if err != nil {
 			return oops.Code(command.CodeWorldError).
 				With("message", "You arrive somewhere strange...").

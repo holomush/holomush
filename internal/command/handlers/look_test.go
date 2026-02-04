@@ -50,7 +50,7 @@ func TestLookHandler_OutputsRoomNameAndDescription(t *testing.T) {
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := LookHandler(context.Background(), exec)
@@ -85,7 +85,7 @@ func TestLookHandler_ReturnsWorldErrorOnFailure(t *testing.T) {
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := LookHandler(context.Background(), exec)
@@ -117,7 +117,7 @@ func TestLookHandler_ReturnsWorldErrorOnAccessDenied(t *testing.T) {
 		CharacterID: characterID,
 		LocationID:  locationID,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := LookHandler(context.Background(), exec)

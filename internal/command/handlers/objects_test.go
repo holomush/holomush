@@ -47,7 +47,7 @@ func TestCreateHandler_Object(t *testing.T) {
 		LocationID:  locationID,
 		Args:        `object "Iron Sword"`,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := CreateHandler(context.Background(), exec)
@@ -85,7 +85,7 @@ func TestCreateHandler_Location(t *testing.T) {
 		LocationID:  locationID,
 		Args:        `location "Secret Room"`,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := CreateHandler(context.Background(), exec)
@@ -112,7 +112,7 @@ func TestCreateHandler_InvalidType(t *testing.T) {
 		LocationID:  locationID,
 		Args:        `invalid "Test"`,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := CreateHandler(context.Background(), exec)
@@ -150,7 +150,7 @@ func TestCreateHandler_InvalidSyntax(t *testing.T) {
 				LocationID:  locationID,
 				Args:        tt.args,
 				Output:      &buf,
-				Services:    &command.Services{World: worldService},
+				Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 			}
 
 			err := CreateHandler(context.Background(), exec)
@@ -202,7 +202,7 @@ func TestSetHandler_Description(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of here to A cozy room.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := SetHandler(context.Background(), exec)
@@ -250,7 +250,7 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "desc of here to Short description.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := SetHandler(context.Background(), exec)
@@ -277,7 +277,7 @@ func TestSetHandler_PropertyNotFound(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "xyz of here to value",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when property is not found
@@ -307,7 +307,7 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of nonexistent to value",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when target is not found
@@ -343,7 +343,7 @@ func TestSetHandler_InvalidIDFormat(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of #invalid-id to value",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when ID is invalid
@@ -391,7 +391,7 @@ func TestSetHandler_InvalidSyntax(t *testing.T) {
 				LocationID:  locationID,
 				Args:        tt.args,
 				Output:      &buf,
-				Services:    &command.Services{World: worldService},
+				Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 			}
 
 			err := SetHandler(context.Background(), exec)
@@ -443,7 +443,7 @@ func TestSetHandler_SetName(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "name of here to New Room Name",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := SetHandler(context.Background(), exec)
@@ -494,7 +494,7 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of #" + objectID.String() + " to A shiny object.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err = SetHandler(context.Background(), exec)
@@ -529,7 +529,7 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        `object "Iron Sword"`,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when service fails
@@ -566,7 +566,7 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 		LocationID:  locationID,
 		Args:        `location "Secret Room"`,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when service fails
@@ -616,7 +616,7 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of here to A cozy room.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when service fails
@@ -682,7 +682,7 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of #" + objectID.String() + " to A shiny object.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	// Handler should return error (not nil) when service fails
@@ -735,7 +735,7 @@ func TestSetHandler_GetLocationFailure(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of here to A cozy room.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := SetHandler(context.Background(), exec)
@@ -785,7 +785,7 @@ func TestSetHandler_GetObjectFailure(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of #" + objectID.String() + " to A shiny object.",
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := SetHandler(context.Background(), exec)
@@ -828,7 +828,7 @@ func TestSetHandler_UnsupportedEntityType(t *testing.T) {
 		LocationID:  locationID,
 		Args:        "description of me to Some bio text.", // "me" resolves to character type
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := SetHandler(context.Background(), exec)
@@ -875,7 +875,7 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 		LocationID:  locationID,
 		Args:        `object "` + longName + `"`,
 		Output:      &buf,
-		Services:    &command.Services{World: worldService},
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
 	}
 
 	err := CreateHandler(context.Background(), exec)

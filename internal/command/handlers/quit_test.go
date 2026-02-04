@@ -27,7 +27,7 @@ func TestQuitHandler_OutputsGoodbyeMessage(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services:    &command.Services{Session: sessionManager},
+		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
 	}
 
 	err := QuitHandler(context.Background(), exec)
@@ -49,7 +49,7 @@ func TestQuitHandler_EndsSession(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services:    &command.Services{Session: sessionManager},
+		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
 	}
 
 	err := QuitHandler(context.Background(), exec)
@@ -69,7 +69,7 @@ func TestQuitHandler_ReturnsErrorOnSessionEndFailure(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services:    &command.Services{Session: sessionManager},
+		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
 	}
 
 	err := QuitHandler(context.Background(), exec)
@@ -90,7 +90,7 @@ func TestQuitHandler_OutputsGoodbyeBeforeError(t *testing.T) {
 	exec := &command.CommandExecution{
 		CharacterID: characterID,
 		Output:      &buf,
-		Services:    &command.Services{Session: sessionManager},
+		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionManager}),
 	}
 
 	// Even though there's an error, goodbye should still be output

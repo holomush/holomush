@@ -40,10 +40,10 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "", // No delay = immediate
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := ShutdownHandler(context.Background(), exec)
@@ -84,10 +84,10 @@ func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "60", // 60 second delay
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := ShutdownHandler(context.Background(), exec)
@@ -130,9 +130,9 @@ func TestShutdownHandler_InvalidDelay_NotANumber(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "abc", // Invalid delay
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access: accessControl,
-		},
+		}),
 	}
 
 	err := ShutdownHandler(context.Background(), exec)
@@ -157,9 +157,9 @@ func TestShutdownHandler_InvalidDelay_Negative(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "-5", // Negative delay
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access: accessControl,
-		},
+		}),
 	}
 
 	err := ShutdownHandler(context.Background(), exec)
@@ -191,10 +191,10 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "30",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := ShutdownHandler(context.Background(), exec)
@@ -223,10 +223,10 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := ShutdownHandler(context.Background(), exec)
@@ -258,10 +258,10 @@ func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Access:      accessControl,
 			Broadcaster: nil, // No broadcaster
-		},
+		}),
 	}
 
 	// Should still work, just skip broadcast

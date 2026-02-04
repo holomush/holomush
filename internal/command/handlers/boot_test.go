@@ -34,7 +34,7 @@ func TestBootHandler_NoArgs(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "",
 		Output:        &buf,
-		Services:      &command.Services{},
+		Services:      command.NewTestServices(command.ServicesConfig{}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -82,11 +82,11 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Admin",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			World:       worldService,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -141,11 +141,11 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Admin going to bed",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			World:       worldService,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -213,11 +213,11 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 			Access:  accessControl,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -269,10 +269,10 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "NonexistentPlayer",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -351,12 +351,12 @@ func TestBootHandler_Success(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			World:       worldService,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -438,12 +438,12 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker Being disruptive",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			World:       worldService,
 			Access:      accessControl,
 			Broadcaster: broadcaster,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -528,11 +528,11 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "troublemaker", // lowercase
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 			Access:  accessControl,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -609,11 +609,11 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 			Access:  accessControl,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -695,11 +695,11 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: mockSessionMgr,
 			World:   worldService,
 			Access:  accessControl,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -815,11 +815,11 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 			Access:  accessControl,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -901,10 +901,10 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 		PlayerID:      playerID,
 		Args:          "NonexistentPlayer", // Target doesn't exist, but errors occurred
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)
@@ -1008,11 +1008,11 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 		PlayerID:      playerID,
 		Args:          "Troublemaker",
 		Output:        &buf,
-		Services: &command.Services{
+		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
 			Access:  accessControl,
-		},
+		}),
 	}
 
 	err := BootHandler(context.Background(), exec)

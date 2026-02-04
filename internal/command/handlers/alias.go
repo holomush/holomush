@@ -33,8 +33,8 @@ func errNoAliasCache() error {
 //   - If alias shadows a system alias
 //   - If alias replaces an existing player alias
 func AliasAddHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache
-	registry := exec.Services.Registry
+	cache := exec.Services.AliasCache()
+	registry := exec.Services.Registry()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -90,7 +90,7 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 // AliasRemoveHandler removes a player alias.
 // Usage: alias remove <alias>
 func AliasRemoveHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache
+	cache := exec.Services.AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -122,7 +122,7 @@ func aliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cache 
 // AliasListHandler lists all player aliases.
 // Usage: alias list
 func AliasListHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache
+	cache := exec.Services.AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -163,8 +163,8 @@ func aliasListImpl(ctx context.Context, exec *command.CommandExecution, cache *c
 //
 // Warns if shadowing a command, but BLOCKS if shadowing another system alias.
 func SysaliasAddHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache
-	registry := exec.Services.Registry
+	cache := exec.Services.AliasCache()
+	registry := exec.Services.Registry()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -215,7 +215,7 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 // SysaliasRemoveHandler removes a system alias.
 // Usage: sysalias remove <alias>
 func SysaliasRemoveHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache
+	cache := exec.Services.AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()
@@ -247,7 +247,7 @@ func sysaliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cac
 // SysaliasListHandler lists all system aliases.
 // Usage: sysalias list
 func SysaliasListHandler(ctx context.Context, exec *command.CommandExecution) error {
-	cache := exec.Services.AliasCache
+	cache := exec.Services.AliasCache()
 
 	if cache == nil {
 		return errNoAliasCache()

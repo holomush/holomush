@@ -55,12 +55,12 @@ func TestCommandExecution_HasRequiredFields(t *testing.T) {
 }
 
 func TestServices_HasAllDependencies(t *testing.T) {
-	svc := &Services{}
+	svc := NewTestServices(ServicesConfig{})
 
-	assert.Nil(t, svc.World, "World service should be nil when not set")
-	assert.Nil(t, svc.Session, "Session service should be nil when not set")
-	assert.Nil(t, svc.Access, "Access service should be nil when not set")
-	assert.Nil(t, svc.Events, "Events service should be nil when not set")
+	assert.Nil(t, svc.World(), "World service should be nil when not set")
+	assert.Nil(t, svc.Session(), "Session service should be nil when not set")
+	assert.Nil(t, svc.Access(), "Access service should be nil when not set")
+	assert.Nil(t, svc.Events(), "Events service should be nil when not set")
 }
 
 func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
@@ -138,11 +138,11 @@ func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
 		Broadcaster: broadcaster,
 	})
 	require.NoError(t, err)
-	assert.Same(t, worldSvc, svc.World)
-	assert.Same(t, sessionSvc, svc.Session)
-	assert.Same(t, accessCtrl, svc.Access)
-	assert.Same(t, eventStore, svc.Events)
-	assert.Same(t, broadcaster, svc.Broadcaster)
+	assert.Same(t, worldSvc, svc.World())
+	assert.Same(t, sessionSvc, svc.Session())
+	assert.Same(t, accessCtrl, svc.Access())
+	assert.Same(t, eventStore, svc.Events())
+	assert.Same(t, broadcaster, svc.Broadcaster())
 }
 
 func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
@@ -266,7 +266,7 @@ func TestNewCommandExecution_ValidInput_ReturnsExecution(t *testing.T) {
 	playerID := ulid.Make()
 	sessionID := ulid.Make()
 	output := &mockWriter{}
-	services := &Services{}
+	services := NewTestServices(ServicesConfig{})
 
 	exec, err := NewCommandExecution(CommandExecutionConfig{
 		CharacterID:   charID,
@@ -294,7 +294,7 @@ func TestNewCommandExecution_ValidInput_ReturnsExecution(t *testing.T) {
 
 func TestNewCommandExecution_ZeroCharacterID_ReturnsError(t *testing.T) {
 	output := &mockWriter{}
-	services := &Services{}
+	services := NewTestServices(ServicesConfig{})
 
 	_, err := NewCommandExecution(CommandExecutionConfig{
 		CharacterID: ulid.ULID{}, // zero value
@@ -320,7 +320,7 @@ func TestNewCommandExecution_NilServices_ReturnsError(t *testing.T) {
 }
 
 func TestNewCommandExecution_NilOutput_ReturnsError(t *testing.T) {
-	services := &Services{}
+	services := NewTestServices(ServicesConfig{})
 
 	_, err := NewCommandExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
@@ -335,7 +335,7 @@ func TestNewCommandExecution_NilOutput_ReturnsError(t *testing.T) {
 func TestNewCommandExecution_MinimalValid_ReturnsExecution(t *testing.T) {
 	charID := ulid.Make()
 	output := &mockWriter{}
-	services := &Services{}
+	services := NewTestServices(ServicesConfig{})
 
 	exec, err := NewCommandExecution(CommandExecutionConfig{
 		CharacterID: charID,
@@ -369,9 +369,9 @@ func TestServices_BroadcastSystemMessage_NilBroadcaster_IsNoOp(t *testing.T) {
 	t.Parallel()
 
 	// Create services with nil Broadcaster
-	svc := &Services{
+	svc := NewTestServices(ServicesConfig{
 		Broadcaster: nil,
-	}
+	})
 
 	// Should not panic - this is a silent no-op
 	assert.NotPanics(t, func() {
@@ -446,9 +446,9 @@ func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {
 	// Subscribe before broadcasting
 	ch := broadcaster.Subscribe(stream)
 
-	svc := &Services{
+	svc := NewTestServices(ServicesConfig{
 		Broadcaster: broadcaster,
-	}
+	})
 
 	// Broadcast the message
 	svc.BroadcastSystemMessage(stream, testMessage)
