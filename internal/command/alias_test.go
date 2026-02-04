@@ -460,15 +460,10 @@ func TestAliasCache_Resolve_PrefixAlias(t *testing.T) {
 		assert.True(t, result.WasAlias)
 	})
 
-	t.Run("prefix alias not matched when command exists", func(t *testing.T) {
-		reg := NewRegistry()
-		_ = reg.Register(CommandEntry{Name: ":debug", Handler: testHandler, Source: "test"})
-
-		result := cache.Resolve(playerID, ":debug stuff", reg)
-		// Should not expand because :debug is a registered command
-		assert.Equal(t, ":debug stuff", result.Resolved)
-		assert.False(t, result.WasAlias)
-	})
+	// Note: The test case "prefix alias not matched when command exists" was removed
+	// because command names starting with special characters (like ":debug") are now
+	// invalid per ValidateCommandName. Prefix aliases like ":" will always expand
+	// since no valid command can start with a non-letter character.
 }
 
 func TestAliasCache_ChainedExpansionPreservesArgs(t *testing.T) {

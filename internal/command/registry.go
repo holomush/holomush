@@ -26,10 +26,13 @@ func NewRegistry() *Registry {
 // If a command with the same name exists, it is overwritten and a warning is logged.
 // This follows ADR 0006 and ADR 0008: last-loaded wins with warning.
 //
-// Returns an error if the command entry is invalid (empty name or nil handler).
+// Returns an error if the command entry is invalid (empty name, invalid name format, or nil handler).
 func (r *Registry) Register(entry CommandEntry) error {
 	if entry.Name == "" {
 		return ErrEmptyCommandName
+	}
+	if err := ValidateCommandName(entry.Name); err != nil {
+		return err
 	}
 	if entry.Handler == nil {
 		return ErrNilHandler

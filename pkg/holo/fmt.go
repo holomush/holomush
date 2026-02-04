@@ -313,6 +313,20 @@ func (st StyledText) renderSegmentANSI(buf *strings.Builder, seg segment) {
 	buf.WriteString(ansiReset)
 }
 
+// RenderPlain renders the styled text as plain text without any formatting.
+// Use RenderPlain for non-ANSI clients (web interfaces, logs, accessibility tools)
+// where escape codes would be displayed literally or cause problems.
+// Use RenderANSI for terminal clients that support ANSI escape sequences.
+func (st StyledText) RenderPlain() string {
+	var buf strings.Builder
+
+	for _, seg := range st.segments {
+		buf.WriteString(seg.text)
+	}
+
+	return buf.String()
+}
+
 // Append combines two StyledText values.
 func (st StyledText) Append(other StyledText) StyledText {
 	return StyledText{

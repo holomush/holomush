@@ -191,3 +191,56 @@ func TestRegistry_Register_NilHandler(t *testing.T) {
 
 	assert.ErrorIs(t, err, ErrNilHandler)
 }
+
+func TestRegistry_Register_InvalidName(t *testing.T) {
+	reg := NewRegistry()
+
+	tests := []struct {
+		name        string
+		commandName string
+		wantErr     bool
+	}{
+		{
+			name:        "starts with digit",
+			commandName: "1test",
+			wantErr:     true,
+		},
+		{
+			name:        "contains space",
+			commandName: "te st",
+			wantErr:     true,
+		},
+		{
+			name:        "too long",
+			commandName: "abcdefghijklmnopqrstuvwxyz",
+			wantErr:     true,
+		},
+		{
+			name:        "valid name",
+			commandName: "test",
+			wantErr:     false,
+		},
+		{
+			name:        "valid with special chars",
+			commandName: "test!",
+			wantErr:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := reg.Register(CommandEntry{
+				Name:    tt.commandName,
+				Handler: noopHandler,
+				Source:  "test",
+			})
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "name")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

@@ -410,6 +410,145 @@ func TestPlainText(t *testing.T) {
 	assert.Equal(t, "hello world", text.RenderANSI())
 }
 
+func TestStyledText_RenderPlain(t *testing.T) {
+	tests := []struct {
+		name      string
+		styled    StyledText
+		wantPlain string
+	}{
+		{
+			name:      "bold text renders as plain",
+			styled:    Fmt.Bold("important"),
+			wantPlain: "important",
+		},
+		{
+			name:      "italic text renders as plain",
+			styled:    Fmt.Italic("whispered"),
+			wantPlain: "whispered",
+		},
+		{
+			name:      "dim text renders as plain",
+			styled:    Fmt.Dim("(quietly)"),
+			wantPlain: "(quietly)",
+		},
+		{
+			name:      "underline text renders as plain",
+			styled:    Fmt.Underline("emphasized"),
+			wantPlain: "emphasized",
+		},
+		{
+			name:      "colored text renders as plain",
+			styled:    Fmt.Color("red", "danger!"),
+			wantPlain: "danger!",
+		},
+		{
+			name:      "plain text unchanged",
+			styled:    PlainText("hello world"),
+			wantPlain: "hello world",
+		},
+		{
+			name:      "empty styled text",
+			styled:    StyledText{},
+			wantPlain: "",
+		},
+		{
+			name:      "combined segments render as plain",
+			styled:    Fmt.Bold("hello").AppendText(" ").Append(Fmt.Italic("world")),
+			wantPlain: "hello world",
+		},
+		{
+			name:      "list renders as plain",
+			styled:    Fmt.List([]string{"sword", "shield", "potion"}),
+			wantPlain: "  - sword\n  - shield\n  - potion",
+		},
+		{
+			name:      "header renders as plain",
+			styled:    Fmt.Header("Inventory"),
+			wantPlain: "Inventory",
+		},
+		{
+			name:      "separator renders as plain",
+			styled:    Fmt.Separator(),
+			wantPlain: "----------------------------------------",
+		},
+		{
+			name:      "text with newlines preserved",
+			styled:    PlainText("line1\nline2\nline3"),
+			wantPlain: "line1\nline2\nline3",
+		},
+		{
+			name:      "text with multiple spaces preserved",
+			styled:    PlainText("hello    world"),
+			wantPlain: "hello    world",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.styled.RenderPlain()
+			assert.Equal(t, tt.wantPlain, got)
+		})
+	}
+}
+
+func TestStyledText_RenderPlain_vs_RenderANSI(t *testing.T) {
+	// RenderPlain should produce the same text content as RenderANSI
+	// but without any ANSI escape codes
+
+	tests := []struct {
+		name      string
+		styled    StyledText
+		wantPlain string
+	}{
+		{
+			name:      "bold",
+			styled:    Fmt.Bold("test"),
+			wantPlain: "test",
+		},
+		{
+			name:      "italic",
+			styled:    Fmt.Italic("test"),
+			wantPlain: "test",
+		},
+		{
+			name:      "dim",
+			styled:    Fmt.Dim("test"),
+			wantPlain: "test",
+		},
+		{
+			name:      "underline",
+			styled:    Fmt.Underline("test"),
+			wantPlain: "test",
+		},
+		{
+			name:      "colored",
+			styled:    Fmt.Color("blue", "test"),
+			wantPlain: "test",
+		},
+		{
+			name:      "combined styles",
+			styled:    Fmt.Bold("hello").AppendText(" ").Append(Fmt.Color("red", "world")),
+			wantPlain: "hello world",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plain := tt.styled.RenderPlain()
+			ansi := tt.styled.RenderANSI()
+
+			// Plain should match expected text exactly
+			assert.Equal(t, tt.wantPlain, plain)
+
+			// Plain should not contain any ANSI escape codes
+			assert.NotContains(t, plain, "\x1b[", "RenderPlain should not contain ANSI escape codes")
+
+			// ANSI should contain escape codes (for styled text)
+			assert.Contains(t, ansi, "\x1b[", "RenderANSI should contain ANSI escape codes for styled text")
+		})
+	}
+}
+
 // Helper function to split rendered output into lines
 func splitLines(s string) []string {
 	if s == "" {
