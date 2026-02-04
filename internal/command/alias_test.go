@@ -5,8 +5,10 @@ package command
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -944,6 +946,157 @@ func TestAliasCache_LoadPlayerAliases_TrustsInput(t *testing.T) {
 	// Verify aliases were loaded
 	result := cache.Resolve(playerID, "alpha", nil)
 	assert.True(t, result.WasAlias)
+}
+
+func TestAliasCache_Resolve_PrefixAliasEdgeCases(t *testing.T) {
+	// Tests for prefix aliases with only the prefix character and no following text.
+	// In MUSH tradition:
+	//   ":" (colon)     → pose   (pose action, space between name and text)
+	//   ";" (semicolon) → pose;  (nospace pose, text appended directly to name)
+	//   "\" (backslash) → emit   (freeform emit, raw text broadcast)
+	//
+	// When only the prefix character is entered with no text, the resolution
+	// should expand to the alias target since the prefix character alone is
+	// treated as a regular alias match (not a prefix match, which requires
+	// len(firstWord) > 1).
+	cache := NewAliasCache()
+	playerID := ulid.Make()
+
+	cache.LoadSystemAliases(map[string]string{
+		":":  "pose",
+		";":  "pose;",
+		"\\": "emit",
+	})
+
+	tests := []struct {
+		name          string
+		input         string
+		wantResolved  string
+		wantWasAlias  bool
+		wantAliasUsed string
+	}{
+		{
+			name:          "colon alone resolves to pose",
+			input:         ":",
+			wantResolved:  "pose",
+			wantWasAlias:  true,
+			wantAliasUsed: ":",
+		},
+		{
+			name:          "semicolon alone resolves to nospace pose",
+			input:         ";",
+			wantResolved:  "pose;",
+			wantWasAlias:  true,
+			wantAliasUsed: ";",
+		},
+		{
+			name:          "backslash alone resolves to emit",
+			input:         "\\",
+			wantResolved:  "emit",
+			wantWasAlias:  true,
+			wantAliasUsed: "\\",
+		},
+		{
+			name:          "colon with text uses prefix expansion",
+			input:         ":waves",
+			wantResolved:  "pose waves",
+			wantWasAlias:  true,
+			wantAliasUsed: ":",
+		},
+		{
+			name:          "semicolon with text uses prefix expansion",
+			input:         ";'s eyes widen",
+			wantResolved:  "pose; 's eyes widen",
+			wantWasAlias:  true,
+			wantAliasUsed: ";",
+		},
+		{
+			name:          "backslash with text uses prefix expansion",
+			input:         "\\A bolt of lightning strikes!",
+			wantResolved:  "emit A bolt of lightning strikes!",
+			wantWasAlias:  true,
+			wantAliasUsed: "\\",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cache.Resolve(playerID, tt.input, nil)
+			assert.Equal(t, tt.wantResolved, result.Resolved)
+			assert.Equal(t, tt.wantWasAlias, result.WasAlias)
+			if tt.wantAliasUsed != "" {
+				assert.Equal(t, tt.wantAliasUsed, result.AliasUsed)
+			}
+		})
+	}
+}
+
+// TestAliasCache_Resolve_PerformanceTarget asserts that alias resolution from
+// cache completes within acceptable latency bounds.
+//
+// The spec states: "Alias resolution from cache MUST complete in <1us".
+// This test uses a generous 10us threshold to account for CI variability
+// (shared runners, virtualization overhead, CPU throttling). The benchmark
+// BenchmarkAliasCache_Resolve provides more precise measurements for local
+// development.
+//
+// Hardware assumptions: This test is designed to pass on modern hardware
+// (2020+ x86_64 or ARM64) with at least 1 GHz clock speed. CI environments
+// with severely constrained CPU (e.g., burstable instances under load) may
+// need the threshold adjusted.
+func TestAliasCache_Resolve_PerformanceTarget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping performance test in short mode")
+	}
+
+	cache := NewAliasCache()
+	playerID := ulid.MustNew(1, nil)
+	registry := NewRegistry()
+
+	// Set up realistic alias data
+	cache.LoadSystemAliases(map[string]string{
+		"l": "look",
+		"n": "north",
+		"s": "south",
+		"e": "east",
+		"w": "west",
+	})
+	_ = cache.SetPlayerAlias(playerID, "aa", "attack all")
+	_ = registry.Register(CommandEntry{Name: "look", Source: "core"})
+
+	// Warm up the cache (ensure any lazy initialization is done)
+	for range 100 {
+		cache.Resolve(playerID, "n", registry)
+	}
+
+	// Run enough iterations to get a stable measurement
+	const iterations = 10000
+	const maxP99Ns = 10_000 // 10us threshold (spec says <1us, generous for CI)
+
+	// Collect individual timings for p99 calculation
+	timings := make([]int64, iterations)
+	for i := range iterations {
+		start := time.Now()
+		cache.Resolve(playerID, "n", registry)
+		timings[i] = time.Since(start).Nanoseconds()
+	}
+
+	// Sort and compute p99
+	slices.Sort(timings)
+	p99Index := int(float64(iterations) * 0.99)
+	p99Ns := timings[p99Index]
+
+	t.Logf("alias resolution p99=%dns, median=%dns, max=%dns (threshold=%dns)",
+		p99Ns,
+		timings[iterations/2],
+		timings[iterations-1],
+		maxP99Ns,
+	)
+
+	if p99Ns > int64(maxP99Ns) {
+		t.Errorf("alias resolution p99 latency %dns exceeds %dns threshold",
+			p99Ns, maxP99Ns)
+	}
 }
 
 func BenchmarkAliasCache_Resolve(b *testing.B) {
