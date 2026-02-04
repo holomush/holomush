@@ -22,6 +22,8 @@ const (
 	CodeTargetNotFound    = "TARGET_NOT_FOUND"
 	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
 	CodeNilServices       = "NIL_SERVICES"
+	CodeInvalidName       = "INVALID_NAME"
+	CodeNoAliasCache      = "NO_ALIAS_CACHE"
 )
 
 // Sentinel errors for special conditions.
@@ -161,6 +163,12 @@ func PlayerMessage(err error) string {
 		return "Target not found."
 	case CodeNilServices:
 		return "Internal error: services unavailable."
+	case CodeInvalidName:
+		// INVALID_NAME errors contain helpful context in the message itself
+		// (e.g., "alias name cannot be empty", "alias name exceeds maximum length of 20")
+		return err.Error()
+	case CodeNoAliasCache:
+		return "Alias system is not available. Contact the server administrator."
 	default:
 		slog.Warn("unhandled error code in PlayerMessage",
 			"code", oopsErr.Code(),

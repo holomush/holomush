@@ -141,6 +141,26 @@ func TestPlayerMessage(t *testing.T) {
 			err:      nil,
 			expected: "Something went wrong. Try again.",
 		},
+		{
+			name:     "invalid name - empty alias",
+			err:      ValidateAliasName(""),
+			expected: "alias name cannot be empty",
+		},
+		{
+			name:     "invalid name - too long",
+			err:      ValidateAliasName("thisaliasnameiswaywaytoolong"),
+			expected: "alias name exceeds maximum length of 20",
+		},
+		{
+			name:     "invalid name - bad pattern",
+			err:      ValidateAliasName("123bad"),
+			expected: "alias name must start with a letter and contain only letters, digits, or _!?@#$%^+-",
+		},
+		{
+			name:     "no alias cache",
+			err:      oops.Code(CodeNoAliasCache).Errorf("alias operations require a configured alias cache"),
+			expected: "Alias system is not available. Contact the server administrator.",
+		},
 	}
 
 	for _, tt := range tests {

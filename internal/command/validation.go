@@ -35,13 +35,13 @@ func ValidateAliasName(name string) error {
 func validateName(name, kind string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
-		return oops.Code("INVALID_NAME").
+		return oops.Code(CodeInvalidName).
 			With("kind", kind).
 			Errorf("%s name cannot be empty", kind)
 	}
 
 	if len(trimmed) > MaxNameLength {
-		return oops.Code("INVALID_NAME").
+		return oops.Code(CodeInvalidName).
 			With("kind", kind).
 			With("length", len(trimmed)).
 			With("max", MaxNameLength).
@@ -49,7 +49,7 @@ func validateName(name, kind string) error {
 	}
 
 	if !namePattern.MatchString(trimmed) {
-		return oops.Code("INVALID_NAME").
+		return oops.Code(CodeInvalidName).
 			With("kind", kind).
 			With("name", trimmed).
 			Errorf("%s name must start with a letter and contain only letters, digits, or _!?@#$%%^+-", kind)
