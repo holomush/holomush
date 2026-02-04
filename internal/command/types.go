@@ -28,6 +28,9 @@ type WorldService interface {
 	// GetExitsByLocation retrieves all exits from a location after checking read authorization.
 	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
 
+	// CreateExit creates a new exit after checking write authorization.
+	CreateExit(ctx context.Context, subjectID string, exit *world.Exit) error
+
 	// MoveCharacter moves a character to a new location.
 	MoveCharacter(ctx context.Context, subjectID string, characterID, toLocationID ulid.ULID) error
 
