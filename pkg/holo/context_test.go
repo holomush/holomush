@@ -62,6 +62,81 @@ func TestCommandContext_ZeroValue(t *testing.T) {
 	assert.Equal(t, "", ctx.PlayerID)
 }
 
+func TestCommandContext_ValidateULIDs(t *testing.T) {
+	tests := []struct {
+		name    string
+		ctx     holo.CommandContext
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "all valid ULIDs",
+			ctx: holo.CommandContext{
+				CharacterID: "01ABC123456789ABCDEFGHJKLM",
+				LocationID:  "01DEF123456789ABCDEFGHJKLM",
+				PlayerID:    "01GHI123456789ABCDEFGHJKLM",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "all empty fields are valid",
+			ctx:     holo.CommandContext{},
+			wantErr: false,
+		},
+		{
+			name: "invalid CharacterID",
+			ctx: holo.CommandContext{
+				CharacterID: "not-a-ulid",
+				LocationID:  "01DEF123456789ABCDEFGHJKLM",
+				PlayerID:    "01GHI123456789ABCDEFGHJKLM",
+			},
+			wantErr: true,
+			errMsg:  "CharacterID",
+		},
+		{
+			name: "invalid LocationID",
+			ctx: holo.CommandContext{
+				CharacterID: "01ABC123456789ABCDEFGHJKLM",
+				LocationID:  "bad",
+				PlayerID:    "01GHI123456789ABCDEFGHJKLM",
+			},
+			wantErr: true,
+			errMsg:  "LocationID",
+		},
+		{
+			name: "invalid PlayerID",
+			ctx: holo.CommandContext{
+				CharacterID: "01ABC123456789ABCDEFGHJKLM",
+				LocationID:  "01DEF123456789ABCDEFGHJKLM",
+				PlayerID:    "xyz",
+			},
+			wantErr: true,
+			errMsg:  "PlayerID",
+		},
+		{
+			name: "some empty some valid",
+			ctx: holo.CommandContext{
+				CharacterID: "01ABC123456789ABCDEFGHJKLM",
+				LocationID:  "",
+				PlayerID:    "",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.ctx.ValidateULIDs()
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestParseCommandPayload(t *testing.T) {
 	tests := []struct {
 		name     string

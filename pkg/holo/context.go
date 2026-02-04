@@ -3,7 +3,12 @@
 
 package holo
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/oklog/ulid/v2"
+)
 
 // CommandContext provides pre-parsed command data to plugin handlers.
 // This replaces brittle JSON parsing in plugins with structured access.
@@ -55,8 +60,37 @@ type commandPayload struct {
 	PlayerID      string `json:"player_id"`
 }
 
+// ValidateULIDs checks that CharacterID, LocationID, and PlayerID are valid ULID strings.
+// It returns an error listing the first invalid field found. Empty fields are considered
+// valid (they may be optional depending on the command).
+//
+// This method is useful for handlers that need to verify ULID integrity before
+// passing IDs to world services.
+func (cc CommandContext) ValidateULIDs() error {
+	fields := []struct {
+		name  string
+		value string
+	}{
+		{"CharacterID", cc.CharacterID},
+		{"LocationID", cc.LocationID},
+		{"PlayerID", cc.PlayerID},
+	}
+	for _, f := range fields {
+		if f.value == "" {
+			continue
+		}
+		if _, err := ulid.Parse(f.value); err != nil {
+			return fmt.Errorf("invalid ULID in %s: %w", f.name, err)
+		}
+	}
+	return nil
+}
+
 // ParseCommandPayload parses a JSON command payload into a CommandContext.
 // Returns a zero-value CommandContext if the payload is empty or invalid JSON.
+// ULID fields (CharacterID, LocationID, PlayerID) are stored as-is without
+// format validation. Use [CommandContext.ValidateULIDs] to verify ULID format
+// after parsing if needed.
 func ParseCommandPayload(payload string) CommandContext {
 	if payload == "" {
 		return CommandContext{}
