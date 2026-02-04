@@ -107,8 +107,12 @@ func formatBootMessage(adminName, reason string, isSelfBoot bool) string {
 
 // findCharacterByName searches active sessions for a character with the given name.
 // Returns the character ID and name if found, or an error if not found.
+// If unexpected errors occur during search (database failures, timeouts), returns a
+// system error instead of "not found" to avoid misleading the user.
 func findCharacterByName(ctx context.Context, exec *command.CommandExecution, subjectID, targetName string) (ulid.ULID, string, error) {
 	sessions := exec.Services.Session.ListActiveSessions()
+
+	var errorCount int
 
 	for _, session := range sessions {
 		// Get character info for this session
@@ -118,7 +122,8 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
-			// Log unexpected errors (database failures, timeouts, etc.) but continue searching
+			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
+			errorCount++
 			slog.Error("unexpected error looking up character",
 				"target_name", targetName,
 				"session_char_id", session.CharacterID.String(),
@@ -131,6 +136,15 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 		if strings.EqualFold(char.Name, targetName) {
 			return char.ID, char.Name, nil
 		}
+	}
+
+	// If unexpected errors occurred and no match was found, report system error
+	// rather than "not found" to avoid misleading the user.
+	// Note: We don't wrap lastErr because oops preserves the inner error's code,
+	// and we need WORLD_ERROR code for PlayerMessage to return our custom message.
+	if errorCount > 0 {
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to system error. Try again.", nil)
 	}
 
 	//nolint:wrapcheck // ErrTargetNotFound creates a structured oops error

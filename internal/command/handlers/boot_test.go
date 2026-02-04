@@ -843,6 +843,85 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// might not have been processed before the target was found.
 }
 
+func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testing.T) {
+	executorID := ulid.Make()
+	errorCharID := ulid.Make()
+	execConn := ulid.Make()
+	errorConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(errorCharID, errorConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "Admin",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// Capture logs (suppress during test)
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Executor lookup - may or may not happen depending on iteration order
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+
+	// Error character lookup - returns unexpected database error
+	dbError := errors.New("database connection timeout")
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, errorCharID).
+		Return(nil, dbError).Maybe()
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID:   executorID,
+		CharacterName: "Admin",
+		PlayerID:      playerID,
+		Args:          "NonexistentPlayer", // Target doesn't exist, but errors occurred
+		Output:        &buf,
+		Services: &command.Services{
+			Session: sessionMgr,
+			World:   worldService,
+		},
+	}
+
+	err := BootHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+
+	// Verify error is a WorldError (system error), not TargetNotFound
+	assert.Equal(t, command.CodeWorldError, oopsErr.Code())
+
+	// Verify user-facing message indicates system error
+	playerMsg := command.PlayerMessage(err)
+	assert.Contains(t, playerMsg, "system error")
+	assert.Contains(t, playerMsg, "Try again")
+}
+
 func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
