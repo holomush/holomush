@@ -62,32 +62,8 @@ func TestWallHandler_WhitespaceOnlyArgs(t *testing.T) {
 	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
 }
 
-func TestWallHandler_NoCapability(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
-
-	accessControl := accesstest.NewMockAccessControl()
-	// Do NOT grant admin.wall capability
-
-	var buf bytes.Buffer
-	exec := &command.CommandExecution{
-		CharacterID:   executorID,
-		CharacterName: "RegularUser",
-		PlayerID:      playerID,
-		Args:          "Server going down in 5 minutes",
-		Output:        &buf,
-		Services: &command.Services{
-			Access: accessControl,
-		},
-	}
-
-	err := WallHandler(context.Background(), exec)
-	require.Error(t, err)
-
-	oopsErr, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, command.CodePermissionDenied, oopsErr.Code())
-}
+// Note: Capability checks are performed by the dispatcher, not the handler.
+// See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
 func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 	executorID := ulid.Make()

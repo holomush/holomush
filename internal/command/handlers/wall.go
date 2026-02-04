@@ -30,10 +30,10 @@ var urgencyPrefixes = map[WallUrgency]string{
 }
 
 // WallHandler broadcasts an announcement to all connected sessions.
-// Requires admin.wall capability.
+// Requires admin.wall capability (checked by dispatcher).
 // Usage: wall [level] <message>
 // Levels: info (default), warning, critical
-func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
+func WallHandler(_ context.Context, exec *command.CommandExecution) error {
 	args := strings.TrimSpace(exec.Args)
 	if args == "" {
 		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
@@ -45,14 +45,6 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	if message == "" {
 		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
 		return command.ErrInvalidArgs("wall", "wall [info|warning|critical] <message>")
-	}
-
-	// Check admin.wall capability
-	subjectID := "char:" + exec.CharacterID.String()
-	allowed := exec.Services.Access.Check(ctx, subjectID, "execute", "admin.wall")
-	if !allowed {
-		//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
-		return command.ErrPermissionDenied("wall", "admin.wall")
 	}
 
 	// Get all active sessions

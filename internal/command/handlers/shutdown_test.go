@@ -19,34 +19,8 @@ import (
 	"github.com/holomush/holomush/internal/core"
 )
 
-func TestShutdownHandler_RequiresCapability(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
-
-	// Use selective mock that denies admin.shutdown
-	accessControl := accesstest.NewMockAccessControl()
-	// Do NOT grant execute access to admin.shutdown
-
-	var buf bytes.Buffer
-	exec := &command.CommandExecution{
-		CharacterID:   executorID,
-		CharacterName: "RegularUser",
-		PlayerID:      playerID,
-		Args:          "",
-		Output:        &buf,
-		Services: &command.Services{
-			Access: accessControl,
-		},
-	}
-
-	err := ShutdownHandler(context.Background(), exec)
-	require.Error(t, err)
-
-	oopsErr, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, command.CodePermissionDenied, oopsErr.Code())
-	assert.Equal(t, "admin.shutdown", oopsErr.Context()["capability"])
-}
+// Note: Capability checks are performed by the dispatcher, not the handler.
+// See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
 func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 	executorID := ulid.Make()

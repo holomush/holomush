@@ -16,19 +16,11 @@ import (
 )
 
 // ShutdownHandler initiates a graceful server shutdown.
-// Requires admin.shutdown capability.
+// Requires admin.shutdown capability (checked by dispatcher).
 // Usage: shutdown [delay_seconds]
 // If delay is 0 or omitted, shutdown is immediate.
 // Broadcasts a warning to all players before initiating shutdown.
-func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error {
-	// Check capability
-	subjectID := "char:" + exec.CharacterID.String()
-	allowed := exec.Services.Access.Check(ctx, subjectID, "execute", "admin.shutdown")
-	if !allowed {
-		//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
-		return command.ErrPermissionDenied("shutdown", "admin.shutdown")
-	}
-
+func ShutdownHandler(_ context.Context, exec *command.CommandExecution) error {
 	// Parse optional delay parameter
 	var delaySeconds int64
 	args := strings.TrimSpace(exec.Args)
