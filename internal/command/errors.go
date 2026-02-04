@@ -131,9 +131,9 @@ func PlayerMessage(err error) string {
 		return "No character selected. Please select a character first."
 	case CodeTargetNotFound:
 		if target, ok := oopsErr.Context()["target"].(string); ok && target != "" {
-			return "Player not found: " + target
+			return "Target not found: " + target
 		}
-		return "Player not found."
+		return "Target not found."
 	default:
 		return "Something went wrong. Try again."
 	}
