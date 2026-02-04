@@ -17,7 +17,47 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/world"
 )
+
+// stubServices creates a minimal non-nil Services for tests that don't
+// actually use the services. This prevents nil pointer panics while
+// allowing the dispatcher to proceed with command execution.
+func stubServices() *Services {
+	svc, _ := NewServices(ServicesConfig{
+		World:       &world.Service{},
+		Session:     &stubSessionService{},
+		Access:      &stubAccessControl{},
+		Events:      &stubEventStore{},
+		Broadcaster: &core.Broadcaster{},
+	})
+	return svc
+}
+
+// Stub types for dispatcher tests - minimal implementations that satisfy interfaces
+type stubSessionService struct{}
+
+func (s *stubSessionService) ListActiveSessions() []*core.Session  { return nil }
+func (s *stubSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
+func (s *stubSessionService) EndSession(_ ulid.ULID) error         { return nil }
+
+type stubAccessControl struct{}
+
+func (s *stubAccessControl) Check(_ context.Context, _, _, _ string) bool { return false }
+
+type stubEventStore struct{}
+
+func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (s *stubEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+	return nil, nil
+}
+func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
+	return ulid.ULID{}, nil
+}
+func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	return nil, nil, nil
+}
 
 func TestDispatcher_Dispatch(t *testing.T) {
 	reg := NewRegistry()
@@ -48,6 +88,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: charID,
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "echo hello world", exec)
@@ -66,6 +107,7 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	dispErr := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
@@ -98,6 +140,7 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "admin", exec)
@@ -120,6 +163,7 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	dispErr := dispatcher.Dispatch(context.Background(), "", exec)
@@ -157,6 +201,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: charID,
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Should fail - missing admin.danger
@@ -198,6 +243,7 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Should succeed without any grants
@@ -229,6 +275,7 @@ func TestDispatcher_HandlerError(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: charID,
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "failing", exec)
@@ -266,6 +313,7 @@ func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: charID,
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	dispatchErr := dispatcher.Dispatch(context.Background(), "failing", exec)
@@ -320,6 +368,7 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "look", exec)
@@ -350,6 +399,7 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "say hello   world", exec)
@@ -420,6 +470,7 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	err = dispatcher.Dispatch(context.Background(), "look here", exec)
@@ -457,6 +508,7 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Input is an actual command, not an alias
@@ -495,6 +547,7 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Use alias 'l' which should expand to 'look'
@@ -534,6 +587,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 		CharacterID: ulid.Make(),
 		PlayerID:    playerID,
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Use alias 'greet' which should expand to 'say Hello everyone!'
@@ -577,6 +631,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 		CharacterID: ulid.Make(),
 		PlayerID:    playerID,
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Player alias should take precedence
@@ -614,6 +669,7 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 		CharacterID: ulid.Make(),
 		PlayerID:    ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// 's' expands to 'say', with extra args appended
@@ -686,6 +742,7 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Create cancellable context
@@ -743,6 +800,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	exec := &CommandExecution{
 		CharacterID: ulid.Make(),
 		Output:      &output,
+		Services:    stubServices(),
 	}
 
 	// Create already-cancelled context
@@ -828,6 +886,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 			CharacterID: charID,
 			PlayerID:    playerID,
 			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
 		}
 
 		err := dispatcher.Dispatch(context.Background(), "pose waves", exec)
@@ -849,6 +908,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 			CharacterID: charID,
 			PlayerID:    playerID,
 			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
 		}
 
 		dispatchErr := dispatcherWithAlias.Dispatch(context.Background(), ";'s eyes widen", exec)
