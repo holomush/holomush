@@ -918,6 +918,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 			BurstCapacity: 2,
 			SustainedRate: 1.0,
 		})
+		defer rl.Close()
 
 		dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
 		require.NoError(t, err)
@@ -971,6 +972,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 			BurstCapacity: 1,
 			SustainedRate: 1.0,
 		})
+		defer rl.Close()
 
 		dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
 		require.NoError(t, err)
@@ -1025,6 +1027,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 			BurstCapacity: 1,
 			SustainedRate: 0.1, // Very slow refill
 		})
+		defer rl.Close()
 
 		dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
 		require.NoError(t, err)
@@ -1075,6 +1078,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 			BurstCapacity: 1,
 			SustainedRate: 1.0,
 		})
+		defer rl.Close()
 
 		dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache), WithRateLimiter(rl))
 		require.NoError(t, err)
@@ -1343,6 +1347,7 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 		BurstCapacity: 1,
 		SustainedRate: 0.1,
 	})
+	defer rl.Close()
 
 	dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
 	require.NoError(t, err)

@@ -104,6 +104,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 			Expect(dispErr).NotTo(HaveOccurred())
 		})
 
+		AfterEach(func() {
+			if rateLimiter != nil {
+				rateLimiter.Close()
+			}
+		})
+
 		It("allows commands up to burst capacity", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -247,6 +253,8 @@ var _ = Describe("Rate Limiting Integration", func() {
 	})
 
 	Describe("Session independence", func() {
+		var rateLimiter *command.RateLimiter
+
 		BeforeEach(func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "test",
@@ -258,7 +266,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			rateLimiter := command.NewRateLimiter(command.RateLimiterConfig{
+			rateLimiter = command.NewRateLimiter(command.RateLimiterConfig{
 				BurstCapacity: 1,
 				SustainedRate: 0.1, // Very slow refill
 			})
@@ -267,6 +275,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 			dispatcher, dispErr = command.NewDispatcher(registry, mockAccess,
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			if rateLimiter != nil {
+				rateLimiter.Close()
+			}
 		})
 
 		It("maintains independent rate limits for different sessions", func() {
@@ -341,6 +355,8 @@ var _ = Describe("Rate Limiting Integration", func() {
 	})
 
 	Describe("Admin bypass capability", func() {
+		var rateLimiter *command.RateLimiter
+
 		BeforeEach(func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "test",
@@ -352,7 +368,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			rateLimiter := command.NewRateLimiter(command.RateLimiterConfig{
+			rateLimiter = command.NewRateLimiter(command.RateLimiterConfig{
 				BurstCapacity: 1,
 				SustainedRate: 0.1, // Very slow refill
 			})
@@ -361,6 +377,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 			dispatcher, dispErr = command.NewDispatcher(registry, mockAccess,
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			if rateLimiter != nil {
+				rateLimiter.Close()
+			}
 		})
 
 		It("exempts characters with bypass capability from rate limiting", func() {
@@ -436,6 +458,8 @@ var _ = Describe("Rate Limiting Integration", func() {
 	})
 
 	Describe("Rate limiting with aliases", func() {
+		var rateLimiter *command.RateLimiter
+
 		BeforeEach(func() {
 			err := registry.Register(command.CommandEntry{
 				Name:         "look",
@@ -452,7 +476,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 				"l": "look",
 			})
 
-			rateLimiter := command.NewRateLimiter(command.RateLimiterConfig{
+			rateLimiter = command.NewRateLimiter(command.RateLimiterConfig{
 				BurstCapacity: 2,
 				SustainedRate: 1.0,
 			})
@@ -462,6 +486,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 				command.WithAliasCache(aliasCache),
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			if rateLimiter != nil {
+				rateLimiter.Close()
+			}
 		})
 
 		It("applies rate limiting after alias resolution", func() {
@@ -500,6 +530,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 	Describe("Configuration validation", func() {
 		It("uses default values when configuration is not provided", func() {
 			rl := command.NewRateLimiter(command.RateLimiterConfig{})
+			defer rl.Close()
 
 			// Should use defaults: BurstCapacity=10, SustainedRate=2.0
 			sessionID := ulid.Make()
@@ -519,6 +550,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 				BurstCapacity: 5,
 				SustainedRate: 1.0,
 			})
+			defer rl.Close()
 
 			sessionID := ulid.Make()
 			for i := 0; i < 5; i++ {
