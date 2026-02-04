@@ -168,7 +168,38 @@ func (r *PropertyRegistry) ValidFor(entityType, propertyName string) bool {
 }
 
 // MustRegister adds a property to the registry, panicking if registration fails.
-// Use this only for known-valid properties during initialization.
+//
+// This function is ONLY for use during program initialization, such as in init()
+// functions or package-level variable declarations. It should never be called at
+// runtime with user-provided or dynamic data, as any error will panic and crash
+// the program.
+//
+// For runtime registration where errors are recoverable, use [PropertyRegistry.Register]
+// instead.
+//
+// Example usage:
+//
+//	// Package-level initialization (safe - known-valid at compile time)
+//	var gameRegistry = func() *PropertyRegistry {
+//		r := NewPropertyRegistry()
+//		r.MustRegister(Property{
+//			Name:       "health",
+//			Type:       PropertyTypeNumber,
+//			Capability: "property.set.health",
+//			AppliesTo:  []string{"character"},
+//		})
+//		return r
+//	}()
+//
+//	// Or in an init function
+//	func init() {
+//		registry.MustRegister(Property{...})
+//	}
+//
+//	// WRONG: Never use at runtime with dynamic data
+//	// func handleUserInput(name string) {
+//	//     registry.MustRegister(Property{Name: name, ...}) // DON'T DO THIS
+//	// }
 func (r *PropertyRegistry) MustRegister(p Property) {
 	if err := r.Register(p); err != nil {
 		panic(err)
