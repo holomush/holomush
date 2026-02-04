@@ -262,14 +262,23 @@ func TestFormatIdleTime(t *testing.T) {
 	}{
 		{"zero", 0, "0s"},
 		{"sub-second", 500 * time.Millisecond, "0s"},
+		{"just under 1 second", 999 * time.Millisecond, "0s"},
 		{"one second", time.Second, "1s"},
 		{"30 seconds", 30 * time.Second, "30s"},
+		{"59.4 seconds rounds down", 59*time.Second + 400*time.Millisecond, "59s"},
+		{"59.5 seconds rounds up to 1 minute", 59*time.Second + 500*time.Millisecond, "1m0s"},
 		{"1 minute", time.Minute, "1m0s"},
 		{"1 minute 30 seconds", time.Minute + 30*time.Second, "1m30s"},
 		{"5 minutes", 5 * time.Minute, "5m0s"},
+		{"59 minutes 59.4 seconds", 59*time.Minute + 59*time.Second + 400*time.Millisecond, "59m59s"},
+		{"59 minutes 59.5 seconds rounds up to 1 hour", 59*time.Minute + 59*time.Second + 500*time.Millisecond, "1h0m"},
 		{"1 hour", time.Hour, "1h0m"},
 		{"1 hour 30 minutes", time.Hour + 30*time.Minute, "1h30m"},
 		{"2 hours 15 minutes", 2*time.Hour + 15*time.Minute, "2h15m"},
+		{"24 hours", 24 * time.Hour, "24h0m"},
+		{"48 hours", 48 * time.Hour, "48h0m"},
+		{"100 hours", 100 * time.Hour, "100h0m"},
+		{"1 nanosecond", time.Nanosecond, "0s"},
 	}
 
 	for _, tt := range tests {

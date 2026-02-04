@@ -150,7 +150,10 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	// Check if on_event exists
 	onEvent := L.GetGlobal("on_event")
 	if onEvent.Type() == lua.LTNil {
-		return nil, nil // No handler
+		slog.Debug("plugin has no handler defined",
+			"plugin", name,
+			"event_type", event.Type)
+		return nil, nil
 	}
 
 	// Build event table

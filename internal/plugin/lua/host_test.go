@@ -142,6 +142,43 @@ func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
 	assert.Empty(t, emits, "expected no emits for plugin without handler")
 }
 
+func TestLuaHost_DeliverEvent_NoHandler_LogsDebug(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin without on_event or on_command function
+	writeMainLua(t, dir, `x = 1`)
+
+	// Capture log output at DEBUG level
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "no-handler-plugin",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "no-handler-plugin", event)
+	require.NoError(t, err, "DeliverEvent() failed")
+	assert.Empty(t, emits, "expected no emits for plugin without handler")
+
+	// Verify DEBUG log was emitted with plugin name
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "no handler", "expected debug log about missing handler")
+	assert.Contains(t, logOutput, "no-handler-plugin", "expected plugin name in debug log")
+}
+
 func TestLuaHost_Unload(t *testing.T) {
 	dir := t.TempDir()
 
