@@ -50,7 +50,7 @@ packages:
       dir: "{{.InterfaceDir}}/mocks"
       outpkg: mocks
     interfaces:
-      AliasRepository:
+      AliasWriter:
   github.com/holomush/holomush/internal/auth:
     config:
       dir: "{{.InterfaceDir}}/mocks"

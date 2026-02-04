@@ -23,7 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// inMemoryAliasRepo is a simple in-memory implementation of AliasRepository for testing.
+// inMemoryAliasRepo is a simple in-memory implementation of command.AliasWriter for testing.
 // It simulates database persistence without requiring PostgreSQL.
 type inMemoryAliasRepo struct {
 	mu            sync.RWMutex

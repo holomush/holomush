@@ -62,10 +62,15 @@ type EventBroadcaster interface {
 	Broadcast(event core.Event)
 }
 
-// AliasRepository defines the persistence operations for alias management.
+// AliasWriter defines write-only persistence operations for alias management.
+// This is a narrow interface containing only the Set/Delete operations needed
+// by command handlers. For the full read+write interface, see store.AliasRepository.
+//
 // This interface follows the "accept interfaces" Go idiom, allowing the command
 // package to depend on an abstraction rather than the concrete store implementation.
-type AliasRepository interface {
+// The store.PostgresAliasRepository implements both this interface and the broader
+// store.AliasRepository.
+type AliasWriter interface {
 	// SetSystemAlias creates or updates a system-wide alias.
 	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
 	// DeleteSystemAlias removes a system-wide alias.
@@ -260,7 +265,7 @@ type ServicesConfig struct {
 	Events      core.EventStore      // event persistence
 	Broadcaster EventBroadcaster     // event broadcasting
 	AliasCache  *AliasCache          // alias management (optional)
-	AliasRepo   AliasRepository      // alias persistence (optional, for alias handlers)
+	AliasRepo   AliasWriter          // alias persistence (optional, for alias handlers)
 	Registry    *Registry            // command registry (optional)
 }
 
@@ -279,7 +284,7 @@ type Services struct {
 	events      core.EventStore      // event persistence
 	broadcaster EventBroadcaster     // event broadcasting
 	aliasCache  *AliasCache          // alias management (optional, for alias commands)
-	aliasRepo   AliasRepository      // alias persistence (optional, for alias handlers)
+	aliasRepo   AliasWriter          // alias persistence (optional, for alias handlers)
 	registry    *Registry            // command registry (optional, for alias shadow detection)
 }
 
@@ -304,8 +309,8 @@ func (s *Services) AliasCache() *AliasCache { return s.aliasCache }
 // Registry returns the command registry for alias shadow detection (may be nil).
 func (s *Services) Registry() *Registry { return s.registry }
 
-// AliasRepo returns the alias repository for persistence (may be nil).
-func (s *Services) AliasRepo() AliasRepository { return s.aliasRepo }
+// AliasRepo returns the alias writer for persistence (may be nil).
+func (s *Services) AliasRepo() AliasWriter { return s.aliasRepo }
 
 // NewServices creates a validated Services instance.
 // Returns an error if any required service is nil.

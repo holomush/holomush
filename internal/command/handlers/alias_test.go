@@ -616,7 +616,7 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("persists player alias to database before updating cache", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		playerID := ulid.Make()
 
 		// Expect database write with correct parameters
@@ -645,7 +645,7 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("does not update cache if database write fails", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		playerID := ulid.Make()
 
 		// Simulate database failure
@@ -696,7 +696,7 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("rolls back database write if cache update fails", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		playerID := ulid.Make()
 
 		// Create a circular alias scenario: add "look" -> "l" first
@@ -734,7 +734,7 @@ func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
 func TestAliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("removes player alias from database before updating cache", func(t *testing.T) {
 		cache := command.NewAliasCache()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		playerID := ulid.Make()
 
 		// Pre-populate cache
@@ -764,7 +764,7 @@ func TestAliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 
 	t.Run("does not update cache if database delete fails", func(t *testing.T) {
 		cache := command.NewAliasCache()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		playerID := ulid.Make()
 
 		// Pre-populate cache
@@ -799,7 +799,7 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("persists system alias to database before updating cache", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		charID := ulid.Make()
 
 		// Expect database write with correct parameters (createdBy is character ID string)
@@ -827,7 +827,7 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("does not update cache if database write fails", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		charID := ulid.Make()
 
 		// Simulate database failure
@@ -855,7 +855,7 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("rolls back database write if cache update fails", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 		charID := ulid.Make()
 
 		// Create a circular alias scenario: add "look" -> "l" first
@@ -892,7 +892,7 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 func TestSysaliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 	t.Run("removes system alias from database before updating cache", func(t *testing.T) {
 		cache := command.NewAliasCache()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 
 		// Pre-populate cache
 		require.NoError(t, cache.SetSystemAlias("l", "look"))
@@ -920,7 +920,7 @@ func TestSysaliasRemoveHandler_PersistsToDatabase(t *testing.T) {
 
 	t.Run("does not update cache if database delete fails", func(t *testing.T) {
 		cache := command.NewAliasCache()
-		mockRepo := mocks.NewMockAliasRepository(t)
+		mockRepo := mocks.NewMockAliasWriter(t)
 
 		// Pre-populate cache
 		require.NoError(t, cache.SetSystemAlias("l", "look"))
