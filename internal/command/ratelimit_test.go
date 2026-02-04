@@ -285,6 +285,94 @@ func TestRateLimiter_Concurrency(_ *testing.T) {
 	// Should not panic or race (run with -race flag)
 }
 
+func TestRateLimiter_CloseDuringAllow(t *testing.T) {
+	t.Run("no races or panics when Close called during concurrent Allow", func(t *testing.T) {
+		rl := NewRateLimiter(RateLimiterConfig{
+			BurstCapacity: 100,
+			SustainedRate: 10.0,
+		})
+
+		const numGoroutines = 20
+		started := make(chan struct{})
+		done := make(chan struct{}, numGoroutines)
+
+		// Spawn goroutines that call Allow in a tight loop until Close fires.
+		for range numGoroutines {
+			go func() {
+				sessionID := ulid.Make()
+				<-started // wait for all goroutines to be ready
+				for {
+					rl.Allow(sessionID)
+					// Check if stopChan is closed (Close was called).
+					select {
+					case <-rl.stopChan:
+						done <- struct{}{}
+						return
+					default:
+					}
+				}
+			}()
+		}
+
+		// Release all goroutines and let them hammer Allow().
+		close(started)
+
+		// Give goroutines time to start executing Allow() calls.
+		time.Sleep(5 * time.Millisecond)
+
+		// Close while Allow goroutines are still running.
+		// Must not panic (sync.Once protects the channel close).
+		assert.NotPanics(t, func() {
+			rl.Close()
+		})
+
+		// Wait for all goroutines to observe the close and exit.
+		for range numGoroutines {
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("goroutine did not exit after Close")
+			}
+		}
+
+		// After Close, Allow must still function without panic.
+		// It returns whatever the token bucket state is; the key
+		// invariant is no data race or panic.
+		assert.NotPanics(t, func() {
+			rl.Allow(ulid.Make())
+		})
+	})
+
+	t.Run("multiple concurrent Close calls do not panic", func(t *testing.T) {
+		rl := NewRateLimiter(RateLimiterConfig{
+			BurstCapacity: 10,
+			SustainedRate: 1.0,
+		})
+
+		const numClosers = 10
+		started := make(chan struct{})
+		done := make(chan struct{}, numClosers)
+
+		for range numClosers {
+			go func() {
+				<-started
+				rl.Close()
+				done <- struct{}{}
+			}()
+		}
+
+		close(started)
+
+		for range numClosers {
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("concurrent Close did not return in time")
+			}
+		}
+	})
+}
+
 func TestRateLimiter_BackgroundCleanup(t *testing.T) {
 	t.Run("cleanup runs periodically and removes stale sessions", func(t *testing.T) {
 		// Use very short intervals for testing
