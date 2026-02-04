@@ -140,7 +140,7 @@ func (f formatter) List(items []string) StyledText {
 		return StyledText{}
 	}
 
-	var lines []string
+	lines := make([]string, 0, len(items))
 	for _, item := range items {
 		lines = append(lines, "  - "+item)
 	}
@@ -161,7 +161,7 @@ func (f formatter) Pairs(pairs map[string]any) StyledText {
 	}
 	sort.Strings(keys)
 
-	var lines []string
+	lines := make([]string, 0, len(keys))
 	for _, k := range keys {
 		lines = append(lines, fmt.Sprintf("%s: %v", k, pairs[k]))
 	}
@@ -204,11 +204,16 @@ func (f formatter) Table(opts TableOpts) StyledText {
 		}
 	}
 
-	var lines []string
+	// Pre-allocate: header + separator + rows
+	lineCapacity := len(opts.Rows)
+	if len(opts.Headers) > 0 {
+		lineCapacity += 2
+	}
+	lines := make([]string, 0, lineCapacity)
 
 	// Render headers
 	if len(opts.Headers) > 0 {
-		var headerCells []string
+		headerCells := make([]string, 0, colCount)
 		for i, h := range opts.Headers {
 			if i < colCount {
 				headerCells = append(headerCells, padRight(h, widths[i]))
@@ -217,7 +222,7 @@ func (f formatter) Table(opts TableOpts) StyledText {
 		lines = append(lines, strings.Join(headerCells, "  "))
 
 		// Separator line
-		var sepCells []string
+		sepCells := make([]string, 0, colCount)
 		for i := 0; i < colCount; i++ {
 			sepCells = append(sepCells, strings.Repeat("-", widths[i]))
 		}
@@ -226,7 +231,7 @@ func (f formatter) Table(opts TableOpts) StyledText {
 
 	// Render rows
 	for _, row := range opts.Rows {
-		var rowCells []string
+		rowCells := make([]string, 0, colCount)
 		for i := 0; i < colCount; i++ {
 			cell := ""
 			if i < len(row) {

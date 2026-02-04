@@ -35,7 +35,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	now := time.Now()
 
 	// Collect visible players
-	var players []playerInfo
+	players := make([]playerInfo, 0, len(sessions))
 	var errorCount int
 	for _, session := range sessions {
 		// Try to get character info - skip if not accessible
