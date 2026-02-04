@@ -171,18 +171,20 @@ func (sm *SessionManager) EndSession(charID ulid.ULID) error {
 }
 
 // UpdateActivity refreshes the last activity time for a character's session.
-func (sm *SessionManager) UpdateActivity(charID ulid.ULID) {
+// Returns an error if the session does not exist.
+// Callers may ignore the error for best-effort activity tracking.
+func (sm *SessionManager) UpdateActivity(charID ulid.ULID) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	session, exists := sm.sessions[charID]
 	if !exists {
-		slog.Debug("UpdateActivity called for non-existent session",
-			"char_id", charID.String(),
-		)
-		return
+		return oops.Code("SESSION_NOT_FOUND").
+			With("char_id", charID.String()).
+			Errorf("session not found for character %s", charID.String())
 	}
 	session.LastActivity = time.Now()
+	return nil
 }
 
 // ListActiveSessions returns copies of all active sessions.

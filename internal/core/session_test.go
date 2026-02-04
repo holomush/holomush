@@ -246,7 +246,8 @@ func TestSessionManager_UpdateActivity(t *testing.T) {
 	originalActivity := session1.LastActivity
 
 	// Update activity
-	sm.UpdateActivity(charID)
+	err := sm.UpdateActivity(charID)
+	require.NoError(t, err)
 
 	// Get session and verify activity was updated
 	session2 := sm.GetSession(charID)
@@ -254,14 +255,19 @@ func TestSessionManager_UpdateActivity(t *testing.T) {
 		"LastActivity should be updated or equal after UpdateActivity")
 }
 
-func TestSessionManager_UpdateActivity_NonExistentSession(_ *testing.T) {
+func TestSessionManager_UpdateActivity_NonExistentSession(t *testing.T) {
 	sm := NewSessionManager()
 
 	charID := NewULID()
 
-	// UpdateActivity for non-existent session should not panic
-	sm.UpdateActivity(charID)
-	// No assertion - just verify no panic occurs
+	// UpdateActivity for non-existent session should return error
+	err := sm.UpdateActivity(charID)
+	require.Error(t, err)
+
+	// Verify error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "Expected oops error")
+	assert.Equal(t, "SESSION_NOT_FOUND", oopsErr.Code())
 }
 
 func TestSessionManager_ListActiveSessions_Empty(t *testing.T) {
