@@ -72,6 +72,19 @@ var (
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandHandler func(ctx context.Context, exec *CommandExecution) error
 
+// CommandEntryConfig holds the configuration for creating a CommandEntry.
+//
+//nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
+type CommandEntryConfig struct {
+	Name         string         // canonical name (e.g., "say") - REQUIRED
+	Handler      CommandHandler // Go handler or Lua dispatcher - REQUIRED
+	Capabilities []string       // ALL required capabilities (AND logic)
+	Help         string         // short description (one line)
+	Usage        string         // usage pattern (e.g., "say <message>")
+	HelpText     string         // detailed markdown help
+	Source       string         // "core" or plugin name
+}
+
 // CommandEntry represents a registered command in the unified registry.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
@@ -85,6 +98,55 @@ type CommandEntry struct {
 	Source       string         // "core" or plugin name
 }
 
+// Error codes for constructor validation failures.
+// CodeNilServices is defined in errors.go.
+const (
+	CodeEmptyName  = "EMPTY_NAME"
+	CodeNilHandler = "NIL_HANDLER"
+	CodeZeroID     = "ZERO_ID"
+	CodeNilOutput  = "NIL_OUTPUT"
+)
+
+// NewCommandEntry creates a validated CommandEntry.
+// Returns an error if Name is empty or Handler is nil.
+func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
+	if cfg.Name == "" {
+		return nil, oops.Code(CodeEmptyName).
+			With("field", "Name").
+			Errorf("Name is required")
+	}
+	if cfg.Handler == nil {
+		return nil, oops.Code(CodeNilHandler).
+			With("field", "Handler").
+			Errorf("Handler is required")
+	}
+
+	return &CommandEntry{
+		Name:         cfg.Name,
+		Handler:      cfg.Handler,
+		Capabilities: cfg.Capabilities,
+		Help:         cfg.Help,
+		Usage:        cfg.Usage,
+		HelpText:     cfg.HelpText,
+		Source:       cfg.Source,
+	}, nil
+}
+
+// CommandExecutionConfig holds the configuration for creating a CommandExecution.
+//
+//nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
+type CommandExecutionConfig struct {
+	CharacterID   ulid.ULID  // REQUIRED: must be non-zero
+	LocationID    ulid.ULID  // optional
+	CharacterName string     // optional
+	PlayerID      ulid.ULID  // optional
+	SessionID     ulid.ULID  // optional
+	Args          string     // optional
+	Output        io.Writer  // REQUIRED: must be non-nil
+	Services      *Services  // REQUIRED: must be non-nil
+	InvokedAs     string     // optional
+}
+
 // CommandExecution provides context for command execution.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
@@ -95,13 +157,45 @@ type CommandExecution struct {
 	PlayerID      ulid.ULID
 	SessionID     ulid.ULID
 	Args          string
-	Output        io.Writer
+	Output        io.Writer  // MUST be non-nil; command handlers write output here
 	Services      *Services
 	// InvokedAs is the original command name as typed by the user, before alias
 	// resolution. For example, if "say'" is an alias for "say", InvokedAs will
 	// be "say'" while the handler is for "say". Plugins can use this to detect
 	// which variant was invoked.
 	InvokedAs string
+}
+
+// NewCommandExecution creates a validated CommandExecution.
+// Returns an error if CharacterID is zero, Services is nil, or Output is nil.
+func NewCommandExecution(cfg CommandExecutionConfig) (*CommandExecution, error) {
+	if cfg.CharacterID.IsZero() {
+		return nil, oops.Code(CodeZeroID).
+			With("field", "CharacterID").
+			Errorf("CharacterID is required and must be non-zero")
+	}
+	if cfg.Services == nil {
+		return nil, oops.Code(CodeNilServices).
+			With("field", "Services").
+			Errorf("Services is required")
+	}
+	if cfg.Output == nil {
+		return nil, oops.Code(CodeNilOutput).
+			With("field", "Output").
+			Errorf("Output is required")
+	}
+
+	return &CommandExecution{
+		CharacterID:   cfg.CharacterID,
+		LocationID:    cfg.LocationID,
+		CharacterName: cfg.CharacterName,
+		PlayerID:      cfg.PlayerID,
+		SessionID:     cfg.SessionID,
+		Args:          cfg.Args,
+		Output:        cfg.Output,
+		Services:      cfg.Services,
+		InvokedAs:     cfg.InvokedAs,
+	}, nil
 }
 
 // Error code for service validation failures.

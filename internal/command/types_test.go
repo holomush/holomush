@@ -190,3 +190,173 @@ func TestCommandHandler_Signature(t *testing.T) {
 	}
 	assert.NotNil(t, handler, "Handler should be assignable")
 }
+
+// Tests for NewCommandEntry constructor
+
+func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
+	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:         "say",
+		Handler:      handler,
+		Capabilities: []string{"rp:speak"},
+		Help:         "Say something to the room",
+		Usage:        "say <message>",
+		HelpText:     "Speaks a message to everyone in the current location.",
+		Source:       "core",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "say", entry.Name)
+	assert.NotNil(t, entry.Handler)
+	assert.Equal(t, []string{"rp:speak"}, entry.Capabilities)
+	assert.Equal(t, "Say something to the room", entry.Help)
+	assert.Equal(t, "say <message>", entry.Usage)
+	assert.Equal(t, "Speaks a message to everyone in the current location.", entry.HelpText)
+	assert.Equal(t, "core", entry.Source)
+}
+
+func TestNewCommandEntry_EmptyName_ReturnsError(t *testing.T) {
+	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
+
+	_, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "",
+		Handler: handler,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Name")
+}
+
+func TestNewCommandEntry_NilHandler_ReturnsError(t *testing.T) {
+	_, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "say",
+		Handler: nil,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Handler")
+}
+
+func TestNewCommandEntry_MinimalValid_ReturnsEntry(t *testing.T) {
+	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "say",
+		Handler: handler,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "say", entry.Name)
+	assert.NotNil(t, entry.Handler)
+	assert.Empty(t, entry.Capabilities)
+	assert.Empty(t, entry.Help)
+	assert.Empty(t, entry.Usage)
+	assert.Empty(t, entry.HelpText)
+	assert.Empty(t, entry.Source)
+}
+
+// Tests for NewCommandExecution constructor
+
+func TestNewCommandExecution_ValidInput_ReturnsExecution(t *testing.T) {
+	charID := ulid.Make()
+	locID := ulid.Make()
+	playerID := ulid.Make()
+	sessionID := ulid.Make()
+	output := &mockWriter{}
+	services := &Services{}
+
+	exec, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID:   charID,
+		LocationID:    locID,
+		CharacterName: "Alice",
+		PlayerID:      playerID,
+		SessionID:     sessionID,
+		Args:          "hello world",
+		Output:        output,
+		Services:      services,
+		InvokedAs:     "say",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, charID, exec.CharacterID)
+	assert.Equal(t, locID, exec.LocationID)
+	assert.Equal(t, "Alice", exec.CharacterName)
+	assert.Equal(t, playerID, exec.PlayerID)
+	assert.Equal(t, sessionID, exec.SessionID)
+	assert.Equal(t, "hello world", exec.Args)
+	assert.Same(t, output, exec.Output)
+	assert.Same(t, services, exec.Services)
+	assert.Equal(t, "say", exec.InvokedAs)
+}
+
+func TestNewCommandExecution_ZeroCharacterID_ReturnsError(t *testing.T) {
+	output := &mockWriter{}
+	services := &Services{}
+
+	_, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID: ulid.ULID{}, // zero value
+		Output:      output,
+		Services:    services,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CharacterID")
+}
+
+func TestNewCommandExecution_NilServices_ReturnsError(t *testing.T) {
+	output := &mockWriter{}
+
+	_, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      output,
+		Services:    nil,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Services")
+}
+
+func TestNewCommandExecution_NilOutput_ReturnsError(t *testing.T) {
+	services := &Services{}
+
+	_, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      nil,
+		Services:    services,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Output")
+}
+
+func TestNewCommandExecution_MinimalValid_ReturnsExecution(t *testing.T) {
+	charID := ulid.Make()
+	output := &mockWriter{}
+	services := &Services{}
+
+	exec, err := NewCommandExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      output,
+		Services:    services,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, charID, exec.CharacterID)
+	assert.Same(t, output, exec.Output)
+	assert.Same(t, services, exec.Services)
+	// Optional fields should be zero/empty
+	assert.True(t, exec.LocationID.IsZero())
+	assert.Empty(t, exec.CharacterName)
+	assert.True(t, exec.PlayerID.IsZero())
+	assert.True(t, exec.SessionID.IsZero())
+	assert.Empty(t, exec.Args)
+	assert.Empty(t, exec.InvokedAs)
+}
+
+// mockWriter implements io.Writer for testing
+type mockWriter struct{}
+
+func (m *mockWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}

@@ -608,6 +608,9 @@ func TestParseWallArgs(t *testing.T) {
 		{"single word", "Hello", WallUrgencyInfo, "Hello"},
 		{"case insensitive", "WARNING All caps", WallUrgencyWarning, "All caps"},
 		{"unknown prefix treated as message", "unknown Some message", WallUrgencyInfo, "unknown Some message"},
+		// Edge case: urgency with only spaces returns spaces as message.
+		// The handler trims and validates, rejecting empty messages with ErrInvalidArgs.
+		{"urgency with only spaces", "warning   ", WallUrgencyWarning, "  "},
 	}
 
 	for _, tt := range tests {
