@@ -828,6 +828,124 @@ func TestAliasCache_ShadowsSystemAlias(t *testing.T) {
 	})
 }
 
+func TestValidateAliasSet(t *testing.T) {
+	t.Run("valid aliases pass validation", func(t *testing.T) {
+		aliases := map[string]string{
+			"l": "look",
+			"n": "north",
+			"s": "south",
+		}
+		err := ValidateAliasSet(aliases)
+		assert.NoError(t, err)
+	})
+
+	t.Run("valid chain passes validation", func(t *testing.T) {
+		aliases := map[string]string{
+			"a": "b",
+			"b": "c",
+			"c": "final",
+		}
+		err := ValidateAliasSet(aliases)
+		assert.NoError(t, err)
+	})
+
+	t.Run("self-referential alias detected", func(t *testing.T) {
+		aliases := map[string]string{
+			"loop": "loop",
+		}
+		err := ValidateAliasSet(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+	})
+
+	t.Run("two-node cycle detected", func(t *testing.T) {
+		aliases := map[string]string{
+			"ping": "pong",
+			"pong": "ping",
+		}
+		err := ValidateAliasSet(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+	})
+
+	t.Run("three-node cycle detected", func(t *testing.T) {
+		aliases := map[string]string{
+			"a": "b",
+			"b": "c",
+			"c": "a",
+		}
+		err := ValidateAliasSet(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+	})
+
+	t.Run("cycle with args in expansion detected", func(t *testing.T) {
+		aliases := map[string]string{
+			"x": "y arg1",
+			"y": "x arg2",
+		}
+		err := ValidateAliasSet(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+	})
+
+	t.Run("empty set is valid", func(t *testing.T) {
+		err := ValidateAliasSet(map[string]string{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("chain terminating at non-alias is valid", func(t *testing.T) {
+		aliases := map[string]string{
+			"a": "b",
+			"b": "c",
+			// "c" not defined - terminates at real command
+		}
+		err := ValidateAliasSet(aliases)
+		assert.NoError(t, err)
+	})
+}
+
+func TestAliasCache_LoadSystemAliases_TrustsInput(t *testing.T) {
+	// This test documents that LoadSystemAliases does NOT validate circular refs.
+	// The expectation is that data comes from the database which was validated
+	// via SetSystemAlias before storage.
+	cache := NewAliasCache()
+
+	// These aliases form a cycle - would be rejected by SetSystemAlias
+	// but LoadSystemAliases trusts the input
+	circularAliases := map[string]string{
+		"ping": "pong",
+		"pong": "ping",
+	}
+
+	// This should NOT panic or error - it trusts the input
+	cache.LoadSystemAliases(circularAliases)
+
+	// Verify aliases were loaded (cycle exists but resolution is depth-limited)
+	result := cache.Resolve(ulid.ULID{}, "ping", nil)
+	assert.True(t, result.WasAlias)
+	// Resolution terminates due to depth limit, not validation
+}
+
+func TestAliasCache_LoadPlayerAliases_TrustsInput(t *testing.T) {
+	// This test documents that LoadPlayerAliases does NOT validate circular refs.
+	cache := NewAliasCache()
+	playerID := ulid.MustNew(1, nil)
+
+	// These aliases form a cycle
+	circularAliases := map[string]string{
+		"alpha": "beta",
+		"beta":  "alpha",
+	}
+
+	// This should NOT panic or error - it trusts the input
+	cache.LoadPlayerAliases(playerID, circularAliases)
+
+	// Verify aliases were loaded
+	result := cache.Resolve(playerID, "alpha", nil)
+	assert.True(t, result.WasAlias)
+}
+
 func BenchmarkAliasCache_Resolve(b *testing.B) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)

@@ -32,6 +32,13 @@ func NewAliasCache() *AliasCache {
 }
 
 // LoadSystemAliases bulk loads system aliases at startup.
+//
+// This method trusts the input data and does NOT validate for circular references.
+// Callers are expected to provide pre-validated data, typically loaded from the
+// database where [SetSystemAlias] already enforced circularity checks before storage.
+//
+// If you need to validate untrusted alias data (e.g., from a migration or manual
+// import), use [ValidateAliasSet] first.
 func (c *AliasCache) LoadSystemAliases(aliases map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -40,6 +47,13 @@ func (c *AliasCache) LoadSystemAliases(aliases map[string]string) {
 }
 
 // LoadPlayerAliases loads a player's aliases when their session is established.
+//
+// This method trusts the input data and does NOT validate for circular references.
+// Callers are expected to provide pre-validated data, typically loaded from the
+// database where [SetPlayerAlias] already enforced circularity checks before storage.
+//
+// If you need to validate untrusted alias data (e.g., from a migration or manual
+// import), use [ValidateAliasSet] first.
 func (c *AliasCache) LoadPlayerAliases(playerID ulid.ULID, aliases map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -420,6 +434,54 @@ func (c *AliasCache) resolveWithDepth(playerID ulid.ULID, cmd string, depth int)
 
 	// No alias found
 	return cmd, depth > 0
+}
+
+// ValidateAliasSet checks a set of aliases for circular references without
+// modifying the cache. This can be used as a pre-flight check for untrusted
+// alias data before calling [LoadSystemAliases] or [LoadPlayerAliases].
+//
+// The function returns an error describing the first circular reference found,
+// or nil if all aliases are valid.
+//
+// Note: This validates the aliases in isolation. Cross-type cycles (where a
+// player alias refers to a system alias that refers back) are detected at
+// resolution time via depth limiting, not here.
+func ValidateAliasSet(aliases map[string]string) error {
+	for alias := range aliases {
+		if detectCycleInSet(aliases, alias) {
+			return ErrCircularAlias(alias)
+		}
+	}
+	return nil
+}
+
+// detectCycleInSet checks if following an alias leads to a cycle within the set.
+func detectCycleInSet(aliases map[string]string, start string) bool {
+	visited := make(map[string]bool)
+	cmd := start
+
+	for depth := 0; depth < MaxExpansionDepth; depth++ {
+		if visited[cmd] {
+			return true
+		}
+		visited[cmd] = true
+
+		next, ok := aliases[cmd]
+		if !ok {
+			// Chain terminates at non-alias
+			return false
+		}
+
+		// Extract first word from expansion
+		nextFirst, _ := splitFirstWord(next)
+		if nextFirst == "" {
+			return false
+		}
+		cmd = nextFirst
+	}
+
+	// Hit depth limit - treat as circular for safety
+	return true
 }
 
 // splitFirstWord splits input into the first word and remaining args.
