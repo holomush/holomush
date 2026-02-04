@@ -396,6 +396,38 @@ func TestStyledText_Append(t *testing.T) {
 	assert.Contains(t, rendered, "world")
 }
 
+func TestStyledText_Append_NoSharedState(t *testing.T) {
+	original := Fmt.Bold("hello")
+	other := Fmt.Italic("world")
+
+	// Create appended version
+	combined := original.Append(other)
+
+	// Verify content
+	assert.Contains(t, combined.RenderPlain(), "hello")
+	assert.Contains(t, combined.RenderPlain(), "world")
+
+	// Verify original is unchanged by further appends to combined
+	combined2 := combined.AppendText(" extra")
+	assert.Equal(t, "helloworld", combined.RenderPlain(), "combined should be unchanged after further append")
+	assert.Equal(t, "helloworld extra", combined2.RenderPlain())
+
+	// Verify original is still just "hello"
+	assert.Equal(t, "hello", original.RenderPlain(), "original should be unchanged after Append")
+}
+
+func TestStyledText_AppendText_NoSharedState(t *testing.T) {
+	original := Fmt.Bold("hello")
+
+	appended := original.AppendText(" world")
+
+	// Further mutations to appended should not affect original
+	appended2 := appended.AppendText(" extra")
+	assert.Equal(t, "hello world", appended.RenderPlain(), "appended should be unchanged")
+	assert.Equal(t, "hello world extra", appended2.RenderPlain())
+	assert.Equal(t, "hello", original.RenderPlain(), "original should be unchanged")
+}
+
 func TestStyledText_AppendText(t *testing.T) {
 	bold := Fmt.Bold("hello")
 	combined := bold.AppendText(" world")

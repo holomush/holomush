@@ -62,8 +62,10 @@ var Fmt formatter
 type formatter struct{}
 
 // StyledText represents formatted text with styling information.
-// It is an intermediate representation that can be rendered to different
-// output formats (ANSI for telnet, HTML for web, etc.).
+// It is an immutable intermediate representation that can be rendered to
+// different output formats (ANSI for telnet, HTML for web, etc.).
+// All methods that combine StyledText values (Append, AppendText) return
+// new instances without modifying the original or sharing underlying storage.
 type StyledText struct {
 	segments []segment
 }
@@ -327,18 +329,24 @@ func (st StyledText) RenderPlain() string {
 	return buf.String()
 }
 
-// Append combines two StyledText values.
+// Append combines two StyledText values into a new StyledText.
+// The returned value has its own backing array and does not share
+// storage with either the receiver or the argument.
 func (st StyledText) Append(other StyledText) StyledText {
-	return StyledText{
-		segments: append(st.segments, other.segments...),
-	}
+	combined := make([]segment, 0, len(st.segments)+len(other.segments))
+	combined = append(combined, st.segments...)
+	combined = append(combined, other.segments...)
+	return StyledText{segments: combined}
 }
 
-// AppendText appends plain text to the styled text.
+// AppendText appends plain text to the styled text, returning a new StyledText.
+// The returned value has its own backing array and does not share
+// storage with the receiver.
 func (st StyledText) AppendText(text string) StyledText {
-	return StyledText{
-		segments: append(st.segments, segment{text: text, style: style{}}),
-	}
+	combined := make([]segment, 0, len(st.segments)+1)
+	combined = append(combined, st.segments...)
+	combined = append(combined, segment{text: text, style: style{}})
+	return StyledText{segments: combined}
 }
 
 // padRight pads a string with spaces to the given width.
