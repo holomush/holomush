@@ -334,7 +334,11 @@ func TestDispatcher_WhitespaceInput(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	exec := &CommandExecution{Output: &output}
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	}
 
 	// Only whitespace
 	dispErr := dispatcher.Dispatch(context.Background(), "   ", exec)
