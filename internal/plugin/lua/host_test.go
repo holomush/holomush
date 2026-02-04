@@ -4,7 +4,9 @@
 package lua_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -826,4 +828,168 @@ end
 	require.Len(t, emits, 1)
 	// With invalid JSON, ctx.name should be empty string
 	assert.Equal(t, "name=", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnNonTableEntry(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns an array with non-table entries
+	mainLua := `
+function on_event(event)
+    return {
+        "string entry",
+        123,
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "warn-non-table",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "warn-non-table", event)
+	require.NoError(t, err)
+
+	// Only the valid table entry should be returned
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify warnings were logged for non-table entries
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "non-table", "expected warning about non-table entry")
+	assert.Contains(t, logOutput, "warn-non-table", "expected plugin name in warning")
+	assert.Contains(t, logOutput, "string", "expected type name in warning")
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnMissingStream(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns event without stream field
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            type = "test",
+            payload = "missing stream"
+        },
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "warn-missing-stream",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "warn-missing-stream", event)
+	require.NoError(t, err)
+
+	// Only the valid entry should be returned
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify warning was logged for missing stream
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "stream", "expected warning about missing stream field")
+	assert.Contains(t, logOutput, "warn-missing-stream", "expected plugin name in warning")
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnMissingType(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns event without type field
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            stream = "test:1",
+            payload = "missing type"
+        },
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "warn-missing-type",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "warn-missing-type", event)
+	require.NoError(t, err)
+
+	// Only the valid entry should be returned
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify warning was logged for missing type
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "type", "expected warning about missing type field")
+	assert.Contains(t, logOutput, "warn-missing-type", "expected plugin name in warning")
 }

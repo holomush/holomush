@@ -5,6 +5,7 @@ package lua
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -168,7 +169,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	ret := L.Get(-1)
 	L.Pop(1)
 
-	return h.parseEmitEvents(ret), nil
+	return h.parseEmitEvents(name, ret), nil
 }
 
 // Plugins returns names of loaded plugins.
@@ -213,7 +214,7 @@ func (h *Host) callOnCommand(state *lua.LState, name string, event pluginpkg.Eve
 	ret := state.Get(-1)
 	state.Pop(1)
 
-	return h.parseEmitEvents(ret), nil
+	return h.parseEmitEvents(name, ret), nil
 }
 
 // buildContextTable creates a Lua table from a CommandContext.
@@ -241,7 +242,7 @@ func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LT
 	return t
 }
 
-func (h *Host) parseEmitEvents(ret lua.LValue) []pluginpkg.EmitEvent {
+func (h *Host) parseEmitEvents(pluginName string, ret lua.LValue) []pluginpkg.EmitEvent {
 	if ret.Type() == lua.LTNil {
 		return nil
 	}
@@ -252,15 +253,46 @@ func (h *Host) parseEmitEvents(ret lua.LValue) []pluginpkg.EmitEvent {
 	}
 
 	var emits []pluginpkg.EmitEvent
+	index := 0
 	table.ForEach(func(_, v lua.LValue) {
-		if eventTable, ok := v.(*lua.LTable); ok {
-			emit := pluginpkg.EmitEvent{
-				Stream:  eventTable.RawGetString("stream").String(),
-				Type:    pluginpkg.EventType(eventTable.RawGetString("type").String()),
-				Payload: eventTable.RawGetString("payload").String(),
-			}
-			emits = append(emits, emit)
+		index++
+
+		eventTable, ok := v.(*lua.LTable)
+		if !ok {
+			slog.Warn("plugin returned non-table emit event entry",
+				"plugin", pluginName,
+				"index", index,
+				"type", v.Type().String())
+			return
 		}
+
+		stream := eventTable.RawGetString("stream").String()
+		eventType := eventTable.RawGetString("type").String()
+		payload := eventTable.RawGetString("payload").String()
+
+		// Validate required fields
+		if stream == "nil" || stream == "" {
+			slog.Warn("plugin emit event missing required 'stream' field",
+				"plugin", pluginName,
+				"index", index,
+				"type", eventType)
+			return
+		}
+
+		if eventType == "nil" || eventType == "" {
+			slog.Warn("plugin emit event missing required 'type' field",
+				"plugin", pluginName,
+				"index", index,
+				"stream", stream)
+			return
+		}
+
+		emit := pluginpkg.EmitEvent{
+			Stream:  stream,
+			Type:    pluginpkg.EventType(eventType),
+			Payload: payload,
+		}
+		emits = append(emits, emit)
 	})
 
 	return emits
