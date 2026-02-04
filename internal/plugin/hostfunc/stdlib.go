@@ -338,7 +338,10 @@ func emitFlush(ls *lua.LState) int {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
+	for _, err := range errs {
+		slog.Warn("emitter json error during flush", "error", err)
+	}
 
 	if len(events) == 0 {
 		ls.Push(lua.LNil)

@@ -18,8 +18,9 @@ func TestNewEmitter(t *testing.T) {
 	require.NotNil(t, emitter)
 
 	// New emitter should have no events
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
 	assert.Empty(t, events)
+	assert.Nil(t, errs)
 }
 
 func TestEmitter_Location(t *testing.T) {
@@ -54,8 +55,9 @@ func TestEmitter_Location(t *testing.T) {
 			emitter := NewEmitter()
 			emitter.Location(tt.locationID, tt.eventType, tt.payload)
 
-			events := emitter.Flush()
+			events, errs := emitter.Flush()
 			require.Len(t, events, 1)
+			assert.Nil(t, errs)
 			assert.Equal(t, tt.wantStream, events[0].Stream)
 			assert.Equal(t, tt.wantType, events[0].Type)
 			assert.NotEmpty(t, events[0].Payload)
@@ -92,8 +94,9 @@ func TestEmitter_Character(t *testing.T) {
 			emitter := NewEmitter()
 			emitter.Character(tt.characterID, tt.eventType, tt.payload)
 
-			events := emitter.Flush()
+			events, errs := emitter.Flush()
 			require.Len(t, events, 1)
+			assert.Nil(t, errs)
 			assert.Equal(t, tt.wantStream, events[0].Stream)
 			assert.Equal(t, tt.eventType, events[0].Type)
 		})
@@ -104,8 +107,9 @@ func TestEmitter_Global(t *testing.T) {
 	emitter := NewEmitter()
 	emitter.Global(plugin.EventTypeSystem, Payload{"message": "Server restart in 5 minutes"})
 
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
+	assert.Nil(t, errs)
 	assert.Equal(t, "global", events[0].Stream)
 	assert.Equal(t, plugin.EventTypeSystem, events[0].Type)
 }
@@ -163,8 +167,9 @@ func TestEmitter_PayloadJSONEncoding(t *testing.T) {
 			emitter := NewEmitter()
 			emitter.Global(plugin.EventTypeSystem, tt.payload)
 
-			events := emitter.Flush()
+			events, errs := emitter.Flush()
 			require.Len(t, events, 1)
+			assert.Nil(t, errs)
 
 			if tt.name == "multiple fields" {
 				// Check that both fields are present
@@ -184,18 +189,21 @@ func TestEmitter_Flush(t *testing.T) {
 		emitter.Character("char1", plugin.EventTypeSay, Payload{"m": "2"})
 		emitter.Global(plugin.EventTypeSystem, Payload{"m": "3"})
 
-		events := emitter.Flush()
+		events, errs := emitter.Flush()
 		require.Len(t, events, 3)
+		assert.Nil(t, errs)
 
 		// Second flush should return empty
-		events2 := emitter.Flush()
+		events2, errs2 := emitter.Flush()
 		assert.Empty(t, events2)
+		assert.Nil(t, errs2)
 	})
 
 	t.Run("empty emitter returns nil", func(t *testing.T) {
 		emitter := NewEmitter()
-		events := emitter.Flush()
+		events, errs := emitter.Flush()
 		assert.Nil(t, events)
+		assert.Nil(t, errs)
 	})
 }
 
@@ -208,8 +216,9 @@ func TestEmitter_MultipleEmits(t *testing.T) {
 	emitter.Character("char1", plugin.EventTypeSystem, Payload{"n": 3})
 	emitter.Global(plugin.EventTypeSystem, Payload{"n": 4})
 
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
 	require.Len(t, events, 4)
+	assert.Nil(t, errs)
 
 	// Verify order preserved
 	assert.Equal(t, "location:loc1", events[0].Stream)
@@ -233,10 +242,12 @@ func TestEmitter_JSONEncodingError(t *testing.T) {
 	badPayload := Payload{"invalid": make(chan int)}
 	emitter.Global(plugin.EventTypeSystem, badPayload)
 
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
 	// On encoding error, payload should be "{}"
 	assert.Equal(t, "{}", events[0].Payload)
+	// Error should be tracked
+	require.Len(t, errs, 1)
 }
 
 func TestEmitter_JSONEncodingError_LogsError(t *testing.T) {
@@ -251,9 +262,10 @@ func TestEmitter_JSONEncodingError_LogsError(t *testing.T) {
 	badPayload := Payload{"invalid": make(chan int)}
 	emitter.Global(plugin.EventTypeSystem, badPayload)
 
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
 	assert.Equal(t, "{}", events[0].Payload)
+	require.Len(t, errs, 1)
 
 	// Verify error was logged
 	logOutput := buf.String()
@@ -273,7 +285,8 @@ func TestEmitter_JSONEncodingError_LogsPayloadType(t *testing.T) {
 	badPayload := Payload{"callback": func() {}}
 	emitter.Location("room123", plugin.EventTypeSay, badPayload)
 
-	emitter.Flush()
+	_, errs := emitter.Flush()
+	require.Len(t, errs, 1)
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "json marshal failed")
@@ -287,8 +300,129 @@ func TestEmitter_NilLogger_NoLogging(t *testing.T) {
 	badPayload := Payload{"invalid": make(chan int)}
 	emitter.Global(plugin.EventTypeSystem, badPayload)
 
-	events := emitter.Flush()
+	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
 	assert.Equal(t, "{}", events[0].Payload)
-	// No panic means success - nil logger is handled gracefully
+	// Error should still be tracked even without logger
+	require.Len(t, errs, 1)
+}
+
+func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
+	t.Run("single error", func(t *testing.T) {
+		emitter := NewEmitter()
+
+		badPayload := Payload{"invalid": make(chan int)}
+		emitter.Global(plugin.EventTypeSystem, badPayload)
+
+		events, errs := emitter.Flush()
+		require.Len(t, events, 1)
+		require.Len(t, errs, 1)
+
+		// Error should contain context
+		assert.Contains(t, errs[0].Error(), "stream=global")
+		assert.Contains(t, errs[0].Error(), "type=system")
+	})
+
+	t.Run("multiple errors", func(t *testing.T) {
+		emitter := NewEmitter()
+
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad1": make(chan int)})
+		emitter.Location("room1", plugin.EventTypeSay, Payload{"bad2": func() {}})
+		emitter.Character("char1", plugin.EventTypePose, Payload{"bad3": make(chan string)})
+
+		events, errs := emitter.Flush()
+		require.Len(t, events, 3)
+		require.Len(t, errs, 3)
+
+		// Verify errors have different stream contexts
+		assert.Contains(t, errs[0].Error(), "stream=global")
+		assert.Contains(t, errs[1].Error(), "stream=location:room1")
+		assert.Contains(t, errs[2].Error(), "stream=char:char1")
+	})
+
+	t.Run("mixed success and errors", func(t *testing.T) {
+		emitter := NewEmitter()
+
+		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		emitter.Global(plugin.EventTypeSystem, Payload{"also_ok": 123})
+
+		events, errs := emitter.Flush()
+		require.Len(t, events, 3)
+		require.Len(t, errs, 1)
+
+		// Verify the one error
+		assert.Contains(t, errs[0].Error(), "stream=global")
+	})
+
+	t.Run("no errors returns nil slice", func(t *testing.T) {
+		emitter := NewEmitter()
+
+		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+
+		events, errs := emitter.Flush()
+		require.Len(t, events, 1)
+		assert.Nil(t, errs)
+	})
+
+	t.Run("flush clears errors", func(t *testing.T) {
+		emitter := NewEmitter()
+
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+
+		_, errs1 := emitter.Flush()
+		require.Len(t, errs1, 1)
+
+		// Second flush should have no errors
+		_, errs2 := emitter.Flush()
+		assert.Nil(t, errs2)
+	})
+}
+
+func TestEmitter_HasErrors(t *testing.T) {
+	t.Run("returns false when no errors", func(t *testing.T) {
+		emitter := NewEmitter()
+		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+		assert.False(t, emitter.HasErrors())
+	})
+
+	t.Run("returns true when errors present", func(t *testing.T) {
+		emitter := NewEmitter()
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		assert.True(t, emitter.HasErrors())
+	})
+
+	t.Run("resets after flush", func(t *testing.T) {
+		emitter := NewEmitter()
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		assert.True(t, emitter.HasErrors())
+
+		emitter.Flush()
+		assert.False(t, emitter.HasErrors())
+	})
+}
+
+func TestEmitter_ErrorCount(t *testing.T) {
+	t.Run("returns 0 when no errors", func(t *testing.T) {
+		emitter := NewEmitter()
+		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+		assert.Equal(t, 0, emitter.ErrorCount())
+	})
+
+	t.Run("counts multiple errors", func(t *testing.T) {
+		emitter := NewEmitter()
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad1": make(chan int)})
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad2": func() {}})
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad3": make(chan string)})
+		assert.Equal(t, 3, emitter.ErrorCount())
+	})
+
+	t.Run("resets after flush", func(t *testing.T) {
+		emitter := NewEmitter()
+		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		assert.Equal(t, 1, emitter.ErrorCount())
+
+		emitter.Flush()
+		assert.Equal(t, 0, emitter.ErrorCount())
+	})
 }
