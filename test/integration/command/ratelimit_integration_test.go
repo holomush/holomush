@@ -120,12 +120,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Execute commands up to burst capacity
 			for i := 0; i < 3; i++ {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred(), "Command %d should succeed", i+1)
 			}
@@ -142,23 +142,23 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Exhaust burst capacity
 			for i := 0; i < 3; i++ {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			// Next command should be rate limited
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   sessionID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(ctx, "test", exec)
 			Expect(err).To(HaveOccurred())
 
@@ -181,23 +181,23 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Exhaust burst capacity
 			for i := 0; i < 3; i++ {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			// Rate limited command should include cooldown
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   sessionID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(ctx, "test", exec)
 			Expect(err).To(HaveOccurred())
 
@@ -218,23 +218,23 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Exhaust burst capacity
 			for i := 0; i < 3; i++ {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			// Should be rate limited
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   sessionID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(ctx, "test", exec)
 			Expect(err).To(HaveOccurred())
 
@@ -242,12 +242,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 			time.Sleep(150 * time.Millisecond)
 
 			// Should be allowed again
-			exec2 := &command.CommandExecution{
+			exec2 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   sessionID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err = dispatcher.Dispatch(ctx, "test", exec2)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -291,12 +291,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 			session2 := ulid.Make()
 
 			// Session 1 uses its token
-			exec1 := &command.CommandExecution{
+			exec1 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: ulid.Make(),
 				SessionID:   session1,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(ctx, "test", exec1)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -309,12 +309,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 			Expect(oopsErr.Code()).To(Equal(command.CodeRateLimited))
 
 			// Session 2 should still have its own token
-			exec2 := &command.CommandExecution{
+			exec2 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: ulid.Make(),
 				SessionID:   session2,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err = dispatcher.Dispatch(ctx, "test", exec2)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -330,24 +330,24 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Each session should be able to execute exactly one command
 			for _, sessionID := range sessions {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: ulid.Make(),
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			// All sessions should now be rate limited
 			for _, sessionID := range sessions {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: ulid.Make(),
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).To(HaveOccurred())
 			}
@@ -396,12 +396,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Admin should be able to execute many commands without rate limiting
 			for i := 0; i < 10; i++ {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: adminCharID,
 					SessionID:   sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred(), "Admin command %d should succeed", i+1)
 			}
@@ -421,32 +421,32 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Admin can execute multiple commands
 			for i := 0; i < 3; i++ {
-				exec := &command.CommandExecution{
+				exec := command.NewTestExecution(command.CommandExecutionConfig{
 					CharacterID: adminCharID,
 					SessionID:   adminSession,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
-				}
+				})
 				err := dispatcher.Dispatch(ctx, "test", exec)
 				Expect(err).NotTo(HaveOccurred())
 			}
 
 			// Regular user hits rate limit after first command
-			exec1 := &command.CommandExecution{
+			exec1 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: regularCharID,
 				SessionID:   regularSession,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(ctx, "test", exec1)
 			Expect(err).NotTo(HaveOccurred())
 
-			exec2 := &command.CommandExecution{
+			exec2 := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: regularCharID,
 				SessionID:   regularSession,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err = dispatcher.Dispatch(ctx, "test", exec2)
 			Expect(err).To(HaveOccurred())
 
@@ -501,13 +501,13 @@ var _ = Describe("Rate Limiting Integration", func() {
 			charID := ulid.Make()
 
 			// Use alias - should succeed
-			exec := &command.CommandExecution{
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
 				CharacterID: charID,
 				SessionID:   sessionID,
 				PlayerID:    playerID,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
-			}
+			})
 			err := dispatcher.Dispatch(ctx, "l around", exec)
 			Expect(err).NotTo(HaveOccurred())
 
