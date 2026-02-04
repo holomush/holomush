@@ -240,4 +240,158 @@ The property name supports prefix matching (e.g., "desc" matches "description").
 Requires the ` + "`objects.set`" + ` capability.`,
 		Source: "core",
 	})
+
+	// Player alias commands
+	mustRegister(command.CommandEntry{
+		Name:         "alias",
+		Handler:      AliasAddHandler,
+		Capabilities: []string{"player.alias"},
+		Help:         "Add a personal alias",
+		Usage:        "alias <name>=<command>",
+		HelpText: `## Alias
+
+Create or update a personal command alias.
+
+### Usage
+
+- ` + "`alias <name>=<command>`" + ` - Create an alias
+
+### Examples
+
+- ` + "`alias l=look`" + ` - Create shortcut for look
+- ` + "`alias n=north`" + ` - Create shortcut for north
+- ` + "`alias aa=attack all`" + ` - Create alias with arguments
+
+### Notes
+
+- Personal aliases take precedence over system aliases
+- Warnings are shown if your alias shadows an existing command or system alias
+- Circular alias chains are automatically rejected
+
+### Permissions
+
+Requires the ` + "`player.alias`" + ` capability.`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntry{
+		Name:         "unalias",
+		Handler:      AliasRemoveHandler,
+		Capabilities: []string{"player.alias"},
+		Help:         "Remove a personal alias",
+		Usage:        "unalias <name>",
+		HelpText: `## Unalias
+
+Remove a personal command alias.
+
+### Usage
+
+- ` + "`unalias <name>`" + ` - Remove the named alias
+
+### Examples
+
+- ` + "`unalias l`" + ` - Remove the 'l' alias
+
+### Permissions
+
+Requires the ` + "`player.alias`" + ` capability.`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntry{
+		Name:         "aliases",
+		Handler:      AliasListHandler,
+		Capabilities: []string{"player.alias"},
+		Help:         "List your personal aliases",
+		Usage:        "aliases",
+		HelpText: `## Aliases
+
+Display all your personal command aliases.
+
+### Usage
+
+- ` + "`aliases`" + ` - List all your aliases
+
+### Permissions
+
+Requires the ` + "`player.alias`" + ` capability.`,
+		Source: "core",
+	})
+
+	// System alias commands
+	mustRegister(command.CommandEntry{
+		Name:         "sysalias",
+		Handler:      SysaliasAddHandler,
+		Capabilities: []string{"admin.alias"},
+		Help:         "Add a system alias",
+		Usage:        "sysalias <name>=<command>",
+		HelpText: `## Sysalias
+
+Create or update a system-wide command alias.
+
+### Usage
+
+- ` + "`sysalias <name>=<command>`" + ` - Create a system alias
+
+### Examples
+
+- ` + "`sysalias l=look`" + ` - Create system shortcut for look
+- ` + "`sysalias n=north`" + ` - Create system shortcut for north
+
+### Notes
+
+- System aliases apply to all players
+- Cannot shadow an existing system alias (remove it first with sysunsalias)
+- Warnings are shown if the alias shadows an existing command
+- Circular alias chains are automatically rejected
+
+### Permissions
+
+Requires the ` + "`admin.alias`" + ` capability.`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntry{
+		Name:         "sysunsalias",
+		Handler:      SysaliasRemoveHandler,
+		Capabilities: []string{"admin.alias"},
+		Help:         "Remove a system alias",
+		Usage:        "sysunsalias <name>",
+		HelpText: `## Sysunsalias
+
+Remove a system-wide command alias.
+
+### Usage
+
+- ` + "`sysunsalias <name>`" + ` - Remove the named system alias
+
+### Examples
+
+- ` + "`sysunsalias l`" + ` - Remove the system 'l' alias
+
+### Permissions
+
+Requires the ` + "`admin.alias`" + ` capability.`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntry{
+		Name:         "sysaliases",
+		Handler:      SysaliasListHandler,
+		Capabilities: []string{"admin.alias"},
+		Help:         "List all system aliases",
+		Usage:        "sysaliases",
+		HelpText: `## Sysaliases
+
+Display all system-wide command aliases.
+
+### Usage
+
+- ` + "`sysaliases`" + ` - List all system aliases
+
+### Permissions
+
+Requires the ` + "`admin.alias`" + ` capability.`,
+		Source: "core",
+	})
 }

@@ -685,6 +685,149 @@ func TestAliasCache_ChainedExpansionPreservesArgs(t *testing.T) {
 	}
 }
 
+func TestAliasCache_GetPlayerAlias(t *testing.T) {
+	cache := NewAliasCache()
+	playerID := ulid.MustNew(1, nil)
+
+	t.Run("returns alias when exists", func(t *testing.T) {
+		require.NoError(t, cache.SetPlayerAlias(playerID, "l", "look"))
+
+		cmd, exists := cache.GetPlayerAlias(playerID, "l")
+		assert.True(t, exists)
+		assert.Equal(t, "look", cmd)
+	})
+
+	t.Run("returns false when alias doesn't exist", func(t *testing.T) {
+		cmd, exists := cache.GetPlayerAlias(playerID, "nonexistent")
+		assert.False(t, exists)
+		assert.Empty(t, cmd)
+	})
+
+	t.Run("returns false for other players alias", func(t *testing.T) {
+		otherPlayer := ulid.MustNew(2, nil)
+		cmd, exists := cache.GetPlayerAlias(otherPlayer, "l")
+		assert.False(t, exists)
+		assert.Empty(t, cmd)
+	})
+}
+
+func TestAliasCache_GetSystemAlias(t *testing.T) {
+	cache := NewAliasCache()
+
+	t.Run("returns alias when exists", func(t *testing.T) {
+		require.NoError(t, cache.SetSystemAlias("l", "look"))
+
+		cmd, exists := cache.GetSystemAlias("l")
+		assert.True(t, exists)
+		assert.Equal(t, "look", cmd)
+	})
+
+	t.Run("returns false when alias doesn't exist", func(t *testing.T) {
+		cmd, exists := cache.GetSystemAlias("nonexistent")
+		assert.False(t, exists)
+		assert.Empty(t, cmd)
+	})
+}
+
+func TestAliasCache_ListPlayerAliases(t *testing.T) {
+	cache := NewAliasCache()
+	playerID := ulid.MustNew(1, nil)
+
+	t.Run("returns empty map for new player", func(t *testing.T) {
+		aliases := cache.ListPlayerAliases(playerID)
+		assert.NotNil(t, aliases)
+		assert.Empty(t, aliases)
+	})
+
+	t.Run("returns copy of player aliases", func(t *testing.T) {
+		require.NoError(t, cache.SetPlayerAlias(playerID, "l", "look"))
+		require.NoError(t, cache.SetPlayerAlias(playerID, "n", "north"))
+
+		aliases := cache.ListPlayerAliases(playerID)
+		assert.Len(t, aliases, 2)
+		assert.Equal(t, "look", aliases["l"])
+		assert.Equal(t, "north", aliases["n"])
+
+		// Verify it's a copy by modifying
+		aliases["modified"] = "test"
+		newAliases := cache.ListPlayerAliases(playerID)
+		assert.Len(t, newAliases, 2) // Should still be 2
+	})
+
+	t.Run("returns empty for player with no aliases", func(t *testing.T) {
+		otherPlayer := ulid.MustNew(2, nil)
+		aliases := cache.ListPlayerAliases(otherPlayer)
+		assert.NotNil(t, aliases)
+		assert.Empty(t, aliases)
+	})
+}
+
+func TestAliasCache_ListSystemAliases(t *testing.T) {
+	t.Run("returns empty map when no aliases", func(t *testing.T) {
+		cache := NewAliasCache()
+		aliases := cache.ListSystemAliases()
+		assert.NotNil(t, aliases)
+		assert.Empty(t, aliases)
+	})
+
+	t.Run("returns copy of system aliases", func(t *testing.T) {
+		cache := NewAliasCache()
+		require.NoError(t, cache.SetSystemAlias("l", "look"))
+		require.NoError(t, cache.SetSystemAlias("n", "north"))
+
+		aliases := cache.ListSystemAliases()
+		assert.Len(t, aliases, 2)
+		assert.Equal(t, "look", aliases["l"])
+		assert.Equal(t, "north", aliases["n"])
+
+		// Verify it's a copy by modifying
+		aliases["modified"] = "test"
+		newAliases := cache.ListSystemAliases()
+		assert.Len(t, newAliases, 2) // Should still be 2
+	})
+}
+
+func TestAliasCache_ShadowsCommand(t *testing.T) {
+	cache := NewAliasCache()
+	registry := NewRegistry()
+
+	require.NoError(t, registry.Register(CommandEntry{
+		Name:    "look",
+		Handler: testHandler,
+		Source:  "core",
+	}))
+
+	t.Run("returns true when command exists", func(t *testing.T) {
+		assert.True(t, cache.ShadowsCommand("look", registry))
+	})
+
+	t.Run("returns false when command doesn't exist", func(t *testing.T) {
+		assert.False(t, cache.ShadowsCommand("nonexistent", registry))
+	})
+
+	t.Run("returns false when registry is nil", func(t *testing.T) {
+		assert.False(t, cache.ShadowsCommand("look", nil))
+	})
+}
+
+func TestAliasCache_ShadowsSystemAlias(t *testing.T) {
+	cache := NewAliasCache()
+
+	t.Run("returns true with command when system alias exists", func(t *testing.T) {
+		require.NoError(t, cache.SetSystemAlias("l", "look"))
+
+		cmd, shadows := cache.ShadowsSystemAlias("l")
+		assert.True(t, shadows)
+		assert.Equal(t, "look", cmd)
+	})
+
+	t.Run("returns false when system alias doesn't exist", func(t *testing.T) {
+		cmd, shadows := cache.ShadowsSystemAlias("nonexistent")
+		assert.False(t, shadows)
+		assert.Empty(t, cmd)
+	})
+}
+
 func BenchmarkAliasCache_Resolve(b *testing.B) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)

@@ -244,6 +244,8 @@ type ServicesConfig struct {
 	Access      access.AccessControl // authorization checks
 	Events      core.EventStore      // event persistence
 	Broadcaster EventBroadcaster     // event broadcasting
+	AliasCache  *AliasCache          // alias management (optional)
+	Registry    *Registry            // command registry (optional)
 }
 
 // Services provides access to core services for command handlers.
@@ -260,6 +262,8 @@ type Services struct {
 	Access      access.AccessControl // authorization checks
 	Events      core.EventStore      // event persistence
 	Broadcaster EventBroadcaster     // event broadcasting
+	AliasCache  *AliasCache          // alias management (optional, for alias commands)
+	Registry    *Registry            // command registry (optional, for alias shadow detection)
 }
 
 // NewServices creates a validated Services instance.
@@ -297,6 +301,8 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 		Access:      cfg.Access,
 		Events:      cfg.Events,
 		Broadcaster: cfg.Broadcaster,
+		AliasCache:  cfg.AliasCache,
+		Registry:    cfg.Registry,
 	}, nil
 }
 

@@ -190,6 +190,68 @@ func (c *AliasCache) ClearPlayer(playerID ulid.ULID) {
 	delete(c.playerAliases, playerID)
 }
 
+// GetPlayerAlias returns a player's alias and whether it exists.
+func (c *AliasCache) GetPlayerAlias(playerID ulid.ULID, alias string) (command string, exists bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if aliases, ok := c.playerAliases[playerID]; ok {
+		command, exists = aliases[alias]
+	}
+	return command, exists
+}
+
+// GetSystemAlias returns a system alias and whether it exists.
+func (c *AliasCache) GetSystemAlias(alias string) (command string, exists bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	command, exists = c.systemAliases[alias]
+	return command, exists
+}
+
+// ListPlayerAliases returns a copy of all aliases for a player.
+// Returns an empty map if the player has no aliases.
+func (c *AliasCache) ListPlayerAliases(playerID ulid.ULID) map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make(map[string]string)
+	if aliases, ok := c.playerAliases[playerID]; ok {
+		maps.Copy(result, aliases)
+	}
+	return result
+}
+
+// ListSystemAliases returns a copy of all system aliases.
+func (c *AliasCache) ListSystemAliases() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make(map[string]string)
+	maps.Copy(result, c.systemAliases)
+	return result
+}
+
+// ShadowsCommand checks if the given alias name matches a registered command.
+func (c *AliasCache) ShadowsCommand(alias string, registry *Registry) bool {
+	if registry == nil {
+		return false
+	}
+	_, exists := registry.Get(alias)
+	return exists
+}
+
+// ShadowsSystemAlias checks if the given alias shadows an existing system alias.
+// Returns the command the system alias expands to and whether it shadows.
+func (c *AliasCache) ShadowsSystemAlias(alias string) (command string, shadows bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	command, shadows = c.systemAliases[alias]
+	return command, shadows
+}
+
 // AliasResult contains the result of alias resolution.
 type AliasResult struct {
 	Resolved  string // The resolved command string

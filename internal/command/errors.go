@@ -17,6 +17,7 @@ const (
 	CodeWorldError        = "WORLD_ERROR"
 	CodeRateLimited       = "RATE_LIMITED"
 	CodeCircularAlias     = "CIRCULAR_ALIAS"
+	CodeAliasConflict     = "ALIAS_CONFLICT"
 	CodeNoCharacter       = "NO_CHARACTER"
 	CodeTargetNotFound    = "TARGET_NOT_FOUND"
 	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
@@ -88,6 +89,14 @@ func ErrCircularAlias(alias string) error {
 		Errorf("Alias rejected: circular reference detected (expansion depth exceeded)")
 }
 
+// ErrAliasConflict creates an error when a system alias shadows another system alias.
+func ErrAliasConflict(alias, existingCommand string) error {
+	return oops.Code(CodeAliasConflict).
+		With("alias", alias).
+		With("existing_command", existingCommand).
+		Errorf("'%s' shadows existing system alias for '%s'. Use 'sysalias remove %s' first.", alias, existingCommand, alias)
+}
+
 // ErrNoCharacter creates an error when command is executed without a character.
 func ErrNoCharacter() error {
 	return oops.Code(CodeNoCharacter).
@@ -136,6 +145,13 @@ func PlayerMessage(err error) string {
 		return "Too many commands. Please slow down."
 	case CodeCircularAlias:
 		return "Alias rejected: circular reference detected (expansion depth exceeded)"
+	case CodeAliasConflict:
+		if alias, ok := oopsErr.Context()["alias"].(string); ok {
+			if existingCmd, ok := oopsErr.Context()["existing_command"].(string); ok {
+				return "'" + alias + "' shadows existing system alias for '" + existingCmd + "'. Use 'sysalias remove " + alias + "' first."
+			}
+		}
+		return "Alias conflicts with an existing system alias."
 	case CodeNoCharacter:
 		return "No character selected. Please select a character first."
 	case CodeTargetNotFound:
