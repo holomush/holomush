@@ -4,6 +4,8 @@
 package holo
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/holomush/holomush/pkg/plugin"
@@ -235,4 +237,58 @@ func TestEmitter_JSONEncodingError(t *testing.T) {
 	require.Len(t, events, 1)
 	// On encoding error, payload should be "{}"
 	assert.Equal(t, "{}", events[0].Payload)
+}
+
+func TestEmitter_JSONEncodingError_LogsError(t *testing.T) {
+	// Capture log output
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	logger := slog.New(handler)
+
+	emitter := NewEmitterWithLogger(logger)
+
+	// Create a payload with a value that cannot be JSON encoded (channel)
+	badPayload := Payload{"invalid": make(chan int)}
+	emitter.Global(plugin.EventTypeSystem, badPayload)
+
+	events := emitter.Flush()
+	require.Len(t, events, 1)
+	assert.Equal(t, "{}", events[0].Payload)
+
+	// Verify error was logged
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "json marshal failed")
+	assert.Contains(t, logOutput, "stream=global")
+	assert.Contains(t, logOutput, "event_type=system")
+}
+
+func TestEmitter_JSONEncodingError_LogsPayloadType(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	logger := slog.New(handler)
+
+	emitter := NewEmitterWithLogger(logger)
+
+	// Use a function which cannot be marshaled - shows type info in log
+	badPayload := Payload{"callback": func() {}}
+	emitter.Location("room123", plugin.EventTypeSay, badPayload)
+
+	emitter.Flush()
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "json marshal failed")
+	assert.Contains(t, logOutput, "stream=location:room123")
+}
+
+func TestEmitter_NilLogger_NoLogging(t *testing.T) {
+	// NewEmitter (no logger) should not panic on marshal error
+	emitter := NewEmitter()
+
+	badPayload := Payload{"invalid": make(chan int)}
+	emitter.Global(plugin.EventTypeSystem, badPayload)
+
+	events := emitter.Flush()
+	require.Len(t, events, 1)
+	assert.Equal(t, "{}", events[0].Payload)
+	// No panic means success - nil logger is handled gracefully
 }

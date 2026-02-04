@@ -5,6 +5,7 @@ package holo
 
 import (
 	"encoding/json"
+	"log/slog"
 
 	"github.com/holomush/holomush/pkg/plugin"
 )
@@ -18,11 +19,21 @@ type Payload map[string]any
 // to add events, and Flush to retrieve and clear the buffer.
 type Emitter struct {
 	events []plugin.EmitEvent
+	logger *slog.Logger
 }
 
 // NewEmitter creates a new event emitter with an empty buffer.
+// JSON encoding errors are silently ignored; use NewEmitterWithLogger
+// to enable error logging.
 func NewEmitter() *Emitter {
 	return &Emitter{}
+}
+
+// NewEmitterWithLogger creates a new event emitter with logging support.
+// When JSON encoding fails, errors are logged with context about the
+// stream and event type to help diagnose plugin bugs or invalid payloads.
+func NewEmitterWithLogger(logger *slog.Logger) *Emitter {
+	return &Emitter{logger: logger}
 }
 
 // Location emits an event to a location stream ("location:<id>").
@@ -52,10 +63,18 @@ func (e *Emitter) Flush() []plugin.EmitEvent {
 }
 
 // emit adds an event to the internal buffer.
-// JSON encoding errors are silently ignored; the payload will be empty on error.
+// JSON encoding errors result in an empty payload; if a logger is configured,
+// the error is logged with context about the stream and event type.
 func (e *Emitter) emit(stream string, eventType plugin.EventType, payload Payload) {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
+		if e.logger != nil {
+			e.logger.Warn("json marshal failed",
+				slog.String("stream", stream),
+				slog.String("event_type", string(eventType)),
+				slog.String("error", err.Error()),
+			)
+		}
 		payloadJSON = []byte("{}")
 	}
 	e.events = append(e.events, plugin.EmitEvent{
