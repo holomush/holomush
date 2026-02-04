@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -349,9 +350,12 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 
 // BroadcastSystemMessage creates and broadcasts a system event with the given message.
 // This is a convenience method for handlers that need to send system messages.
-// If the Broadcaster is nil, this method is a no-op.
+// If the Broadcaster is nil, this method logs a debug message and returns.
 func (s *Services) BroadcastSystemMessage(stream, message string) {
 	if s.broadcaster == nil {
+		slog.Debug("BroadcastSystemMessage: broadcaster not configured, message not delivered",
+			"stream", stream,
+			"message_length", len(message))
 		return
 	}
 
