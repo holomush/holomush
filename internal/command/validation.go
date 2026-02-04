@@ -17,7 +17,9 @@ const (
 
 // namePattern validates command/alias names: must start with letter,
 // followed by letters, digits, or special chars: _!?@#$%^+-
-// Pattern: ^[a-zA-Z][a-zA-Z0-9_!?@#$%^+-]{0,19}$
+// Pattern: ^[a-zA-Z][a-zA-Z0-9_!?@#$%^+\-]{0,19}$
+// Note: The hyphen is escaped (\-) in the regex for clarity, though it's
+// optional at the end of a character class.
 var namePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_!?@#$%^+\-]{0,19}$`)
 
 // ValidateCommandName validates a command name.
