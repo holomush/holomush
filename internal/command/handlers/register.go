@@ -188,18 +188,24 @@ Requires the ` + "`admin.wall`" + ` capability.`,
 		Handler:      CreateHandler,
 		Capabilities: []string{"objects.create"},
 		Help:         "Create a new object",
-		Usage:        "create <name>",
+		Usage:        `create <type> "<name>"`,
 		HelpText: `## Create
 
-Create a new object in your inventory.
+Create a new object or location with the specified name.
 
 ### Usage
 
-- ` + "`create <name>`" + ` - Create an object with the given name
+- ` + "`create <type> \"<name>\"`" + ` - Create an object or location with the given name (name must be quoted)
+
+### Types
+
+- ` + "`object`" + ` - A portable object
+- ` + "`location`" + ` - A room or area
 
 ### Examples
 
-- ` + "`create sword`" + ` - Create a new sword
+- ` + "`create object \"Enchanted Sword\"`" + ` - Create a new object
+- ` + "`create location \"The Library\"`" + ` - Create a new location
 
 ### Permissions
 
