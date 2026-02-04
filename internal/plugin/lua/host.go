@@ -109,6 +109,12 @@ func (h *Host) Unload(_ context.Context, name string) error {
 // DeliverEvent executes the plugin's event handler.
 // For command events, it calls on_command(ctx) if defined, falling back to on_event(event).
 // For non-command events, it calls on_event(event).
+//
+// Partial Success Behavior: If the plugin returns emit events with validation errors (e.g.,
+// missing required fields), those specific events are skipped and logged as warnings, but
+// valid events are still returned. This ensures plugin bugs don't break game uptime while
+// still providing visibility into issues via logs. The returned error is only non-nil for
+// critical failures (plugin not found, Lua execution errors), not for emit validation issues.
 func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
 	h.mu.RLock()
 	p, ok := h.plugins[name]
