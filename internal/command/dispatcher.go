@@ -6,6 +6,7 @@ package command
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"go.opentelemetry.io/otel"
@@ -67,6 +68,19 @@ func NewDispatcher(registry *Registry, ac access.AccessControl, opts ...Dispatch
 
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
+	startTime := time.Now()
+
+	// Track command name and source for metrics (populated as we learn them)
+	var commandName, commandSource, metricsStatus string
+
+	// Record metrics on exit
+	defer func() {
+		if commandName != "" {
+			RecordCommandExecution(commandName, commandSource, metricsStatus)
+			RecordCommandDuration(commandName, commandSource, time.Since(startTime))
+		}
+	}()
+
 	// Validate execution context - commands require a character
 	if exec.CharacterID.Compare(ulid.ULID{}) == 0 {
 		return ErrNoCharacter()
@@ -93,6 +107,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		// If an alias was used, set InvokedAs to the actual alias (not the parsed word)
 		if aliasResult.WasAlias && aliasResult.AliasUsed != "" {
 			invokedAs = aliasResult.AliasUsed
+			// Record alias expansion metric
+			RecordAliasExpansion(aliasResult.AliasUsed)
 		}
 	}
 
@@ -101,6 +117,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	if err != nil {
 		return err
 	}
+
+	// Set command name for metrics (now we know it)
+	commandName = parsed.Name
 
 	// Start trace span
 	ctx, span := tracer.Start(ctx, "command.execute",
@@ -135,6 +154,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 				span.SetAttributes(attribute.Bool("command.rate_limited", true))
 				span.SetAttributes(attribute.Int64("command.cooldown_ms", cooldownMs))
 				observability.RecordCommandRateLimited(parsed.Name)
+				metricsStatus = StatusRateLimited
 				err = ErrRateLimited(cooldownMs)
 				return err
 			}
@@ -144,15 +164,19 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// Look up command
 	entry, ok := d.registry.Get(parsed.Name)
 	if !ok {
+		metricsStatus = StatusNotFound
 		err = ErrUnknownCommand(parsed.Name)
 		return err
 	}
 
+	// Set source for metrics (now we know it)
+	commandSource = entry.Source
 	span.SetAttributes(attribute.String("command.source", entry.Source))
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
 		if !d.access.Check(ctx, subject, "execute", cap) {
+			metricsStatus = StatusPermissionDenied
 			err = ErrPermissionDenied(parsed.Name, cap)
 			return err
 		}
@@ -163,11 +187,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	exec.InvokedAs = invokedAs
 	err = entry.Handler(ctx, exec)
 	if err != nil {
+		metricsStatus = StatusError
 		slog.WarnContext(ctx, "command execution failed",
 			"command", parsed.Name,
 			"character_id", exec.CharacterID.String(),
 			"error", err,
 		)
+	} else {
+		metricsStatus = StatusSuccess
 	}
 	return err
 }

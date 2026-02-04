@@ -14,6 +14,8 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/goleak"
 
 	"github.com/holomush/holomush/internal/access/accesstest"
@@ -1160,4 +1162,212 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 		require.NoError(t, dispatchErr)
 		assert.Equal(t, ";", capturedInvokedAs, "InvokedAs should be the original command before alias resolution")
 	})
+}
+
+func TestDispatcher_MetricsIntegration(t *testing.T) {
+	// Set up test meter provider to capture metrics
+	reader := setupTestMeterProvider(t)
+
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	// Register test commands
+	err := reg.Register(CommandEntry{
+		Name:         "success",
+		Capabilities: nil,
+		Handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	err = reg.Register(CommandEntry{
+		Name:         "failing",
+		Capabilities: nil,
+		Handler: func(_ context.Context, _ *CommandExecution) error {
+			return errors.New("handler error")
+		},
+		Source: "lua",
+	})
+	require.NoError(t, err)
+
+	err = reg.Register(CommandEntry{
+		Name:         "protected",
+		Capabilities: []string{"admin.manage"},
+		Handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
+
+	t.Run("records success metric", func(t *testing.T) {
+		exec := &CommandExecution{
+			CharacterID: ulid.Make(),
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		dispatchErr := dispatcher.Dispatch(context.Background(), "success", exec)
+		require.NoError(t, dispatchErr)
+	})
+
+	t.Run("records error metric", func(t *testing.T) {
+		exec := &CommandExecution{
+			CharacterID: ulid.Make(),
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		dispatchErr := dispatcher.Dispatch(context.Background(), "failing", exec)
+		require.Error(t, dispatchErr)
+	})
+
+	t.Run("records not_found metric", func(t *testing.T) {
+		exec := &CommandExecution{
+			CharacterID: ulid.Make(),
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		dispatchErr := dispatcher.Dispatch(context.Background(), "nonexistent", exec)
+		require.Error(t, dispatchErr)
+	})
+
+	t.Run("records permission_denied metric", func(t *testing.T) {
+		exec := &CommandExecution{
+			CharacterID: ulid.Make(),
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		// Don't grant admin.manage capability
+		dispatchErr := dispatcher.Dispatch(context.Background(), "protected", exec)
+		require.Error(t, dispatchErr)
+	})
+
+	// Collect and verify metrics
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(context.Background(), &rm)
+	require.NoError(t, err)
+
+	executions := findMetric(rm, "holomush.command.executions")
+	require.NotNil(t, executions, "holomush.command.executions metric should be recorded")
+
+	// Verify we have metrics with various statuses
+	assert.True(t, hasCounterWithStatus(executions, StatusSuccess), "should have success status")
+	assert.True(t, hasCounterWithStatus(executions, StatusError), "should have error status")
+	assert.True(t, hasCounterWithStatus(executions, StatusNotFound), "should have not_found status")
+	assert.True(t, hasCounterWithStatus(executions, StatusPermissionDenied), "should have permission_denied status")
+
+	// Verify duration histogram
+	duration := findMetric(rm, "holomush.command.duration")
+	require.NotNil(t, duration, "holomush.command.duration metric should be recorded")
+	assert.True(t, hasHistogramWithCommand(duration, "success"), "should have duration for success command")
+	assert.True(t, hasHistogramWithCommand(duration, "failing"), "should have duration for failing command")
+	assert.True(t, hasHistogramWithCommand(duration, "nonexistent"), "should have duration for nonexistent command")
+}
+
+func TestDispatcher_AliasMetrics(t *testing.T) {
+	// Set up test meter provider to capture metrics
+	reader := setupTestMeterProvider(t)
+
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	err := reg.Register(CommandEntry{
+		Name:         "look",
+		Capabilities: nil,
+		Handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	// Set up alias cache
+	cache := NewAliasCache()
+	cache.LoadSystemAliases(map[string]string{
+		"l": "look",
+	})
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
+	require.NoError(t, err)
+
+	// Use the alias
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		PlayerID:    ulid.Make(),
+		Output:      &bytes.Buffer{},
+		Services:    stubServices(),
+	}
+	err = dispatcher.Dispatch(context.Background(), "l around", exec)
+	require.NoError(t, err)
+
+	// Collect and verify metrics
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(context.Background(), &rm)
+	require.NoError(t, err)
+
+	expansions := findMetric(rm, "holomush.alias.expansions")
+	require.NotNil(t, expansions, "holomush.alias.expansions metric should be recorded")
+
+	// Verify we have an expansion for 'l'
+	value := getCounterValue(expansions, attribute.String("alias", "l"))
+	assert.Equal(t, int64(1), value, "should have 1 expansion for 'l' alias")
+}
+
+func TestDispatcher_RateLimitMetrics(t *testing.T) {
+	// Set up test meter provider to capture metrics
+	reader := setupTestMeterProvider(t)
+
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	err := reg.Register(CommandEntry{
+		Name:         "test",
+		Capabilities: nil,
+		Handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	// Create rate limiter with burst of 1
+	rl := NewRateLimiter(RateLimiterConfig{
+		BurstCapacity: 1,
+		SustainedRate: 0.1,
+	})
+
+	dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
+	require.NoError(t, err)
+
+	sessionID := ulid.Make()
+
+	// First command succeeds
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		SessionID:   sessionID,
+		Output:      &bytes.Buffer{},
+		Services:    stubServices(),
+	}
+	err = dispatcher.Dispatch(context.Background(), "test", exec)
+	require.NoError(t, err)
+
+	// Second command is rate limited
+	err = dispatcher.Dispatch(context.Background(), "test", exec)
+	require.Error(t, err)
+
+	// Collect and verify metrics
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(context.Background(), &rm)
+	require.NoError(t, err)
+
+	executions := findMetric(rm, "holomush.command.executions")
+	require.NotNil(t, executions, "holomush.command.executions metric should be recorded")
+
+	// Should have both success and rate_limited
+	assert.True(t, hasCounterWithStatus(executions, StatusSuccess), "should have success status")
+	assert.True(t, hasCounterWithStatus(executions, StatusRateLimited), "should have rate_limited status")
 }
