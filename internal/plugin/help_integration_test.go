@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/accesstest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
@@ -87,7 +88,11 @@ func setupHelpTest() (*helpFixture, error) {
 
 	enforcer := capability.NewEnforcer()
 	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil, enforcer, hostfunc.WithCommandRegistry(registry))
+	ac := accesstest.AllowAll{} // Allow all access for testing
+	hostFuncs := hostfunc.New(nil, enforcer,
+		hostfunc.WithCommandRegistry(registry),
+		hostfunc.WithAccessControl(ac),
+	)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
 	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
@@ -285,6 +290,37 @@ var _ = Describe("Help Plugin Integration", func() {
 			// Should find commands mentioning "room"
 			Expect(message).To(ContainSubstring("say")) // "Say something to the room"
 			Expect(message).To(ContainSubstring("dig")) // "Create a new room"
+		})
+
+		It("searches commands by usage field", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Search for "message" which only appears in usage: "say <message>"
+			event := pluginpkg.Event{
+				ID:        "01HTEST",
+				Stream:    "char:01HTEST000000000000000CHAR",
+				Type:      pluginpkg.EventType("command"),
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginpkg.ActorCharacter,
+				ActorID:   "01HTEST000000000000000CHAR",
+				Payload:   makeCommandPayload("help", "search message"),
+			}
+
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(len(result)).To(BeNumerically(">=", 1))
+
+			outputEvent := result[0]
+			payload := parsePayload(outputEvent.Payload)
+			message := payload["message"].(string)
+
+			// Should find "say" command via usage field "say <message>"
+			Expect(message).To(ContainSubstring("say"))
+			// Should NOT find "look" or "dig" (they don't have "message" in any field)
+			Expect(message).NotTo(ContainSubstring("look"))
+			Expect(message).NotTo(ContainSubstring("dig"))
 		})
 	})
 })

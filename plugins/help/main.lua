@@ -145,13 +145,14 @@ function search_commands(ctx, term)
         return holo.emit.flush()
     end
 
-    -- Filter commands matching the search term
+    -- Filter commands matching the search term (searches name, help, and usage fields)
     local matches = {}
     local lower_term = term:lower()
     for _, cmd in ipairs(commands or {}) do
         local name_match = cmd.name and cmd.name:lower():find(lower_term, 1, true)
         local help_match = cmd.help and cmd.help:lower():find(lower_term, 1, true)
-        if name_match or help_match then
+        local usage_match = cmd.usage and cmd.usage:lower():find(lower_term, 1, true)
+        if name_match or help_match or usage_match then
             table.insert(matches, cmd)
         end
     end
