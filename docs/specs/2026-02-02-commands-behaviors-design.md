@@ -97,11 +97,12 @@ type Services struct {
     Broadcaster *core.Broadcaster    // event broadcasting (for admin commands)
 }
 
-// NOTE: The Services struct uses concrete types rather than interfaces for
-// World and Broadcaster. This is intentional:
-// - World uses pointer type (*world.Service) because the service is stateful
-// - Broadcaster is needed by admin commands (boot, shutdown, wall) to
-//   broadcast messages to all connected sessions
+// NOTE: The Services struct uses interfaces rather than concrete types.
+// This is intentional and follows Go best practice ("accept interfaces, return structs"):
+// - Enables flexible implementation (production vs test implementations)
+// - Allows command handlers to be tested with mocks
+// - Decouples handlers from concrete service implementations
+// - WorldService and EventBroadcaster interfaces define only the methods handlers actually need
 ```
 
 ### Go Command Registration
