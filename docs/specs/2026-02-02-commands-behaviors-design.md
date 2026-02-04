@@ -90,11 +90,11 @@ type CommandExecution struct {
 // Handlers MUST NOT store references to services beyond execution.
 // Handlers MUST access services only through exec.Services.
 type Services struct {
-    World       *world.Service       // world model queries and mutations
+    World       WorldService         // world model queries and mutations
     Session     core.SessionService  // session management
     Access      access.AccessControl // authorization checks
     Events      core.EventStore      // event persistence
-    Broadcaster *core.Broadcaster    // event broadcasting (for admin commands)
+    Broadcaster EventBroadcaster     // event broadcasting (for admin commands)
 }
 
 // NOTE: The Services struct uses interfaces rather than concrete types.
