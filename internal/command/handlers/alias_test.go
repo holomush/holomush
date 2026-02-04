@@ -6,13 +6,16 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/mocks"
 )
 
 // testHandler is a no-op handler for testing purposes.
@@ -528,5 +531,344 @@ func TestSysaliasListHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Contains(t, buf.String(), "No system aliases defined")
+	})
+}
+
+// --- Persistence Tests ---
+
+func TestAliasAddHandler_PersistsToDatabase(t *testing.T) {
+	t.Run("persists player alias to database before updating cache", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		playerID := ulid.Make()
+
+		// Expect database write with correct parameters
+		mockRepo.EXPECT().
+			SetPlayerAlias(mock.Anything, playerID, "l", "look").
+			Return(nil)
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.NoError(t, err)
+
+		// Verify alias is in cache
+		result := cache.Resolve(playerID, "l", nil)
+		assert.Equal(t, "look", result.Resolved)
+		assert.True(t, result.WasAlias)
+	})
+
+	t.Run("does not update cache if database write fails", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		playerID := ulid.Make()
+
+		// Simulate database failure
+		mockRepo.EXPECT().
+			SetPlayerAlias(mock.Anything, playerID, "l", "look").
+			Return(errors.New("database connection failed"))
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection failed")
+
+		// Verify alias was NOT added to cache
+		_, exists := cache.GetPlayerAlias(playerID, "l")
+		assert.False(t, exists, "alias should not be in cache when database write fails")
+	})
+
+	t.Run("works without repository (cache-only mode)", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		playerID := ulid.Make()
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{}), // No AliasRepo
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.NoError(t, err)
+
+		// Alias should still be added to cache
+		result := cache.Resolve(playerID, "l", nil)
+		assert.Equal(t, "look", result.Resolved)
+	})
+
+	t.Run("rolls back database write if cache update fails", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		playerID := ulid.Make()
+
+		// Create a circular alias scenario: add "look" -> "l" first
+		// Then when we try to add "l" -> "look", the cache will detect the cycle
+		require.NoError(t, cache.SetPlayerAlias(playerID, "look", "l"))
+
+		// Expect database write to succeed
+		mockRepo.EXPECT().
+			SetPlayerAlias(mock.Anything, playerID, "l", "look").
+			Return(nil)
+
+		// Expect rollback (delete) when cache fails due to circular reference
+		mockRepo.EXPECT().
+			DeletePlayerAlias(mock.Anything, playerID, "l").
+			Return(nil)
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "circular")
+
+		// Verify: database write was rolled back (DeletePlayerAlias was called)
+		// The mock expectations above verify this automatically
+	})
+}
+
+func TestAliasRemoveHandler_PersistsToDatabase(t *testing.T) {
+	t.Run("removes player alias from database before updating cache", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		playerID := ulid.Make()
+
+		// Pre-populate cache
+		require.NoError(t, cache.SetPlayerAlias(playerID, "l", "look"))
+
+		// Expect database delete with correct parameters
+		mockRepo.EXPECT().
+			DeletePlayerAlias(mock.Anything, playerID, "l").
+			Return(nil)
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := aliasRemoveImpl(context.Background(), exec, cache)
+		require.NoError(t, err)
+
+		// Verify alias is removed from cache
+		_, exists := cache.GetPlayerAlias(playerID, "l")
+		assert.False(t, exists)
+	})
+
+	t.Run("does not update cache if database delete fails", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		playerID := ulid.Make()
+
+		// Pre-populate cache
+		require.NoError(t, cache.SetPlayerAlias(playerID, "l", "look"))
+
+		// Simulate database failure
+		mockRepo.EXPECT().
+			DeletePlayerAlias(mock.Anything, playerID, "l").
+			Return(errors.New("database connection failed"))
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := aliasRemoveImpl(context.Background(), exec, cache)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection failed")
+
+		// Verify alias is still in cache
+		cmd, exists := cache.GetPlayerAlias(playerID, "l")
+		assert.True(t, exists, "alias should still be in cache when database delete fails")
+		assert.Equal(t, "look", cmd)
+	})
+}
+
+func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
+	t.Run("persists system alias to database before updating cache", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		charID := ulid.Make()
+
+		// Expect database write with correct parameters (createdBy is character ID string)
+		mockRepo.EXPECT().
+			SetSystemAlias(mock.Anything, "l", "look", charID.String()).
+			Return(nil)
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: charID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
+		require.NoError(t, err)
+
+		// Verify alias is in cache
+		result := cache.Resolve(ulid.ULID{}, "l", nil)
+		assert.Equal(t, "look", result.Resolved)
+		assert.True(t, result.WasAlias)
+	})
+
+	t.Run("does not update cache if database write fails", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		charID := ulid.Make()
+
+		// Simulate database failure
+		mockRepo.EXPECT().
+			SetSystemAlias(mock.Anything, "l", "look", charID.String()).
+			Return(errors.New("database connection failed"))
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: charID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection failed")
+
+		// Verify alias was NOT added to cache
+		_, exists := cache.GetSystemAlias("l")
+		assert.False(t, exists, "alias should not be in cache when database write fails")
+	})
+
+	t.Run("rolls back database write if cache update fails", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasRepository(t)
+		charID := ulid.Make()
+
+		// Create a circular alias scenario: add "look" -> "l" first
+		// Then when we try to add "l" -> "look", the cache will detect the cycle
+		require.NoError(t, cache.SetSystemAlias("look", "l"))
+
+		// Expect database write to succeed
+		mockRepo.EXPECT().
+			SetSystemAlias(mock.Anything, "l", "look", charID.String()).
+			Return(nil)
+
+		// Expect rollback (delete) when cache fails due to circular reference
+		mockRepo.EXPECT().
+			DeleteSystemAlias(mock.Anything, "l").
+			Return(nil)
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: charID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "circular")
+
+		// Verify: database write was rolled back (DeleteSystemAlias was called)
+		// The mock expectations above verify this automatically
+	})
+}
+
+func TestSysaliasRemoveHandler_PersistsToDatabase(t *testing.T) {
+	t.Run("removes system alias from database before updating cache", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		mockRepo := mocks.NewMockAliasRepository(t)
+
+		// Pre-populate cache
+		require.NoError(t, cache.SetSystemAlias("l", "look"))
+
+		// Expect database delete with correct parameters
+		mockRepo.EXPECT().
+			DeleteSystemAlias(mock.Anything, "l").
+			Return(nil)
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			Args:        "l",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := sysaliasRemoveImpl(context.Background(), exec, cache)
+		require.NoError(t, err)
+
+		// Verify alias is removed from cache
+		_, exists := cache.GetSystemAlias("l")
+		assert.False(t, exists)
+	})
+
+	t.Run("does not update cache if database delete fails", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		mockRepo := mocks.NewMockAliasRepository(t)
+
+		// Pre-populate cache
+		require.NoError(t, cache.SetSystemAlias("l", "look"))
+
+		// Simulate database failure
+		mockRepo.EXPECT().
+			DeleteSystemAlias(mock.Anything, "l").
+			Return(errors.New("database connection failed"))
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			Args:        "l",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		}
+
+		err := sysaliasRemoveImpl(context.Background(), exec, cache)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database connection failed")
+
+		// Verify alias is still in cache
+		cmd, exists := cache.GetSystemAlias("l")
+		assert.True(t, exists, "alias should still be in cache when database delete fails")
+		assert.Equal(t, "look", cmd)
 	})
 }

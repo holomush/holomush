@@ -45,6 +45,12 @@ packages:
       CharacterRepository:
       AccessControl:
       EventEmitter:
+  github.com/holomush/holomush/internal/command:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      outpkg: mocks
+    interfaces:
+      AliasRepository:
   github.com/holomush/holomush/internal/auth:
     config:
       dir: "{{.InterfaceDir}}/mocks"

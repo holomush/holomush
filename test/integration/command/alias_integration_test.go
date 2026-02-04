@@ -8,6 +8,7 @@ package command_test
 import (
 	"bytes"
 	"context"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -21,6 +22,83 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
+
+// inMemoryAliasRepo is a simple in-memory implementation of AliasRepository for testing.
+// It simulates database persistence without requiring PostgreSQL.
+type inMemoryAliasRepo struct {
+	mu            sync.RWMutex
+	systemAliases map[string]aliasEntry
+	playerAliases map[ulid.ULID]map[string]aliasEntry
+}
+
+type aliasEntry struct {
+	command   string
+	createdBy string // only for system aliases
+}
+
+func newInMemoryAliasRepo() *inMemoryAliasRepo {
+	return &inMemoryAliasRepo{
+		systemAliases: make(map[string]aliasEntry),
+		playerAliases: make(map[ulid.ULID]map[string]aliasEntry),
+	}
+}
+
+func (r *inMemoryAliasRepo) SetSystemAlias(_ context.Context, alias, cmd, createdBy string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.systemAliases[alias] = aliasEntry{command: cmd, createdBy: createdBy}
+	return nil
+}
+
+func (r *inMemoryAliasRepo) DeleteSystemAlias(_ context.Context, alias string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.systemAliases, alias)
+	return nil
+}
+
+func (r *inMemoryAliasRepo) SetPlayerAlias(_ context.Context, playerID ulid.ULID, alias, cmd string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.playerAliases[playerID] == nil {
+		r.playerAliases[playerID] = make(map[string]aliasEntry)
+	}
+	r.playerAliases[playerID][alias] = aliasEntry{command: cmd}
+	return nil
+}
+
+func (r *inMemoryAliasRepo) DeletePlayerAlias(_ context.Context, playerID ulid.ULID, alias string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.playerAliases[playerID] != nil {
+		delete(r.playerAliases[playerID], alias)
+	}
+	return nil
+}
+
+// GetSystemAliases returns all system aliases (for loading into cache after "restart").
+func (r *inMemoryAliasRepo) GetSystemAliases() map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]string)
+	for alias, entry := range r.systemAliases {
+		result[alias] = entry.command
+	}
+	return result
+}
+
+// GetPlayerAliases returns all player aliases (for loading into cache after "restart").
+func (r *inMemoryAliasRepo) GetPlayerAliases(playerID ulid.ULID) map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]string)
+	if aliases, ok := r.playerAliases[playerID]; ok {
+		for alias, entry := range aliases {
+			result[alias] = entry.command
+		}
+	}
+	return result
+}
 
 var _ = Describe("Alias Management Integration", func() {
 	var (
@@ -609,6 +687,186 @@ var _ = Describe("Alias Management Integration", func() {
 			oopsErr, ok := oops.AsOops(err)
 			Expect(ok).To(BeTrue())
 			Expect(oopsErr.Code()).To(Equal(command.CodeCircularAlias))
+		})
+	})
+})
+
+var _ = Describe("Alias Persistence Integration", func() {
+	var (
+		aliasRepo *inMemoryAliasRepo
+	)
+
+	BeforeEach(func() {
+		aliasRepo = newInMemoryAliasRepo()
+	})
+
+	Describe("Aliases survive server restart", func() {
+		It("persists player aliases and restores them after cache clear", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			playerID := ulid.Make()
+			charID := ulid.Make()
+
+			// Create a fresh cache and services
+			cache1 := command.NewAliasCache()
+			mockAccess := accesstest.NewMockAccessControl()
+			services1, err := command.NewServices(command.ServicesConfig{
+				World:       &world.Service{},
+				Session:     &stubSessionService{},
+				Access:      mockAccess,
+				Events:      &stubEventStore{},
+				Broadcaster: &core.Broadcaster{},
+				AliasCache:  cache1,
+				AliasRepo:   aliasRepo,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Add a player alias
+			var buf bytes.Buffer
+			exec := &command.CommandExecution{
+				CharacterID: charID,
+				PlayerID:    playerID,
+				SessionID:   ulid.Make(),
+				Args:        "l=look",
+				Output:      &buf,
+				Services:    services1,
+			}
+
+			err = handlers.AliasAddHandler(ctx, exec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buf.String()).To(ContainSubstring("Alias 'l' added"))
+
+			// Verify alias is in cache
+			result := cache1.Resolve(playerID, "l", nil)
+			Expect(result.WasAlias).To(BeTrue())
+			Expect(result.Resolved).To(Equal("look"))
+
+			// Simulate server restart: create a new cache (old cache is gone)
+			cache2 := command.NewAliasCache()
+
+			// Load aliases from "database" (our in-memory repo)
+			playerAliases := aliasRepo.GetPlayerAliases(playerID)
+			cache2.LoadPlayerAliases(playerID, playerAliases)
+
+			// Verify alias was restored from "database"
+			result2 := cache2.Resolve(playerID, "l", nil)
+			Expect(result2.WasAlias).To(BeTrue())
+			Expect(result2.Resolved).To(Equal("look"))
+		})
+
+		It("persists system aliases and restores them after cache clear", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			charID := ulid.Make()
+
+			// Create a fresh cache and services
+			cache1 := command.NewAliasCache()
+			mockAccess := accesstest.NewMockAccessControl()
+			services1, err := command.NewServices(command.ServicesConfig{
+				World:       &world.Service{},
+				Session:     &stubSessionService{},
+				Access:      mockAccess,
+				Events:      &stubEventStore{},
+				Broadcaster: &core.Broadcaster{},
+				AliasCache:  cache1,
+				AliasRepo:   aliasRepo,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Add a system alias
+			var buf bytes.Buffer
+			exec := &command.CommandExecution{
+				CharacterID: charID,
+				SessionID:   ulid.Make(),
+				Args:        "q=quit",
+				Output:      &buf,
+				Services:    services1,
+			}
+
+			err = handlers.SysaliasAddHandler(ctx, exec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buf.String()).To(ContainSubstring("System alias 'q' added"))
+
+			// Verify alias is in cache
+			result := cache1.Resolve(ulid.ULID{}, "q", nil)
+			Expect(result.WasAlias).To(BeTrue())
+			Expect(result.Resolved).To(Equal("quit"))
+
+			// Simulate server restart: create a new cache (old cache is gone)
+			cache2 := command.NewAliasCache()
+
+			// Load aliases from "database" (our in-memory repo)
+			systemAliases := aliasRepo.GetSystemAliases()
+			cache2.LoadSystemAliases(systemAliases)
+
+			// Verify alias was restored from "database"
+			result2 := cache2.Resolve(ulid.ULID{}, "q", nil)
+			Expect(result2.WasAlias).To(BeTrue())
+			Expect(result2.Resolved).To(Equal("quit"))
+		})
+
+		It("removes alias from database when deleted", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			playerID := ulid.Make()
+			charID := ulid.Make()
+
+			// Create cache and services
+			cache := command.NewAliasCache()
+			mockAccess := accesstest.NewMockAccessControl()
+			services, err := command.NewServices(command.ServicesConfig{
+				World:       &world.Service{},
+				Session:     &stubSessionService{},
+				Access:      mockAccess,
+				Events:      &stubEventStore{},
+				Broadcaster: &core.Broadcaster{},
+				AliasCache:  cache,
+				AliasRepo:   aliasRepo,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Add and then remove a player alias
+			var buf bytes.Buffer
+			addExec := &command.CommandExecution{
+				CharacterID: charID,
+				PlayerID:    playerID,
+				SessionID:   ulid.Make(),
+				Args:        "l=look",
+				Output:      &buf,
+				Services:    services,
+			}
+
+			err = handlers.AliasAddHandler(ctx, addExec)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Remove the alias
+			buf.Reset()
+			removeExec := &command.CommandExecution{
+				CharacterID: charID,
+				PlayerID:    playerID,
+				SessionID:   ulid.Make(),
+				Args:        "l",
+				Output:      &buf,
+				Services:    services,
+			}
+
+			err = handlers.AliasRemoveHandler(ctx, removeExec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buf.String()).To(ContainSubstring("Alias 'l' removed"))
+
+			// Verify alias is gone from database
+			playerAliases := aliasRepo.GetPlayerAliases(playerID)
+			Expect(playerAliases).NotTo(HaveKey("l"))
+
+			// Simulate server restart and verify alias is NOT restored
+			cache2 := command.NewAliasCache()
+			cache2.LoadPlayerAliases(playerID, aliasRepo.GetPlayerAliases(playerID))
+
+			result := cache2.Resolve(playerID, "l", nil)
+			Expect(result.WasAlias).To(BeFalse())
 		})
 	})
 })

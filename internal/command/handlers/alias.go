@@ -5,6 +5,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -73,8 +74,29 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 		warnings = append(warnings, "Warning: Replacing existing alias '"+alias+"' (was: '"+existingCmd+"').")
 	}
 
-	// Attempt to set the alias (may fail due to circular reference)
+	// Persist to database first (if repository is available)
+	// Database write must succeed before updating cache to maintain consistency
+	repo := exec.Services.AliasRepo()
+	if repo != nil {
+		if err := repo.SetPlayerAlias(ctx, exec.PlayerID, alias, cmd); err != nil {
+			return oops.With("operation", "persist player alias").
+				With("alias", alias).
+				Wrap(err)
+		}
+	}
+
+	// Attempt to set the alias in cache (may fail due to circular reference)
 	if err := cache.SetPlayerAlias(exec.PlayerID, alias, cmd); err != nil {
+		// Rollback: delete from database since cache update failed
+		if repo != nil {
+			if rollbackErr := repo.DeletePlayerAlias(ctx, exec.PlayerID, alias); rollbackErr != nil {
+				slog.ErrorContext(ctx, "failed to rollback alias after cache error",
+					"alias", alias,
+					"player_id", exec.PlayerID.String(),
+					"cache_error", err.Error(),
+					"rollback_error", rollbackErr.Error())
+			}
+		}
 		return err //nolint:wrapcheck // SetPlayerAlias returns structured oops error
 	}
 
@@ -111,6 +133,16 @@ func aliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cache 
 	if _, exists := cache.GetPlayerAlias(exec.PlayerID, alias); !exists {
 		writeOutputf(ctx, exec, "alias", "No alias '%s' found.\n", alias)
 		return nil
+	}
+
+	// Delete from database first (if repository is available)
+	// Database delete must succeed before updating cache to maintain consistency
+	if repo := exec.Services.AliasRepo(); repo != nil {
+		if err := repo.DeletePlayerAlias(ctx, exec.PlayerID, alias); err != nil {
+			return oops.With("operation", "delete player alias").
+				With("alias", alias).
+				Wrap(err)
+		}
 	}
 
 	cache.RemovePlayerAlias(exec.PlayerID, alias)
@@ -198,8 +230,29 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 		warnings = append(warnings, "Warning: '"+alias+"' is an existing command. System alias will override it.")
 	}
 
-	// Attempt to set the alias (may fail due to circular reference)
+	// Persist to database first (if repository is available)
+	// Database write must succeed before updating cache to maintain consistency
+	repo := exec.Services.AliasRepo()
+	if repo != nil {
+		createdBy := exec.CharacterID.String()
+		if err := repo.SetSystemAlias(ctx, alias, cmd, createdBy); err != nil {
+			return oops.With("operation", "persist system alias").
+				With("alias", alias).
+				Wrap(err)
+		}
+	}
+
+	// Attempt to set the alias in cache (may fail due to circular reference)
 	if err := cache.SetSystemAlias(alias, cmd); err != nil {
+		// Rollback: delete from database since cache update failed
+		if repo != nil {
+			if rollbackErr := repo.DeleteSystemAlias(ctx, alias); rollbackErr != nil {
+				slog.ErrorContext(ctx, "failed to rollback system alias after cache error",
+					"alias", alias,
+					"cache_error", err.Error(),
+					"rollback_error", rollbackErr.Error())
+			}
+		}
 		return err //nolint:wrapcheck // SetSystemAlias returns structured oops error
 	}
 
@@ -236,6 +289,16 @@ func sysaliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cac
 	if _, exists := cache.GetSystemAlias(alias); !exists {
 		writeOutputf(ctx, exec, "sysalias", "No system alias '%s' found.\n", alias)
 		return nil
+	}
+
+	// Delete from database first (if repository is available)
+	// Database delete must succeed before updating cache to maintain consistency
+	if repo := exec.Services.AliasRepo(); repo != nil {
+		if err := repo.DeleteSystemAlias(ctx, alias); err != nil {
+			return oops.With("operation", "delete system alias").
+				With("alias", alias).
+				Wrap(err)
+		}
 	}
 
 	cache.RemoveSystemAlias(alias)

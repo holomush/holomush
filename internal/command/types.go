@@ -61,6 +61,20 @@ type EventBroadcaster interface {
 	Broadcast(event core.Event)
 }
 
+// AliasRepository defines the persistence operations for alias management.
+// This interface follows the "accept interfaces" Go idiom, allowing the command
+// package to depend on an abstraction rather than the concrete store implementation.
+type AliasRepository interface {
+	// SetSystemAlias creates or updates a system-wide alias.
+	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
+	// DeleteSystemAlias removes a system-wide alias.
+	DeleteSystemAlias(ctx context.Context, alias string) error
+	// SetPlayerAlias creates or updates a player-specific alias.
+	SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, command string) error
+	// DeletePlayerAlias removes a player-specific alias.
+	DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error
+}
+
 // Compile-time interface checks to ensure concrete types implement the interfaces.
 var (
 	_ WorldService     = (*world.Service)(nil)
@@ -245,6 +259,7 @@ type ServicesConfig struct {
 	Events      core.EventStore      // event persistence
 	Broadcaster EventBroadcaster     // event broadcasting
 	AliasCache  *AliasCache          // alias management (optional)
+	AliasRepo   AliasRepository      // alias persistence (optional, for alias handlers)
 	Registry    *Registry            // command registry (optional)
 }
 
@@ -263,6 +278,7 @@ type Services struct {
 	events      core.EventStore      // event persistence
 	broadcaster EventBroadcaster     // event broadcasting
 	aliasCache  *AliasCache          // alias management (optional, for alias commands)
+	aliasRepo   AliasRepository      // alias persistence (optional, for alias handlers)
 	registry    *Registry            // command registry (optional, for alias shadow detection)
 }
 
@@ -286,6 +302,9 @@ func (s *Services) AliasCache() *AliasCache { return s.aliasCache }
 
 // Registry returns the command registry for alias shadow detection (may be nil).
 func (s *Services) Registry() *Registry { return s.registry }
+
+// AliasRepo returns the alias repository for persistence (may be nil).
+func (s *Services) AliasRepo() AliasRepository { return s.aliasRepo }
 
 // NewServices creates a validated Services instance.
 // Returns an error if any required service is nil.
@@ -323,6 +342,7 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 		events:      cfg.Events,
 		broadcaster: cfg.Broadcaster,
 		aliasCache:  cfg.AliasCache,
+		aliasRepo:   cfg.AliasRepo,
 		registry:    cfg.Registry,
 	}, nil
 }
@@ -367,6 +387,7 @@ func NewTestServices(cfg ServicesConfig) *Services {
 		events:      cfg.Events,
 		broadcaster: cfg.Broadcaster,
 		aliasCache:  cfg.AliasCache,
+		aliasRepo:   cfg.AliasRepo,
 		registry:    cfg.Registry,
 	}
 }
