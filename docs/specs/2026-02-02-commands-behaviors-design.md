@@ -609,10 +609,10 @@ Help content MUST be markdown. Rendering depends on client:
 
 ### Partitioning Strategy
 
-| Implementation | Commands                                                           | Rationale                                         |
-| -------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
-| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical          |
-| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable                 |
+| Implementation | Commands                                                           | Rationale                                |
+| -------------- | ------------------------------------------------------------------ | ---------------------------------------- |
+| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical |
+| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable        |
 
 **Capability Requirements**:
 

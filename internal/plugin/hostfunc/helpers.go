@@ -3,6 +3,7 @@
 
 // Package hostfunc note: L is the idiomatic variable name for lua.LState
 // in the gopher-lua community, matching the reference implementation.
+//
 //nolint:gocritic // captLocal: L is the idiomatic name for lua.LState
 package hostfunc
 

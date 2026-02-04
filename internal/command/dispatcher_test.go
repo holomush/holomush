@@ -52,9 +52,11 @@ func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return 
 func (s *stubEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
 	return nil, nil
 }
+
 func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
 	return ulid.ULID{}, nil
 }
+
 func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
 }
