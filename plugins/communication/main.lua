@@ -17,7 +17,10 @@ end
 
 function handle_say(ctx)
     if ctx.args == "" then
-        return nil
+        holo.emit.character(ctx.character_id, "error", {
+            message = "What do you want to say?"
+        })
+        return holo.emit.flush()
     end
     local msg = ctx.character_name .. ' says, "' .. ctx.args .. '"'
     holo.emit.location(ctx.location_id, "say", {
@@ -29,7 +32,10 @@ end
 
 function handle_pose(ctx)
     if ctx.args == "" then
-        return nil
+        holo.emit.character(ctx.character_id, "error", {
+            message = "What do you want to do?"
+        })
+        return holo.emit.flush()
     end
     local separator = " "
     if ctx.invoked_as == ";" then
@@ -48,7 +54,10 @@ function handle_pose(ctx)
         end
     end
     if action == "" then
-        return nil
+        holo.emit.character(ctx.character_id, "error", {
+            message = "What do you want to do?"
+        })
+        return holo.emit.flush()
     end
     local msg = ctx.character_name .. separator .. action
     holo.emit.location(ctx.location_id, "pose", {
@@ -60,7 +69,10 @@ end
 
 function handle_emit(ctx)
     if ctx.args == "" then
-        return nil
+        holo.emit.character(ctx.character_id, "error", {
+            message = "What do you want to emit?"
+        })
+        return holo.emit.flush()
     end
     holo.emit.location(ctx.location_id, "emit", {
         message = ctx.args

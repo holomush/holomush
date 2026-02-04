@@ -8,6 +8,7 @@ events:
   - command
 capabilities:
   - events.emit.location
+  - events.emit.character
 commands:
   - name: say
     capabilities:

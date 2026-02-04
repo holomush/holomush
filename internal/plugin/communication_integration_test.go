@@ -184,7 +184,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 
 		Context("when say command has empty message", func() {
-			It("returns no events", func() {
+			It("returns error message to character", func() {
 				ctx := context.Background()
 				event := pluginpkg.Event{
 					ID:        "01DEF",
@@ -193,12 +193,15 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginpkg.ActorCharacter,
 					ActorID:   "char123",
-					Payload:   `{"name":"say","args":"","character_name":"Alice","location_id":"loc456"}`,
+					Payload:   `{"name":"say","args":"","character_name":"Alice","location_id":"loc456","character_id":"char123"}`,
 				}
 
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(BeEmpty())
+				Expect(emits).To(HaveLen(1))
+				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(string(emits[0].Type)).To(Equal("error"))
+				Expect(emits[0].Payload).To(ContainSubstring("What do you want to say?"))
 			})
 		})
 	})
@@ -311,7 +314,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 
 		Context("when pose command has empty action", func() {
-			It("returns no events", func() {
+			It("returns error message to character", func() {
 				ctx := context.Background()
 				event := pluginpkg.Event{
 					ID:        "01GHI2",
@@ -320,12 +323,57 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginpkg.ActorCharacter,
 					ActorID:   "char123",
-					Payload:   `{"name":"pose","args":"","character_name":"Bob","location_id":"loc456"}`,
+					Payload:   `{"name":"pose","args":"","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
 
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(BeEmpty())
+				Expect(emits).To(HaveLen(1))
+				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(string(emits[0].Type)).To(Equal("error"))
+				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
+			})
+		})
+
+		Context("when pose uses prefix marker with no action after it", func() {
+			It("returns error message when only : is provided in args", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01GHI5",
+					Stream:    "char:char123",
+					Type:      pluginpkg.EventType("command"),
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char123",
+					Payload:   `{"name":"pose","args":":","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(string(emits[0].Type)).To(Equal("error"))
+				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
+			})
+
+			It("returns error message when only ; is provided in args", func() {
+				ctx := context.Background()
+				event := pluginpkg.Event{
+					ID:        "01GHI6",
+					Stream:    "char:char123",
+					Type:      pluginpkg.EventType("command"),
+					Timestamp: time.Now().UnixMilli(),
+					ActorKind: pluginpkg.ActorCharacter,
+					ActorID:   "char123",
+					Payload:   `{"name":"pose","args":";","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
+				}
+
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(emits).To(HaveLen(1))
+				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(string(emits[0].Type)).To(Equal("error"))
+				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
 			})
 		})
 	})
@@ -354,7 +402,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 
 		Context("when emit command has empty text", func() {
-			It("returns no events", func() {
+			It("returns error message to character", func() {
 				ctx := context.Background()
 				event := pluginpkg.Event{
 					ID:        "01JKL2",
@@ -363,12 +411,15 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginpkg.ActorCharacter,
 					ActorID:   "char123",
-					Payload:   `{"name":"emit","args":"","character_name":"Admin","location_id":"loc456"}`,
+					Payload:   `{"name":"emit","args":"","character_name":"Admin","location_id":"loc456","character_id":"char123"}`,
 				}
 
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(emits).To(BeEmpty())
+				Expect(emits).To(HaveLen(1))
+				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(string(emits[0].Type)).To(Equal("error"))
+				Expect(emits[0].Payload).To(ContainSubstring("What do you want to emit?"))
 			})
 		})
 	})
