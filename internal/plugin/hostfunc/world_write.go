@@ -28,21 +28,7 @@ var propertyRegistry = holo.DefaultRegistry()
 func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
-			slog.Error("create_location called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
-		}
-
-		mutator, ok := f.worldService.(WorldMutator)
-		if !ok {
-			slog.Warn("create_location called but world service does not support mutations",
-				"plugin", pluginName)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service does not support mutations"))
-			return 2
+			return f.pushServiceUnavailable(L, "create_location", pluginName)
 		}
 
 		name := L.CheckString(1)
@@ -51,9 +37,7 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 
 		locType := world.LocationType(locTypeStr)
 		if err := locType.Validate(); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid location type: " + locTypeStr))
-			return 2
+			return pushError(L, "invalid location type: "+locTypeStr)
 		}
 
 		loc := &world.Location{
@@ -63,27 +47,17 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 			Type:        locType,
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
+		return f.withMutatorContext(L, "create_location", pluginName,
+			func(ctx context.Context, mutator WorldMutator, subjectID string, _ *WorldQuerierAdapter) int {
+				if err := mutator.CreateLocation(ctx, subjectID, loc); err != nil {
+					return pushError(L, sanitizeErrorForPlugin(pluginName, "location", name, err))
+				}
 
-		subjectID := "system:plugin:" + pluginName
-		if err := mutator.CreateLocation(ctx, subjectID, loc); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "location", name, err)))
-			return 2
-		}
-
-		result := L.NewTable()
-		L.SetField(result, "id", lua.LString(loc.ID.String()))
-		L.SetField(result, "name", lua.LString(loc.Name))
-		L.Push(result)
-		L.Push(lua.LNil)
-		return 2
+				result := L.NewTable()
+				L.SetField(result, "id", lua.LString(loc.ID.String()))
+				L.SetField(result, "name", lua.LString(loc.Name))
+				return pushSuccess(L, result)
+			})
 	}
 }
 
@@ -93,46 +67,20 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
-			slog.Error("create_exit called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
-		}
-
-		mutator, ok := f.worldService.(WorldMutator)
-		if !ok {
-			slog.Warn("create_exit called but world service does not support mutations",
-				"plugin", pluginName)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service does not support mutations"))
-			return 2
+			return f.pushServiceUnavailable(L, "create_exit", pluginName)
 		}
 
 		fromIDStr := L.CheckString(1)
 		toIDStr := L.CheckString(2)
 		name := L.CheckString(3)
 
-		fromID, err := ulid.Parse(fromIDStr)
-		if err != nil {
-			slog.Debug("create_exit: invalid from_id format",
-				"plugin", pluginName,
-				"from_id", fromIDStr,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid from_id: " + err.Error()))
+		fromID, ok := parseULID(L, fromIDStr, pluginName, "create_exit", "from_id")
+		if !ok {
 			return 2
 		}
 
-		toID, err := ulid.Parse(toIDStr)
-		if err != nil {
-			slog.Debug("create_exit: invalid to_id format",
-				"plugin", pluginName,
-				"to_id", toIDStr,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid to_id: " + err.Error()))
+		toID, ok := parseULID(L, toIDStr, pluginName, "create_exit", "to_id")
+		if !ok {
 			return 2
 		}
 
@@ -159,27 +107,17 @@ func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 			}
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
+		return f.withMutatorContext(L, "create_exit", pluginName,
+			func(ctx context.Context, mutator WorldMutator, subjectID string, _ *WorldQuerierAdapter) int {
+				if err := mutator.CreateExit(ctx, subjectID, exit); err != nil {
+					return pushError(L, sanitizeErrorForPlugin(pluginName, "exit", name, err))
+				}
 
-		subjectID := "system:plugin:" + pluginName
-		if err := mutator.CreateExit(ctx, subjectID, exit); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "exit", name, err)))
-			return 2
-		}
-
-		result := L.NewTable()
-		L.SetField(result, "id", lua.LString(exit.ID.String()))
-		L.SetField(result, "name", lua.LString(exit.Name))
-		L.Push(result)
-		L.Push(lua.LNil)
-		return 2
+				result := L.NewTable()
+				L.SetField(result, "id", lua.LString(exit.ID.String()))
+				L.SetField(result, "name", lua.LString(exit.Name))
+				return pushSuccess(L, result)
+			})
 	}
 }
 
@@ -190,21 +128,7 @@ func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
-			slog.Error("create_object called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
-		}
-
-		mutator, ok := f.worldService.(WorldMutator)
-		if !ok {
-			slog.Warn("create_object called but world service does not support mutations",
-				"plugin", pluginName)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service does not support mutations"))
-			return 2
+			return f.pushServiceUnavailable(L, "create_object", pluginName)
 		}
 
 		name := L.CheckString(1)
@@ -212,9 +136,7 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 		// Validate opts parameter is provided and is a table
 		opts, ok := L.Get(2).(*lua.LTable)
 		if !ok {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("second argument must be an options table"))
-			return 2
+			return pushError(L, "second argument must be an options table")
 		}
 
 		// Parse containment from options
@@ -224,9 +146,7 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 		if locIDVal := opts.RawGetString("location_id"); locIDVal.Type() == lua.LTString {
 			locID, err := ulid.Parse(locIDVal.String())
 			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("invalid location_id: " + err.Error()))
-				return 2
+				return pushError(L, "invalid location_id: "+err.Error())
 			}
 			containment = world.InLocation(locID)
 			containmentCount++
@@ -235,9 +155,7 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 		if charIDVal := opts.RawGetString("character_id"); charIDVal.Type() == lua.LTString {
 			charID, err := ulid.Parse(charIDVal.String())
 			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("invalid character_id: " + err.Error()))
-				return 2
+				return pushError(L, "invalid character_id: "+err.Error())
 			}
 			containment = world.HeldByCharacter(charID)
 			containmentCount++
@@ -246,25 +164,19 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 		if containerIDVal := opts.RawGetString("container_id"); containerIDVal.Type() == lua.LTString {
 			containerID, err := ulid.Parse(containerIDVal.String())
 			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString("invalid container_id: " + err.Error()))
-				return 2
+				return pushError(L, "invalid container_id: "+err.Error())
 			}
 			containment = world.ContainedInObject(containerID)
 			containmentCount++
 		}
 
 		if containmentCount != 1 {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("must specify exactly one containment: location_id, character_id, or container_id"))
-			return 2
+			return pushError(L, "must specify exactly one containment: location_id, character_id, or container_id")
 		}
 
 		obj, err := world.NewObjectWithID(ulid.Make(), name, containment)
 		if err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid object: " + err.Error()))
-			return 2
+			return pushError(L, "invalid object: "+err.Error())
 		}
 
 		// Optional description
@@ -272,27 +184,17 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 			obj.Description = descVal.String()
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
+		return f.withMutatorContext(L, "create_object", pluginName,
+			func(ctx context.Context, mutator WorldMutator, subjectID string, _ *WorldQuerierAdapter) int {
+				if err := mutator.CreateObject(ctx, subjectID, obj); err != nil {
+					return pushError(L, sanitizeErrorForPlugin(pluginName, "object", name, err))
+				}
 
-		subjectID := "system:plugin:" + pluginName
-		if err := mutator.CreateObject(ctx, subjectID, obj); err != nil {
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "object", name, err)))
-			return 2
-		}
-
-		result := L.NewTable()
-		L.SetField(result, "id", lua.LString(obj.ID.String()))
-		L.SetField(result, "name", lua.LString(obj.Name))
-		L.Push(result)
-		L.Push(lua.LNil)
-		return 2
+				result := L.NewTable()
+				L.SetField(result, "id", lua.LString(obj.ID.String()))
+				L.SetField(result, "name", lua.LString(obj.Name))
+				return pushSuccess(L, result)
+			})
 	}
 }
 
@@ -301,52 +203,36 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 func (f *Functions) findLocationFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
-			slog.Error("find_location called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
+			return f.pushServiceUnavailable(L, "find_location", pluginName)
 		}
 
+		// Check for mutator support (find_location needs FindLocationByName method)
 		mutator, ok := f.worldService.(WorldMutator)
 		if !ok {
 			slog.Warn("find_location called but world service does not support FindLocationByName",
 				"plugin", pluginName)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service does not support location search"))
-			return 2
+			return pushError(L, "world service does not support location search")
 		}
 
 		name := L.CheckString(1)
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
-
-		subjectID := "system:plugin:" + pluginName
-		loc, err := mutator.FindLocationByName(ctx, subjectID, name)
-		if err != nil {
-			if errors.Is(err, world.ErrNotFound) {
-				slog.Debug("find_location: location not found",
-					"plugin", pluginName,
-					"name", name)
+		return f.withQueryContext(L, pluginName, func(ctx context.Context, _ *WorldQuerierAdapter) int {
+			subjectID := "system:plugin:" + pluginName
+			loc, err := mutator.FindLocationByName(ctx, subjectID, name)
+			if err != nil {
+				if errors.Is(err, world.ErrNotFound) {
+					slog.Debug("find_location: location not found",
+						"plugin", pluginName,
+						"name", name)
+				}
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "location", name, err))
 			}
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "location", name, err)))
-			return 2
-		}
 
-		result := L.NewTable()
-		L.SetField(result, "id", lua.LString(loc.ID.String()))
-		L.SetField(result, "name", lua.LString(loc.Name))
-		L.Push(result)
-		L.Push(lua.LNil)
-		return 2
+			result := L.NewTable()
+			L.SetField(result, "id", lua.LString(loc.ID.String()))
+			L.SetField(result, "name", lua.LString(loc.Name))
+			return pushSuccess(L, result)
+		})
 	}
 }
 
@@ -357,21 +243,7 @@ func (f *Functions) findLocationFn(pluginName string) lua.LGFunction {
 func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
-			slog.Error("set_property called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
-		}
-
-		mutator, ok := f.worldService.(WorldMutator)
-		if !ok {
-			slog.Warn("set_property called but world service does not support mutations",
-				"plugin", pluginName)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service does not support mutations"))
-			return 2
+			return f.pushServiceUnavailable(L, "set_property", pluginName)
 		}
 
 		entityType := L.CheckString(1)
@@ -381,86 +253,57 @@ func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 
 		// Validate entity type
 		if entityType != "location" && entityType != "object" {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid entity type: " + entityType + " (must be 'location' or 'object')"))
-			return 2
+			return pushError(L, "invalid entity type: "+entityType+" (must be 'location' or 'object')")
 		}
 
 		// Validate entity ID
-		entityID, err := ulid.Parse(entityIDStr)
-		if err != nil {
-			slog.Debug("set_property: invalid entity_id format",
-				"plugin", pluginName,
-				"entity_id", entityIDStr,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid entity_id: " + err.Error()))
+		entityID, ok := parseULID(L, entityIDStr, pluginName, "set_property", "entity_id")
+		if !ok {
 			return 2
 		}
 
 		// Validate property using PropertyRegistry
 		if !propertyRegistry.ValidFor(entityType, property) {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid property: " + property + " for " + entityType))
-			return 2
+			return pushError(L, "invalid property: "+property+" for "+entityType)
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
+		return f.withMutatorContext(L, "set_property", pluginName,
+			func(ctx context.Context, mutator WorldMutator, subjectID string, adapter *WorldQuerierAdapter) int {
+				// Get and update the entity
+				switch entityType {
+				case "location":
+					loc, err := adapter.GetLocation(ctx, entityID)
+					if err != nil {
+						return pushError(L, sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err))
+					}
+					switch property {
+					case "name":
+						loc.Name = value
+					case "description":
+						loc.Description = value
+					}
+					if err := mutator.UpdateLocation(ctx, subjectID, loc); err != nil {
+						return pushError(L, sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err))
+					}
 
-		subjectID := "system:plugin:" + pluginName
+				case "object":
+					obj, err := adapter.GetObject(ctx, entityID)
+					if err != nil {
+						return pushError(L, sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err))
+					}
+					switch property {
+					case "name":
+						obj.Name = value
+					case "description":
+						obj.Description = value
+					}
+					if err := mutator.UpdateObject(ctx, subjectID, obj); err != nil {
+						return pushError(L, sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err))
+					}
+				}
 
-		// Get and update the entity
-		switch entityType {
-		case "location":
-			adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-			loc, err := adapter.GetLocation(ctx, entityID)
-			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err)))
-				return 2
-			}
-			switch property {
-			case "name":
-				loc.Name = value
-			case "description":
-				loc.Description = value
-			}
-			if err := mutator.UpdateLocation(ctx, subjectID, loc); err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err)))
-				return 2
-			}
-
-		case "object":
-			adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-			obj, err := adapter.GetObject(ctx, entityID)
-			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err)))
-				return 2
-			}
-			switch property {
-			case "name":
-				obj.Name = value
-			case "description":
-				obj.Description = value
-			}
-			if err := mutator.UpdateObject(ctx, subjectID, obj); err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err)))
-				return 2
-			}
-		}
-
-		L.Push(lua.LTrue)
-		L.Push(lua.LNil)
-		return 2
+				return pushSuccess(L, lua.LTrue)
+			})
 	}
 }
 
@@ -471,12 +314,7 @@ func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 func (f *Functions) getPropertyFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldService == nil {
-			slog.Error("get_property called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
+			return f.pushServiceUnavailable(L, "get_property", pluginName)
 		}
 
 		entityType := L.CheckString(1)
@@ -485,74 +323,49 @@ func (f *Functions) getPropertyFn(pluginName string) lua.LGFunction {
 
 		// Validate entity type
 		if entityType != "location" && entityType != "object" {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid entity type: " + entityType + " (must be 'location' or 'object')"))
-			return 2
+			return pushError(L, "invalid entity type: "+entityType+" (must be 'location' or 'object')")
 		}
 
 		// Validate entity ID
-		entityID, err := ulid.Parse(entityIDStr)
-		if err != nil {
-			slog.Debug("get_property: invalid entity_id format",
-				"plugin", pluginName,
-				"entity_id", entityIDStr,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid entity_id: " + err.Error()))
+		entityID, ok := parseULID(L, entityIDStr, pluginName, "get_property", "entity_id")
+		if !ok {
 			return 2
 		}
 
 		// Validate property using PropertyRegistry
 		if !propertyRegistry.ValidFor(entityType, property) {
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid property: " + property + " for " + entityType))
-			return 2
+			return pushError(L, "invalid property: "+property+" for "+entityType)
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
+		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
+			var value string
+			switch entityType {
+			case "location":
+				loc, err := adapter.GetLocation(ctx, entityID)
+				if err != nil {
+					return pushError(L, sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err))
+				}
+				switch property {
+				case "name":
+					value = loc.Name
+				case "description":
+					value = loc.Description
+				}
 
-		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-
-		// Get the property value
-		var value string
-		switch entityType {
-		case "location":
-			loc, err := adapter.GetLocation(ctx, entityID)
-			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err)))
-				return 2
-			}
-			switch property {
-			case "name":
-				value = loc.Name
-			case "description":
-				value = loc.Description
+			case "object":
+				obj, err := adapter.GetObject(ctx, entityID)
+				if err != nil {
+					return pushError(L, sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err))
+				}
+				switch property {
+				case "name":
+					value = obj.Name
+				case "description":
+					value = obj.Description
+				}
 			}
 
-		case "object":
-			obj, err := adapter.GetObject(ctx, entityID)
-			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err)))
-				return 2
-			}
-			switch property {
-			case "name":
-				value = obj.Name
-			case "description":
-				value = obj.Description
-			}
-		}
-
-		L.Push(lua.LString(value))
-		L.Push(lua.LNil)
-		return 2
+			return pushSuccess(L, lua.LString(value))
+		})
 	}
 }
