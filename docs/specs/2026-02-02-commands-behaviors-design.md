@@ -88,14 +88,22 @@ type CommandExecution struct {
 
 // Services provides access to core services for command handlers.
 // Handlers MUST NOT store references to services beyond execution.
-// Handlers MUST access services only through exec.Services.
+// Handlers MUST access services only through exec.Services getters.
 type Services struct {
-    World       WorldService         // world model queries and mutations
-    Session     core.SessionService  // session management
-    Access      access.AccessControl // authorization checks
-    Events      core.EventStore      // event persistence
-    Broadcaster EventBroadcaster     // event broadcasting (for admin commands)
+    world       WorldService         // private - use World() getter
+    session     core.SessionService  // private - use Session() getter
+    access      access.AccessControl // private - use Access() getter
+    events      core.EventStore      // private - use Events() getter
+    broadcaster EventBroadcaster     // private - use Broadcaster() getter
 }
+
+// Getter methods provide read-only access to services.
+// This prevents handlers from replacing service implementations.
+func (s *Services) World() WorldService              { return s.world }
+func (s *Services) Session() core.SessionService     { return s.session }
+func (s *Services) Access() access.AccessControl     { return s.access }
+func (s *Services) Events() core.EventStore          { return s.events }
+func (s *Services) Broadcaster() EventBroadcaster    { return s.broadcaster }
 
 // NOTE: The Services struct uses interfaces rather than concrete types.
 // This is intentional and follows Go best practice ("accept interfaces, return structs"):
@@ -627,7 +635,7 @@ Direct function call with injected services:
 
 ```go
 func LookHandler(ctx context.Context, exec *CommandExecution) error {
-    room, err := exec.Services.World.GetLocation(ctx, exec.LocationID)
+    room, err := exec.Services.World().GetLocation(ctx, exec.LocationID)
     if err != nil {
         return WorldError("You can't see anything here.", err)
     }
@@ -636,8 +644,8 @@ func LookHandler(ctx context.Context, exec *CommandExecution) error {
 }
 ```
 
-Handlers access services via `exec.Services` rather than storing dependencies.
-This keeps handlers stateless and testable.
+Handlers access services via `exec.Services` getters (e.g., `exec.Services.World()`)
+rather than storing dependencies. This keeps handlers stateless and testable.
 
 ### Lua Command Execution
 
