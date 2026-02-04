@@ -330,35 +330,105 @@ end
 	}
 }
 
-func TestLuaHost_DeliverEvent_NonTableReturn(t *testing.T) {
-	dir := t.TempDir()
-
-	// Plugin that returns a string instead of a table
-	writeMainLua(t, dir, `
+func TestLuaHost_DeliverEvent_NonTableReturn_Logs_Warning(t *testing.T) {
+	tests := []struct {
+		name         string
+		luaCode      string
+		expectWarn   bool
+		expectedType string
+	}{
+		{
+			name: "string return logs warning",
+			luaCode: `
 function on_event(event)
     return "not a table"
 end
-`)
-
-	host := pluginlua.NewHost()
-	defer closeHost(t, host)
-
-	manifest := &plugin.Manifest{
-		Name:      "bad-return",
-		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+`,
+			expectWarn:   true,
+			expectedType: "string",
+		},
+		{
+			name: "number return logs warning",
+			luaCode: `
+function on_event(event)
+    return 42
+end
+`,
+			expectWarn:   true,
+			expectedType: "number",
+		},
+		{
+			name: "boolean return logs warning",
+			luaCode: `
+function on_event(event)
+    return true
+end
+`,
+			expectWarn:   true,
+			expectedType: "bool",
+		},
+		{
+			name: "nil return does NOT log warning",
+			luaCode: `
+function on_event(event)
+    return nil
+end
+`,
+			expectWarn: false,
+		},
+		{
+			name: "table return does NOT log warning",
+			luaCode: `
+function on_event(event)
+    return {}
+end
+`,
+			expectWarn: false,
+		},
 	}
 
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeMainLua(t, dir, tt.luaCode)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
-	emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
-	require.NoError(t, err, "DeliverEvent() failed")
+			// Capture log output
+			var logBuf bytes.Buffer
+			handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+			oldLogger := slog.Default()
+			slog.SetDefault(slog.New(handler))
+			defer slog.SetDefault(oldLogger)
 
-	// Non-table returns should be gracefully ignored (empty emits)
-	assert.Empty(t, emits, "expected empty emits for non-table return")
+			host := pluginlua.NewHost()
+			defer closeHost(t, host)
+
+			manifest := &plugin.Manifest{
+				Name:      "bad-return",
+				Version:   "1.0.0",
+				Type:      plugin.TypeLua,
+				LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+			}
+
+			err := host.Load(context.Background(), manifest, dir)
+			require.NoError(t, err)
+
+			event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+			emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
+			require.NoError(t, err, "DeliverEvent() failed")
+
+			// Non-table returns should be gracefully ignored (empty emits)
+			assert.Empty(t, emits, "expected empty emits for non-table return")
+
+			logOutput := logBuf.String()
+			if tt.expectWarn {
+				assert.Contains(t, logOutput, "non-table", "expected warning about non-table return")
+				assert.Contains(t, logOutput, "bad-return", "expected plugin name in warning")
+				assert.Contains(t, logOutput, tt.expectedType, "expected return type in warning")
+			} else {
+				assert.NotContains(t, logOutput, "non-table", "expected no warning for nil/table return")
+			}
+		})
+	}
 }
 
 func TestLuaHost_DeliverEvent_MalformedEmitEvents(t *testing.T) {

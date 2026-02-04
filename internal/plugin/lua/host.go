@@ -249,7 +249,10 @@ func (h *Host) parseEmitEvents(pluginName string, ret lua.LValue) []pluginpkg.Em
 
 	table, ok := ret.(*lua.LTable)
 	if !ok {
-		return nil // Non-table return is ignored
+		slog.Warn("plugin returned non-table value",
+			"plugin", pluginName,
+			"type", ret.Type().String())
+		return nil
 	}
 
 	var emits []pluginpkg.EmitEvent
