@@ -223,6 +223,82 @@ func TestAliasAddHandler(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("trims whitespace around alias and command", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		playerID := ulid.Make()
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "  l = look  ",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasCache: cache}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.NoError(t, err)
+		// Verify the alias was stored without whitespace
+		result := cache.Resolve(playerID, "l", registry)
+		assert.Equal(t, "look", result.Resolved)
+		assert.True(t, result.WasAlias)
+	})
+
+	t.Run("rejects whitespace-only alias name", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		playerID := ulid.Make()
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "   =look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+	})
+
+	t.Run("rejects whitespace-only command", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		playerID := ulid.Make()
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l=   ",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+	})
+
+	t.Run("rejects whitespace-only input", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		playerID := ulid.Make()
+
+		var buf bytes.Buffer
+		exec := &command.CommandExecution{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "   ",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{}),
+		}
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+	})
+
 	t.Run("returns error when alias cache is nil", func(t *testing.T) {
 		var buf bytes.Buffer
 		exec := &command.CommandExecution{
