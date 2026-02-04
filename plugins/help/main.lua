@@ -39,7 +39,17 @@ function list_commands(ctx)
         return holo.emit.flush()
     end
 
-    if not commands or #commands == 0 then
+    -- Distinguish nil (service issue) from empty table (no commands registered).
+    -- holomush.list_commands() returns nil when the command service is unavailable,
+    -- and an empty table when no commands match the character's capabilities.
+    if commands == nil then
+        holo.emit.character(ctx.character_id, "error", {
+            message = "Help service temporarily unavailable. Please try again later."
+        })
+        return holo.emit.flush()
+    end
+
+    if #commands == 0 then
         holo.emit.character(ctx.character_id, "info", {
             message = "No commands available."
         })
