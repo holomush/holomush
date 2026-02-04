@@ -692,9 +692,7 @@ var _ = Describe("Alias Management Integration", func() {
 })
 
 var _ = Describe("Alias Persistence Integration", func() {
-	var (
-		aliasRepo *inMemoryAliasRepo
-	)
+	var aliasRepo *inMemoryAliasRepo
 
 	BeforeEach(func() {
 		aliasRepo = newInMemoryAliasRepo()
@@ -870,4 +868,3 @@ var _ = Describe("Alias Persistence Integration", func() {
 		})
 	})
 })
-

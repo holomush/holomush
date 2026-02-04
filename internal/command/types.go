@@ -184,15 +184,15 @@ func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandExecutionConfig struct {
-	CharacterID   ulid.ULID  // REQUIRED: must be non-zero
-	LocationID    ulid.ULID  // optional
-	CharacterName string     // optional
-	PlayerID      ulid.ULID  // optional
-	SessionID     ulid.ULID  // optional
-	Args          string     // optional
-	Output        io.Writer  // REQUIRED: must be non-nil
-	Services      *Services  // REQUIRED: must be non-nil
-	InvokedAs     string     // optional
+	CharacterID   ulid.ULID // REQUIRED: must be non-zero
+	LocationID    ulid.ULID // optional
+	CharacterName string    // optional
+	PlayerID      ulid.ULID // optional
+	SessionID     ulid.ULID // optional
+	Args          string    // optional
+	Output        io.Writer // REQUIRED: must be non-nil
+	Services      *Services // REQUIRED: must be non-nil
+	InvokedAs     string    // optional
 }
 
 // CommandExecution provides context for command execution.

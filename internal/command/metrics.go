@@ -49,6 +49,17 @@ var AliasExpansions = prometheus.NewCounterVec(
 	[]string{"alias"},
 )
 
+// AliasRollbackFailures is the counter for alias rollback failures.
+// This tracks CRITICAL failures where both cache update and database rollback fail,
+// leaving the database and cache in an inconsistent state.
+// See operator documentation for recovery procedures.
+var AliasRollbackFailures = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "holomush_alias_rollback_failures_total",
+		Help: "Total alias rollback failures (database-cache inconsistency)",
+	},
+)
+
 // RegisterMetrics registers command package metrics with the given Prometheus registry.
 // This must be called at startup to make metrics available on /metrics.
 // Panics if registration fails (following prometheus convention).
@@ -56,6 +67,7 @@ func RegisterMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(CommandExecutions)
 	reg.MustRegister(CommandDuration)
 	reg.MustRegister(AliasExpansions)
+	reg.MustRegister(AliasRollbackFailures)
 }
 
 // RecordCommandExecution increments the command execution counter with the given attributes.
@@ -81,4 +93,11 @@ func RecordCommandDuration(command, source string, duration time.Duration) {
 //   - alias: the alias that was expanded
 func RecordAliasExpansion(alias string) {
 	AliasExpansions.WithLabelValues(alias).Inc()
+}
+
+// RecordAliasRollbackFailure increments the alias rollback failure counter.
+// This should be called when both cache update AND database rollback fail,
+// which leaves the system in an inconsistent state requiring manual intervention.
+func RecordAliasRollbackFailure() {
+	AliasRollbackFailures.Inc()
 }

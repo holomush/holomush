@@ -41,12 +41,13 @@ HoloMUSH exposes Prometheus metrics at `/metrics`.
 
 ### Available Metrics
 
-| Metric                          | Type      | Description             |
-| ------------------------------- | --------- | ----------------------- |
-| `holomush_events_total`         | Counter   | Total events processed  |
-| `holomush_sessions_active`      | Gauge     | Current active sessions |
-| `holomush_grpc_requests_total`  | Counter   | gRPC requests by method |
-| `holomush_grpc_latency_seconds` | Histogram | gRPC request latency    |
+| Metric                                   | Type      | Description                                   |
+| ---------------------------------------- | --------- | --------------------------------------------- |
+| `holomush_events_total`                  | Counter   | Total events processed                        |
+| `holomush_sessions_active`               | Gauge     | Current active sessions                       |
+| `holomush_grpc_requests_total`           | Counter   | gRPC requests by method                       |
+| `holomush_grpc_latency_seconds`          | Histogram | gRPC request latency                          |
+| `holomush_alias_rollback_failures_total` | Counter   | Alias rollback failures (requires manual fix) |
 
 ### Scrape Configuration
 
@@ -360,6 +361,71 @@ psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='holomush';"
 ```sql
 EXPLAIN ANALYZE SELECT * FROM events WHERE stream = 'room:123' ORDER BY id DESC LIMIT 100;
 ```
+
+### Alias Database-Cache Inconsistency
+
+**Symptom:** Log message with `severity=critical` containing
+"alias rollback failed - database-cache inconsistency".
+
+**Monitoring:** Alert on the `holomush_alias_rollback_failures_total` metric.
+
+```yaml
+# Prometheus alert rule
+- alert: AliasRollbackFailure
+  expr: increase(holomush_alias_rollback_failures_total[5m]) > 0
+  for: 0m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Alias database-cache inconsistency detected"
+    description: "A rollback failure has left aliases in an inconsistent state."
+```
+
+**Cause:** During alias creation, the database write succeeded but the cache
+update failed (e.g., circular reference detected). The subsequent rollback
+(database delete) also failed, leaving the alias in the database but not in
+the cache.
+
+**Impact:**
+
+- The alias exists in the database but is not loaded into cache
+- On server restart, the alias will be loaded and may cause issues
+- The alias may conflict with other aliases or commands
+
+**Recovery:**
+
+1. **Identify the problematic alias** from the log message (check `alias` and
+   `player_id` fields)
+
+2. **For player aliases**, delete from database:
+
+   ```sql
+   DELETE FROM player_aliases
+   WHERE player_id = '<player_id>' AND alias = '<alias_name>';
+   ```
+
+3. **For system aliases**, delete from database:
+
+   ```sql
+   DELETE FROM system_aliases WHERE alias = '<alias_name>';
+   ```
+
+4. **Verify cleanup:**
+
+   ```sql
+   -- Check player aliases
+   SELECT * FROM player_aliases WHERE alias = '<alias_name>';
+
+   -- Check system aliases
+   SELECT * FROM system_aliases WHERE alias = '<alias_name>';
+   ```
+
+5. **No restart required** - the cache does not contain the alias, so removing
+   it from the database prevents it from being loaded on the next restart.
+
+**Prevention:** This failure typically occurs when database connectivity is
+degraded. Monitor database connection health and ensure proper connection
+pooling configuration.
 
 ## Next Steps
 

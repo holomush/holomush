@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -886,6 +887,91 @@ func TestSysaliasAddHandler_PersistsToDatabase(t *testing.T) {
 
 		// Verify: database write was rolled back (DeleteSystemAlias was called)
 		// The mock expectations above verify this automatically
+	})
+}
+
+func TestAliasAddHandler_DoubleFailure(t *testing.T) {
+	t.Run("logs critical when both cache update and rollback fail for player alias", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasWriter(t)
+		playerID := ulid.Make()
+
+		// Create a circular alias scenario: add "look" -> "l" first
+		// Then when we try to add "l" -> "look", the cache will detect the cycle
+		require.NoError(t, cache.SetPlayerAlias(playerID, "look", "l"))
+
+		// Expect database write to succeed
+		mockRepo.EXPECT().
+			SetPlayerAlias(mock.Anything, playerID, "l", "look").
+			Return(nil)
+
+		// Simulate rollback failure - this creates the double-failure scenario
+		mockRepo.EXPECT().
+			DeletePlayerAlias(mock.Anything, playerID, "l").
+			Return(errors.New("rollback failed: database connection lost"))
+
+		// Capture metrics before the call
+		beforeCount := testutil.ToFloat64(command.AliasRollbackFailures)
+
+		var buf bytes.Buffer
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
+			CharacterID: ulid.Make(),
+			PlayerID:    playerID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		})
+
+		err := aliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "circular")
+
+		// Verify metric was incremented
+		afterCount := testutil.ToFloat64(command.AliasRollbackFailures)
+		assert.Equal(t, beforeCount+1, afterCount, "rollback failure metric should increment")
+	})
+}
+
+func TestSysaliasAddHandler_DoubleFailure(t *testing.T) {
+	t.Run("logs critical when both cache update and rollback fail for system alias", func(t *testing.T) {
+		cache := command.NewAliasCache()
+		registry := command.NewRegistry()
+		mockRepo := mocks.NewMockAliasWriter(t)
+		charID := ulid.Make()
+
+		// Create a circular alias scenario: add "look" -> "l" first
+		// Then when we try to add "l" -> "look", the cache will detect the cycle
+		require.NoError(t, cache.SetSystemAlias("look", "l"))
+
+		// Expect database write to succeed
+		mockRepo.EXPECT().
+			SetSystemAlias(mock.Anything, "l", "look", charID.String()).
+			Return(nil)
+
+		// Simulate rollback failure - this creates the double-failure scenario
+		mockRepo.EXPECT().
+			DeleteSystemAlias(mock.Anything, "l").
+			Return(errors.New("rollback failed: database connection lost"))
+
+		// Capture metrics before the call
+		beforeCount := testutil.ToFloat64(command.AliasRollbackFailures)
+
+		var buf bytes.Buffer
+		exec := command.NewTestExecution(command.CommandExecutionConfig{
+			CharacterID: charID,
+			Args:        "l=look",
+			Output:      &buf,
+			Services:    command.NewTestServices(command.ServicesConfig{AliasRepo: mockRepo}),
+		})
+
+		err := sysaliasAddImpl(context.Background(), exec, cache, registry)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "circular")
+
+		// Verify metric was incremented
+		afterCount := testutil.ToFloat64(command.AliasRollbackFailures)
+		assert.Equal(t, beforeCount+1, afterCount, "rollback failure metric should increment")
 	})
 }
 

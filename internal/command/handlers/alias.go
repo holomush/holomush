@@ -87,11 +87,17 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 		// Rollback: delete from database since cache update failed
 		if repo != nil {
 			if rollbackErr := repo.DeletePlayerAlias(ctx, exec.PlayerID(), alias); rollbackErr != nil {
-				slog.ErrorContext(ctx, "failed to rollback alias after cache error",
+				// CRITICAL: Both cache update and rollback failed.
+				// Database contains alias but cache does not - inconsistent state.
+				// Requires manual intervention. See operator docs for recovery.
+				slog.ErrorContext(ctx, "CRITICAL: alias rollback failed - database-cache inconsistency",
+					"severity", "critical",
 					"alias", alias,
 					"player_id", exec.PlayerID().String(),
 					"cache_error", err.Error(),
-					"rollback_error", rollbackErr.Error())
+					"rollback_error", rollbackErr.Error(),
+					"recovery", "see operator documentation: alias-inconsistency-recovery")
+				command.RecordAliasRollbackFailure()
 			}
 		}
 		return err //nolint:wrapcheck // SetPlayerAlias returns structured oops error
@@ -244,10 +250,16 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 		// Rollback: delete from database since cache update failed
 		if repo != nil {
 			if rollbackErr := repo.DeleteSystemAlias(ctx, alias); rollbackErr != nil {
-				slog.ErrorContext(ctx, "failed to rollback system alias after cache error",
+				// CRITICAL: Both cache update and rollback failed.
+				// Database contains alias but cache does not - inconsistent state.
+				// Requires manual intervention. See operator docs for recovery.
+				slog.ErrorContext(ctx, "CRITICAL: system alias rollback failed - database-cache inconsistency",
+					"severity", "critical",
 					"alias", alias,
 					"cache_error", err.Error(),
-					"rollback_error", rollbackErr.Error())
+					"rollback_error", rollbackErr.Error(),
+					"recovery", "see operator documentation: alias-inconsistency-recovery")
+				command.RecordAliasRollbackFailure()
 			}
 		}
 		return err //nolint:wrapcheck // SetSystemAlias returns structured oops error

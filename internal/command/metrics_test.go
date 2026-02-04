@@ -106,6 +106,19 @@ func TestRecordAliasExpansion(t *testing.T) {
 	assert.Equal(t, colonBefore+1, colonAfter, "expected 1 expansion for ':' alias")
 }
 
+func TestRecordAliasRollbackFailure(t *testing.T) {
+	// Get current value
+	before := testutil.ToFloat64(AliasRollbackFailures)
+
+	// Record rollback failures
+	RecordAliasRollbackFailure()
+	RecordAliasRollbackFailure()
+
+	// Verify counter incremented
+	after := testutil.ToFloat64(AliasRollbackFailures)
+	assert.Equal(t, before+2, after, "expected counter to increment by 2")
+}
+
 func TestMetricsStatusConstants(t *testing.T) {
 	// Verify status constants are defined as expected
 	assert.Equal(t, "success", StatusSuccess)
