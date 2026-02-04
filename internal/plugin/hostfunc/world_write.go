@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/world"
@@ -236,6 +237,118 @@ func (f *Functions) findLocationFn(pluginName string) lua.LGFunction {
 	}
 }
 
+// propertyOpts holds validated parameters for property operations.
+type propertyOpts struct {
+	entityType  string
+	entityID    ulid.ULID
+	entityIDStr string
+	property    string
+}
+
+// validatePropertyArgs validates and parses common property function arguments.
+// Returns propertyOpts and true on success, or pushes error and returns false.
+//
+//nolint:gocritic // captLocal: L is the idiomatic name for lua.LState in gopher-lua
+func validatePropertyArgs(L *lua.LState, pluginName, fnName string, hasValue bool) (*propertyOpts, bool) {
+	entityType := L.CheckString(1)
+	entityIDStr := L.CheckString(2)
+	property := L.CheckString(3)
+	if hasValue {
+		L.CheckString(4) // validate value is present
+	}
+
+	// Validate entity type
+	if entityType != "location" && entityType != "object" {
+		pushError(L, "invalid entity type: "+entityType+" (must be 'location' or 'object')")
+		return nil, false
+	}
+
+	// Validate entity ID
+	entityID, ok := parseULID(L, entityIDStr, pluginName, fnName, "entity_id")
+	if !ok {
+		return nil, false
+	}
+
+	// Validate property using PropertyRegistry
+	if !propertyRegistry.ValidFor(entityType, property) {
+		pushError(L, "invalid property: "+property+" for "+entityType)
+		return nil, false
+	}
+
+	return &propertyOpts{
+		entityType:  entityType,
+		entityID:    entityID,
+		entityIDStr: entityIDStr,
+		property:    property,
+	}, true
+}
+
+// getEntityProperty retrieves a property value from an entity.
+func getEntityProperty(ctx context.Context, adapter *WorldQuerierAdapter, opts *propertyOpts) (string, error) {
+	switch opts.entityType {
+	case "location":
+		loc, err := adapter.GetLocation(ctx, opts.entityID)
+		if err != nil {
+			return "", err
+		}
+		switch opts.property {
+		case "name":
+			return loc.Name, nil
+		case "description":
+			return loc.Description, nil
+		}
+	case "object":
+		obj, err := adapter.GetObject(ctx, opts.entityID)
+		if err != nil {
+			return "", err
+		}
+		switch opts.property {
+		case "name":
+			return obj.Name, nil
+		case "description":
+			return obj.Description, nil
+		}
+	}
+	return "", nil
+}
+
+// setEntityProperty sets a property value on an entity.
+func setEntityProperty(ctx context.Context, adapter *WorldQuerierAdapter, mutator WorldMutator, subjectID string, opts *propertyOpts, value string) error {
+	switch opts.entityType {
+	case "location":
+		loc, err := adapter.GetLocation(ctx, opts.entityID)
+		if err != nil {
+			return err
+		}
+		switch opts.property {
+		case "name":
+			loc.Name = value
+		case "description":
+			loc.Description = value
+		}
+		if err := mutator.UpdateLocation(ctx, subjectID, loc); err != nil {
+			return oops.Wrapf(err, "update location %s", opts.entityID)
+		}
+		return nil
+	case "object":
+		obj, err := adapter.GetObject(ctx, opts.entityID)
+		if err != nil {
+			return err
+		}
+		switch opts.property {
+		case "name":
+			obj.Name = value
+		case "description":
+			obj.Description = value
+		}
+		if err := mutator.UpdateObject(ctx, subjectID, obj); err != nil {
+			return oops.Wrapf(err, "update object %s", opts.entityID)
+		}
+		return nil
+	}
+	return nil
+}
+
 // setPropertyFn returns a Lua function that sets a property on an entity.
 // Lua signature: set_property(entity_type, entity_id, property, value) -> true or nil, error
 // entity_type: "location" or "object"
@@ -246,62 +359,17 @@ func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 			return f.pushServiceUnavailable(L, "set_property", pluginName)
 		}
 
-		entityType := L.CheckString(1)
-		entityIDStr := L.CheckString(2)
-		property := L.CheckString(3)
-		value := L.CheckString(4)
-
-		// Validate entity type
-		if entityType != "location" && entityType != "object" {
-			return pushError(L, "invalid entity type: "+entityType+" (must be 'location' or 'object')")
-		}
-
-		// Validate entity ID
-		entityID, ok := parseULID(L, entityIDStr, pluginName, "set_property", "entity_id")
+		opts, ok := validatePropertyArgs(L, pluginName, "set_property", true)
 		if !ok {
 			return 2
 		}
-
-		// Validate property using PropertyRegistry
-		if !propertyRegistry.ValidFor(entityType, property) {
-			return pushError(L, "invalid property: "+property+" for "+entityType)
-		}
+		value := L.CheckString(4)
 
 		return f.withMutatorContext(L, "set_property", pluginName,
 			func(ctx context.Context, mutator WorldMutator, subjectID string, adapter *WorldQuerierAdapter) int {
-				// Get and update the entity
-				switch entityType {
-				case "location":
-					loc, err := adapter.GetLocation(ctx, entityID)
-					if err != nil {
-						return pushError(L, sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err))
-					}
-					switch property {
-					case "name":
-						loc.Name = value
-					case "description":
-						loc.Description = value
-					}
-					if err := mutator.UpdateLocation(ctx, subjectID, loc); err != nil {
-						return pushError(L, sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err))
-					}
-
-				case "object":
-					obj, err := adapter.GetObject(ctx, entityID)
-					if err != nil {
-						return pushError(L, sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err))
-					}
-					switch property {
-					case "name":
-						obj.Name = value
-					case "description":
-						obj.Description = value
-					}
-					if err := mutator.UpdateObject(ctx, subjectID, obj); err != nil {
-						return pushError(L, sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err))
-					}
+				if err := setEntityProperty(ctx, adapter, mutator, subjectID, opts, value); err != nil {
+					return pushError(L, sanitizeErrorForPlugin(pluginName, opts.entityType, opts.entityIDStr, err))
 				}
-
 				return pushSuccess(L, lua.LTrue)
 			})
 	}
@@ -317,54 +385,16 @@ func (f *Functions) getPropertyFn(pluginName string) lua.LGFunction {
 			return f.pushServiceUnavailable(L, "get_property", pluginName)
 		}
 
-		entityType := L.CheckString(1)
-		entityIDStr := L.CheckString(2)
-		property := L.CheckString(3)
-
-		// Validate entity type
-		if entityType != "location" && entityType != "object" {
-			return pushError(L, "invalid entity type: "+entityType+" (must be 'location' or 'object')")
-		}
-
-		// Validate entity ID
-		entityID, ok := parseULID(L, entityIDStr, pluginName, "get_property", "entity_id")
+		opts, ok := validatePropertyArgs(L, pluginName, "get_property", false)
 		if !ok {
 			return 2
 		}
 
-		// Validate property using PropertyRegistry
-		if !propertyRegistry.ValidFor(entityType, property) {
-			return pushError(L, "invalid property: "+property+" for "+entityType)
-		}
-
 		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
-			var value string
-			switch entityType {
-			case "location":
-				loc, err := adapter.GetLocation(ctx, entityID)
-				if err != nil {
-					return pushError(L, sanitizeErrorForPlugin(pluginName, "location", entityIDStr, err))
-				}
-				switch property {
-				case "name":
-					value = loc.Name
-				case "description":
-					value = loc.Description
-				}
-
-			case "object":
-				obj, err := adapter.GetObject(ctx, entityID)
-				if err != nil {
-					return pushError(L, sanitizeErrorForPlugin(pluginName, "object", entityIDStr, err))
-				}
-				switch property {
-				case "name":
-					value = obj.Name
-				case "description":
-					value = obj.Description
-				}
+			value, err := getEntityProperty(ctx, adapter, opts)
+			if err != nil {
+				return pushError(L, sanitizeErrorForPlugin(pluginName, opts.entityType, opts.entityIDStr, err))
 			}
-
 			return pushSuccess(L, lua.LString(value))
 		})
 	}
