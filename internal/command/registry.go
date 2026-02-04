@@ -9,7 +9,9 @@ import (
 )
 
 // Registry manages command registration and lookup.
-// It is thread-safe for concurrent access.
+// Registry is safe for concurrent use. All methods are protected by a
+// sync.RWMutex, allowing concurrent reads (Get, All) with exclusive writes
+// (Register).
 type Registry struct {
 	commands map[string]CommandEntry
 	mu       sync.RWMutex
@@ -22,7 +24,7 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register adds a command to the registry.
+// Register adds a command to the registry. It is safe for concurrent use.
 // If a command with the same name exists, it is overwritten and a warning is logged.
 // This follows ADR 0006 and ADR 0008: last-loaded wins with warning.
 //
@@ -52,7 +54,7 @@ func (r *Registry) Register(entry CommandEntry) error {
 	return nil
 }
 
-// Get retrieves a command by name.
+// Get retrieves a command by name. It is safe for concurrent use.
 // Returns the command entry and true if found, or zero value and false if not found.
 func (r *Registry) Get(name string) (CommandEntry, bool) {
 	r.mu.RLock()
@@ -62,8 +64,9 @@ func (r *Registry) Get(name string) (CommandEntry, bool) {
 	return entry, ok
 }
 
-// All returns all registered commands.
-// The returned slice is a copy and safe to modify.
+// All returns all registered commands. It is safe for concurrent use.
+// The returned slice is a defensive copy and safe to modify without
+// affecting the registry's internal state.
 func (r *Registry) All() []CommandEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
