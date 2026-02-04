@@ -5,7 +5,9 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -359,4 +361,69 @@ type mockWriter struct{}
 
 func (m *mockWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
+}
+
+// Tests for BroadcastSystemMessage
+
+func TestServices_BroadcastSystemMessage_NilBroadcaster_IsNoOp(t *testing.T) {
+	t.Parallel()
+
+	// Create services with nil Broadcaster
+	svc := &Services{
+		Broadcaster: nil,
+	}
+
+	// Should not panic - this is a silent no-op
+	assert.NotPanics(t, func() {
+		svc.BroadcastSystemMessage("test-stream", "test message")
+	})
+}
+
+func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {
+	// Create a real broadcaster so we can subscribe and capture the event
+	broadcaster := core.NewBroadcaster()
+	stream := "test-stream"
+	testMessage := "Server is shutting down"
+
+	// Subscribe before broadcasting
+	ch := broadcaster.Subscribe(stream)
+
+	svc := &Services{
+		Broadcaster: broadcaster,
+	}
+
+	// Broadcast the message
+	svc.BroadcastSystemMessage(stream, testMessage)
+
+	// Receive the event
+	select {
+	case event := <-ch:
+		// Verify stream
+		assert.Equal(t, stream, event.Stream, "Stream should match input")
+
+		// Verify event type
+		assert.Equal(t, core.EventTypeSystem, event.Type, "Type should be EventTypeSystem")
+
+		// Verify actor
+		assert.Equal(t, core.ActorSystem, event.Actor.Kind, "Actor.Kind should be ActorSystem")
+		assert.Equal(t, "system", event.Actor.ID, "Actor.ID should be 'system'")
+
+		// Verify payload contains message
+		var payload map[string]string
+		err := json.Unmarshal(event.Payload, &payload)
+		require.NoError(t, err, "Payload should be valid JSON")
+		assert.Equal(t, testMessage, payload["message"], "Payload should contain the message")
+
+		// Verify ID is set (non-zero)
+		assert.False(t, event.ID.IsZero(), "Event ID should be set")
+
+		// Verify timestamp is recent
+		assert.WithinDuration(t, time.Now(), event.Timestamp, time.Second,
+			"Timestamp should be recent")
+	default:
+		t.Fatal("Expected to receive an event from the broadcaster")
+	}
+
+	// Cleanup
+	broadcaster.Unsubscribe(stream, ch)
 }
