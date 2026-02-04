@@ -29,9 +29,9 @@ function handle_help(ctx)
     return show_command_help(ctx, args)
 end
 
--- List all available commands
+-- List all available commands (filtered by character capabilities)
 function list_commands(ctx)
-    local commands, err = holomush.list_commands()
+    local commands, err = holomush.list_commands(ctx.character_id)
     if err then
         holo.emit.character(ctx.character_id, "error", {
             message = "Error listing commands: " .. err
@@ -135,9 +135,9 @@ function show_command_help(ctx, command_name)
     return holo.emit.flush()
 end
 
--- Search commands by keyword
+-- Search commands by keyword (filtered by character capabilities)
 function search_commands(ctx, term)
-    local commands, err = holomush.list_commands()
+    local commands, err = holomush.list_commands(ctx.character_id)
     if err then
         holo.emit.character(ctx.character_id, "error", {
             message = "Error searching commands: " .. err

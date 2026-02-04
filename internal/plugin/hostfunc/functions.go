@@ -41,6 +41,7 @@ type Functions struct {
 	enforcer        CapabilityChecker
 	worldService    WorldService
 	commandRegistry CommandRegistry
+	access          AccessControl
 }
 
 // Option configures Functions.

@@ -4,6 +4,9 @@
 package hostfunc
 
 import (
+	"context"
+
+	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/command"
@@ -17,6 +20,13 @@ type CommandRegistry interface {
 	Get(name string) (command.CommandEntry, bool)
 }
 
+// AccessControl checks if a subject can perform an action on a resource.
+// This is used to filter commands based on character capabilities.
+type AccessControl interface {
+	// Check returns true if subject can perform action on resource.
+	Check(ctx context.Context, subject, action, resource string) bool
+}
+
 // WithCommandRegistry sets the command registry for command-related host functions.
 func WithCommandRegistry(reg CommandRegistry) Option {
 	return func(f *Functions) {
@@ -24,21 +34,61 @@ func WithCommandRegistry(reg CommandRegistry) Option {
 	}
 }
 
+// WithAccessControl sets the access control for capability filtering.
+func WithAccessControl(ac AccessControl) Option {
+	return func(f *Functions) {
+		f.access = ac
+	}
+}
+
 // listCommandsFn returns the list_commands host function.
+// Args: character_id (string) - the character whose capabilities determine visible commands
 // Returns: (commands table, error string)
+//
+// Commands are filtered by capability:
+//   - Commands with no capabilities (nil or empty slice) are always included
+//   - Commands with capabilities require ALL capabilities to be granted (AND logic)
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 	return func(L *lua.LState) int {
+		charIDStr := L.CheckString(1)
+		if charIDStr == "" {
+			L.RaiseError("character ID cannot be empty")
+			return 0
+		}
+
+		charID, err := ulid.Parse(charIDStr)
+		if err != nil {
+			L.RaiseError("invalid character ID: %s", charIDStr)
+			return 0
+		}
+
 		if f.commandRegistry == nil {
 			L.Push(lua.LNil)
 			L.Push(lua.LString("command registry not available"))
 			return 2
 		}
 
+		if f.access == nil {
+			L.Push(lua.LNil)
+			L.Push(lua.LString("access control not available"))
+			return 2
+		}
+
 		commands := f.commandRegistry.All()
+		subject := "char:" + charID.String()
+		ctx := context.Background()
+
+		// Filter commands by character capabilities
+		var filtered []command.CommandEntry
+		for _, cmd := range commands {
+			if f.canExecuteCommand(ctx, subject, cmd) {
+				filtered = append(filtered, cmd)
+			}
+		}
 
 		// Create result table
 		tbl := L.NewTable()
-		for i, cmd := range commands {
+		for i, cmd := range filtered {
 			cmdTbl := L.NewTable()
 			L.SetField(cmdTbl, "name", lua.LString(cmd.Name))
 			L.SetField(cmdTbl, "help", lua.LString(cmd.Help))
@@ -53,6 +103,23 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		L.Push(lua.LNil) // no error
 		return 2
 	}
+}
+
+// canExecuteCommand checks if subject has all required capabilities for a command.
+// Returns true if command has no capabilities or subject has ALL required capabilities.
+func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) bool {
+	// Commands with no capabilities are always available
+	if len(cmd.Capabilities) == 0 {
+		return true
+	}
+
+	// Check ALL capabilities (AND logic)
+	for _, cap := range cmd.Capabilities {
+		if !f.access.Check(ctx, subject, "execute", cap) {
+			return false
+		}
+	}
+	return true
 }
 
 // getCommandHelpFn returns the get_command_help host function.
