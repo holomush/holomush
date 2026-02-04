@@ -96,7 +96,7 @@ func ErrAliasConflict(alias, existingCommand string) error {
 	return oops.Code(CodeAliasConflict).
 		With("alias", alias).
 		With("existing_command", existingCommand).
-		Errorf("'%s' shadows existing system alias for '%s'. Use 'sysalias remove %s' first.", alias, existingCommand, alias)
+		Errorf("'%s' shadows existing system alias for '%s'. Use 'sysunsalias %s' first.", alias, existingCommand, alias)
 }
 
 // ErrNoCharacter creates an error when command is executed without a character.
@@ -150,7 +150,7 @@ func PlayerMessage(err error) string {
 	case CodeAliasConflict:
 		if alias, ok := oopsErr.Context()["alias"].(string); ok {
 			if existingCmd, ok := oopsErr.Context()["existing_command"].(string); ok {
-				return "'" + alias + "' shadows existing system alias for '" + existingCmd + "'. Use 'sysalias remove " + alias + "' first."
+				return "'" + alias + "' shadows existing system alias for '" + existingCmd + "'. Use 'sysunsalias " + alias + "' first."
 			}
 		}
 		return "Alias conflicts with an existing system alias."

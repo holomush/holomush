@@ -24,7 +24,7 @@ func errNoAliasCache() error {
 // --- Player Alias Commands ---
 
 // AliasAddHandler adds a player alias.
-// Usage: alias add <alias>=<command>
+// Usage: alias <alias>=<command>
 //
 // Warnings are issued but don't prevent the operation:
 //   - If alias shadows an existing command
@@ -113,7 +113,7 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 }
 
 // AliasRemoveHandler removes a player alias.
-// Usage: alias remove <alias>
+// Usage: unalias <alias>
 func AliasRemoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 	cache := exec.Services().AliasCache()
 
@@ -129,7 +129,7 @@ func aliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cache 
 	alias := strings.TrimSpace(exec.Args)
 	if alias == "" {
 		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
-		return command.ErrInvalidArgs("alias remove", "alias remove <alias>")
+		return command.ErrInvalidArgs("unalias", "unalias <alias>")
 	}
 
 	// Check if alias exists before removing
@@ -155,7 +155,7 @@ func aliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cache 
 }
 
 // AliasListHandler lists all player aliases.
-// Usage: alias list
+// Usage: aliases
 func AliasListHandler(ctx context.Context, exec *command.CommandExecution) error {
 	cache := exec.Services().AliasCache()
 
@@ -194,7 +194,7 @@ func aliasListImpl(ctx context.Context, exec *command.CommandExecution, cache *c
 // --- System Alias Commands ---
 
 // SysaliasAddHandler adds a system alias.
-// Usage: sysalias add <alias>=<command>
+// Usage: sysalias <alias>=<command>
 //
 // Warns if shadowing a command, but BLOCKS if shadowing another system alias.
 func SysaliasAddHandler(ctx context.Context, exec *command.CommandExecution) error {
@@ -275,7 +275,7 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 }
 
 // SysaliasRemoveHandler removes a system alias.
-// Usage: sysalias remove <alias>
+// Usage: sysunsalias <alias>
 func SysaliasRemoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 	cache := exec.Services().AliasCache()
 
@@ -291,7 +291,7 @@ func sysaliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cac
 	alias := strings.TrimSpace(exec.Args)
 	if alias == "" {
 		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
-		return command.ErrInvalidArgs("sysalias remove", "sysalias remove <alias>")
+		return command.ErrInvalidArgs("sysunsalias", "sysunsalias <alias>")
 	}
 
 	// Check if alias exists before removing
@@ -317,7 +317,7 @@ func sysaliasRemoveImpl(ctx context.Context, exec *command.CommandExecution, cac
 }
 
 // SysaliasListHandler lists all system aliases.
-// Usage: sysalias list
+// Usage: sysaliases
 func SysaliasListHandler(ctx context.Context, exec *command.CommandExecution) error {
 	cache := exec.Services().AliasCache()
 
