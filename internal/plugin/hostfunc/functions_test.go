@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -375,7 +374,12 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 
 	errVal := L.GetGlobal("err")
 	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "database connection failed", errVal.String())
+
+	// Error should be sanitized with correlation ID, not raw database error
+	errMsg := errVal.String()
+	assert.Contains(t, errMsg, "internal error (ref: ")
+	assert.NotContains(t, errMsg, "database connection failed",
+		"raw error should not leak to plugin")
 }
 
 func TestHostFunctions_KVSet_StoreError(t *testing.T) {
@@ -400,7 +404,12 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
 	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "write failed: disk full", errVal.String())
+
+	// Error should be sanitized with correlation ID, not raw database error
+	errMsg := errVal.String()
+	assert.Contains(t, errMsg, "internal error (ref: ")
+	assert.NotContains(t, errMsg, "write failed",
+		"raw error should not leak to plugin")
 }
 
 func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
@@ -425,7 +434,12 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
 	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "delete failed: permission denied", errVal.String())
+
+	// Error should be sanitized with correlation ID, not raw database error
+	errMsg := errVal.String()
+	assert.Contains(t, errMsg, "internal error (ref: ")
+	assert.NotContains(t, errMsg, "delete failed",
+		"raw error should not leak to plugin")
 }
 
 func TestHostFunctions_KV_MissingArguments(t *testing.T) {
@@ -573,10 +587,8 @@ func TestHostFunctions_KVGet_Timeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
-	// Error should indicate deadline/timeout
-	errMsg := errVal.String()
-	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
-		"error should mention timeout/deadline, got: %s", errMsg)
+	// Sanitized timeout message (no raw context.DeadlineExceeded details)
+	assert.Equal(t, "operation timed out", errVal.String())
 }
 
 func TestHostFunctions_KVSet_Timeout(t *testing.T) {
@@ -597,9 +609,8 @@ func TestHostFunctions_KVSet_Timeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
-	errMsg := errVal.String()
-	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
-		"error should mention timeout/deadline, got: %s", errMsg)
+	// Sanitized timeout message
+	assert.Equal(t, "operation timed out", errVal.String())
 }
 
 func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
@@ -620,9 +631,8 @@ func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
-	errMsg := errVal.String()
-	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
-		"error should mention timeout/deadline, got: %s", errMsg)
+	// Sanitized timeout message
+	assert.Equal(t, "operation timed out", errVal.String())
 }
 
 func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {

@@ -9,6 +9,8 @@ package hostfunc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -216,6 +218,37 @@ func (f *Functions) newRequestIDFn() lua.LGFunction {
 	}
 }
 
+// sanitizeKVErrorForPlugin converts internal KV errors to safe messages for plugins.
+// It handles known error types (timeouts, not-found) with specific messages, and logs
+// internal errors at ERROR level for operators while returning a generic message with
+// a correlation ID to the plugin. This prevents leaking database internals to Lua code.
+func sanitizeKVErrorForPlugin(pluginName, operation, key string, err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		slog.Warn("plugin KV operation timed out",
+			"plugin", pluginName,
+			"operation", operation,
+			"key", key)
+		return "operation timed out"
+	}
+	if errors.Is(err, world.ErrNotFound) {
+		return "key not found"
+	}
+	if errors.Is(err, world.ErrPermissionDenied) {
+		return "access denied"
+	}
+
+	// Generate correlation ID for this error instance.
+	errorID := ulid.Make().String()
+
+	slog.Error("internal error in plugin KV operation",
+		"error_id", errorID,
+		"plugin", pluginName,
+		"operation", operation,
+		"key", key,
+		"error", err)
+	return fmt.Sprintf("internal error (ref: %s)", errorID)
+}
+
 func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
@@ -238,12 +271,8 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 
 		value, err := f.kvStore.Get(ctx, pluginName, key)
 		if err != nil {
-			slog.Error("kv_get failed",
-				"plugin", pluginName,
-				"key", key,
-				"error", err)
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "get", key, err)))
 			return 2
 		}
 
@@ -281,12 +310,8 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 		defer cancel()
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
-			slog.Error("kv_set failed",
-				"plugin", pluginName,
-				"key", key,
-				"error", err)
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "set", key, err)))
 			return 2
 		}
 
@@ -317,12 +342,8 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		defer cancel()
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {
-			slog.Error("kv_delete failed",
-				"plugin", pluginName,
-				"key", key,
-				"error", err)
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "delete", key, err)))
 			return 2
 		}
 
