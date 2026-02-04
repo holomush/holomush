@@ -1066,6 +1066,61 @@ func TestCommandSpec_Validate(t *testing.T) {
 	}
 }
 
+func TestCommandSpec_Validate_HelpTextHelpFileMutualExclusivity(t *testing.T) {
+	tests := []struct {
+		name    string
+		cmd     plugin.CommandSpec
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "both helpText and helpFile rejects with error",
+			cmd: plugin.CommandSpec{
+				Name:     "bad",
+				HelpText: "Some inline help text",
+				HelpFile: "help/bad.md",
+			},
+			wantErr: true,
+			errMsg:  "cannot specify both helpText and helpFile",
+		},
+		{
+			name: "helpText only passes validation",
+			cmd: plugin.CommandSpec{
+				Name:     "say",
+				HelpText: "Detailed inline help for the say command.",
+			},
+			wantErr: false,
+		},
+		{
+			name: "helpFile only passes validation",
+			cmd: plugin.CommandSpec{
+				Name:     "combat",
+				HelpFile: "help/combat.md",
+			},
+			wantErr: false,
+		},
+		{
+			name: "neither helpText nor helpFile passes validation",
+			cmd: plugin.CommandSpec{
+				Name: "look",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cmd.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestManifest_Validate_DuplicateCommandNames(t *testing.T) {
 	tests := []struct {
 		name    string
