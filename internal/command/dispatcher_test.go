@@ -862,6 +862,245 @@ func TestDispatcher_NilServices(t *testing.T) {
 	assert.Equal(t, CodeNilServices, oopsErr.Code())
 }
 
+func TestDispatcher_WithRateLimiter(t *testing.T) {
+	t.Run("rate limiting disabled when no limiter configured", func(t *testing.T) {
+		reg := NewRegistry()
+		mockAccess := accesstest.NewMockAccessControl()
+
+		var executed int
+		err := reg.Register(CommandEntry{
+			Name:         "test",
+			Capabilities: nil,
+			Handler: func(_ context.Context, _ *CommandExecution) error {
+				executed++
+				return nil
+			},
+			Source: "core",
+		})
+		require.NoError(t, err)
+
+		// Create dispatcher without rate limiter
+		dispatcher, err := NewDispatcher(reg, mockAccess)
+		require.NoError(t, err)
+
+		// Execute many commands - should all succeed (no rate limiting)
+		for i := 0; i < 20; i++ {
+			exec := &CommandExecution{
+				CharacterID: ulid.Make(),
+				SessionID:   ulid.Make(),
+				Output:      &bytes.Buffer{},
+				Services:    stubServices(),
+			}
+			err := dispatcher.Dispatch(context.Background(), "test", exec)
+			require.NoError(t, err)
+		}
+		assert.Equal(t, 20, executed)
+	})
+
+	t.Run("rate limiting blocks commands when burst exceeded", func(t *testing.T) {
+		reg := NewRegistry()
+		mockAccess := accesstest.NewMockAccessControl()
+
+		err := reg.Register(CommandEntry{
+			Name:         "test",
+			Capabilities: nil,
+			Handler: func(_ context.Context, _ *CommandExecution) error {
+				return nil
+			},
+			Source: "core",
+		})
+		require.NoError(t, err)
+
+		// Create rate limiter with low burst capacity
+		rl := NewRateLimiter(RateLimiterConfig{
+			BurstCapacity: 2,
+			SustainedRate: 1.0,
+		})
+
+		dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
+		require.NoError(t, err)
+
+		sessionID := ulid.Make()
+
+		// First two commands should succeed
+		for i := 0; i < 2; i++ {
+			exec := &CommandExecution{
+				CharacterID: ulid.Make(),
+				SessionID:   sessionID,
+				Output:      &bytes.Buffer{},
+				Services:    stubServices(),
+			}
+			dispatchErr := dispatcher.Dispatch(context.Background(), "test", exec)
+			require.NoError(t, dispatchErr)
+		}
+
+		// Third command should be rate limited
+		exec := &CommandExecution{
+			CharacterID: ulid.Make(),
+			SessionID:   sessionID,
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		err = dispatcher.Dispatch(context.Background(), "test", exec)
+		require.Error(t, err)
+
+		// Verify error code and context
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok)
+		assert.Equal(t, CodeRateLimited, oopsErr.Code())
+		assert.Contains(t, oopsErr.Context(), "cooldown_ms")
+	})
+
+	t.Run("different sessions have independent rate limits", func(t *testing.T) {
+		reg := NewRegistry()
+		mockAccess := accesstest.NewMockAccessControl()
+
+		err := reg.Register(CommandEntry{
+			Name:         "test",
+			Capabilities: nil,
+			Handler: func(_ context.Context, _ *CommandExecution) error {
+				return nil
+			},
+			Source: "core",
+		})
+		require.NoError(t, err)
+
+		rl := NewRateLimiter(RateLimiterConfig{
+			BurstCapacity: 1,
+			SustainedRate: 1.0,
+		})
+
+		dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
+		require.NoError(t, err)
+
+		session1 := ulid.Make()
+		session2 := ulid.Make()
+
+		// Session 1 uses its token
+		exec1 := &CommandExecution{
+			CharacterID: ulid.Make(),
+			SessionID:   session1,
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		err = dispatcher.Dispatch(context.Background(), "test", exec1)
+		require.NoError(t, err)
+
+		// Session 1 is now rate limited
+		err = dispatcher.Dispatch(context.Background(), "test", exec1)
+		require.Error(t, err)
+		assert.Contains(t, PlayerMessage(err), "slow down")
+
+		// Session 2 should still have its token
+		exec2 := &CommandExecution{
+			CharacterID: ulid.Make(),
+			SessionID:   session2,
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		err = dispatcher.Dispatch(context.Background(), "test", exec2)
+		require.NoError(t, err)
+	})
+
+	t.Run("bypass capability exempts from rate limiting", func(t *testing.T) {
+		reg := NewRegistry()
+		mockAccess := accesstest.NewMockAccessControl()
+
+		var executed int
+		err := reg.Register(CommandEntry{
+			Name:         "test",
+			Capabilities: nil,
+			Handler: func(_ context.Context, _ *CommandExecution) error {
+				executed++
+				return nil
+			},
+			Source: "core",
+		})
+		require.NoError(t, err)
+
+		// Create rate limiter with very low burst
+		rl := NewRateLimiter(RateLimiterConfig{
+			BurstCapacity: 1,
+			SustainedRate: 0.1, // Very slow refill
+		})
+
+		dispatcher, err := NewDispatcher(reg, mockAccess, WithRateLimiter(rl))
+		require.NoError(t, err)
+
+		charID := ulid.Make()
+		sessionID := ulid.Make()
+
+		// Grant bypass capability
+		mockAccess.Grant("char:"+charID.String(), "execute", CapabilityRateLimitBypass)
+
+		// Should be able to execute many commands despite rate limit
+		for i := 0; i < 10; i++ {
+			exec := &CommandExecution{
+				CharacterID: charID,
+				SessionID:   sessionID,
+				Output:      &bytes.Buffer{},
+				Services:    stubServices(),
+			}
+			err := dispatcher.Dispatch(context.Background(), "test", exec)
+			require.NoError(t, err)
+		}
+		assert.Equal(t, 10, executed)
+	})
+
+	t.Run("rate limiting happens after alias resolution", func(t *testing.T) {
+		reg := NewRegistry()
+		mockAccess := accesstest.NewMockAccessControl()
+
+		var capturedArgs string
+		err := reg.Register(CommandEntry{
+			Name:         "look",
+			Capabilities: nil,
+			Handler: func(_ context.Context, exec *CommandExecution) error {
+				capturedArgs = exec.Args
+				return nil
+			},
+			Source: "core",
+		})
+		require.NoError(t, err)
+
+		// Set up alias cache
+		cache := NewAliasCache()
+		cache.LoadSystemAliases(map[string]string{
+			"l": "look",
+		})
+
+		rl := NewRateLimiter(RateLimiterConfig{
+			BurstCapacity: 1,
+			SustainedRate: 1.0,
+		})
+
+		dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache), WithRateLimiter(rl))
+		require.NoError(t, err)
+
+		sessionID := ulid.Make()
+		playerID := ulid.Make()
+
+		// Use alias - should succeed (alias resolved, command executed)
+		exec := &CommandExecution{
+			CharacterID: ulid.Make(),
+			SessionID:   sessionID,
+			PlayerID:    playerID,
+			Output:      &bytes.Buffer{},
+			Services:    stubServices(),
+		}
+		err = dispatcher.Dispatch(context.Background(), "l around", exec)
+		require.NoError(t, err)
+		assert.Equal(t, "around", capturedArgs)
+
+		// Second command should be rate limited
+		err = dispatcher.Dispatch(context.Background(), "l again", exec)
+		require.Error(t, err)
+		oopsErr, ok := oops.AsOops(err)
+		require.True(t, ok)
+		assert.Equal(t, CodeRateLimited, oopsErr.Code())
+	})
+}
+
 func TestDispatcher_InvokedAs(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := accesstest.NewMockAccessControl()

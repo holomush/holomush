@@ -14,15 +14,17 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/observability"
 )
 
 var tracer = otel.Tracer("holomush/command")
 
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
-	registry   *Registry
-	access     access.AccessControl
-	aliasCache *AliasCache // optional, can be nil
+	registry    *Registry
+	access      access.AccessControl
+	aliasCache  *AliasCache  // optional, can be nil
+	rateLimiter *RateLimiter // optional, can be nil
 }
 
 // DispatcherOption configures a Dispatcher during construction.
@@ -33,6 +35,14 @@ type DispatcherOption func(*Dispatcher)
 func WithAliasCache(cache *AliasCache) DispatcherOption {
 	return func(d *Dispatcher) {
 		d.aliasCache = cache
+	}
+}
+
+// WithRateLimiter configures the dispatcher to use rate limiting.
+// If not provided, rate limiting is disabled.
+func WithRateLimiter(rl *RateLimiter) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.rateLimiter = rl
 	}
 }
 
@@ -114,6 +124,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		span.SetAttributes(attribute.String("command.alias_used", aliasResult.AliasUsed))
 	}
 
+	// Apply rate limiting if configured (after alias resolution, before capability check)
+	subject := "char:" + exec.CharacterID.String()
+	if d.rateLimiter != nil {
+		// Check if character has bypass capability
+		hasBypass := d.access.Check(ctx, subject, "execute", CapabilityRateLimitBypass)
+		if !hasBypass {
+			allowed, cooldownMs := d.rateLimiter.Allow(exec.SessionID)
+			if !allowed {
+				span.SetAttributes(attribute.Bool("command.rate_limited", true))
+				span.SetAttributes(attribute.Int64("command.cooldown_ms", cooldownMs))
+				observability.RecordCommandRateLimited(parsed.Name)
+				err = ErrRateLimited(cooldownMs)
+				return err
+			}
+		}
+	}
+
 	// Look up command
 	entry, ok := d.registry.Get(parsed.Name)
 	if !ok {
@@ -124,7 +151,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	span.SetAttributes(attribute.String("command.source", entry.Source))
 
 	// Check capabilities using getter to ensure defensive copy
-	subject := "char:" + exec.CharacterID.String()
 	for _, cap := range entry.GetCapabilities() {
 		if !d.access.Check(ctx, subject, "execute", cap) {
 			err = ErrPermissionDenied(parsed.Name, cap)
