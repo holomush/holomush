@@ -94,6 +94,14 @@ type CommandEntryConfig struct {
 // SHOULD NOT modify fields after calling NewCommandEntry. Use GetCapabilities()
 // to access capabilities safely (returns a defensive copy).
 //
+// Design Note - Why Not Compile-Time Enforcement:
+// Making fields private would require getters for all fields, significantly
+// increasing API surface and boilerplate. The by-value storage in Registry
+// already provides implicit protection against post-registration mutation.
+// Only Capabilities needs a defensive copy getter since slices are reference
+// types. This pragmatic approach balances safety with Go idioms and API
+// ergonomics for this codebase.
+//
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")

@@ -108,13 +108,14 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 // canExecuteCommand checks if subject has all required capabilities for a command.
 // Returns true if command has no capabilities or subject has ALL required capabilities.
 func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) bool {
+	caps := cmd.GetCapabilities()
 	// Commands with no capabilities are always available
-	if len(cmd.Capabilities) == 0 {
+	if len(caps) == 0 {
 		return true
 	}
 
 	// Check ALL capabilities (AND logic)
-	for _, cap := range cmd.Capabilities {
+	for _, cap := range caps {
 		if !f.access.Check(ctx, subject, "execute", cap) {
 			return false
 		}
@@ -154,9 +155,9 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 		L.SetField(tbl, "help_text", lua.LString(cmd.HelpText))
 		L.SetField(tbl, "source", lua.LString(cmd.Source))
 
-		// Add capabilities array
+		// Add capabilities array (use getter for defensive copy)
 		capsTbl := L.NewTable()
-		for i, cap := range cmd.Capabilities {
+		for i, cap := range cmd.GetCapabilities() {
 			L.SetTable(capsTbl, lua.LNumber(i+1), lua.LString(cap))
 		}
 		L.SetField(tbl, "capabilities", capsTbl)
