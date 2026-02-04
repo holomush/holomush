@@ -267,10 +267,29 @@ func (c *AliasCache) ShadowsSystemAlias(alias string) (command string, shadows b
 }
 
 // AliasResult contains the result of alias resolution.
+// Use NewAliasResult or NoAliasResult to construct instances consistently.
 type AliasResult struct {
 	Resolved  string // The resolved command string
 	WasAlias  bool   // Whether an alias was expanded
 	AliasUsed string // The alias that was matched (empty if no alias)
+}
+
+// NewAliasResult creates an AliasResult for a successful alias expansion.
+// WasAlias is automatically set to true when aliasUsed is non-empty.
+func NewAliasResult(resolved, aliasUsed string) AliasResult {
+	return AliasResult{
+		Resolved:  resolved,
+		WasAlias:  aliasUsed != "",
+		AliasUsed: aliasUsed,
+	}
+}
+
+// NoAliasResult creates an AliasResult for input that was not alias-expanded.
+// WasAlias is false and AliasUsed is empty.
+func NoAliasResult(input string) AliasResult {
+	return AliasResult{
+		Resolved: input,
+	}
 }
 
 // aliasLookupResult holds the result of a locked alias lookup.
@@ -308,19 +327,19 @@ type aliasLookupResult struct {
 // makes the locking behavior predictable for future modifications.
 func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registry) AliasResult {
 	if input == "" {
-		return AliasResult{Resolved: input}
+		return NoAliasResult(input)
 	}
 
 	// Extract the first word (command) and any remaining args
 	firstWord, args := splitFirstWord(input)
 	if firstWord == "" {
-		return AliasResult{Resolved: input}
+		return NoAliasResult(input)
 	}
 
 	// Step 1: Check if first word is a registered command
 	if registry != nil {
 		if _, ok := registry.Get(firstWord); ok {
-			return AliasResult{Resolved: input}
+			return NoAliasResult(input)
 		}
 	}
 
@@ -328,7 +347,7 @@ func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registr
 	lookup := c.lookupAliasLocked(playerID, firstWord)
 
 	if !lookup.expanded {
-		return AliasResult{Resolved: input}
+		return NoAliasResult(input)
 	}
 
 	// Build the resolved string (no lock needed)
@@ -340,7 +359,7 @@ func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registr
 		parts = append(parts, args)
 	}
 	resolved := strings.Join(parts, " ")
-	return AliasResult{Resolved: resolved, WasAlias: true, AliasUsed: lookup.aliasUsed}
+	return NewAliasResult(resolved, lookup.aliasUsed)
 }
 
 // lookupAliasLocked performs all alias map lookups under a single RLock.

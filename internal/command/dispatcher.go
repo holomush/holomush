@@ -100,7 +100,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Resolve aliases if cache is configured
 	resolvedInput := input
-	aliasResult := AliasResult{}
+	aliasResult := NoAliasResult(input)
 	if d.aliasCache != nil {
 		aliasResult = d.aliasCache.Resolve(exec.PlayerID(), input, d.registry)
 		resolvedInput = aliasResult.Resolved
