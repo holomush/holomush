@@ -20,7 +20,7 @@ import (
 // Usage: shutdown [delay_seconds]
 // If delay is 0 or omitted, shutdown is immediate.
 // Broadcasts a warning to all players before initiating shutdown.
-func ShutdownHandler(_ context.Context, exec *command.CommandExecution) error {
+func ShutdownHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Parse optional delay parameter
 	var delaySeconds int64
 	args := strings.TrimSpace(exec.Args)
@@ -48,13 +48,16 @@ func ShutdownHandler(_ context.Context, exec *command.CommandExecution) error {
 		"delay_seconds", delaySeconds,
 	)
 
-	// Notify the executor
+	// Notify the executor - output write errors are logged but don't fail the shutdown
+	var n int
+	var err error
 	if delaySeconds == 0 {
-		//nolint:errcheck // output write error is acceptable; player display is best-effort
-		_, _ = fmt.Fprintln(exec.Output, "Initiating server shutdown...")
+		n, err = fmt.Fprintln(exec.Output, "Initiating server shutdown...")
 	} else {
-		//nolint:errcheck // output write error is acceptable; player display is best-effort
-		_, _ = fmt.Fprintf(exec.Output, "Initiating server shutdown in %d seconds...\n", delaySeconds)
+		n, err = fmt.Fprintf(exec.Output, "Initiating server shutdown in %d seconds...\n", delaySeconds)
+	}
+	if err != nil {
+		logOutputError(ctx, "shutdown", exec.CharacterID.String(), n, err)
 	}
 
 	// Return shutdown signal with delay context

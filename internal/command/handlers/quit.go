@@ -13,9 +13,12 @@ import (
 )
 
 // QuitHandler ends the character's session gracefully.
-func QuitHandler(_ context.Context, exec *command.CommandExecution) error {
-	//nolint:errcheck // output write error is acceptable; player display is best-effort
-	_, _ = fmt.Fprintln(exec.Output, "Goodbye!")
+func QuitHandler(ctx context.Context, exec *command.CommandExecution) error {
+	// Output write errors are logged but don't fail the command - the session end will proceed
+	n, err := fmt.Fprintln(exec.Output, "Goodbye!")
+	if err != nil {
+		logOutputError(ctx, "quit", exec.CharacterID.String(), n, err)
+	}
 
 	if err := exec.Services.Session.EndSession(exec.CharacterID); err != nil {
 		return oops.Code(command.CodeWorldError).

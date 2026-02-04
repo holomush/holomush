@@ -24,7 +24,10 @@ func LookHandler(ctx context.Context, exec *command.CommandExecution) error {
 			Wrap(err)
 	}
 
-	//nolint:errcheck // output write error is acceptable; player display is best-effort
-	_, _ = fmt.Fprintf(exec.Output, "%s\n%s\n", loc.Name, loc.Description)
+	// Output write errors are logged but don't fail the command - the game action succeeded
+	n, err := fmt.Fprintf(exec.Output, "%s\n%s\n", loc.Name, loc.Description)
+	if err != nil {
+		logOutputError(ctx, "look", exec.CharacterID.String(), n, err)
+	}
 	return nil
 }

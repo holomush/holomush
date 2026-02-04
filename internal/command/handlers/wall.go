@@ -33,7 +33,7 @@ var urgencyPrefixes = map[WallUrgency]string{
 // Requires admin.wall capability (checked by dispatcher).
 // Usage: wall [level] <message>
 // Levels: info (default), warning, critical
-func WallHandler(_ context.Context, exec *command.CommandExecution) error {
+func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	args := strings.TrimSpace(exec.Args)
 	if args == "" {
 		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
@@ -74,8 +74,11 @@ func WallHandler(_ context.Context, exec *command.CommandExecution) error {
 	if len(sessions) == 1 {
 		sessionWord = "session"
 	}
-	//nolint:errcheck // output write error is acceptable; player display is best-effort
-	_, _ = fmt.Fprintf(exec.Output, "Announcement sent to %d %s.\n", len(sessions), sessionWord)
+	// Output write errors are logged but don't fail the command - the broadcast succeeded
+	n, err := fmt.Fprintf(exec.Output, "Announcement sent to %d %s.\n", len(sessions), sessionWord)
+	if err != nil {
+		logOutputError(ctx, "wall", exec.CharacterID.String(), n, err)
+	}
 
 	return nil
 }

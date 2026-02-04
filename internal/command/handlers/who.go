@@ -25,13 +25,16 @@ type playerInfo struct {
 // WhoHandler displays a list of connected players with idle times.
 func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	sessions := exec.Services.Session.ListActiveSessions()
+	charID := exec.CharacterID.String()
 
 	if len(sessions) == 0 {
-		writeWhoOutput(exec.Output, nil)
+		if n, err := writeWhoOutput(exec.Output, nil); err != nil {
+			logOutputError(ctx, "who", charID, n, err)
+		}
 		return nil
 	}
 
-	subjectID := "char:" + exec.CharacterID.String()
+	subjectID := "char:" + charID
 	now := time.Now()
 
 	// Collect visible players
@@ -61,29 +64,44 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		})
 	}
 
-	writeWhoOutput(exec.Output, players)
+	if n, err := writeWhoOutput(exec.Output, players); err != nil {
+		logOutputError(ctx, "who", charID, n, err)
+	}
 
 	// Warn user if any characters couldn't be displayed due to errors.
-	// Output write errors are acceptable; warning display is best-effort.
-	//nolint:errcheck // output write error is acceptable; warning display is best-effort
+	// Output write errors are logged but don't fail the command.
 	if errorCount > 0 {
+		var n int
+		var err error
 		if errorCount == 1 {
-			fmt.Fprintln(exec.Output, "(Note: 1 player could not be displayed due to an error)")
+			n, err = fmt.Fprintln(exec.Output, "(Note: 1 player could not be displayed due to an error)")
 		} else {
-			fmt.Fprintf(exec.Output, "(Note: %d players could not be displayed due to errors)\n", errorCount)
+			n, err = fmt.Fprintf(exec.Output, "(Note: %d players could not be displayed due to errors)\n", errorCount)
+		}
+		if err != nil {
+			logOutputError(ctx, "who", charID, n, err)
 		}
 	}
 	return nil
 }
 
 // writeWhoOutput formats and writes the who list to the output.
-// Output write errors are acceptable; player display is best-effort.
-//
-//nolint:errcheck // output write error is acceptable; player display is best-effort
-func writeWhoOutput(w io.Writer, players []playerInfo) {
+// Returns total bytes written and the first error encountered (if any).
+func writeWhoOutput(w io.Writer, players []playerInfo) (int, error) {
+	var totalBytes int
+	var firstErr error
+
+	// Helper to track bytes and capture first error
+	write := func(n int, err error) {
+		totalBytes += n
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
 	if len(players) == 0 {
-		_, _ = fmt.Fprintln(w, "No players online.")
-		return
+		write(fmt.Fprintln(w, "No players online."))
+		return totalBytes, firstErr
 	}
 
 	// Sort players by name for consistent output
@@ -92,21 +110,23 @@ func writeWhoOutput(w io.Writer, players []playerInfo) {
 	})
 
 	// Output header
-	_, _ = fmt.Fprintln(w, "Players Online:")
-	_, _ = fmt.Fprintln(w, "---------------")
+	write(fmt.Fprintln(w, "Players Online:"))
+	write(fmt.Fprintln(w, "---------------"))
 
 	// Output each player
 	for _, p := range players {
-		_, _ = fmt.Fprintf(w, "  %-20s  Idle %s\n", p.Name, formatIdleTime(p.IdleTime))
+		write(fmt.Fprintf(w, "  %-20s  Idle %s\n", p.Name, formatIdleTime(p.IdleTime)))
 	}
 
 	// Output footer
-	_, _ = fmt.Fprintln(w, "---------------")
+	write(fmt.Fprintln(w, "---------------"))
 	if len(players) == 1 {
-		_, _ = fmt.Fprintln(w, "1 player online.")
+		write(fmt.Fprintln(w, "1 player online."))
 	} else {
-		_, _ = fmt.Fprintf(w, "%d players online.\n", len(players))
+		write(fmt.Fprintf(w, "%d players online.\n", len(players)))
 	}
+
+	return totalBytes, firstErr
 }
 
 // formatIdleTime formats a duration as a human-readable idle time.

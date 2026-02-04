@@ -21,6 +21,22 @@ import (
 // ReadinessChecker returns whether the service is ready to accept connections.
 type ReadinessChecker func() bool
 
+// commandOutputFailures is a package-level counter for command output write failures.
+// This allows handlers to increment the metric without needing access to the Server instance.
+var commandOutputFailures = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_command_output_failures_total",
+		Help: "Total number of command output write failures by command",
+	},
+	[]string{"command"},
+)
+
+// RecordCommandOutputFailure increments the command output failure counter.
+// Called by command handlers when output write fails.
+func RecordCommandOutputFailure(command string) {
+	commandOutputFailures.WithLabelValues(command).Inc()
+}
+
 // Metrics contains custom Prometheus metrics for HoloMUSH.
 type Metrics struct {
 	ConnectionsTotal *prometheus.CounterVec
@@ -48,6 +64,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 
 	reg.MustRegister(m.ConnectionsTotal)
 	reg.MustRegister(m.RequestsTotal)
+	reg.MustRegister(commandOutputFailures)
 
 	return m
 }

@@ -78,15 +78,19 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 		)
 	}
 
-	// Notify the executor
-	//nolint:errcheck // output write error is acceptable; player display is best-effort
+	// Notify the executor - output write errors are logged but don't fail the boot
+	var n int
+	var writeErr error
 	switch {
 	case isSelfBoot:
-		_, _ = fmt.Fprintln(exec.Output, "Disconnecting...")
+		n, writeErr = fmt.Fprintln(exec.Output, "Disconnecting...")
 	case reason != "":
-		_, _ = fmt.Fprintf(exec.Output, "%s has been booted. Reason: %s\n", targetCharName, reason)
+		n, writeErr = fmt.Fprintf(exec.Output, "%s has been booted. Reason: %s\n", targetCharName, reason)
 	default:
-		_, _ = fmt.Fprintf(exec.Output, "%s has been booted.\n", targetCharName)
+		n, writeErr = fmt.Fprintf(exec.Output, "%s has been booted.\n", targetCharName)
+	}
+	if writeErr != nil {
+		logOutputError(ctx, "boot", exec.CharacterID.String(), n, writeErr)
 	}
 
 	return nil
