@@ -69,6 +69,20 @@ func ErrInvalidArgs(cmd, usage string) error {
 }
 
 // WorldError creates an error for world state issues with a player-facing message.
+//
+// The message parameter is returned to the player via [PlayerMessage] and should
+// be a user-friendly description of what went wrong (e.g., "There's no exit to
+// the north.").
+//
+// When cause is non-nil, the underlying error is wrapped for diagnostic purposes
+// but is not shown to the player. When cause is nil, the error contains only the
+// player-facing message.
+//
+// Logging expectations: callers MUST log diagnostic details (via slog) before
+// calling WorldError when the cause provides useful debugging context. WorldError
+// itself does not log. When cause is nil, the caller should have already logged
+// the relevant context or the situation should be self-explanatory from the
+// player-facing message alone.
 func WorldError(message string, cause error) error {
 	builder := oops.Code(CodeWorldError).With("message", message)
 	if cause != nil {
