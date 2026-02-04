@@ -68,23 +68,23 @@ func (pt PropertyType) String() string {
 
 // Property defines a settable property on game entities.
 // Property is conceptually immutable after construction via NewProperty.
-// Use GetAppliesTo() to access the AppliesTo field safely (returns a defensive copy).
+// Use GetAppliesTo() to access the entity types this property applies to (returns a defensive copy).
 type Property struct {
 	Name       string       // Full property name (e.g., "description")
 	Type       PropertyType // Property type: "string", "text", "number", "bool"
 	Capability string       // Required capability to set (e.g., "property.set.description")
-	AppliesTo  []string     // Entity types this property applies to - use GetAppliesTo() for safe access
+	appliesTo  []string     // Entity types this property applies to - use GetAppliesTo() for access
 }
 
 // GetAppliesTo returns a defensive copy of the entity types this property applies to.
 // This prevents external modification of the property's internal state.
 // Returns nil if no entity types are set.
 func (p *Property) GetAppliesTo() []string {
-	if p.AppliesTo == nil {
+	if p.appliesTo == nil {
 		return nil
 	}
-	result := make([]string, len(p.AppliesTo))
-	copy(result, p.AppliesTo)
+	result := make([]string, len(p.appliesTo))
+	copy(result, p.appliesTo)
 	return result
 }
 
@@ -109,7 +109,7 @@ func NewProperty(name string, propType PropertyType, capability string, appliesT
 		Name:       name,
 		Type:       propType,
 		Capability: capability,
-		AppliesTo:  appliesCopy,
+		appliesTo:  appliesCopy,
 	}, nil
 }
 
@@ -180,7 +180,7 @@ func (r *PropertyRegistry) ValidFor(entityType, propertyName string) bool {
 	if !ok {
 		return false
 	}
-	for _, et := range prop.AppliesTo {
+	for _, et := range prop.appliesTo {
 		if et == entityType {
 			return true
 		}
@@ -203,12 +203,8 @@ func (r *PropertyRegistry) ValidFor(entityType, propertyName string) bool {
 //	// Package-level initialization (safe - known-valid at compile time)
 //	var gameRegistry = func() *PropertyRegistry {
 //		r := NewPropertyRegistry()
-//		r.MustRegister(Property{
-//			Name:       "health",
-//			Type:       PropertyTypeNumber,
-//			Capability: "property.set.health",
-//			AppliesTo:  []string{"character"},
-//		})
+//		p, _ := NewProperty("health", PropertyTypeNumber, "property.set.health", []string{"character"})
+//		r.MustRegister(p)
 //		return r
 //	}()
 //
@@ -234,13 +230,13 @@ func DefaultRegistry() *PropertyRegistry {
 		Name:       "description",
 		Type:       PropertyTypeText,
 		Capability: "property.set.description",
-		AppliesTo:  []string{"location", "object", "character", "exit"},
+		appliesTo:  []string{"location", "object", "character", "exit"},
 	})
 	r.MustRegister(Property{
 		Name:       "name",
 		Type:       PropertyTypeString,
 		Capability: "property.set.name",
-		AppliesTo:  []string{"location", "object", "exit"},
+		appliesTo:  []string{"location", "object", "exit"},
 	})
 	return r
 }

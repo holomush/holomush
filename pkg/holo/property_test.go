@@ -123,7 +123,7 @@ func TestDefaultRegistry(t *testing.T) {
 	assert.Equal(t, "description", desc.Name)
 	assert.Equal(t, PropertyTypeText, desc.Type)
 	assert.Equal(t, "property.set.description", desc.Capability)
-	assert.ElementsMatch(t, []string{"location", "object", "character", "exit"}, desc.AppliesTo)
+	assert.ElementsMatch(t, []string{"location", "object", "character", "exit"}, desc.GetAppliesTo())
 
 	// Should have name property
 	name, err := r.Resolve("name")
@@ -131,7 +131,7 @@ func TestDefaultRegistry(t *testing.T) {
 	assert.Equal(t, "name", name.Name)
 	assert.Equal(t, PropertyTypeString, name.Type)
 	assert.Equal(t, "property.set.name", name.Capability)
-	assert.ElementsMatch(t, []string{"location", "object", "exit"}, name.AppliesTo)
+	assert.ElementsMatch(t, []string{"location", "object", "exit"}, name.GetAppliesTo())
 }
 
 func TestDefaultRegistry_PrefixResolution(t *testing.T) {
@@ -165,13 +165,13 @@ func TestProperty_Fields(t *testing.T) {
 		Name:       "test_prop",
 		Type:       PropertyTypeNumber,
 		Capability: "property.set.test_prop",
-		AppliesTo:  []string{"object", "character"},
+		appliesTo:  []string{"object", "character"},
 	}
 
 	assert.Equal(t, "test_prop", p.Name)
 	assert.Equal(t, PropertyTypeNumber, p.Type)
 	assert.Equal(t, "property.set.test_prop", p.Capability)
-	assert.Equal(t, []string{"object", "character"}, p.AppliesTo)
+	assert.Equal(t, []string{"object", "character"}, p.GetAppliesTo())
 }
 
 func TestPropertyRegistry_ValidFor(t *testing.T) {
@@ -225,7 +225,7 @@ func TestPropertyRegistry_ValidFor_CustomProperty(t *testing.T) {
 	require.NoError(t, r.Register(Property{
 		Name:      "custom",
 		Type:      PropertyTypeString,
-		AppliesTo: []string{"location", "character"},
+		appliesTo: []string{"location", "character"},
 	}))
 
 	// Custom property applies to registered entity types
@@ -336,7 +336,7 @@ func TestNewProperty_Valid(t *testing.T) {
 			assert.Equal(t, tt.propName, p.Name)
 			assert.Equal(t, tt.propType, p.Type)
 			assert.Equal(t, tt.capability, p.Capability)
-			assert.Equal(t, tt.appliesTo, p.AppliesTo)
+			assert.Equal(t, tt.appliesTo, p.GetAppliesTo())
 		})
 	}
 }
@@ -515,7 +515,7 @@ func TestPropertyRegistry_ConcurrentAccess(t *testing.T) {
 		p := Property{
 			Name:      fmt.Sprintf("initial_%d", i),
 			Type:      PropertyTypeString,
-			AppliesTo: []string{"object", "location"},
+			appliesTo: []string{"object", "location"},
 		}
 		require.NoError(t, r.Register(p))
 	}
@@ -538,7 +538,7 @@ func TestPropertyRegistry_ConcurrentAccess(t *testing.T) {
 					p := Property{
 						Name:      fmt.Sprintf("prop_%d_%d", id, i),
 						Type:      PropertyTypeString,
-						AppliesTo: []string{"object"},
+						appliesTo: []string{"object"},
 					}
 					_ = r.Register(p) // Ignore duplicate errors
 				case 1:
