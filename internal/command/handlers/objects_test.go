@@ -116,10 +116,14 @@ func TestCreateHandler_InvalidType(t *testing.T) {
 	}
 
 	err := CreateHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "Unknown type")
+	// Verify structured error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+	assert.Equal(t, "create", oopsErr.Context()["command"])
+	assert.Contains(t, oopsErr.Context()["usage"], "valid types: object, location")
 }
 
 func TestCreateHandler_InvalidSyntax(t *testing.T) {
@@ -154,10 +158,14 @@ func TestCreateHandler_InvalidSyntax(t *testing.T) {
 			}
 
 			err := CreateHandler(context.Background(), exec)
-			require.NoError(t, err)
+			require.Error(t, err)
 
-			output := buf.String()
-			assert.Contains(t, output, "Usage:")
+			// Verify structured error code
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok, "error should be oops error")
+			assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+			assert.Equal(t, "create", oopsErr.Context()["command"])
+			assert.Contains(t, oopsErr.Context()["usage"], "create <type>")
 		})
 	}
 }
@@ -395,10 +403,14 @@ func TestSetHandler_InvalidSyntax(t *testing.T) {
 			}
 
 			err := SetHandler(context.Background(), exec)
-			require.NoError(t, err)
+			require.Error(t, err)
 
-			output := buf.String()
-			assert.Contains(t, output, "Usage:")
+			// Verify structured error code
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok, "error should be oops error")
+			assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+			assert.Equal(t, "set", oopsErr.Context()["command"])
+			assert.Contains(t, oopsErr.Context()["usage"], "set <property> of <target> to <value>")
 		})
 	}
 }

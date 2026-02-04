@@ -26,14 +26,14 @@ var createPattern = regexp.MustCompile(`^(\w+)\s+"([^"]+)"$`)
 func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 	args := strings.TrimSpace(exec.Args)
 	if args == "" {
-		writeOutput(ctx, exec, "create", "Usage: create <type> \"<name>\"")
-		return nil
+		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
+		return command.ErrInvalidArgs("create", "create <type> \"<name>\"")
 	}
 
 	matches := createPattern.FindStringSubmatch(args)
 	if matches == nil {
-		writeOutput(ctx, exec, "create", "Usage: create <type> \"<name>\"")
-		return nil
+		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
+		return command.ErrInvalidArgs("create", "create <type> \"<name>\"")
 	}
 
 	entityType := strings.ToLower(matches[1])
@@ -49,8 +49,8 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 		slog.DebugContext(ctx, "create: unknown entity type",
 			"character_id", exec.CharacterID,
 			"entity_type", entityType)
-		writeOutputf(ctx, exec, "create", "Unknown type: %s. Use: object, location\n", entityType)
-		return nil
+		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
+		return command.ErrInvalidArgs("create", "create <type> \"<name>\" (valid types: object, location)")
 	}
 }
 
@@ -115,14 +115,14 @@ var setPattern = regexp.MustCompile(`^(\w+)\s+of\s+(\S+)\s+to\s+(.+)$`)
 func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	args := strings.TrimSpace(exec.Args)
 	if args == "" {
-		writeOutput(ctx, exec, "set", "Usage: set <property> of <target> to <value>")
-		return nil
+		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
+		return command.ErrInvalidArgs("set", "set <property> of <target> to <value>")
 	}
 
 	matches := setPattern.FindStringSubmatch(args)
 	if matches == nil {
-		writeOutput(ctx, exec, "set", "Usage: set <property> of <target> to <value>")
-		return nil
+		//nolint:wrapcheck // ErrInvalidArgs creates a structured oops error
+		return command.ErrInvalidArgs("set", "set <property> of <target> to <value>")
 	}
 
 	propertyPrefix := matches[1]
