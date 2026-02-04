@@ -76,6 +76,61 @@ func TestParse(t *testing.T) {
 			wantCmd:  "say",
 			wantArgs: "hello",
 		},
+		// Unicode input tests
+		{
+			name:     "unicode arguments (Chinese)",
+			input:    "say 你好世界",
+			wantCmd:  "say",
+			wantArgs: "你好世界",
+		},
+		{
+			name:     "emoji arguments",
+			input:    "say Hello! 👋",
+			wantCmd:  "say",
+			wantArgs: "Hello! 👋",
+		},
+		{
+			name:     "unicode in quoted context",
+			input:    `say "café résumé"`,
+			wantCmd:  "say",
+			wantArgs: `"café résumé"`,
+		},
+		{
+			name:     "mixed ASCII and unicode",
+			input:    "say Hello 世界",
+			wantCmd:  "say",
+			wantArgs: "Hello 世界",
+		},
+		{
+			name:     "unicode command name",
+			input:    "日本語 argument",
+			wantCmd:  "日本語",
+			wantArgs: "argument",
+		},
+		{
+			name:     "multi-byte emoji sequence",
+			input:    "emote 👨‍👩‍👧‍👦 waves",
+			wantCmd:  "emote",
+			wantArgs: "👨‍👩‍👧‍👦 waves",
+		},
+		{
+			name:     "accented characters",
+			input:    "whisper naïve façade",
+			wantCmd:  "whisper",
+			wantArgs: "naïve façade",
+		},
+		{
+			name:     "right-to-left script (Arabic)",
+			input:    "say مرحبا",
+			wantCmd:  "say",
+			wantArgs: "مرحبا",
+		},
+		{
+			name:     "unicode whitespace only args trimmed",
+			input:    "look   ",
+			wantCmd:  "look",
+			wantArgs: "",
+		},
 	}
 
 	for _, tt := range tests {
