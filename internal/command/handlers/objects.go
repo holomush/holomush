@@ -221,16 +221,26 @@ func applyProperty(ctx context.Context, exec *command.CommandExecution, entityTy
 	case "object":
 		return applyPropertyToObject(ctx, exec, subjectID, entityID, propName, value)
 	case "character":
-		return fmt.Errorf("setting properties on characters not yet supported")
+		return oops.Code(command.CodeInvalidArgs).
+			With("entity_type", entityType).
+			With("property", propName).
+			Errorf("setting properties on characters not yet supported")
 	default:
-		return fmt.Errorf("cannot set properties on %s", entityType)
+		return oops.Code(command.CodeInvalidArgs).
+			With("entity_type", entityType).
+			With("property", propName).
+			Errorf("cannot set properties on %s", entityType)
 	}
 }
 
 func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
 	loc, err := exec.Services.World.GetLocation(ctx, subjectID, entityID)
 	if err != nil {
-		return fmt.Errorf("location not found: %w", err)
+		return oops.Code(command.CodeWorldError).
+			With("entity_type", "location").
+			With("entity_id", entityID.String()).
+			With("operation", "get").
+			Wrapf(err, "get location failed")
 	}
 	switch propName {
 	case "description":
@@ -238,10 +248,19 @@ func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution
 	case "name":
 		loc.Name = value
 	default:
-		return fmt.Errorf("property %s not applicable to location", propName)
+		return oops.Code(command.CodeInvalidArgs).
+			With("entity_type", "location").
+			With("entity_id", entityID.String()).
+			With("property", propName).
+			Errorf("property %s not applicable to location", propName)
 	}
 	if err := exec.Services.World.UpdateLocation(ctx, subjectID, loc); err != nil {
-		return fmt.Errorf("update location failed: %w", err)
+		return oops.Code(command.CodeWorldError).
+			With("entity_type", "location").
+			With("entity_id", entityID.String()).
+			With("property", propName).
+			With("operation", "update").
+			Wrapf(err, "update location failed")
 	}
 	return nil
 }
@@ -249,7 +268,11 @@ func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution
 func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
 	obj, err := exec.Services.World.GetObject(ctx, subjectID, entityID)
 	if err != nil {
-		return fmt.Errorf("object not found: %w", err)
+		return oops.Code(command.CodeWorldError).
+			With("entity_type", "object").
+			With("entity_id", entityID.String()).
+			With("operation", "get").
+			Wrapf(err, "get object failed")
 	}
 	switch propName {
 	case "description":
@@ -257,10 +280,19 @@ func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, 
 	case "name":
 		obj.Name = value
 	default:
-		return fmt.Errorf("property %s not applicable to object", propName)
+		return oops.Code(command.CodeInvalidArgs).
+			With("entity_type", "object").
+			With("entity_id", entityID.String()).
+			With("property", propName).
+			Errorf("property %s not applicable to object", propName)
 	}
 	if err := exec.Services.World.UpdateObject(ctx, subjectID, obj); err != nil {
-		return fmt.Errorf("update object failed: %w", err)
+		return oops.Code(command.CodeWorldError).
+			With("entity_type", "object").
+			With("entity_id", entityID.String()).
+			With("property", propName).
+			With("operation", "update").
+			Wrapf(err, "update object failed")
 	}
 	return nil
 }

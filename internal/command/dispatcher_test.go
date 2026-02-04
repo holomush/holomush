@@ -760,6 +760,44 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	assert.ErrorIs(t, dispatchErr, context.Canceled)
 }
 
+func TestDispatcher_NilServices(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := accesstest.NewMockAccessControl()
+
+	// Register a command that accesses Services.World (would panic if nil)
+	err := reg.Register(CommandEntry{
+		Name:         "checkservices",
+		Capabilities: nil,
+		Handler: func(_ context.Context, exec *CommandExecution) error {
+			// This would panic if Services is nil
+			_ = exec.Services.World
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := &CommandExecution{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    nil, // Explicitly nil Services
+	}
+
+	// Dispatch should return an error instead of panicking
+	dispatchErr := dispatcher.Dispatch(context.Background(), "checkservices", exec)
+	require.Error(t, dispatchErr)
+	assert.Contains(t, PlayerMessage(dispatchErr), "services")
+
+	// Verify error code
+	oopsErr, ok := oops.AsOops(dispatchErr)
+	require.True(t, ok)
+	assert.Equal(t, CodeNilServices, oopsErr.Code())
+}
+
 func TestDispatcher_InvokedAs(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := accesstest.NewMockAccessControl()

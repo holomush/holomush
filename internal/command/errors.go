@@ -18,6 +18,7 @@ const (
 	CodeNoCharacter       = "NO_CHARACTER"
 	CodeTargetNotFound    = "TARGET_NOT_FOUND"
 	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
+	CodeNilServices       = "NIL_SERVICES"
 )
 
 // Sentinel errors for special conditions.
@@ -98,6 +99,12 @@ func ErrTargetNotFound(target string) error {
 		Errorf("player not found: %s", target)
 }
 
+// ErrNilServices creates an error when command execution has nil Services.
+func ErrNilServices() error {
+	return oops.Code(CodeNilServices).
+		Errorf("command execution context missing services")
+}
+
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
 	if err == nil {
@@ -134,6 +141,8 @@ func PlayerMessage(err error) string {
 			return "Target not found: " + target
 		}
 		return "Target not found."
+	case CodeNilServices:
+		return "Internal error: services unavailable."
 	default:
 		return "Something went wrong. Try again."
 	}

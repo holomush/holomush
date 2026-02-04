@@ -624,6 +624,18 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "optimistic locking conflict")
 
+	// Verify structured error - code comes from world service (deepest error)
+	// but handler wrapper adds additional context (entity_type, entity_id, property, operation)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	// World service provides specific code - more specific than generic WORLD_ERROR
+	assert.Equal(t, "LOCATION_UPDATE_FAILED", oopsErr.Code())
+	// Handler wrapper adds context for debugging
+	assert.Equal(t, "location", oopsErr.Context()["entity_type"])
+	assert.Equal(t, locationID.String(), oopsErr.Context()["entity_id"])
+	assert.Equal(t, "description", oopsErr.Context()["property"])
+	assert.Equal(t, "update", oopsErr.Context()["operation"])
+
 	// User sees sanitized message, not internal error details
 	output := buf.String()
 	assert.Contains(t, output, "Failed to set property. Please try again.")
@@ -678,9 +690,159 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "permission revoked")
 
+	// Verify structured error - code comes from world service (deepest error)
+	// but handler wrapper adds additional context (entity_type, entity_id, property, operation)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	// World service provides specific code - more specific than generic WORLD_ERROR
+	assert.Equal(t, "OBJECT_UPDATE_FAILED", oopsErr.Code())
+	// Handler wrapper adds context for debugging
+	assert.Equal(t, "object", oopsErr.Context()["entity_type"])
+	assert.Equal(t, objectID.String(), oopsErr.Context()["entity_id"])
+	assert.Equal(t, "description", oopsErr.Context()["property"])
+	assert.Equal(t, "update", oopsErr.Context()["operation"])
+
 	// User sees sanitized message, not internal error details
 	output := buf.String()
 	assert.Contains(t, output, "Failed to set property. Please try again.")
-	assert.NotContains(t, output, "permission revoked")    // internal error not exposed
-	assert.NotContains(t, output, "update object failed")  // internal error not exposed
+	assert.NotContains(t, output, "permission revoked")   // internal error not exposed
+	assert.NotContains(t, output, "update object failed") // internal error not exposed
+}
+
+func TestSetHandler_GetLocationFailure(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// For GetLocation - fails (e.g., location not found in database)
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Return(true)
+	locationRepo.EXPECT().
+		Get(mock.Anything, locationID).
+		Return(nil, errors.New("location not found in database"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  locationRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of here to A cozy room.",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "location not found in database")
+
+	// Verify structured error - code comes from world service (deepest error)
+	// but handler wrapper adds additional context (entity_type, entity_id, operation)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	// World service provides specific code - more specific than generic WORLD_ERROR
+	assert.Equal(t, "LOCATION_GET_FAILED", oopsErr.Code())
+	// Handler wrapper adds context for debugging
+	assert.Equal(t, "location", oopsErr.Context()["entity_type"])
+	assert.Equal(t, locationID.String(), oopsErr.Context()["entity_id"])
+	assert.Equal(t, "get", oopsErr.Context()["operation"])
+
+	// User sees sanitized message
+	output := buf.String()
+	assert.Contains(t, output, "Failed to set property. Please try again.")
+}
+
+func TestSetHandler_GetObjectFailure(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+	objectID := ulid.Make()
+
+	objectRepo := worldtest.NewMockObjectRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// For GetObject - fails (e.g., object not found in database)
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
+		Return(true)
+	objectRepo.EXPECT().
+		Get(mock.Anything, objectID).
+		Return(nil, errors.New("object not found in database"))
+
+	worldService := world.NewService(world.ServiceConfig{
+		ObjectRepo:    objectRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of #" + objectID.String() + " to A shiny object.",
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "object not found in database")
+
+	// Verify structured error - code comes from world service (deepest error)
+	// but handler wrapper adds additional context (entity_type, entity_id, operation)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	// World service provides specific code - more specific than generic WORLD_ERROR
+	assert.Equal(t, "OBJECT_GET_FAILED", oopsErr.Code())
+	// Handler wrapper adds context for debugging
+	assert.Equal(t, "object", oopsErr.Context()["entity_type"])
+	assert.Equal(t, objectID.String(), oopsErr.Context()["entity_id"])
+	assert.Equal(t, "get", oopsErr.Context()["operation"])
+
+	// User sees sanitized message
+	output := buf.String()
+	assert.Contains(t, output, "Failed to set property. Please try again.")
+}
+
+func TestSetHandler_UnsupportedEntityType(t *testing.T) {
+	// This tests the applyProperty function's handling of unsupported entity types.
+	// Currently, "character" entity type is not yet supported.
+	// The "me" target resolves to character type.
+
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	worldService := world.NewService(world.ServiceConfig{
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of me to Some bio text.", // "me" resolves to character type
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "setting properties on characters not yet supported")
+
+	// Verify structured error with context
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+	assert.Equal(t, "character", oopsErr.Context()["entity_type"])
+	assert.Equal(t, "description", oopsErr.Context()["property"])
+
+	// User sees sanitized message
+	output := buf.String()
+	assert.Contains(t, output, "Failed to set property. Please try again.")
 }

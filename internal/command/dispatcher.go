@@ -62,6 +62,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		return ErrNoCharacter()
 	}
 
+	// Validate Services is non-nil to prevent handler panics
+	if exec.Services == nil {
+		return ErrNilServices()
+	}
+
 	// Parse original input to capture the invoked command name before alias resolution
 	originalParsed, err := Parse(input)
 	if err != nil {
