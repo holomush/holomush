@@ -846,3 +846,40 @@ func TestSetHandler_UnsupportedEntityType(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "Failed to set property. Please try again.")
 }
+
+func TestCreateHandler_Object_InvalidName(t *testing.T) {
+	// Tests that CreateHandler properly handles validation errors from world.NewObject.
+	// An empty name triggers a ValidationError during object construction.
+
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	worldService := world.NewService(world.ServiceConfig{
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := &command.CommandExecution{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        `object ""`, // empty name triggers validation error
+		Output:      &buf,
+		Services:    &command.Services{World: worldService},
+	}
+
+	err := CreateHandler(context.Background(), exec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be empty")
+
+	// Verify structured error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, command.CodeWorldError, oopsErr.Code())
+
+	// User sees sanitized message, not internal error details
+	output := buf.String()
+	assert.Contains(t, output, "Failed to create object.")
+	assert.NotContains(t, output, "cannot be empty") // internal error not exposed
+}
