@@ -1099,6 +1099,278 @@ func TestAliasCache_Resolve_PerformanceTarget(t *testing.T) {
 	}
 }
 
+func TestAliasCache_LoadSystemAliasesValidated(t *testing.T) {
+	t.Run("valid aliases load successfully", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"l": "look",
+			"n": "north",
+			"s": "south",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		require.NoError(t, err)
+
+		// Verify all aliases were loaded
+		for alias, cmd := range aliases {
+			result := cache.Resolve(ulid.ULID{}, alias, nil)
+			assert.Equal(t, cmd, result.Resolved)
+			assert.True(t, result.WasAlias)
+		}
+	})
+
+	t.Run("empty map loads successfully", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		err := cache.LoadSystemAliasesValidated(map[string]string{})
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects circular references", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"ping": "pong",
+			"pong": "ping",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+
+		// Verify nothing was loaded
+		result := cache.Resolve(ulid.ULID{}, "ping", nil)
+		assert.False(t, result.WasAlias)
+	})
+
+	t.Run("rejects empty key", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"":  "look",
+			"n": "north",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias key")
+
+		// Verify nothing was loaded
+		result := cache.Resolve(ulid.ULID{}, "n", nil)
+		assert.False(t, result.WasAlias)
+	})
+
+	t.Run("rejects empty value", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"l": "",
+			"n": "north",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias value")
+
+		// Verify nothing was loaded
+		result := cache.Resolve(ulid.ULID{}, "n", nil)
+		assert.False(t, result.WasAlias)
+	})
+
+	t.Run("rejects whitespace-only key", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"  ": "look",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias key")
+	})
+
+	t.Run("rejects whitespace-only value", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"l": "   ",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias value")
+	})
+
+	t.Run("rejects self-referential alias", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"loop": "loop",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+	})
+
+	t.Run("valid chain with termination passes", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"a": "b",
+			"b": "c",
+			"c": "final",
+		}
+
+		err := cache.LoadSystemAliasesValidated(aliases)
+		require.NoError(t, err)
+
+		result := cache.Resolve(ulid.ULID{}, "a", nil)
+		assert.Equal(t, "final", result.Resolved)
+		assert.True(t, result.WasAlias)
+	})
+}
+
+func TestAliasCache_LoadPlayerAliasesValidated(t *testing.T) {
+	playerID := ulid.MustNew(1, nil)
+
+	t.Run("valid aliases load successfully", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"attack": "combat attack",
+			"heal":   "cast heal",
+		}
+
+		err := cache.LoadPlayerAliasesValidated(playerID, aliases)
+		require.NoError(t, err)
+
+		// Verify aliases work for this player
+		for alias, cmd := range aliases {
+			result := cache.Resolve(playerID, alias, nil)
+			assert.Equal(t, cmd, result.Resolved)
+			assert.True(t, result.WasAlias)
+		}
+	})
+
+	t.Run("empty map loads successfully", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		err := cache.LoadPlayerAliasesValidated(playerID, map[string]string{})
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects circular references", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"alpha": "beta",
+			"beta":  "alpha",
+		}
+
+		err := cache.LoadPlayerAliasesValidated(playerID, aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "circular reference detected")
+
+		// Verify nothing was loaded
+		result := cache.Resolve(playerID, "alpha", nil)
+		assert.False(t, result.WasAlias)
+	})
+
+	t.Run("rejects empty key", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"": "look",
+		}
+
+		err := cache.LoadPlayerAliasesValidated(playerID, aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias key")
+	})
+
+	t.Run("rejects empty value", func(t *testing.T) {
+		cache := NewAliasCache()
+
+		aliases := map[string]string{
+			"l": "",
+		}
+
+		err := cache.LoadPlayerAliasesValidated(playerID, aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias value")
+	})
+
+	t.Run("does not affect other players", func(t *testing.T) {
+		cache := NewAliasCache()
+		otherPlayer := ulid.MustNew(2, nil)
+
+		aliases := map[string]string{
+			"attack": "combat attack",
+		}
+
+		err := cache.LoadPlayerAliasesValidated(playerID, aliases)
+		require.NoError(t, err)
+
+		// Other player should not have the alias
+		result := cache.Resolve(otherPlayer, "attack", nil)
+		assert.False(t, result.WasAlias)
+	})
+}
+
+func TestValidateAliasEntries(t *testing.T) {
+	t.Run("valid entries pass", func(t *testing.T) {
+		aliases := map[string]string{
+			"l": "look",
+			"n": "north",
+		}
+		err := validateAliasEntries(aliases)
+		assert.NoError(t, err)
+	})
+
+	t.Run("empty map passes", func(t *testing.T) {
+		err := validateAliasEntries(map[string]string{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("empty key rejected", func(t *testing.T) {
+		aliases := map[string]string{
+			"": "look",
+		}
+		err := validateAliasEntries(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias key")
+	})
+
+	t.Run("whitespace-only key rejected", func(t *testing.T) {
+		aliases := map[string]string{
+			"  \t": "look",
+		}
+		err := validateAliasEntries(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias key")
+	})
+
+	t.Run("empty value rejected", func(t *testing.T) {
+		aliases := map[string]string{
+			"l": "",
+		}
+		err := validateAliasEntries(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias value")
+	})
+
+	t.Run("whitespace-only value rejected", func(t *testing.T) {
+		aliases := map[string]string{
+			"l": "   ",
+		}
+		err := validateAliasEntries(aliases)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty alias value")
+	})
+}
+
 func BenchmarkAliasCache_Resolve(b *testing.B) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // MaxExpansionDepth is the maximum depth for alias expansion to prevent infinite loops.
@@ -38,12 +39,30 @@ func NewAliasCache() *AliasCache {
 // database where [SetSystemAlias] already enforced circularity checks before storage.
 //
 // If you need to validate untrusted alias data (e.g., from a migration or manual
-// import), use [ValidateAliasSet] first.
+// import), use [LoadSystemAliasesValidated] or [ValidateAliasSet] first.
 func (c *AliasCache) LoadSystemAliases(aliases map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	maps.Copy(c.systemAliases, aliases)
+}
+
+// LoadSystemAliasesValidated bulk loads system aliases after validating for
+// empty keys/values and circular references. If validation fails, no aliases
+// are loaded and an error is returned.
+//
+// Use this for untrusted data sources (migrations, manual imports, external files).
+// For trusted data from the database, prefer [LoadSystemAliases] for performance.
+func (c *AliasCache) LoadSystemAliasesValidated(aliases map[string]string) error {
+	if err := validateAliasEntries(aliases); err != nil {
+		return err
+	}
+	if err := ValidateAliasSet(aliases); err != nil {
+		return err
+	}
+
+	c.LoadSystemAliases(aliases)
+	return nil
 }
 
 // LoadPlayerAliases loads a player's aliases when their session is established.
@@ -53,7 +72,7 @@ func (c *AliasCache) LoadSystemAliases(aliases map[string]string) {
 // database where [SetPlayerAlias] already enforced circularity checks before storage.
 //
 // If you need to validate untrusted alias data (e.g., from a migration or manual
-// import), use [ValidateAliasSet] first.
+// import), use [LoadPlayerAliasesValidated] or [ValidateAliasSet] first.
 func (c *AliasCache) LoadPlayerAliases(playerID ulid.ULID, aliases map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -63,6 +82,24 @@ func (c *AliasCache) LoadPlayerAliases(playerID ulid.ULID, aliases map[string]st
 	}
 
 	maps.Copy(c.playerAliases[playerID], aliases)
+}
+
+// LoadPlayerAliasesValidated loads a player's aliases after validating for
+// empty keys/values and circular references. If validation fails, no aliases
+// are loaded and an error is returned.
+//
+// Use this for untrusted data sources (migrations, manual imports, external files).
+// For trusted data from the database, prefer [LoadPlayerAliases] for performance.
+func (c *AliasCache) LoadPlayerAliasesValidated(playerID ulid.ULID, aliases map[string]string) error {
+	if err := validateAliasEntries(aliases); err != nil {
+		return err
+	}
+	if err := ValidateAliasSet(aliases); err != nil {
+		return err
+	}
+
+	c.LoadPlayerAliases(playerID, aliases)
+	return nil
 }
 
 // SetSystemAlias adds or updates a single system alias.
@@ -453,6 +490,23 @@ func (c *AliasCache) resolveWithDepth(playerID ulid.ULID, cmd string, depth int)
 
 	// No alias found
 	return cmd, depth > 0
+}
+
+// validateAliasEntries checks that no alias key or value is empty or whitespace-only.
+// Returns an error describing the first invalid entry found, or nil if all are valid.
+func validateAliasEntries(aliases map[string]string) error {
+	for key, value := range aliases {
+		if strings.TrimSpace(key) == "" {
+			return oops.Code(CodeInvalidName).
+				Errorf("empty alias key in bulk load")
+		}
+		if strings.TrimSpace(value) == "" {
+			return oops.Code(CodeInvalidName).
+				With("alias", key).
+				Errorf("empty alias value for key %q in bulk load", key)
+		}
+	}
+	return nil
 }
 
 // ValidateAliasSet checks a set of aliases for circular references without
