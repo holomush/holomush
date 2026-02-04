@@ -87,7 +87,7 @@ Your character remains in-world but becomes inactive.
 
 Display a list of all connected players.
 
-Shows character names and how long they've been connected.
+Shows character names and their idle times (time since last activity).
 
 ### Usage
 
