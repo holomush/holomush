@@ -14,13 +14,10 @@ import (
 	"github.com/holomush/holomush/internal/command"
 )
 
-// CodeNoAliasCache is the error code for missing alias cache.
-const CodeNoAliasCache = "NO_ALIAS_CACHE"
-
 // errNoAliasCache creates an error for when alias operations are attempted
 // without a configured alias cache.
 func errNoAliasCache() error {
-	return oops.Code(CodeNoAliasCache).
+	return oops.Code(command.CodeNoAliasCache).
 		Errorf("alias operations require a configured alias cache")
 }
 
