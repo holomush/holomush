@@ -5,6 +5,7 @@ package lua
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -172,7 +173,14 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	ret := L.Get(-1)
 	L.Pop(1)
 
-	return h.parseEmitEvents(name, ret), nil
+	emits, validationErrs := h.parseEmitEvents(ret)
+	if len(validationErrs) > 0 {
+		slog.Warn("plugin emit validation errors",
+			"plugin", name,
+			"error_count", len(validationErrs),
+			"errors", validationErrs)
+	}
+	return emits, nil
 }
 
 // Plugins returns names of loaded plugins.
@@ -217,7 +225,14 @@ func (h *Host) callOnCommand(state *lua.LState, name string, event pluginpkg.Eve
 	ret := state.Get(-1)
 	state.Pop(1)
 
-	return h.parseEmitEvents(name, ret), nil
+	emits, validationErrs := h.parseEmitEvents(ret)
+	if len(validationErrs) > 0 {
+		slog.Warn("plugin emit validation errors",
+			"plugin", name,
+			"error_count", len(validationErrs),
+			"errors", validationErrs)
+	}
+	return emits, nil
 }
 
 // buildContextTable creates a Lua table from a CommandContext.
@@ -245,30 +260,25 @@ func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LT
 	return t
 }
 
-func (h *Host) parseEmitEvents(pluginName string, ret lua.LValue) []pluginpkg.EmitEvent {
+func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginpkg.EmitEvent, validationErrs []string) {
 	if ret.Type() == lua.LTNil {
-		return nil
+		return nil, nil
 	}
 
 	table, ok := ret.(*lua.LTable)
 	if !ok {
-		slog.Warn("plugin returned non-table value",
-			"plugin", pluginName,
-			"type", ret.Type().String())
-		return nil
+		err := "returned non-table value: " + ret.Type().String()
+		return nil, []string{err}
 	}
 
-	var emits []pluginpkg.EmitEvent
 	index := 0
 	table.ForEach(func(_, v lua.LValue) {
 		index++
 
 		eventTable, ok := v.(*lua.LTable)
 		if !ok {
-			slog.Warn("plugin returned non-table emit event entry",
-				"plugin", pluginName,
-				"index", index,
-				"type", v.Type().String())
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: expected table, got %s", index, v.Type().String()))
 			return
 		}
 
@@ -278,18 +288,14 @@ func (h *Host) parseEmitEvents(pluginName string, ret lua.LValue) []pluginpkg.Em
 
 		// Validate required fields
 		if stream == "nil" || stream == "" {
-			slog.Warn("plugin emit event missing required 'stream' field",
-				"plugin", pluginName,
-				"index", index,
-				"type", eventType)
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: missing required 'stream' field", index))
 			return
 		}
 
 		if eventType == "nil" || eventType == "" {
-			slog.Warn("plugin emit event missing required 'type' field",
-				"plugin", pluginName,
-				"index", index,
-				"stream", stream)
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: missing required 'type' field (stream=%s)", index, stream))
 			return
 		}
 
@@ -301,5 +307,5 @@ func (h *Host) parseEmitEvents(pluginName string, ret lua.LValue) []pluginpkg.Em
 		emits = append(emits, emit)
 	})
 
-	return emits
+	return emits, validationErrs
 }

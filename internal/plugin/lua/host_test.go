@@ -1100,3 +1100,70 @@ end
 	assert.Contains(t, logOutput, "type", "expected warning about missing type field")
 	assert.Contains(t, logOutput, "warn-missing-type", "expected plugin name in warning")
 }
+
+func TestLuaHost_DeliverEvent_ValidationErrorsLogged(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with multiple validation failures
+	mainLua := `
+function on_event(event)
+    return {
+        "not a table",
+        {
+            -- missing stream
+            type = "test",
+            payload = "missing stream"
+        },
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        },
+        {
+            stream = "test:2",
+            -- missing type
+            payload = "missing type"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "multi-validation",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "multi-validation", event)
+	require.NoError(t, err, "DeliverEvent should not fail on validation errors")
+
+	// Only the valid entry should be returned (partial success)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify consolidated validation errors were logged in single warning
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "emit validation errors", "expected consolidated warning")
+	assert.Contains(t, logOutput, "multi-validation", "expected plugin name in warning")
+	assert.Contains(t, logOutput, "error_count", "expected error count")
+	// Individual error messages should be in the errors array
+	assert.Contains(t, logOutput, "entry[1]", "expected entry 1 error")
+	assert.Contains(t, logOutput, "entry[2]", "expected entry 2 error")
+	assert.Contains(t, logOutput, "entry[4]", "expected entry 4 error")
+}
