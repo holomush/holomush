@@ -262,9 +262,9 @@ a cycle or excessively long chain). Circular aliases MUST be rejected with the e
 
 | Command                          | Capabilities   | Description         |
 | -------------------------------- | -------------- | ------------------- |
-| `alias add <alias>=<command>`    | `player.alias` | Add player alias    |
-| `alias remove <alias>`           | `player.alias` | Remove player alias |
-| `alias list`                     | `player.alias` | List player aliases |
+| `alias <alias>=<command>`        | `player.alias` | Add player alias    |
+| `unalias <alias>`                | `player.alias` | Remove player alias |
+| `aliases`                        | `player.alias` | List player aliases |
 | `sysalias add <alias>=<command>` | `admin.alias`  | Add system alias    |
 | `sysalias remove <alias>`        | `admin.alias`  | Remove system alias |
 | `sysalias list`                  | `admin.alias`  | List system aliases |
@@ -491,7 +491,7 @@ func PlayerMessage(err error) string {
 - `say hello` → "You say, "hello"" (confirmation)
 - `look` → Room description (content)
 - `move north` → New room description (content)
-- `alias add l=look` → "Alias added: l → look" (confirmation)
+- `alias l=look` → "Alias added: l → look" (confirmation)
 
 **Error feedback** is contextual:
 
