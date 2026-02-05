@@ -1027,6 +1027,373 @@ func (*LogResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{17}
 }
 
+// ListCommandsRequest requests the list of available commands.
+// Commands are filtered by the character's capabilities.
+type ListCommandsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Character identifier for capability filtering.
+	CharacterId   string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCommandsRequest) Reset() {
+	*x = ListCommandsRequest{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCommandsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCommandsRequest) ProtoMessage() {}
+
+func (x *ListCommandsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCommandsRequest.ProtoReflect.Descriptor instead.
+func (*ListCommandsRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListCommandsRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+// ListCommandsResponse contains the list of available commands.
+type ListCommandsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Available commands.
+	Commands []*CommandInfo `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	// Error message if query failed.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCommandsResponse) Reset() {
+	*x = ListCommandsResponse{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCommandsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCommandsResponse) ProtoMessage() {}
+
+func (x *ListCommandsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCommandsResponse.ProtoReflect.Descriptor instead.
+func (*ListCommandsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListCommandsResponse) GetCommands() []*CommandInfo {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *ListCommandsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// CommandInfo contains basic command information for listing.
+type CommandInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Command name.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Short help description.
+	Help string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
+	// Usage pattern (e.g., "say <message>").
+	Usage string `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	// Source plugin name or "core".
+	Source        string `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandInfo) Reset() {
+	*x = CommandInfo{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandInfo) ProtoMessage() {}
+
+func (x *CommandInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandInfo.ProtoReflect.Descriptor instead.
+func (*CommandInfo) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CommandInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CommandInfo) GetHelp() string {
+	if x != nil {
+		return x.Help
+	}
+	return ""
+}
+
+func (x *CommandInfo) GetUsage() string {
+	if x != nil {
+		return x.Usage
+	}
+	return ""
+}
+
+func (x *CommandInfo) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+// GetCommandHelpRequest requests detailed help for a command.
+type GetCommandHelpRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Command name to get help for.
+	CommandName   string `protobuf:"bytes,1,opt,name=command_name,json=commandName,proto3" json:"command_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCommandHelpRequest) Reset() {
+	*x = GetCommandHelpRequest{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCommandHelpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCommandHelpRequest) ProtoMessage() {}
+
+func (x *GetCommandHelpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCommandHelpRequest.ProtoReflect.Descriptor instead.
+func (*GetCommandHelpRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetCommandHelpRequest) GetCommandName() string {
+	if x != nil {
+		return x.CommandName
+	}
+	return ""
+}
+
+// GetCommandHelpResponse contains detailed command help.
+type GetCommandHelpResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Detailed command information (nil if not found).
+	Command *CommandHelpInfo `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	// Error message if query failed.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCommandHelpResponse) Reset() {
+	*x = GetCommandHelpResponse{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCommandHelpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCommandHelpResponse) ProtoMessage() {}
+
+func (x *GetCommandHelpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCommandHelpResponse.ProtoReflect.Descriptor instead.
+func (*GetCommandHelpResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetCommandHelpResponse) GetCommand() *CommandHelpInfo {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *GetCommandHelpResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// CommandHelpInfo contains detailed help for a command.
+type CommandHelpInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Command name.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Short help description.
+	Help string `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
+	// Usage pattern.
+	Usage string `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	// Detailed markdown help text.
+	HelpText string `protobuf:"bytes,4,opt,name=help_text,json=helpText,proto3" json:"help_text,omitempty"`
+	// Required capabilities for this command.
+	Capabilities []string `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	// Source plugin name or "core".
+	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandHelpInfo) Reset() {
+	*x = CommandHelpInfo{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandHelpInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandHelpInfo) ProtoMessage() {}
+
+func (x *CommandHelpInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandHelpInfo.ProtoReflect.Descriptor instead.
+func (*CommandHelpInfo) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CommandHelpInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CommandHelpInfo) GetHelp() string {
+	if x != nil {
+		return x.Help
+	}
+	return ""
+}
+
+func (x *CommandHelpInfo) GetUsage() string {
+	if x != nil {
+		return x.Usage
+	}
+	return ""
+}
+
+func (x *CommandHelpInfo) GetHelpText() string {
+	if x != nil {
+		return x.HelpText
+	}
+	return ""
+}
+
+func (x *CommandHelpInfo) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *CommandHelpInfo) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
 var File_holomush_plugin_v1_hostfunc_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
@@ -1086,13 +1453,35 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\r\n" +
-	"\vLogResponse*w\n" +
+	"\vLogResponse\"8\n" +
+	"\x13ListCommandsRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\"i\n" +
+	"\x14ListCommandsResponse\x12;\n" +
+	"\bcommands\x18\x01 \x03(\v2\x1f.holomush.plugin.v1.CommandInfoR\bcommands\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"c\n" +
+	"\vCommandInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04help\x18\x02 \x01(\tR\x04help\x12\x14\n" +
+	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\":\n" +
+	"\x15GetCommandHelpRequest\x12!\n" +
+	"\fcommand_name\x18\x01 \x01(\tR\vcommandName\"m\n" +
+	"\x16GetCommandHelpResponse\x12=\n" +
+	"\acommand\x18\x01 \x01(\v2#.holomush.plugin.v1.CommandHelpInfoR\acommand\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xa8\x01\n" +
+	"\x0fCommandHelpInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04help\x18\x02 \x01(\tR\x04help\x12\x14\n" +
+	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x1b\n" +
+	"\thelp_text\x18\x04 \x01(\tR\bhelpText\x12\"\n" +
+	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source*w\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x042\xdf\x05\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x042\xab\a\n" +
 	"\rHostFunctions\x12X\n" +
 	"\tEmitEvent\x12$.holomush.plugin.v1.EmitEventRequest\x1a%.holomush.plugin.v1.EmitEventResponse\x12X\n" +
 	"\tQueryRoom\x12$.holomush.plugin.v1.QueryRoomRequest\x1a%.holomush.plugin.v1.QueryRoomResponse\x12g\n" +
@@ -1101,7 +1490,9 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\x05KVGet\x12 .holomush.plugin.v1.KVGetRequest\x1a!.holomush.plugin.v1.KVGetResponse\x12L\n" +
 	"\x05KVSet\x12 .holomush.plugin.v1.KVSetRequest\x1a!.holomush.plugin.v1.KVSetResponse\x12U\n" +
 	"\bKVDelete\x12#.holomush.plugin.v1.KVDeleteRequest\x1a$.holomush.plugin.v1.KVDeleteResponse\x12F\n" +
-	"\x03Log\x12\x1e.holomush.plugin.v1.LogRequest\x1a\x1f.holomush.plugin.v1.LogResponseB\xd5\x01\n" +
+	"\x03Log\x12\x1e.holomush.plugin.v1.LogRequest\x1a\x1f.holomush.plugin.v1.LogResponse\x12a\n" +
+	"\fListCommands\x12'.holomush.plugin.v1.ListCommandsRequest\x1a(.holomush.plugin.v1.ListCommandsResponse\x12g\n" +
+	"\x0eGetCommandHelp\x12).holomush.plugin.v1.GetCommandHelpRequest\x1a*.holomush.plugin.v1.GetCommandHelpResponseB\xd5\x01\n" +
 	"\x16com.holomush.plugin.v1B\rHostfuncProtoP\x01ZBgithub.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1\xa2\x02\x03HPX\xaa\x02\x12Holomush.Plugin.V1\xca\x02\x12Holomush\\Plugin\\V1\xe2\x02\x1eHolomush\\Plugin\\V1\\GPBMetadata\xea\x02\x14Holomush::Plugin::V1b\x06proto3"
 
 var (
@@ -1117,7 +1508,7 @@ func file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_plugin_v1_hostfunc_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_holomush_plugin_v1_hostfunc_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_holomush_plugin_v1_hostfunc_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_holomush_plugin_v1_hostfunc_proto_goTypes = []any{
 	(LogLevel)(0),                       // 0: holomush.plugin.v1.LogLevel
 	(*EmitEventRequest)(nil),            // 1: holomush.plugin.v1.EmitEventRequest
@@ -1138,37 +1529,49 @@ var file_holomush_plugin_v1_hostfunc_proto_goTypes = []any{
 	(*KVDeleteResponse)(nil),            // 16: holomush.plugin.v1.KVDeleteResponse
 	(*LogRequest)(nil),                  // 17: holomush.plugin.v1.LogRequest
 	(*LogResponse)(nil),                 // 18: holomush.plugin.v1.LogResponse
-	nil,                                 // 19: holomush.plugin.v1.LogRequest.FieldsEntry
-	(*EmitEvent)(nil),                   // 20: holomush.plugin.v1.EmitEvent
+	(*ListCommandsRequest)(nil),         // 19: holomush.plugin.v1.ListCommandsRequest
+	(*ListCommandsResponse)(nil),        // 20: holomush.plugin.v1.ListCommandsResponse
+	(*CommandInfo)(nil),                 // 21: holomush.plugin.v1.CommandInfo
+	(*GetCommandHelpRequest)(nil),       // 22: holomush.plugin.v1.GetCommandHelpRequest
+	(*GetCommandHelpResponse)(nil),      // 23: holomush.plugin.v1.GetCommandHelpResponse
+	(*CommandHelpInfo)(nil),             // 24: holomush.plugin.v1.CommandHelpInfo
+	nil,                                 // 25: holomush.plugin.v1.LogRequest.FieldsEntry
+	(*EmitEvent)(nil),                   // 26: holomush.plugin.v1.EmitEvent
 }
 var file_holomush_plugin_v1_hostfunc_proto_depIdxs = []int32{
-	20, // 0: holomush.plugin.v1.EmitEventRequest.event:type_name -> holomush.plugin.v1.EmitEvent
+	26, // 0: holomush.plugin.v1.EmitEventRequest.event:type_name -> holomush.plugin.v1.EmitEvent
 	5,  // 1: holomush.plugin.v1.QueryRoomResponse.room:type_name -> holomush.plugin.v1.RoomInfo
 	8,  // 2: holomush.plugin.v1.QueryCharacterResponse.character:type_name -> holomush.plugin.v1.CharacterInfo
 	8,  // 3: holomush.plugin.v1.QueryRoomCharactersResponse.characters:type_name -> holomush.plugin.v1.CharacterInfo
 	0,  // 4: holomush.plugin.v1.LogRequest.level:type_name -> holomush.plugin.v1.LogLevel
-	19, // 5: holomush.plugin.v1.LogRequest.fields:type_name -> holomush.plugin.v1.LogRequest.FieldsEntry
-	1,  // 6: holomush.plugin.v1.HostFunctions.EmitEvent:input_type -> holomush.plugin.v1.EmitEventRequest
-	3,  // 7: holomush.plugin.v1.HostFunctions.QueryRoom:input_type -> holomush.plugin.v1.QueryRoomRequest
-	6,  // 8: holomush.plugin.v1.HostFunctions.QueryCharacter:input_type -> holomush.plugin.v1.QueryCharacterRequest
-	9,  // 9: holomush.plugin.v1.HostFunctions.QueryRoomCharacters:input_type -> holomush.plugin.v1.QueryRoomCharactersRequest
-	11, // 10: holomush.plugin.v1.HostFunctions.KVGet:input_type -> holomush.plugin.v1.KVGetRequest
-	13, // 11: holomush.plugin.v1.HostFunctions.KVSet:input_type -> holomush.plugin.v1.KVSetRequest
-	15, // 12: holomush.plugin.v1.HostFunctions.KVDelete:input_type -> holomush.plugin.v1.KVDeleteRequest
-	17, // 13: holomush.plugin.v1.HostFunctions.Log:input_type -> holomush.plugin.v1.LogRequest
-	2,  // 14: holomush.plugin.v1.HostFunctions.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
-	4,  // 15: holomush.plugin.v1.HostFunctions.QueryRoom:output_type -> holomush.plugin.v1.QueryRoomResponse
-	7,  // 16: holomush.plugin.v1.HostFunctions.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
-	10, // 17: holomush.plugin.v1.HostFunctions.QueryRoomCharacters:output_type -> holomush.plugin.v1.QueryRoomCharactersResponse
-	12, // 18: holomush.plugin.v1.HostFunctions.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
-	14, // 19: holomush.plugin.v1.HostFunctions.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
-	16, // 20: holomush.plugin.v1.HostFunctions.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse
-	18, // 21: holomush.plugin.v1.HostFunctions.Log:output_type -> holomush.plugin.v1.LogResponse
-	14, // [14:22] is the sub-list for method output_type
-	6,  // [6:14] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	25, // 5: holomush.plugin.v1.LogRequest.fields:type_name -> holomush.plugin.v1.LogRequest.FieldsEntry
+	21, // 6: holomush.plugin.v1.ListCommandsResponse.commands:type_name -> holomush.plugin.v1.CommandInfo
+	24, // 7: holomush.plugin.v1.GetCommandHelpResponse.command:type_name -> holomush.plugin.v1.CommandHelpInfo
+	1,  // 8: holomush.plugin.v1.HostFunctions.EmitEvent:input_type -> holomush.plugin.v1.EmitEventRequest
+	3,  // 9: holomush.plugin.v1.HostFunctions.QueryRoom:input_type -> holomush.plugin.v1.QueryRoomRequest
+	6,  // 10: holomush.plugin.v1.HostFunctions.QueryCharacter:input_type -> holomush.plugin.v1.QueryCharacterRequest
+	9,  // 11: holomush.plugin.v1.HostFunctions.QueryRoomCharacters:input_type -> holomush.plugin.v1.QueryRoomCharactersRequest
+	11, // 12: holomush.plugin.v1.HostFunctions.KVGet:input_type -> holomush.plugin.v1.KVGetRequest
+	13, // 13: holomush.plugin.v1.HostFunctions.KVSet:input_type -> holomush.plugin.v1.KVSetRequest
+	15, // 14: holomush.plugin.v1.HostFunctions.KVDelete:input_type -> holomush.plugin.v1.KVDeleteRequest
+	17, // 15: holomush.plugin.v1.HostFunctions.Log:input_type -> holomush.plugin.v1.LogRequest
+	19, // 16: holomush.plugin.v1.HostFunctions.ListCommands:input_type -> holomush.plugin.v1.ListCommandsRequest
+	22, // 17: holomush.plugin.v1.HostFunctions.GetCommandHelp:input_type -> holomush.plugin.v1.GetCommandHelpRequest
+	2,  // 18: holomush.plugin.v1.HostFunctions.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
+	4,  // 19: holomush.plugin.v1.HostFunctions.QueryRoom:output_type -> holomush.plugin.v1.QueryRoomResponse
+	7,  // 20: holomush.plugin.v1.HostFunctions.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
+	10, // 21: holomush.plugin.v1.HostFunctions.QueryRoomCharacters:output_type -> holomush.plugin.v1.QueryRoomCharactersResponse
+	12, // 22: holomush.plugin.v1.HostFunctions.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
+	14, // 23: holomush.plugin.v1.HostFunctions.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
+	16, // 24: holomush.plugin.v1.HostFunctions.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse
+	18, // 25: holomush.plugin.v1.HostFunctions.Log:output_type -> holomush.plugin.v1.LogResponse
+	20, // 26: holomush.plugin.v1.HostFunctions.ListCommands:output_type -> holomush.plugin.v1.ListCommandsResponse
+	23, // 27: holomush.plugin.v1.HostFunctions.GetCommandHelp:output_type -> holomush.plugin.v1.GetCommandHelpResponse
+	18, // [18:28] is the sub-list for method output_type
+	8,  // [8:18] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_hostfunc_proto_init() }
@@ -1183,7 +1586,7 @@ func file_holomush_plugin_v1_hostfunc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_hostfunc_proto_rawDesc), len(file_holomush_plugin_v1_hostfunc_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   19,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

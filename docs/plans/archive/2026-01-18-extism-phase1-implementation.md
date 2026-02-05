@@ -557,7 +557,6 @@ import json
 import extism
 
 
-@extism.plugin_fn
 def handle_event():
     """Handle incoming events and emit echo responses."""
     # Read input event
@@ -588,6 +587,9 @@ def handle_event():
     }
 
     extism.output_str(json.dumps(response))
+
+
+extism.plugin_fn(handle_event)
 ```
 
 **Step 3: Create Makefile for building**
@@ -1128,7 +1130,7 @@ Review all other system documentation for consistency with this change.
 Create `docs/reference/plugin-authoring.md` covering:
 
 1. **Overview**: HoloMUSH plugins are WebAssembly modules using Extism PDK
-2. **Quick Start (Python)**: Install CLI, create plugin with `@extism.plugin_fn`, build with `extism-py`
+2. **Quick Start (Python)**: Install CLI, register with `extism.plugin_fn(handle_event)`, build with `extism-py`
 3. **Event Structure**: JSON with id, stream, type, timestamp, actor_kind (0=Character, 1=System, 2=Plugin), actor_id, payload
 4. **Event Types**: say, pose, arrive, leave, system
 5. **Response Structure**: JSON with events array containing stream, type, payload

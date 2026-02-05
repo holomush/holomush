@@ -8,18 +8,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
-	"github.com/oklog/ulid/v2"
-	lua "github.com/yuin/gopher-lua"
+	"github.com/holomush/holomush/internal/world"
 )
 
 func TestNew_NilEnforcerPanics(t *testing.T) {
@@ -30,6 +30,78 @@ func TestNew_NilEnforcerPanics(t *testing.T) {
 
 	hostfunc.New(nil, nil)
 }
+
+func TestWithWorldQuerier_PanicsWithHelpfulMessage(t *testing.T) {
+	defer func() {
+		r := recover()
+		require.NotNil(t, r, "expected panic for WithWorldQuerier")
+		require.Contains(t, r.(string), "WithWorldQuerier", "panic message should mention WithWorldQuerier")
+		require.Contains(t, r.(string), "WithWorldService", "panic message should direct to WithWorldService")
+		require.Contains(t, r.(string), "WorldMutator", "panic message should mention WorldMutator")
+	}()
+
+	// This should panic immediately when creating the option
+	_ = hostfunc.WithWorldQuerier(nil)
+}
+
+func TestWithWorldService_AcceptsWorldMutator(t *testing.T) {
+	// This test verifies that WithWorldService accepts a WorldMutator at construction time
+	// The compile-time type check ensures only WorldMutator implementations can be passed
+	// If this compiles, the interface enforcement is working
+
+	// Create a simple mock that implements WorldMutator
+	mutator := &mockWorldMutatorForConstructorTest{}
+
+	// This should work without panicking
+	hf := hostfunc.New(nil, capability.NewEnforcer(), hostfunc.WithWorldService(mutator))
+	require.NotNil(t, hf, "hostfunc.New should return a Functions instance")
+}
+
+// mockWorldMutatorForConstructorTest implements WorldMutator for testing constructor behavior.
+type mockWorldMutatorForConstructorTest struct{}
+
+func (m *mockWorldMutatorForConstructorTest) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
+	return nil, nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) GetCharacter(_ context.Context, _ string, _ ulid.ULID) (*world.Character, error) {
+	return nil, nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
+	return nil, nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) GetObject(_ context.Context, _ string, _ ulid.ULID) (*world.Object, error) {
+	return nil, nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) CreateLocation(_ context.Context, _ string, _ *world.Location) error {
+	return nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) CreateExit(_ context.Context, _ string, _ *world.Exit) error {
+	return nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) CreateObject(_ context.Context, _ string, _ *world.Object) error {
+	return nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) UpdateLocation(_ context.Context, _ string, _ *world.Location) error {
+	return nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) UpdateObject(_ context.Context, _ string, _ *world.Object) error {
+	return nil
+}
+
+func (m *mockWorldMutatorForConstructorTest) FindLocationByName(_ context.Context, _, _ string) (*world.Location, error) {
+	return nil, nil
+}
+
+// Compile-time interface check.
+var _ hostfunc.WorldMutator = (*mockWorldMutatorForConstructorTest)(nil)
 
 func TestHostFunctions_Log(t *testing.T) {
 	L := lua.NewState()
@@ -375,7 +447,12 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 
 	errVal := L.GetGlobal("err")
 	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "database connection failed", errVal.String())
+
+	// Error should be sanitized with correlation ID, not raw database error
+	errMsg := errVal.String()
+	assert.Contains(t, errMsg, "internal error (ref: ")
+	assert.NotContains(t, errMsg, "database connection failed",
+		"raw error should not leak to plugin")
 }
 
 func TestHostFunctions_KVSet_StoreError(t *testing.T) {
@@ -400,7 +477,12 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
 	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "write failed: disk full", errVal.String())
+
+	// Error should be sanitized with correlation ID, not raw database error
+	errMsg := errVal.String()
+	assert.Contains(t, errMsg, "internal error (ref: ")
+	assert.NotContains(t, errMsg, "write failed",
+		"raw error should not leak to plugin")
 }
 
 func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
@@ -425,7 +507,12 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, result.Type(), "expected nil result")
 	require.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "delete failed: permission denied", errVal.String())
+
+	// Error should be sanitized with correlation ID, not raw database error
+	errMsg := errVal.String()
+	assert.Contains(t, errMsg, "internal error (ref: ")
+	assert.NotContains(t, errMsg, "delete failed",
+		"raw error should not leak to plugin")
 }
 
 func TestHostFunctions_KV_MissingArguments(t *testing.T) {
@@ -573,10 +660,8 @@ func TestHostFunctions_KVGet_Timeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
-	// Error should indicate deadline/timeout
-	errMsg := errVal.String()
-	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
-		"error should mention timeout/deadline, got: %s", errMsg)
+	// Sanitized timeout message (no raw context.DeadlineExceeded details)
+	assert.Equal(t, "operation timed out", errVal.String())
 }
 
 func TestHostFunctions_KVSet_Timeout(t *testing.T) {
@@ -597,9 +682,8 @@ func TestHostFunctions_KVSet_Timeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
-	errMsg := errVal.String()
-	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
-		"error should mention timeout/deadline, got: %s", errMsg)
+	// Sanitized timeout message
+	assert.Equal(t, "operation timed out", errVal.String())
 }
 
 func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
@@ -620,9 +704,8 @@ func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string for timeout")
 
-	errMsg := errVal.String()
-	assert.True(t, strings.Contains(errMsg, "deadline") || strings.Contains(errMsg, "timeout"),
-		"error should mention timeout/deadline, got: %s", errMsg)
+	// Sanitized timeout message
+	assert.Equal(t, "operation timed out", errVal.String())
 }
 
 func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {

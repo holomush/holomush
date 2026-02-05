@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: communication
+version: 1.0.0
+type: lua
+events:
+  - command
+capabilities:
+  - events.emit.location
+  - events.emit.character
+commands:
+  - name: say
+    capabilities:
+      - comms.say
+    help: "Send a message to the room"
+    usage: "say <message>"
+    helpText: |
+      ## Say
+
+      Speaks a message aloud to everyone in your current location.
+
+      Your message will be displayed as: `You say, "message"`
+      Others will see: `CharacterName says, "message"`
+
+      ### Examples
+
+      - `say Hello everyone!` - Shows: CharacterName says, "Hello everyone!"
+      - `say How are you?` - Shows: CharacterName says, "How are you?"
+
+  - name: pose
+    capabilities:
+      - comms.pose
+    help: "Perform an action in the room"
+    usage: "pose <action>"
+    helpText: |
+      ## Pose
+
+      Performs an emoted action visible to everyone in your current location.
+
+      Your character name is prepended to the action.
+
+      ### Variants
+
+      - `pose waves` or `:waves` - Shows "CharacterName waves" (space before action)
+      - `;'s eyes widen` - Shows "CharacterName's eyes widen" (no space, for possessives)
+
+      The `:` and `;` shortcuts are aliases. Use `;` when your action starts with
+      a possessive ('s) or other text that should connect directly to your name.
+
+      ### Examples
+
+      - `pose waves hello.` - Shows "CharacterName waves hello."
+      - `:looks around curiously.` - Shows "CharacterName looks around curiously."
+      - `;'s jaw drops.` - Shows "CharacterName's jaw drops."
+
+  - name: emit
+    capabilities:
+      - comms.emit
+    help: "Emit raw text to the room (privileged)"
+    usage: "emit <text>"
+    helpText: |
+      ## Emit
+
+      Emits raw text to everyone in your current location without any prefix.
+
+      This command requires the `comms.emit` capability, typically granted to
+      storytellers and administrators for room descriptions or special effects.
+
+      ### Examples
+
+      - `emit The room shakes violently!` - Shows "The room shakes violently!"
+      - `emit A cold wind blows through.` - Shows "A cold wind blows through."
+
+lua-plugin:
+  entry: main.lua

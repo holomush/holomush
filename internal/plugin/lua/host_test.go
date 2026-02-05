@@ -4,7 +4,9 @@
 package lua_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -138,6 +140,43 @@ func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
 	emits, err := host.DeliverEvent(context.Background(), "no-handler", event)
 	require.NoError(t, err, "DeliverEvent() failed")
 	assert.Empty(t, emits, "expected no emits for plugin without handler")
+}
+
+func TestLuaHost_DeliverEvent_NoHandler_LogsDebug(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin without on_event or on_command function
+	writeMainLua(t, dir, `x = 1`)
+
+	// Capture log output at DEBUG level
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "no-handler-plugin",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "no-handler-plugin", event)
+	require.NoError(t, err, "DeliverEvent() failed")
+	assert.Empty(t, emits, "expected no emits for plugin without handler")
+
+	// Verify DEBUG log was emitted with plugin name
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "no handler", "expected debug log about missing handler")
+	assert.Contains(t, logOutput, "no-handler-plugin", "expected plugin name in debug log")
 }
 
 func TestLuaHost_Unload(t *testing.T) {
@@ -328,35 +367,105 @@ end
 	}
 }
 
-func TestLuaHost_DeliverEvent_NonTableReturn(t *testing.T) {
-	dir := t.TempDir()
-
-	// Plugin that returns a string instead of a table
-	writeMainLua(t, dir, `
+func TestLuaHost_DeliverEvent_NonTableReturn_Logs_Warning(t *testing.T) {
+	tests := []struct {
+		name         string
+		luaCode      string
+		expectWarn   bool
+		expectedType string
+	}{
+		{
+			name: "string return logs warning",
+			luaCode: `
 function on_event(event)
     return "not a table"
 end
-`)
-
-	host := pluginlua.NewHost()
-	defer closeHost(t, host)
-
-	manifest := &plugin.Manifest{
-		Name:      "bad-return",
-		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+`,
+			expectWarn:   true,
+			expectedType: "string",
+		},
+		{
+			name: "number return logs warning",
+			luaCode: `
+function on_event(event)
+    return 42
+end
+`,
+			expectWarn:   true,
+			expectedType: "number",
+		},
+		{
+			name: "boolean return logs warning",
+			luaCode: `
+function on_event(event)
+    return true
+end
+`,
+			expectWarn:   true,
+			expectedType: "bool",
+		},
+		{
+			name: "nil return does NOT log warning",
+			luaCode: `
+function on_event(event)
+    return nil
+end
+`,
+			expectWarn: false,
+		},
+		{
+			name: "table return does NOT log warning",
+			luaCode: `
+function on_event(event)
+    return {}
+end
+`,
+			expectWarn: false,
+		},
 	}
 
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeMainLua(t, dir, tt.luaCode)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
-	emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
-	require.NoError(t, err, "DeliverEvent() failed")
+			// Capture log output
+			var logBuf bytes.Buffer
+			handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+			oldLogger := slog.Default()
+			slog.SetDefault(slog.New(handler))
+			defer slog.SetDefault(oldLogger)
 
-	// Non-table returns should be gracefully ignored (empty emits)
-	assert.Empty(t, emits, "expected empty emits for non-table return")
+			host := pluginlua.NewHost()
+			defer closeHost(t, host)
+
+			manifest := &plugin.Manifest{
+				Name:      "bad-return",
+				Version:   "1.0.0",
+				Type:      plugin.TypeLua,
+				LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+			}
+
+			err := host.Load(context.Background(), manifest, dir)
+			require.NoError(t, err)
+
+			event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+			emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
+			require.NoError(t, err, "DeliverEvent() failed")
+
+			// Non-table returns should be gracefully ignored (empty emits)
+			assert.Empty(t, emits, "expected empty emits for non-table return")
+
+			logOutput := logBuf.String()
+			if tt.expectWarn {
+				assert.Contains(t, logOutput, "non-table", "expected warning about non-table return")
+				assert.Contains(t, logOutput, "bad-return", "expected plugin name in warning")
+				assert.Contains(t, logOutput, tt.expectedType, "expected return type in warning")
+			} else {
+				assert.NotContains(t, logOutput, "non-table", "expected no warning for nil/table return")
+			}
+		})
+	}
 }
 
 func TestLuaHost_DeliverEvent_MalformedEmitEvents(t *testing.T) {
@@ -586,4 +695,475 @@ func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
 	}()
 
 	_ = pluginlua.NewHostWithFunctions(nil)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_CommandEvent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with on_command handler that echoes context fields
+	mainLua := `
+function on_command(ctx)
+    return {
+        {
+            stream = "location:" .. ctx.location_id,
+            type = "echo",
+            payload = ctx.name .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
+                      ctx.character_name .. "|" .. ctx.character_id .. "|" ..
+                      ctx.location_id .. "|" .. ctx.player_id
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "on-command-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{
+		ID:        "01ABC",
+		Stream:    "char:char123",
+		Type:      pluginpkg.EventType("command"),
+		Timestamp: 1705591234000,
+		ActorKind: pluginpkg.ActorCharacter,
+		ActorID:   "char123",
+		Payload:   `{"name":"say","args":"Hello everyone!","invoked_as":";","character_name":"Alice","character_id":"01CHAR","location_id":"01LOC","player_id":"01PLAYER"}`,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "on-command-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+
+	// Verify all context fields were received correctly
+	expected := "say|Hello everyone!|;|Alice|01CHAR|01LOC|01PLAYER"
+	assert.Equal(t, expected, emits[0].Payload)
+	assert.Equal(t, "location:01LOC", emits[0].Stream)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_FallbackToOnEvent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with only on_event (no on_command)
+	mainLua := `
+function on_event(event)
+    if event.type == "command" then
+        return {
+            {
+                stream = "fallback:1",
+                type = "echo",
+                payload = "fell_back_to_on_event"
+            }
+        }
+    end
+    return nil
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "fallback-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	// Command event should fall back to on_event
+	event := pluginpkg.Event{
+		ID:      "01ABC",
+		Stream:  "char:char123",
+		Type:    pluginpkg.EventType("command"),
+		Payload: `{"name":"say","args":"test"}`,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "fallback-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "fell_back_to_on_event", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_NonCommandEventUsesOnEvent(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with both on_command and on_event
+	mainLua := `
+function on_command(ctx)
+    return {
+        {
+            stream = "on_command:1",
+            type = "echo",
+            payload = "on_command_called"
+        }
+    }
+end
+
+function on_event(event)
+    return {
+        {
+            stream = "on_event:1",
+            type = "echo",
+            payload = "on_event_called"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "both-handlers",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	// Non-command event should use on_event, not on_command
+	event := pluginpkg.Event{
+		ID:     "01ABC",
+		Stream: "location:123",
+		Type:   pluginpkg.EventTypeSay,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "both-handlers", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "on_event_called", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_EmptyArgs(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_command(ctx)
+    local args_value = ctx.args
+    if args_value == "" then
+        args_value = "EMPTY"
+    end
+    return {
+        {
+            stream = "test:1",
+            type = "echo",
+            payload = "args=" .. args_value
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "empty-args-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{
+		ID:      "01ABC",
+		Type:    pluginpkg.EventType("command"),
+		Payload: `{"name":"look","args":"","character_name":"Bob","location_id":"loc1"}`,
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "empty-args-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "args=EMPTY", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_OnCommand_InvalidPayload(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_command(ctx)
+    -- Even with invalid payload, ctx should have empty strings
+    return {
+        {
+            stream = "test:1",
+            type = "echo",
+            payload = "name=" .. (ctx.name or "nil")
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "invalid-payload-test",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{
+		ID:      "01ABC",
+		Type:    pluginpkg.EventType("command"),
+		Payload: "not valid json",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "invalid-payload-test", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+	// With invalid JSON, ctx.name should be empty string
+	assert.Equal(t, "name=", emits[0].Payload)
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnNonTableEntry(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns an array with non-table entries
+	mainLua := `
+function on_event(event)
+    return {
+        "string entry",
+        123,
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "warn-non-table",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "warn-non-table", event)
+	require.NoError(t, err)
+
+	// Only the valid table entry should be returned
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify warnings were logged for non-table entries
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "non-table", "expected warning about non-table entry")
+	assert.Contains(t, logOutput, "warn-non-table", "expected plugin name in warning")
+	assert.Contains(t, logOutput, "string", "expected type name in warning")
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnMissingStream(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns event without stream field
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            type = "test",
+            payload = "missing stream"
+        },
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "warn-missing-stream",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "warn-missing-stream", event)
+	require.NoError(t, err)
+
+	// Only the valid entry should be returned
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify warning was logged for missing stream
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "stream", "expected warning about missing stream field")
+	assert.Contains(t, logOutput, "warn-missing-stream", "expected plugin name in warning")
+}
+
+func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnMissingType(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin returns event without type field
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            stream = "test:1",
+            payload = "missing type"
+        },
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "warn-missing-type",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "warn-missing-type", event)
+	require.NoError(t, err)
+
+	// Only the valid entry should be returned
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify warning was logged for missing type
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "type", "expected warning about missing type field")
+	assert.Contains(t, logOutput, "warn-missing-type", "expected plugin name in warning")
+}
+
+func TestLuaHost_DeliverEvent_ValidationErrorsLogged(t *testing.T) {
+	dir := t.TempDir()
+
+	// Plugin with multiple validation failures
+	mainLua := `
+function on_event(event)
+    return {
+        "not a table",
+        {
+            -- missing stream
+            type = "test",
+            payload = "missing stream"
+        },
+        {
+            stream = "valid:1",
+            type = "test",
+            payload = "valid"
+        },
+        {
+            stream = "test:2",
+            -- missing type
+            payload = "missing type"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugin.Manifest{
+		Name:      "multi-validation",
+		Version:   "1.0.0",
+		Type:      plugin.TypeLua,
+		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	emits, err := host.DeliverEvent(context.Background(), "multi-validation", event)
+	require.NoError(t, err, "DeliverEvent should not fail on validation errors")
+
+	// Only the valid entry should be returned (partial success)
+	require.Len(t, emits, 1)
+	assert.Equal(t, "valid:1", emits[0].Stream)
+
+	// Verify consolidated validation errors were logged in single warning
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "emit validation errors", "expected consolidated warning")
+	assert.Contains(t, logOutput, "multi-validation", "expected plugin name in warning")
+	assert.Contains(t, logOutput, "error_count", "expected error count")
+	// Individual error messages should be in the errors array
+	assert.Contains(t, logOutput, "entry[1]", "expected entry 1 error")
+	assert.Contains(t, logOutput, "entry[2]", "expected entry 2 error")
+	assert.Contains(t, logOutput, "entry[4]", "expected entry 4 error")
 }

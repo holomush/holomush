@@ -785,3 +785,23 @@ func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, charac
 	}
 	return nil
 }
+
+// FindLocationByName searches for a location by name after checking read authorization.
+// Returns ErrNotFound if no location matches.
+func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string) (*Location, error) {
+	if s.locationRepo == nil {
+		return nil, oops.Code("LOCATION_FIND_FAILED").Errorf("location repository not configured")
+	}
+	// Check read authorization for location wildcard (searching locations)
+	if !s.accessControl.Check(ctx, subjectID, "read", "location:*") {
+		return nil, oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	loc, err := s.locationRepo.FindByName(ctx, name)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, oops.Code("LOCATION_NOT_FOUND").With("name", name).Wrap(err)
+		}
+		return nil, oops.Code("LOCATION_FIND_FAILED").With("name", name).Wrap(err)
+	}
+	return loc, nil
+}

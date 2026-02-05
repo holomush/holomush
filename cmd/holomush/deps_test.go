@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,6 +91,10 @@ func (m *mockObservabilityServer) Addr() string {
 		return m.addrFunc()
 	}
 	return "127.0.0.1:9100"
+}
+
+func (m *mockObservabilityServer) MustRegister(_ ...prometheus.Collector) {
+	// No-op for testing - metrics registration is not needed in unit tests
 }
 
 // mockGRPCClient implements GRPCClient for testing.

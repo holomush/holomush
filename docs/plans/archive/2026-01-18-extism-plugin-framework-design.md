@@ -82,8 +82,8 @@ All commands and behaviors ship as replaceable plugins:
 | `holomush-communication` | say, pose, emit, whisper |
 | `holomush-navigation`    | move, look, exits        |
 | `holomush-messaging`     | page, channels           |
-| `holomush-building`      | @dig, @create, @describe |
-| `holomush-admin`         | @boot, @shutdown, @stats |
+| `holomush-building`      | dig, link                |
+| `holomush-admin`         | boot, shutdown, stats    |
 
 ## Plugin Authoring
 
@@ -122,7 +122,6 @@ The same plugin in ~30 lines:
 import extism
 from holomush_pdk import Event, emit_event
 
-@extism.plugin_fn
 def handle_event():
     event = Event.from_input()
 
@@ -134,6 +133,8 @@ def handle_event():
         type="say",
         payload={"message": f"Echo: {event.payload['message']}"}
     )
+
+extism.plugin_fn(handle_event)
 ```
 
 ### Language Support

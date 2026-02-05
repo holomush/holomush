@@ -32,6 +32,8 @@ const (
 	HostFunctions_KVSet_FullMethodName               = "/holomush.plugin.v1.HostFunctions/KVSet"
 	HostFunctions_KVDelete_FullMethodName            = "/holomush.plugin.v1.HostFunctions/KVDelete"
 	HostFunctions_Log_FullMethodName                 = "/holomush.plugin.v1.HostFunctions/Log"
+	HostFunctions_ListCommands_FullMethodName        = "/holomush.plugin.v1.HostFunctions/ListCommands"
+	HostFunctions_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.HostFunctions/GetCommandHelp"
 )
 
 // HostFunctionsClient is the client API for HostFunctions service.
@@ -58,6 +60,12 @@ type HostFunctionsClient interface {
 	KVDelete(ctx context.Context, in *KVDeleteRequest, opts ...grpc.CallOption) (*KVDeleteResponse, error)
 	// Log writes a log message through the host's logging system.
 	Log(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error)
+	// ListCommands returns all available commands.
+	// Requires capability: command.list
+	ListCommands(ctx context.Context, in *ListCommandsRequest, opts ...grpc.CallOption) (*ListCommandsResponse, error)
+	// GetCommandHelp returns detailed help for a specific command.
+	// Requires capability: command.help
+	GetCommandHelp(ctx context.Context, in *GetCommandHelpRequest, opts ...grpc.CallOption) (*GetCommandHelpResponse, error)
 }
 
 type hostFunctionsClient struct {
@@ -148,6 +156,26 @@ func (c *hostFunctionsClient) Log(ctx context.Context, in *LogRequest, opts ...g
 	return out, nil
 }
 
+func (c *hostFunctionsClient) ListCommands(ctx context.Context, in *ListCommandsRequest, opts ...grpc.CallOption) (*ListCommandsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCommandsResponse)
+	err := c.cc.Invoke(ctx, HostFunctions_ListCommands_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostFunctionsClient) GetCommandHelp(ctx context.Context, in *GetCommandHelpRequest, opts ...grpc.CallOption) (*GetCommandHelpResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCommandHelpResponse)
+	err := c.cc.Invoke(ctx, HostFunctions_GetCommandHelp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HostFunctionsServer is the server API for HostFunctions service.
 // All implementations must embed UnimplementedHostFunctionsServer
 // for forward compatibility.
@@ -172,6 +200,12 @@ type HostFunctionsServer interface {
 	KVDelete(context.Context, *KVDeleteRequest) (*KVDeleteResponse, error)
 	// Log writes a log message through the host's logging system.
 	Log(context.Context, *LogRequest) (*LogResponse, error)
+	// ListCommands returns all available commands.
+	// Requires capability: command.list
+	ListCommands(context.Context, *ListCommandsRequest) (*ListCommandsResponse, error)
+	// GetCommandHelp returns detailed help for a specific command.
+	// Requires capability: command.help
+	GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error)
 	mustEmbedUnimplementedHostFunctionsServer()
 }
 
@@ -205,6 +239,12 @@ func (UnimplementedHostFunctionsServer) KVDelete(context.Context, *KVDeleteReque
 }
 func (UnimplementedHostFunctionsServer) Log(context.Context, *LogRequest) (*LogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Log not implemented")
+}
+func (UnimplementedHostFunctionsServer) ListCommands(context.Context, *ListCommandsRequest) (*ListCommandsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCommands not implemented")
+}
+func (UnimplementedHostFunctionsServer) GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCommandHelp not implemented")
 }
 func (UnimplementedHostFunctionsServer) mustEmbedUnimplementedHostFunctionsServer() {}
 func (UnimplementedHostFunctionsServer) testEmbeddedByValue()                       {}
@@ -371,6 +411,42 @@ func _HostFunctions_Log_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostFunctions_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCommandsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostFunctionsServer).ListCommands(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostFunctions_ListCommands_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostFunctionsServer).ListCommands(ctx, req.(*ListCommandsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HostFunctions_GetCommandHelp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCommandHelpRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostFunctionsServer).GetCommandHelp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostFunctions_GetCommandHelp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostFunctionsServer).GetCommandHelp(ctx, req.(*GetCommandHelpRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HostFunctions_ServiceDesc is the grpc.ServiceDesc for HostFunctions service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -409,6 +485,14 @@ var HostFunctions_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Log",
 			Handler:    _HostFunctions_Log_Handler,
+		},
+		{
+			MethodName: "ListCommands",
+			Handler:    _HostFunctions_ListCommands_Handler,
+		},
+		{
+			MethodName: "GetCommandHelp",
+			Handler:    _HostFunctions_GetCommandHelp_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

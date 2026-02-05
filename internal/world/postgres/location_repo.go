@@ -113,6 +113,23 @@ func (r *LocationRepository) GetShadowedBy(ctx context.Context, id ulid.ULID) ([
 	return scanLocations(rows)
 }
 
+// FindByName searches for a location by exact name match.
+// Returns ErrNotFound if no location matches.
+func (r *LocationRepository) FindByName(ctx context.Context, name string) (*world.Location, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, type, shadows_id, name, description, owner_id, replay_policy, created_at, archived_at
+		FROM locations WHERE name = $1
+	`, name)
+	loc, err := scanLocationRow(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("LOCATION_NOT_FOUND").With("name", name).Wrap(world.ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "find location by name").With("name", name).Wrap(err)
+	}
+	return loc, nil
+}
+
 // locationScanFields holds intermediate scan values for location parsing.
 type locationScanFields struct {
 	idStr        string

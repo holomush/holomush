@@ -5,6 +5,8 @@ package lua
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/pkg/holo"
 	pluginpkg "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -103,7 +106,15 @@ func (h *Host) Unload(_ context.Context, name string) error {
 	return nil
 }
 
-// DeliverEvent executes the plugin's on_event function.
+// DeliverEvent executes the plugin's event handler.
+// For command events, it calls on_command(ctx) if defined, falling back to on_event(event).
+// For non-command events, it calls on_event(event).
+//
+// Partial Success Behavior: If the plugin returns emit events with validation errors (e.g.,
+// missing required fields), those specific events are skipped and logged as warnings, but
+// valid events are still returned. This ensures plugin bugs don't break game uptime while
+// still providing visibility into issues via logs. The returned error is only non-nil for
+// critical failures (plugin not found, Lua execution errors), not for emit validation issues.
 func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
 	h.mu.RLock()
 	p, ok := h.plugins[name]
@@ -134,10 +145,22 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").Hint("failed to load code").Wrap(err)
 	}
 
+	// For command events, try on_command first
+	if event.Type == "command" {
+		onCommand := L.GetGlobal("on_command")
+		if onCommand.Type() != lua.LTNil {
+			return h.callOnCommand(L, name, event, onCommand)
+		}
+		// Fall through to on_event if on_command not defined
+	}
+
 	// Check if on_event exists
 	onEvent := L.GetGlobal("on_event")
 	if onEvent.Type() == lua.LTNil {
-		return nil, nil // No handler
+		slog.Debug("plugin has no handler defined",
+			"plugin", name,
+			"event_type", event.Type)
+		return nil, nil
 	}
 
 	// Build event table
@@ -156,7 +179,14 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 	ret := L.Get(-1)
 	L.Pop(1)
 
-	return h.parseEmitEvents(ret), nil
+	emits, validationErrs := h.parseEmitEvents(ret)
+	if len(validationErrs) > 0 {
+		slog.Warn("plugin emit validation errors",
+			"plugin", name,
+			"error_count", len(validationErrs),
+			"errors", validationErrs)
+	}
+	return emits, nil
 }
 
 // Plugins returns names of loaded plugins.
@@ -180,6 +210,50 @@ func (h *Host) Close(_ context.Context) error {
 	return nil
 }
 
+// callOnCommand calls the on_command handler with a typed CommandContext.
+func (h *Host) callOnCommand(state *lua.LState, name string, event pluginpkg.Event, onCommand lua.LValue) ([]pluginpkg.EmitEvent, error) {
+	// Parse command payload into CommandContext
+	cmdCtx := holo.ParseCommandPayload(event.Payload)
+
+	// Build Lua context table
+	ctxTable := h.buildContextTable(state, cmdCtx)
+
+	// Call on_command(ctx)
+	if err := state.CallByParam(lua.P{
+		Fn:      onCommand,
+		NRet:    1,
+		Protect: true,
+	}, ctxTable); err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "on_command").Wrap(err)
+	}
+
+	// Get return value
+	ret := state.Get(-1)
+	state.Pop(1)
+
+	emits, validationErrs := h.parseEmitEvents(ret)
+	if len(validationErrs) > 0 {
+		slog.Warn("plugin emit validation errors",
+			"plugin", name,
+			"error_count", len(validationErrs),
+			"errors", validationErrs)
+	}
+	return emits, nil
+}
+
+// buildContextTable creates a Lua table from a CommandContext.
+func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lua.LTable {
+	t := state.NewTable()
+	state.SetField(t, "name", lua.LString(ctx.Name))
+	state.SetField(t, "args", lua.LString(ctx.Args))
+	state.SetField(t, "invoked_as", lua.LString(ctx.InvokedAs))
+	state.SetField(t, "character_name", lua.LString(ctx.CharacterName))
+	state.SetField(t, "character_id", lua.LString(ctx.CharacterID))
+	state.SetField(t, "location_id", lua.LString(ctx.LocationID))
+	state.SetField(t, "player_id", lua.LString(ctx.PlayerID))
+	return t
+}
+
 func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LTable {
 	t := state.NewTable()
 	state.SetField(t, "id", lua.LString(event.ID))
@@ -192,27 +266,52 @@ func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LT
 	return t
 }
 
-func (h *Host) parseEmitEvents(ret lua.LValue) []pluginpkg.EmitEvent {
+func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginpkg.EmitEvent, validationErrs []string) {
 	if ret.Type() == lua.LTNil {
-		return nil
+		return nil, nil
 	}
 
 	table, ok := ret.(*lua.LTable)
 	if !ok {
-		return nil // Non-table return is ignored
+		err := "returned non-table value: " + ret.Type().String()
+		return nil, []string{err}
 	}
 
-	var emits []pluginpkg.EmitEvent
+	index := 0
 	table.ForEach(func(_, v lua.LValue) {
-		if eventTable, ok := v.(*lua.LTable); ok {
-			emit := pluginpkg.EmitEvent{
-				Stream:  eventTable.RawGetString("stream").String(),
-				Type:    pluginpkg.EventType(eventTable.RawGetString("type").String()),
-				Payload: eventTable.RawGetString("payload").String(),
-			}
-			emits = append(emits, emit)
+		index++
+
+		eventTable, ok := v.(*lua.LTable)
+		if !ok {
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: expected table, got %s", index, v.Type().String()))
+			return
 		}
+
+		stream := eventTable.RawGetString("stream").String()
+		eventType := eventTable.RawGetString("type").String()
+		payload := eventTable.RawGetString("payload").String()
+
+		// Validate required fields
+		if stream == "nil" || stream == "" {
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: missing required 'stream' field", index))
+			return
+		}
+
+		if eventType == "nil" || eventType == "" {
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: missing required 'type' field (stream=%s)", index, stream))
+			return
+		}
+
+		emit := pluginpkg.EmitEvent{
+			Stream:  stream,
+			Type:    pluginpkg.EventType(eventType),
+			Payload: payload,
+		}
+		emits = append(emits, emit)
 	})
 
-	return emits
+	return emits, validationErrs
 }

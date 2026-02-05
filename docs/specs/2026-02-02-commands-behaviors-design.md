@@ -88,13 +88,29 @@ type CommandExecution struct {
 
 // Services provides access to core services for command handlers.
 // Handlers MUST NOT store references to services beyond execution.
-// Handlers MUST access services only through exec.Services.
+// Handlers MUST access services only through exec.Services getters.
 type Services struct {
-    World   world.Service     // world model queries and mutations
-    Session core.SessionManager
-    Access  access.Evaluator
-    Events  core.EventStore
+    world       WorldService         // private - use World() getter
+    session     core.SessionService  // private - use Session() getter
+    access      access.AccessControl // private - use Access() getter
+    events      core.EventStore      // private - use Events() getter
+    broadcaster EventBroadcaster     // private - use Broadcaster() getter
 }
+
+// Getter methods provide read-only access to services.
+// This prevents handlers from replacing service implementations.
+func (s *Services) World() WorldService              { return s.world }
+func (s *Services) Session() core.SessionService     { return s.session }
+func (s *Services) Access() access.AccessControl     { return s.access }
+func (s *Services) Events() core.EventStore          { return s.events }
+func (s *Services) Broadcaster() EventBroadcaster    { return s.broadcaster }
+
+// NOTE: The Services struct uses interfaces rather than concrete types.
+// This is intentional and follows Go best practice ("accept interfaces, return structs"):
+// - Enables flexible implementation (production vs test implementations)
+// - Allows command handlers to be tested with mocks
+// - Decouples handlers from concrete service implementations
+// - WorldService and EventBroadcaster interfaces define only the methods handlers actually need
 ```
 
 ### Go Command Registration
@@ -105,12 +121,24 @@ Core commands register at server startup:
 registry.Register(CommandEntry{
     Name:         "look",
     Handler:      handlers.Look,
-    Capabilities: []string{"world.look"},
+    Capabilities: nil, // Core navigation commands are intentionally unrestricted
     Help:         "Look at your surroundings",
     Usage:        "look [target]",
     Source:       "core",
 })
 ```
+
+**Core Command Capability Decision**: Basic player commands (`look`, `move`, `quit`, `who`)
+are intentionally registered without capability requirements. These are fundamental actions
+that all players MUST be able to perform regardless of their granted capabilities:
+
+- `look` - Players MUST always be able to see their surroundings
+- `move` - Players MUST always be able to navigate between locations
+- `quit` - Players MUST always be able to disconnect their session
+- `who` - Players MUST always be able to see who is online
+
+Restricting basic navigation would break the core gameplay loop. Admin commands (`boot`,
+`shutdown`, `wall`) still require appropriate `admin.*` capabilities.
 
 ### Lua Command Registration
 
@@ -211,7 +239,8 @@ lower-priority layer in the resolution order.
 - MUST start with a letter (not digits or special characters)
 - MAY contain special characters after first char: `_!?@#$%^+-`
 - MUST NOT exceed 20 characters
-- Examples: `look`, `@create`, `+who`, `say!` are valid; `123go`, `*star` are invalid
+- Examples: `look`, `create`, `who`, `say!`, `cmd@test` are valid; `@create`, `+who`, `123go`, `*star` are invalid
+- Note: `@` and `+` are allowed after the first character, but disallowed as leading prefixes
 
 **Player aliases** MUST match: `^[a-zA-Z][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
 
@@ -234,9 +263,9 @@ a cycle or excessively long chain). Circular aliases MUST be rejected with the e
 
 | Command                          | Capabilities   | Description         |
 | -------------------------------- | -------------- | ------------------- |
-| `alias add <alias>=<command>`    | `player.alias` | Add player alias    |
-| `alias remove <alias>`           | `player.alias` | Remove player alias |
-| `alias list`                     | `player.alias` | List player aliases |
+| `alias <alias>=<command>`        | `player.alias` | Add player alias    |
+| `unalias <alias>`                | `player.alias` | Remove player alias |
+| `aliases`                        | `player.alias` | List player aliases |
 | `sysalias add <alias>=<command>` | `admin.alias`  | Add system alias    |
 | `sysalias remove <alias>`        | `admin.alias`  | Remove system alias |
 | `sysalias list`                  | `admin.alias`  | List system aliases |
@@ -321,7 +350,7 @@ Capabilities use dot-notation hierarchy:
 | ---------- | ----------------------------------------------------------- |
 | `world.*`  | `world.look`, `world.move`, `world.examine`                 |
 | `comms.*`  | `comms.say`, `comms.pose`, `comms.emit`                     |
-| `build.*`  | `build.dig`, `build.create`, `build.link`, `build.describe` |
+| `build.*`  | `build.dig`, `build.create`, `build.link`, `build.set`      |
 | `player.*` | `player.alias`, `player.who`, `player.quit`                 |
 | `admin.*`  | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
 
@@ -401,7 +430,7 @@ The error SHOULD include cooldown duration in context for client display.
 
 **Observability**:
 
-- Metric: `holomush.command.rate_limited` (counter, labels: `command`)
+- Metric: `holomush_command_rate_limited_total` (counter, labels: `command`)
 
 ---
 
@@ -463,7 +492,7 @@ func PlayerMessage(err error) string {
 - `say hello` → "You say, "hello"" (confirmation)
 - `look` → Room description (content)
 - `move north` → New room description (content)
-- `alias add l=look` → "Alias added: l → look" (confirmation)
+- `alias l=look` → "Alias added: l → look" (confirmation)
 
 **Error feedback** is contextual:
 
@@ -505,9 +534,9 @@ defer span.End()
 
 **Metrics**: Command dispatcher exports:
 
-- `holomush.command.executions` (counter) - by command name, source, status
-- `holomush.command.duration` (histogram) - execution latency by command
-- `holomush.alias.expansions` (counter) - alias usage patterns
+- `holomush_command_executions_total` (counter) - by command name, source, status
+- `holomush_command_duration_seconds` (histogram) - execution latency by command
+- `holomush_alias_expansions_total` (counter) - alias usage patterns
 
 Lua plugin command execution inherits the parent span context, allowing traces
 to flow through Go → Lua → host function calls.
@@ -590,10 +619,16 @@ Help content MUST be markdown. Rendering depends on client:
 
 ### Partitioning Strategy
 
-| Implementation | Commands                                                           | Rationale                                |
-| -------------- | ------------------------------------------------------------------ | ---------------------------------------- |
-| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical |
-| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable        |
+| Implementation | Commands                                                                   | Rationale                                |
+| -------------- | -------------------------------------------------------------------------- | ---------------------------------------- |
+| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`, `create`, `set` | Core engine, admin, performance-critical |
+| **Lua**        | `say`, `pose`, `emit`, `dig`, `link`, `help`                               | Proves plugin model, customizable        |
+
+**Capability Requirements**:
+
+- Core navigation (`look`, `move`, `quit`, `who`): **Unrestricted** - no capability check
+- Admin commands (`boot`, `shutdown`, `wall`): Require `admin.*` capabilities
+- Lua plugin commands: Require capabilities declared in `plugin.yaml`
 
 ### Go Command Execution
 
@@ -601,7 +636,7 @@ Direct function call with injected services:
 
 ```go
 func LookHandler(ctx context.Context, exec *CommandExecution) error {
-    room, err := exec.Services.World.GetLocation(ctx, exec.LocationID)
+    room, err := exec.Services.World().GetLocation(ctx, exec.LocationID)
     if err != nil {
         return WorldError("You can't see anything here.", err)
     }
@@ -610,8 +645,8 @@ func LookHandler(ctx context.Context, exec *CommandExecution) error {
 }
 ```
 
-Handlers access services via `exec.Services` rather than storing dependencies.
-This keeps handlers stateless and testable.
+Handlers access services via `exec.Services` getters (e.g., `exec.Services.World()`)
+rather than storing dependencies. This keeps handlers stateless and testable.
 
 ### Lua Command Execution
 

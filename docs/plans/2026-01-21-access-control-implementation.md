@@ -307,7 +307,7 @@ func TestDefaultRoles(t *testing.T) {
 
     // Builder has world modification
     assert.Contains(t, roles["builder"], "write:location:*")
-    assert.Contains(t, roles["builder"], "execute:command:@dig")
+    assert.Contains(t, roles["builder"], "execute:command:dig")
 
     // Admin has full access
     assert.Contains(t, roles["admin"], "read:**")
@@ -361,7 +361,7 @@ var playerPowers = []string{
     "execute:command:say",
     "execute:command:pose",
     "execute:command:look",
-    "execute:command:go",
+    "execute:command:move",
 }
 
 var builderPowers = []string{
@@ -371,10 +371,10 @@ var builderPowers = []string{
     "delete:object:*",
 
     // Builder commands
-    "execute:command:@dig",
-    "execute:command:@create",
-    "execute:command:@describe",
-    "execute:command:@link",
+    "execute:command:dig",
+    "execute:command:create",
+    "execute:command:set",
+    "execute:command:link",
 }
 
 var adminPowers = []string{

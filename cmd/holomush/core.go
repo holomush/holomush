@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -253,6 +254,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		// For core, we're ready once we reach this point (database is connected,
 		// listener is bound, core components initialized)
 		obsServer = deps.ObservabilityServerFactory(cfg.metricsAddr, func() bool { return true })
+		// Register command package metrics with the observability server
+		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
 		obsErrChan, err := obsServer.Start()
 		if err != nil {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)

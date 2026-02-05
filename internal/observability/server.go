@@ -21,6 +21,38 @@ import (
 // ReadinessChecker returns whether the service is ready to accept connections.
 type ReadinessChecker func() bool
 
+// commandOutputFailures is a package-level counter for command output write failures.
+// This allows handlers to increment the metric without needing access to the Server instance.
+var commandOutputFailures = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_command_output_failures_total",
+		Help: "Total number of command output write failures by command",
+	},
+	[]string{"command"},
+)
+
+// commandRateLimited is a package-level counter for rate-limited commands.
+// This tracks when commands are rejected due to rate limiting.
+var commandRateLimited = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_command_rate_limited_total",
+		Help: "Total number of commands rejected due to rate limiting",
+	},
+	[]string{"command"},
+)
+
+// RecordCommandOutputFailure increments the command output failure counter.
+// Called by command handlers when output write fails.
+func RecordCommandOutputFailure(command string) {
+	commandOutputFailures.WithLabelValues(command).Inc()
+}
+
+// RecordCommandRateLimited increments the rate-limited command counter.
+// Called by the dispatcher when a command is rejected due to rate limiting.
+func RecordCommandRateLimited(command string) {
+	commandRateLimited.WithLabelValues(command).Inc()
+}
+
 // Metrics contains custom Prometheus metrics for HoloMUSH.
 type Metrics struct {
 	ConnectionsTotal *prometheus.CounterVec
@@ -48,6 +80,8 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 
 	reg.MustRegister(m.ConnectionsTotal)
 	reg.MustRegister(m.RequestsTotal)
+	reg.MustRegister(commandOutputFailures)
+	reg.MustRegister(commandRateLimited)
 
 	return m
 }
@@ -89,6 +123,13 @@ func NewServer(addr string, readinessChecker ReadinessChecker) *Server {
 // Metrics returns the custom metrics for recording application events.
 func (s *Server) Metrics() *Metrics {
 	return s.metrics
+}
+
+// MustRegister registers additional Prometheus collectors with the server's registry.
+// This allows other packages to register their metrics without creating import cycles.
+// Panics if registration fails (following prometheus convention for MustRegister).
+func (s *Server) MustRegister(cs ...prometheus.Collector) {
+	s.registry.MustRegister(cs...)
 }
 
 // Start begins serving observability endpoints.

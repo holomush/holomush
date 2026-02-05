@@ -71,121 +71,73 @@ type WorldQuerier interface {
 // queryRoomFn returns a Lua function that queries room information.
 func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
-			slog.Error("query_room called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
+		if f.worldMutator == nil {
+			return f.pushServiceUnavailable(L, "query_room", pluginName)
 		}
 
 		roomID := L.CheckString(1)
-		id, err := ulid.Parse(roomID)
-		if err != nil {
-			slog.Debug("query_room: invalid room ID format",
-				"plugin", pluginName,
-				"room_id", roomID,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid room ID: " + err.Error()))
+		id, ok := parseULID(L, roomID, pluginName, "query_room", "room ID")
+		if !ok {
 			return 2
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
-
-		// Create adapter for this plugin's authorization
-		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-		loc, err := adapter.GetLocation(ctx, id)
-		if err != nil {
-			if errors.Is(err, world.ErrNotFound) {
-				slog.Debug("query_room: room not found",
-					"plugin", pluginName,
-					"room_id", roomID)
+		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
+			loc, err := adapter.GetLocation(ctx, id)
+			if err != nil {
+				if errors.Is(err, world.ErrNotFound) {
+					slog.Debug("query_room: room not found",
+						"plugin", pluginName,
+						"room_id", roomID)
+				}
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "room", roomID, err))
 			}
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "room", roomID, err)))
-			return 2
-		}
 
-		// Return room info as a table
-		room := L.NewTable()
-		L.SetField(room, "id", lua.LString(loc.ID.String()))
-		L.SetField(room, "name", lua.LString(loc.Name))
-		L.SetField(room, "description", lua.LString(loc.Description))
-		L.SetField(room, "type", lua.LString(string(loc.Type)))
+			room := L.NewTable()
+			L.SetField(room, "id", lua.LString(loc.ID.String()))
+			L.SetField(room, "name", lua.LString(loc.Name))
+			L.SetField(room, "description", lua.LString(loc.Description))
+			L.SetField(room, "type", lua.LString(string(loc.Type)))
 
-		L.Push(room)
-		L.Push(lua.LNil)
-		return 2
+			return pushSuccess(L, room)
+		})
 	}
 }
 
 // queryCharacterFn returns a Lua function that queries character information.
 func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
-			slog.Error("query_character called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
+		if f.worldMutator == nil {
+			return f.pushServiceUnavailable(L, "query_character", pluginName)
 		}
 
 		charID := L.CheckString(1)
-		id, err := ulid.Parse(charID)
-		if err != nil {
-			slog.Debug("query_character: invalid character ID format",
-				"plugin", pluginName,
-				"character_id", charID,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid character ID: " + err.Error()))
+		id, ok := parseULID(L, charID, pluginName, "query_character", "character ID")
+		if !ok {
 			return 2
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
-
-		// Create adapter for this plugin's authorization
-		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-		char, err := adapter.GetCharacter(ctx, id)
-		if err != nil {
-			if errors.Is(err, world.ErrNotFound) {
-				slog.Debug("query_character: character not found",
-					"plugin", pluginName,
-					"character_id", charID)
+		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
+			char, err := adapter.GetCharacter(ctx, id)
+			if err != nil {
+				if errors.Is(err, world.ErrNotFound) {
+					slog.Debug("query_character: character not found",
+						"plugin", pluginName,
+						"character_id", charID)
+				}
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "character", charID, err))
 			}
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "character", charID, err)))
-			return 2
-		}
 
-		// Return character info as a table
-		character := L.NewTable()
-		L.SetField(character, "id", lua.LString(char.ID.String()))
-		L.SetField(character, "player_id", lua.LString(char.PlayerID.String()))
-		L.SetField(character, "name", lua.LString(char.Name))
-		L.SetField(character, "description", lua.LString(char.Description))
-		if char.LocationID != nil {
-			L.SetField(character, "location_id", lua.LString(char.LocationID.String()))
-		}
+			character := L.NewTable()
+			L.SetField(character, "id", lua.LString(char.ID.String()))
+			L.SetField(character, "player_id", lua.LString(char.PlayerID.String()))
+			L.SetField(character, "name", lua.LString(char.Name))
+			L.SetField(character, "description", lua.LString(char.Description))
+			if char.LocationID != nil {
+				L.SetField(character, "location_id", lua.LString(char.LocationID.String()))
+			}
 
-		L.Push(character)
-		L.Push(lua.LNil)
-		return 2
+			return pushSuccess(L, character)
+		})
 	}
 }
 
@@ -196,24 +148,13 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 //   - offset: number of results to skip (default: 0)
 func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
-			slog.Error("query_room_characters called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
+		if f.worldMutator == nil {
+			return f.pushServiceUnavailable(L, "query_room_characters", pluginName)
 		}
 
 		roomID := L.CheckString(1)
-		id, err := ulid.Parse(roomID)
-		if err != nil {
-			slog.Debug("query_room_characters: invalid room ID format",
-				"plugin", pluginName,
-				"room_id", roomID,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid room ID: " + err.Error()))
+		id, ok := parseULID(L, roomID, pluginName, "query_room_characters", "room ID")
+		if !ok {
 			return 2
 		}
 
@@ -229,118 +170,82 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 			}
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
-
-		// Create adapter for this plugin's authorization
-		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-		chars, err := adapter.GetCharactersByLocation(ctx, id, opts)
-		if err != nil {
-			if errors.Is(err, world.ErrNotFound) {
-				slog.Debug("query_room_characters: room not found",
-					"plugin", pluginName,
-					"room_id", roomID)
+		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
+			chars, err := adapter.GetCharactersByLocation(ctx, id, opts)
+			if err != nil {
+				if errors.Is(err, world.ErrNotFound) {
+					slog.Debug("query_room_characters: room not found",
+						"plugin", pluginName,
+						"room_id", roomID)
+				}
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "room", roomID, err))
 			}
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "room", roomID, err)))
-			return 2
-		}
 
-		// Return lightweight list of characters (id, name only).
-		// For full character details (player_id, description, location_id),
-		// use query_character on individual character IDs.
-		characters := L.NewTable()
-		for i, char := range chars {
-			c := L.NewTable()
-			L.SetField(c, "id", lua.LString(char.ID.String()))
-			L.SetField(c, "name", lua.LString(char.Name))
-			characters.RawSetInt(i+1, c)
-		}
+			// Return lightweight list of characters (id, name only).
+			// For full character details (player_id, description, location_id),
+			// use query_character on individual character IDs.
+			characters := L.NewTable()
+			for i, char := range chars {
+				c := L.NewTable()
+				L.SetField(c, "id", lua.LString(char.ID.String()))
+				L.SetField(c, "name", lua.LString(char.Name))
+				characters.RawSetInt(i+1, c)
+			}
 
-		L.Push(characters)
-		L.Push(lua.LNil)
-		return 2
+			return pushSuccess(L, characters)
+		})
 	}
 }
 
 // queryObjectFn returns a Lua function that queries object information.
 func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
-			slog.Error("query_object called but world service unavailable",
-				"plugin", pluginName,
-				"hint", "use WithWorldService option when creating hostfunc.Functions")
-			L.Push(lua.LNil)
-			L.Push(lua.LString("world service not configured - contact server administrator"))
-			return 2
+		if f.worldMutator == nil {
+			return f.pushServiceUnavailable(L, "query_object", pluginName)
 		}
 
 		objID := L.CheckString(1)
-		id, err := ulid.Parse(objID)
-		if err != nil {
-			slog.Debug("query_object: invalid object ID format",
-				"plugin", pluginName,
-				"object_id", objID,
-				"error", err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString("invalid object ID: " + err.Error()))
+		id, ok := parseULID(L, objID, pluginName, "query_object", "object ID")
+		if !ok {
 			return 2
 		}
 
-		// Inherit context from Lua state if available, otherwise use Background
-		parentCtx := L.Context()
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
-		defer cancel()
-
-		// Create adapter for this plugin's authorization
-		adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-		obj, err := adapter.GetObject(ctx, id)
-		if err != nil {
-			if errors.Is(err, world.ErrNotFound) {
-				slog.Debug("query_object: object not found",
-					"plugin", pluginName,
-					"object_id", objID)
+		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
+			obj, err := adapter.GetObject(ctx, id)
+			if err != nil {
+				if errors.Is(err, world.ErrNotFound) {
+					slog.Debug("query_object: object not found",
+						"plugin", pluginName,
+						"object_id", objID)
+				}
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "object", objID, err))
 			}
-			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeErrorForPlugin(pluginName, "object", objID, err)))
-			return 2
-		}
 
-		// Return object info as a table
-		object := L.NewTable()
-		L.SetField(object, "id", lua.LString(obj.ID.String()))
-		L.SetField(object, "name", lua.LString(obj.Name))
-		L.SetField(object, "description", lua.LString(obj.Description))
-		L.SetField(object, "is_container", lua.LBool(obj.IsContainer))
+			object := L.NewTable()
+			L.SetField(object, "id", lua.LString(obj.ID.String()))
+			L.SetField(object, "name", lua.LString(obj.Name))
+			L.SetField(object, "description", lua.LString(obj.Description))
+			L.SetField(object, "is_container", lua.LBool(obj.IsContainer))
 
-		// Optional fields - only set if non-nil
-		if obj.LocationID() != nil {
-			L.SetField(object, "location_id", lua.LString(obj.LocationID().String()))
-		}
-		if obj.HeldByCharacterID() != nil {
-			L.SetField(object, "held_by_character_id", lua.LString(obj.HeldByCharacterID().String()))
-		}
-		if obj.ContainedInObjectID() != nil {
-			L.SetField(object, "contained_in_object_id", lua.LString(obj.ContainedInObjectID().String()))
-		}
-		if obj.OwnerID != nil {
-			L.SetField(object, "owner_id", lua.LString(obj.OwnerID.String()))
-		}
+			// Optional fields - only set if non-nil
+			if obj.LocationID() != nil {
+				L.SetField(object, "location_id", lua.LString(obj.LocationID().String()))
+			}
+			if obj.HeldByCharacterID() != nil {
+				L.SetField(object, "held_by_character_id", lua.LString(obj.HeldByCharacterID().String()))
+			}
+			if obj.ContainedInObjectID() != nil {
+				L.SetField(object, "contained_in_object_id", lua.LString(obj.ContainedInObjectID().String()))
+			}
+			if obj.OwnerID != nil {
+				L.SetField(object, "owner_id", lua.LString(obj.OwnerID.String()))
+			}
 
-		// Containment type
-		containment := obj.Containment()
-		L.SetField(object, "containment_type", lua.LString(string((&containment).Type())))
+			// Containment type
+			containment := obj.Containment()
+			L.SetField(object, "containment_type", lua.LString(string((&containment).Type())))
 
-		L.Push(object)
-		L.Push(lua.LNil)
-		return 2
+			return pushSuccess(L, object)
+		})
 	}
 }

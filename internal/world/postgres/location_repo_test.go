@@ -381,3 +381,42 @@ func TestLocationRepository_GetShadowedBy(t *testing.T) {
 		assert.Empty(t, shadows)
 	})
 }
+
+func TestLocationRepository_FindByName(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewLocationRepository(testPool)
+
+	// Create test location
+	loc := &world.Location{
+		ID:           ulid.Make(),
+		Name:         "Unique Test Location",
+		Description:  "A location with a unique name.",
+		Type:         world.LocationTypePersistent,
+		ReplayPolicy: "last:-1",
+		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+	}
+	require.NoError(t, repo.Create(ctx, loc))
+
+	t.Cleanup(func() {
+		_ = repo.Delete(ctx, loc.ID)
+	})
+
+	t.Run("finds location by exact name", func(t *testing.T) {
+		found, err := repo.FindByName(ctx, "Unique Test Location")
+		require.NoError(t, err)
+		assert.Equal(t, loc.ID, found.ID)
+		assert.Equal(t, loc.Name, found.Name)
+	})
+
+	t.Run("returns ErrNotFound for non-existent name", func(t *testing.T) {
+		_, err := repo.FindByName(ctx, "Non-Existent Location")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+	})
+
+	t.Run("name match is case-sensitive", func(t *testing.T) {
+		_, err := repo.FindByName(ctx, "unique test location") // lowercase
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+	})
+}

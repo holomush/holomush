@@ -342,7 +342,7 @@ player-powers:
   - emit:stream:location:$here
 
   # Commands
-  - execute:command:go
+  - execute:command:move
   - execute:command:get
   - execute:command:drop
   - execute:command:give
@@ -353,9 +353,9 @@ builder-powers:
   - delete:exit:*
   - write:object:*
   - delete:object:*
-  - execute:command:@dig
-  - execute:command:@link
-  - execute:command:@create
+  - execute:command:dig
+  - execute:command:link
+  - execute:command:create
 
 scene-member-powers:
   - read:location:$scene_member

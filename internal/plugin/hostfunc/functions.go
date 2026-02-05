@@ -9,12 +9,15 @@ package hostfunc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -37,70 +40,51 @@ type CapabilityChecker interface {
 
 // Functions provides host functions to Lua plugins.
 type Functions struct {
-	kvStore      KVStore
-	enforcer     CapabilityChecker
-	worldService WorldService
+	kvStore          KVStore
+	enforcer         CapabilityChecker
+	worldMutator     WorldMutator
+	commandRegistry  CommandRegistry
+	access           AccessControl
+	propertyRegistry *property.Registry
 }
 
 // Option configures Functions.
 type Option func(*Functions)
 
-// WithWorldService sets the world service for world query functions.
+// WithWorldService sets the world service for world query and mutation functions.
 // Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
-func WithWorldService(svc WorldService) Option {
+// The service must implement WorldMutator; this is enforced at compile-time.
+func WithWorldService(svc WorldMutator) Option {
 	return func(f *Functions) {
-		f.worldService = svc
+		f.worldMutator = svc
 	}
 }
 
-// WithWorldQuerier wraps a WorldQuerier for backwards compatibility.
+// WithPropertyRegistry sets the property registry for property host functions.
+func WithPropertyRegistry(registry *property.Registry) Option {
+	return func(f *Functions) {
+		f.propertyRegistry = registry
+	}
+}
+
+// WithWorldQuerier is no longer supported and has been removed.
 //
-// Deprecated: WithWorldQuerier will be removed in v1.0.0.
-// Use WithWorldService instead, which enables per-plugin ABAC authorization.
-// This adapter exists for backwards compatibility during the transition period.
-func WithWorldQuerier(w WorldQuerier) Option {
-	return func(f *Functions) {
-		// Wrap the querier in a passthrough adapter that ignores authorization
-		f.worldService = &passthroughWorldService{querier: w}
-	}
-}
-
-// passthroughWorldService wraps a WorldQuerier for backwards compatibility.
-// It ignores the subjectID parameter since the underlying querier doesn't use it.
-type passthroughWorldService struct {
-	querier WorldQuerier
-}
-
-func (p *passthroughWorldService) GetLocation(ctx context.Context, _ string, id ulid.ULID) (*world.Location, error) {
-	loc, err := p.querier.GetLocation(ctx, id)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return loc, nil
-}
-
-func (p *passthroughWorldService) GetCharacter(ctx context.Context, _ string, id ulid.ULID) (*world.Character, error) {
-	char, err := p.querier.GetCharacter(ctx, id)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return char, nil
-}
-
-func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _ string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
-	chars, err := p.querier.GetCharactersByLocation(ctx, locationID, opts)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return chars, nil
-}
-
-func (p *passthroughWorldService) GetObject(ctx context.Context, _ string, id ulid.ULID) (*world.Object, error) {
-	obj, err := p.querier.GetObject(ctx, id)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return obj, nil
+// Deprecated: WithWorldQuerier was removed because WorldQuerier and WorldMutator
+// have incompatible method signatures. Use [WithWorldService] instead, which
+// requires a WorldMutator (which includes all read and write operations).
+//
+// Migration example:
+//
+//	// Before: WithWorldQuerier(querier)
+//	// After:  WithWorldService(service) // service must implement WorldMutator
+//
+// This function always panics to fail fast at startup. Update your code to use
+// WithWorldService with a service that implements the WorldMutator interface.
+func WithWorldQuerier(_ WorldQuerier) Option {
+	panic("hostfunc.WithWorldQuerier: this function has been removed. " +
+		"Use WithWorldService instead with a service that implements WorldMutator. " +
+		"WorldMutator includes all read methods (GetLocation, GetCharacter, etc.) " +
+		"plus write methods (CreateLocation, UpdateLocation, etc.).")
 }
 
 // New creates host functions with dependencies.
@@ -117,11 +101,17 @@ func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
 	for _, opt := range opts {
 		opt(f)
 	}
+	if f.propertyRegistry == nil {
+		f.propertyRegistry = property.SharedRegistry()
+	}
 	return f
 }
 
 // Register adds host functions to a Lua state.
 func (f *Functions) Register(ls *lua.LState, pluginName string) {
+	// Register the holo.* stdlib (fmt, emit namespaces)
+	RegisterStdlib(ls)
+
 	mod := ls.NewTable()
 
 	// Logging (no capability required)
@@ -140,6 +130,18 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
 	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
 	ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
+
+	// World mutations (capability required)
+	ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
+	ls.SetField(mod, "create_exit", ls.NewFunction(f.wrap(pluginName, "world.write.exit", f.createExitFn(pluginName))))
+	ls.SetField(mod, "create_object", ls.NewFunction(f.wrap(pluginName, "world.write.object", f.createObjectFn(pluginName))))
+	ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
+	ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
+	ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
+
+	// Command registry functions (capability required)
+	ls.SetField(mod, "list_commands", ls.NewFunction(f.wrap(pluginName, "command.list", f.listCommandsFn(pluginName))))
+	ls.SetField(mod, "get_command_help", ls.NewFunction(f.wrap(pluginName, "command.help", f.getCommandHelpFn(pluginName))))
 
 	ls.SetGlobal("holomush", mod)
 }
@@ -194,6 +196,37 @@ func (f *Functions) newRequestIDFn() lua.LGFunction {
 	}
 }
 
+// sanitizeKVErrorForPlugin converts internal KV errors to safe messages for plugins.
+// It handles known error types (timeouts, not-found) with specific messages, and logs
+// internal errors at ERROR level for operators while returning a generic message with
+// a correlation ID to the plugin. This prevents leaking database internals to Lua code.
+func sanitizeKVErrorForPlugin(pluginName, operation, key string, err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		slog.Warn("plugin KV operation timed out",
+			"plugin", pluginName,
+			"operation", operation,
+			"key", key)
+		return "operation timed out"
+	}
+	if errors.Is(err, world.ErrNotFound) {
+		return "key not found"
+	}
+	if errors.Is(err, world.ErrPermissionDenied) {
+		return "access denied"
+	}
+
+	// Generate correlation ID for this error instance.
+	errorID := ulid.Make().String()
+
+	slog.Error("internal error in plugin KV operation",
+		"error_id", errorID,
+		"plugin", pluginName,
+		"operation", operation,
+		"key", key,
+		"error", err)
+	return fmt.Sprintf("internal error (ref: %s)", errorID)
+}
+
 func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
@@ -216,12 +249,8 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 
 		value, err := f.kvStore.Get(ctx, pluginName, key)
 		if err != nil {
-			slog.Error("kv_get failed",
-				"plugin", pluginName,
-				"key", key,
-				"error", err)
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "get", key, err)))
 			return 2
 		}
 
@@ -259,12 +288,8 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 		defer cancel()
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
-			slog.Error("kv_set failed",
-				"plugin", pluginName,
-				"key", key,
-				"error", err)
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "set", key, err)))
 			return 2
 		}
 
@@ -295,12 +320,8 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		defer cancel()
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {
-			slog.Error("kv_delete failed",
-				"plugin", pluginName,
-				"key", key,
-				"error", err)
 			L.Push(lua.LNil)
-			L.Push(lua.LString(err.Error()))
+			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "delete", key, err)))
 			return 2
 		}
 

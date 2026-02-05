@@ -42,6 +42,41 @@
       },
       "type": "array"
     },
+    "commands": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "help": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "string"
+          },
+          "helpText": {
+            "type": "string"
+          },
+          "helpFile": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ]
+      },
+      "type": "array",
+      "description": "Commands provided by this plugin"
+    },
     "lua-plugin": {
       "properties": {
         "entry": {

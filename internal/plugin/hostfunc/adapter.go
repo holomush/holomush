@@ -15,12 +15,20 @@ import (
 
 // WorldService defines the world service methods needed by the adapter.
 // This interface allows decoupling from the concrete world.Service type.
+//
+// Deprecated: Use WorldMutator instead. This interface is kept for backwards
+// compatibility but will be removed in a future version. All world services
+// must now implement WorldMutator (which embeds all WorldService methods).
 type WorldService interface {
 	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
 	GetCharacter(ctx context.Context, subjectID string, id ulid.ULID) (*world.Character, error)
 	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
 	GetObject(ctx context.Context, subjectID string, id ulid.ULID) (*world.Object, error)
 }
+
+// WorldMutator defines the world service methods for mutations.
+// This is an alias for world.Mutator to maintain package separation.
+type WorldMutator = world.Mutator
 
 // WorldQuerierAdapter wraps a WorldService to provide plugin access with
 // system-level authorization. Each plugin gets its own adapter instance
