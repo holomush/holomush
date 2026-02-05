@@ -521,3 +521,8 @@ func TestRateLimiter_WithRegistry(t *testing.T) {
 		}
 	})
 }
+
+func TestCapabilityRateLimitBypass_Constant(t *testing.T) {
+	// Verify the capability constant exists and has the expected value
+	assert.Equal(t, "admin.ratelimit.bypass", CapabilityRateLimitBypass)
+}
