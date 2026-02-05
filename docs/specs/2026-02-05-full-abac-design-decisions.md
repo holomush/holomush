@@ -310,3 +310,195 @@ must live in Go application code. PostgreSQL is storage only.
 
 **Impact:** Visibility defaults, LISTEN/NOTIFY notifications, and version
 history management are all handled in Go store implementations.
+
+---
+
+_The following decisions were captured during the architecture review of PR #65.
+They record clarifications and refinements made in response to review findings._
+
+---
+
+## 15. Grammar: `in` Operator Extended to Attribute Expressions
+
+**Review finding:** The DSL grammar defined `expr "in" list` and
+`expr "in" entity_ref` but example policies used `principal.id in
+resource.visible_to` — an attribute-to-attribute membership check that was
+unparseable under the original grammar.
+
+**Decision:** Add `expr "in" expr` to the condition production. The right-hand
+side MUST resolve to a `[]string` or `[]any` attribute at evaluation time. This
+is distinct from `expr "in" list` where the list is a literal.
+
+**Rationale:** Property access control requires checking character IDs against
+`visible_to` and `excluded_from` lists, which are attributes, not literals.
+Without this, the healer-wound scenario and all `visible_to`/`excluded_from`
+policies would be unimplementable.
+
+---
+
+## 16. Entity References Explicitly Deferred
+
+**Review finding:** The grammar included `entity_ref` (`Type::"value"`) syntax
+and the operator table listed `in (entity)`, but the spec simultaneously said
+this was "reserved for future." This created a confusing situation where admins
+could write policies the parser would accept but the evaluator couldn't execute.
+
+**Decision:** Remove `entity_ref` from the grammar entirely. The parser MUST
+reject `Type::"value"` syntax with a clear error message directing admins to use
+attribute-based group checks (`principal.flags.containsAny(["admin"])`) instead.
+Entity references MAY be added in a future phase when group/hierarchy features
+are implemented.
+
+**Rationale:** Including unimplemented syntax in the grammar invites runtime
+errors. Better to reject at parse time with a helpful message than to accept
+syntax that fails silently at evaluation time.
+
+**Updates decision #8:** The full expression language still includes all
+operators from decision #8. Only `entity_ref` is deferred — `in` works with
+lists and attribute expressions.
+
+---
+
+## 17. Session Resolution at Engine Entry Point
+
+**Review finding:** The spec stated sessions are "resolved to their associated
+character" but didn't specify where this happens — in the engine, in a provider,
+or at the adapter layer. This ambiguity affects the entire provider architecture.
+
+**Decision:** Session resolution happens at the engine entry point, BEFORE
+attribute resolution. The engine rewrites `session:web-123` to
+`character:01ABC` by querying the session store, then proceeds as if the caller
+passed the character subject directly.
+
+**Rationale:** Policies are always evaluated as `principal is character`, never
+`principal is session`. Resolving at the entry point keeps the provider layer
+clean — `CharacterProvider` only handles characters, not sessions. The
+`SessionProvider` in the architecture diagram exists solely for this lookup, not
+as an attribute contributor.
+
+---
+
+## 18. Property Package Ownership
+
+**Review finding:** The `entity_properties` table was introduced but the spec
+didn't clarify whether properties live in `internal/world` (alongside locations
+and objects) or in `internal/access/policy/store`.
+
+**Decision:** Properties are world model entities managed by
+`internal/world/PropertyRepository`, consistent with `LocationRepository` and
+`ObjectRepository`. The `entity_properties` table is part of the world schema.
+The `PropertyProvider` in `internal/access/policy/attribute/` wraps
+`PropertyRepository` to resolve attributes for policy evaluation.
+
+**Rationale:** Properties have parent entities (characters, locations, objects)
+and represent game-world data, not authorization metadata. Placing them in the
+world package maintains the separation of concerns: world model stores data,
+access control evaluates policies against it.
+
+**Updates decision #9:** Clarifies the implementation location of the property
+model from decision #9.
+
+---
+
+## 19. Lock Policies Are Not Versioned
+
+**Review finding:** Lock commands compile to "scoped policies" but the spec
+didn't specify what happens on modification — is the old policy versioned,
+deleted, or updated in place?
+
+**Decision:** Lock-generated policies are NOT versioned.
+
+- `lock X/action = condition` creates a policy via `PolicyStore.Create()`
+  with naming convention `lock:{resource-type}:{resource-id}:{action}`.
+- `unlock X/action` deletes the policy via `PolicyStore.DeleteByName()`.
+- Modifying a lock deletes the old policy and creates a new one in a single
+  transaction.
+
+**Rationale:** Lock versioning would explode the audit log for casual player
+actions (setting a lock on a chest shouldn't generate version history). Admins
+who need version history use the full `policy` command set. Player locks are
+ephemeral by design — they exist for in-game convenience, not governance.
+
+---
+
+## 20. `enter` Action as New ABAC-Only Path
+
+**Review finding:** The seed policies introduce an `enter` action for location
+entry control, but the static system handles movement through
+`write:character:$self` (changing character location). This semantic gap affects
+shadow mode validation.
+
+**Decision:** The `enter` action is a new capability introduced by the ABAC
+system with no static-system equivalent. Shadow mode validation MUST exclude
+`enter` actions when comparing engine results against `StaticAccessControl`.
+
+**Rationale:** The static system conflates "move yourself" with "enter a
+location" under the `write:character` permission. ABAC separates these concerns
+so admins can write fine-grained location entry policies (faction gates, level
+requirements) independent of character modification permissions.
+
+---
+
+## 21. Shadow Mode Cutover Criteria
+
+**Review finding:** The migration strategy said "remove `StaticAccessControl`
+once 100% agreement is confirmed" without defining what that means
+operationally.
+
+**Decision:** Objective cutover criteria:
+
+- Shadow mode runs in staging for at least **7 days**
+- At least **10,000 authorization checks** collected
+- **100% agreement** between `Decision.Allowed` and `StaticAccessControl.Check()`
+  for all checks (excluding `enter` actions per decision #20)
+- Any disagreement blocks cutover and triggers immediate investigation
+- Rollback: revert the `StaticAccessControl` removal PR
+
+**Rationale:** Without objective criteria, "100% agreement" is a judgement call
+that invites premature cutover. The 7-day window catches day-of-week variations
+in game activity. 10,000 checks provides statistical confidence. Explicit
+rollback plan reduces risk of the cutover being irreversible.
+
+**Updates decision #5:** Adds operational detail to the migration strategy from
+decision #5.
+
+---
+
+## 22. Flat Prefixed Strings Over Typed Structs
+
+**Review finding:** `AccessRequest` uses flat strings (`Subject:
+"character:01ABC"`) parsed at evaluation time, which is inconsistent with the
+world model's typed structs (`Location.ID ulid.ULID`).
+
+**Decision:** Keep flat prefixed strings for `AccessRequest`.
+
+**Rationale:** Flat strings simplify serialization for audit logging (no
+marshaling needed), cross-process communication (adapter signature matches
+existing `Check()` callers), and the `policy test` admin command (admins type
+`character:01ABC` directly). Parsing overhead is negligible at <200 concurrent
+users (~1μs per parse). If profiling shows parsing as a bottleneck, introduce a
+cached parsed representation without changing the public API.
+
+---
+
+## 23. Performance Targets
+
+**Review finding:** The spec had no stated performance requirements, making it
+impossible to detect regressions or know when optimization is needed.
+
+**Decision:** Define performance targets for the policy engine:
+
+| Metric                   | Target |
+| ------------------------ | ------ |
+| `Evaluate()` p99 latency | <5ms   |
+| Attribute resolution     | <2ms   |
+| DSL condition evaluation | <1ms   |
+| Cache reload             | <50ms  |
+
+All targets assume 200 concurrent users. Implementation SHOULD add
+`slog.Debug()` timers for profiling.
+
+**Rationale:** Concrete targets enable CI-based performance regression detection
+and give implementers a clear "good enough" threshold. The 5ms target leaves
+headroom for the full request path while keeping authorization invisible to
+players.
