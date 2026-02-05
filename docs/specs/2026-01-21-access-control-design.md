@@ -142,7 +142,7 @@ Resources are prefixed strings identifying what is being accessed:
 | `stream:location:*` | Location event streams |
 | `stream:session:*`  | Session event streams  |
 | `event:say`         | Specific event type    |
-| `command:@dig`      | Specific command       |
+| `command:dig`       | Specific command       |
 | `kv:pluginname:*`   | Plugin KV namespace    |
 
 Resources use `gobwas/glob` for pattern matching (same as `capability.Enforcer`).
@@ -154,7 +154,7 @@ Permissions combine action and resource: `action:resource`
 ```text
 read:location:*           # Read any room
 emit:stream:location:*    # Emit to any location stream
-execute:command:@dig      # Run @dig command
+execute:command:dig       # Run dig command
 grant:character:*         # Grant permissions to any character
 ```
 
@@ -222,7 +222,7 @@ permission_groups:
     - execute:command:say
     - execute:command:pose
     - execute:command:look
-    - execute:command:go
+    - execute:command:move
 
   builder-powers:
     # World modification
@@ -231,10 +231,10 @@ permission_groups:
     - delete:object:*
 
     # Builder commands
-    - execute:command:@dig
-    - execute:command:@create
-    - execute:command:@describe
-    - execute:command:@link
+    - execute:command:dig
+    - execute:command:create
+    - execute:command:set
+    - execute:command:link
 
   admin-powers:
     # Full access

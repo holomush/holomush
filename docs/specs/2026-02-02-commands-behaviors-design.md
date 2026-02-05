@@ -240,6 +240,7 @@ lower-priority layer in the resolution order.
 - MAY contain special characters after first char: `_!?@#$%^+-`
 - MUST NOT exceed 20 characters
 - Examples: `look`, `create`, `who`, `say!`, `cmd@test` are valid; `@create`, `+who`, `123go`, `*star` are invalid
+- Note: `@` and `+` are allowed after the first character, but disallowed as leading prefixes
 
 **Player aliases** MUST match: `^[a-zA-Z][a-zA-Z0-9_!?@#$%^+-]{0,19}$`
 
@@ -349,7 +350,7 @@ Capabilities use dot-notation hierarchy:
 | ---------- | ----------------------------------------------------------- |
 | `world.*`  | `world.look`, `world.move`, `world.examine`                 |
 | `comms.*`  | `comms.say`, `comms.pose`, `comms.emit`                     |
-| `build.*`  | `build.dig`, `build.create`, `build.link`, `build.describe` |
+| `build.*`  | `build.dig`, `build.create`, `build.link`, `build.set`      |
 | `player.*` | `player.alias`, `player.who`, `player.quit`                 |
 | `admin.*`  | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
 
@@ -618,10 +619,10 @@ Help content MUST be markdown. Rendering depends on client:
 
 ### Partitioning Strategy
 
-| Implementation | Commands                                                           | Rationale                                |
-| -------------- | ------------------------------------------------------------------ | ---------------------------------------- |
-| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`          | Core engine, admin, performance-critical |
-| **Lua**        | `say`, `pose`, `emit`, `dig`, `create`, `describe`, `link`, `help` | Proves plugin model, customizable        |
+| Implementation | Commands                                                                    | Rationale                                |
+| -------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
+| **Go**         | `look`, `move`, `quit`, `who`, `boot`, `shutdown`, `wall`, `create`, `set`   | Core engine, admin, performance-critical |
+| **Lua**        | `say`, `pose`, `emit`, `dig`, `link`, `help`                                | Proves plugin model, customizable        |
 
 **Capability Requirements**:
 

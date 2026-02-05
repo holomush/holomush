@@ -23,7 +23,7 @@ This document defines the HoloMUSH development roadmap, organized as iterative e
 | ---------------- | --------------------------------- | ---------------------------------------------------------------------------------- |
 | Plugin runtime   | Lua (gopher-lua) + go-plugin      | Lua is cheap (~40KB/instance vs ~10MB for WASM), go-plugin enables complex systems |
 | Password hashing | argon2id                          | Memory-hard, GPU-resistant, 10 years battle-tested                                 |
-| Command prefixes | None                              | Break from MU* tradition (@, +), use plain command names                           |
+| Command prefixes | None (no leading @/+ prefixes)     | Break from MU* tradition (@, +), use plain command names                           |
 | Access control   | Phased (static roles → full ABAC) | Avoid over-engineering early while maintaining interface compatibility             |
 
 ## Plugin Architecture
@@ -377,25 +377,25 @@ Connect → Authenticate (player) → Select Character → Resume/Create Session
 
 ### Phases
 
-| Phase | Bead ID          | Deliverable             | Gate                                   |
-| ----- | ---------------- | ----------------------- | -------------------------------------- |
-| 6.1   | `holomush-wr9.3` | Command parser          | Input → command + args                 |
-| 6.1b  | `holomush-wr9.4` | Alias system            | System + player-level aliases          |
-| 6.2   | `holomush-wr9.5` | Core commands (Go)      | `look`, `move`, `quit`, `who`          |
-| 6.3   | `holomush-wr9.6` | Communication (Lua)     | `say`, `pose`, `emit`                  |
-| 6.4   | `holomush-wr9.7` | Building commands (Lua) | `dig`, `create`, `describe`, `link`    |
-| 6.5   | `holomush-wr9.8` | Admin commands (Go)     | `boot`, `shutdown`, `wall`             |
-| 6.6   | `holomush-wr9.9` | Help system (Lua)       | `help` with plugin-contributed entries |
+| Phase | Bead ID          | Deliverable             | Gate                                            |
+| ----- | ---------------- | ----------------------- | ----------------------------------------------- |
+| 6.1   | `holomush-wr9.3` | Command parser          | Input → command + args                          |
+| 6.1b  | `holomush-wr9.4` | Alias system            | System + player-level aliases                   |
+| 6.2   | `holomush-wr9.5` | Core commands (Go)      | `look`, `move`, `quit`, `who`, `create`, `set`  |
+| 6.3   | `holomush-wr9.6` | Communication (Lua)     | `say`, `pose`, `emit`                           |
+| 6.4   | `holomush-wr9.7` | Building commands (Lua) | `dig`, `link`                                   |
+| 6.5   | `holomush-wr9.8` | Admin commands (Go)     | `boot`, `shutdown`, `wall`                      |
+| 6.6   | `holomush-wr9.9` | Help system (Lua)       | `help` with plugin-contributed entries          |
 
 ### Command Implementation Types
 
-| Commands                            | Implementation | Rationale                                |
-| ----------------------------------- | -------------- | ---------------------------------------- |
-| `look`, `move`, `quit`, `who`       | Go             | Core infra, session/world integration    |
-| `say`, `pose`, `emit`               | Lua            | Proves plugin model, customizable        |
-| `dig`, `create`, `describe`, `link` | Lua            | Moderate complexity, customizable        |
-| `boot`, `shutdown`, `wall`          | Go             | Security-critical, direct session access |
-| `help`                              | Lua            | Simple, plugin-extendable                |
+| Commands                                         | Implementation | Rationale                                |
+| ------------------------------------------------ | -------------- | ---------------------------------------- |
+| `look`, `move`, `quit`, `who`, `create`, `set`   | Go             | Core infra, session/world integration    |
+| `say`, `pose`, `emit`                            | Lua            | Proves plugin model, customizable        |
+| `dig`, `link`                                    | Lua            | Moderate complexity, customizable        |
+| `boot`, `shutdown`, `wall`                       | Go             | Security-critical, direct session access |
+| `help`                                           | Lua            | Simple, plugin-extendable                |
 
 ### Alias System
 

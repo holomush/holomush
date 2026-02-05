@@ -476,8 +476,8 @@ func TestValidateCommandName(t *testing.T) {
         wantErr bool
     }{
         {"simple lowercase", "look", false},
-        {"with at prefix", "@create", false},
-        {"with plus prefix", "+who", false},
+        {"with at prefix", "@create", true},
+        {"with plus prefix", "+who", true},
         {"with underscore", "my_cmd", false},
         {"with question mark", "say?", false},
         {"max length 20", "abcdefghijklmnopqrst", false},
