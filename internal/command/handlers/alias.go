@@ -57,12 +57,12 @@ func aliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache *co
 	var warnings []string
 
 	// Check if shadowing a registered command
-	if cache.ShadowsCommand(alias, registry) {
+	if checkCommandShadows(cache, registry, alias) {
 		warnings = append(warnings, "Warning: '"+alias+"' is an existing command. Your alias will override it.")
 	}
 
 	// Check if shadowing a system alias
-	if sysCmd, shadows := cache.ShadowsSystemAlias(alias); shadows {
+	if sysCmd, shadows := checkSystemAliasShadows(cache, alias); shadows {
 		warnings = append(warnings, "Warning: '"+alias+"' is a system alias for '"+sysCmd+"'. Your alias will take precedence.")
 	}
 
@@ -220,7 +220,7 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 	}
 
 	// Block if shadowing an existing system alias
-	if existingCmd, shadows := cache.ShadowsSystemAlias(alias); shadows {
+	if existingCmd, shadows := checkSystemAliasShadows(cache, alias); shadows {
 		//nolint:wrapcheck // ErrAliasConflict creates a structured oops error
 		return command.ErrAliasConflict(alias, existingCmd)
 	}
@@ -229,7 +229,7 @@ func sysaliasAddImpl(ctx context.Context, exec *command.CommandExecution, cache 
 	var warnings []string
 
 	// Check if shadowing a registered command
-	if cache.ShadowsCommand(alias, registry) {
+	if checkCommandShadows(cache, registry, alias) {
 		warnings = append(warnings, "Warning: '"+alias+"' is an existing command. System alias will override it.")
 	}
 
