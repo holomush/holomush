@@ -82,7 +82,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			executed = 0
 
 			// Register a test command
-			err := registry.Register(command.CommandEntry{
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 				Name: "test",
 				Help: "Test command for rate limiting",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
@@ -91,6 +91,8 @@ var _ = Describe("Rate Limiting Integration", func() {
 				},
 				Source: "test",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create rate limiter with low burst capacity for testing
@@ -257,13 +259,15 @@ var _ = Describe("Rate Limiting Integration", func() {
 		var rateLimiter *command.RateLimiter
 
 		BeforeEach(func() {
-			err := registry.Register(command.CommandEntry{
-				Name:         "test",
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "test",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
 				Source: "test",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			rateLimiter = command.NewRateLimiter(command.RateLimiterConfig{
@@ -358,13 +362,15 @@ var _ = Describe("Rate Limiting Integration", func() {
 		var rateLimiter *command.RateLimiter
 
 		BeforeEach(func() {
-			err := registry.Register(command.CommandEntry{
-				Name:         "test",
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "test",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
 				Source: "test",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			rateLimiter = command.NewRateLimiter(command.RateLimiterConfig{
@@ -460,13 +466,15 @@ var _ = Describe("Rate Limiting Integration", func() {
 		var rateLimiter *command.RateLimiter
 
 		BeforeEach(func() {
-			err := registry.Register(command.CommandEntry{
-				Name:         "look",
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "look",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
 				Source: "core",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			aliasCache := command.NewAliasCache()

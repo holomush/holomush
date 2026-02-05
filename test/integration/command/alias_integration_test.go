@@ -139,26 +139,30 @@ var _ = Describe("Alias Management Integration", func() {
 			charID = ulid.Make()
 
 			// Register alias commands
-			err := registry.Register(command.CommandEntry{
-				Name:         "alias",
-				Help:         "Manage player aliases",
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "alias",
+				Help: "Manage player aliases",
 				Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 					return nil // Subcommand placeholder
 				},
 				Source: "core",
 			})
 			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
+			Expect(err).NotTo(HaveOccurred())
 
 			// Register a test command that can be aliased
-			err = registry.Register(command.CommandEntry{
-				Name:         "look",
-				Help:         "Look around",
+			entry, err = command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "look",
+				Help: "Look around",
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
 					_, _ = exec.Output().Write([]byte("You look around."))
 					return nil
 				},
 				Source: "core",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			var dispErr error
@@ -272,26 +276,30 @@ var _ = Describe("Alias Management Integration", func() {
 			charID = ulid.Make()
 
 			// Register sysalias commands
-			err := registry.Register(command.CommandEntry{
-				Name:         "sysalias",
-				Help:         "Manage system aliases",
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "sysalias",
+				Help: "Manage system aliases",
 				Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 					return nil // Subcommand placeholder
 				},
 				Source: "core",
 			})
 			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
+			Expect(err).NotTo(HaveOccurred())
 
 			// Register a test command that can be aliased
-			err = registry.Register(command.CommandEntry{
-				Name:         "look",
-				Help:         "Look around",
+			entry, err = command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "look",
+				Help: "Look around",
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
 					_, _ = exec.Output().Write([]byte("You look around."))
 					return nil
 				},
 				Source: "core",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			var dispErr error
@@ -392,14 +400,16 @@ var _ = Describe("Alias Management Integration", func() {
 			charID = ulid.Make()
 
 			// Register a command that can be shadowed
-			err := registry.Register(command.CommandEntry{
-				Name:         "look",
-				Help:         "Look around",
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name: "look",
+				Help: "Look around",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
 					return nil
 				},
 				Source: "core",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			var dispErr error
@@ -881,7 +891,7 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 		mockAccess = accesstest.NewMockAccessControl()
 
 		// Register a command that aliases can target
-		err := registry.Register(command.CommandEntry{
+		entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 			Name: "look",
 			Help: "Look around",
 			Handler: func(_ context.Context, exec *command.CommandExecution) error {
@@ -891,8 +901,10 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 			Source: "core",
 		})
 		Expect(err).NotTo(HaveOccurred())
+		err = registry.Register(*entry)
+		Expect(err).NotTo(HaveOccurred())
 
-		err = registry.Register(command.CommandEntry{
+		entry, err = command.NewCommandEntry(command.CommandEntryConfig{
 			Name: "north",
 			Help: "Go north",
 			Handler: func(_ context.Context, exec *command.CommandExecution) error {
@@ -901,6 +913,8 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 			},
 			Source: "core",
 		})
+		Expect(err).NotTo(HaveOccurred())
+		err = registry.Register(*entry)
 		Expect(err).NotTo(HaveOccurred())
 
 		services, err = command.NewServices(command.ServicesConfig{
@@ -1121,7 +1135,7 @@ var _ = Describe("Alias Cache Startup Loading from Database", func() {
 			cache.LoadSystemAliases(aliasRepo.GetSystemAliases())
 
 			registry := command.NewRegistry()
-			err := registry.Register(command.CommandEntry{
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 				Name: "look",
 				Help: "Look around",
 				Handler: func(_ context.Context, exec *command.CommandExecution) error {
@@ -1130,6 +1144,8 @@ var _ = Describe("Alias Cache Startup Loading from Database", func() {
 				},
 				Source: "core",
 			})
+			Expect(err).NotTo(HaveOccurred())
+			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
 			mockAccess := accesstest.NewMockAccessControl()

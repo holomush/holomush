@@ -94,13 +94,16 @@ type CommandHandler func(ctx context.Context, exec *CommandExecution) error
 
 // CommandEntryConfig holds the configuration for creating a CommandEntry.
 //
+// This struct is exported to allow external packages (e.g., integration tests,
+// plugins) to construct CommandEntry values using the constructor.
+//
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntryConfig struct {
-	Name         string         // canonical name (e.g., "say") - REQUIRED
+	Name         string         // canonical name (e.g. "say") - REQUIRED
 	Handler      CommandHandler // Go handler or Lua dispatcher - REQUIRED
 	Capabilities []string       // ALL required capabilities (AND logic)
 	Help         string         // short description (one line)
-	Usage        string         // usage pattern (e.g., "say <message>")
+	Usage        string         // usage pattern (e.g. "say <message>")
 	HelpText     string         // detailed markdown help
 	Source       string         // "core" or plugin name
 }

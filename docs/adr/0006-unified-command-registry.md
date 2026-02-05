@@ -143,22 +143,18 @@ preventing silent conflicts.
 
 ```go
 // Go command registration (at startup)
-registry.Register(CommandEntry{
-    Name:         "look",
-    Handler:      handlers.Look,
-    Capabilities: []string{"world.look"},
-    Help:         "Look at your surroundings",
-    Source:       "core",
-})
+entry, err := NewCommandEntry("look", handlers.Look, []string{"world.look"}, "core")
+if err != nil {
+    return err
+}
+registry.Register(*entry)
 
 // Lua command registration (at plugin load)
-registry.Register(CommandEntry{
-    Name:         "say",
-    Handler:      LuaDispatcher("communication", "say", host),
-    Capabilities: []string{"comms.say"},
-    Help:         "Send a message to the room",
-    Source:       "communication",  // plugin name
-})
+entry, err := NewCommandEntry("say", LuaDispatcher("communication", "say", host), []string{"comms.say"}, "communication")
+if err != nil {
+    return err
+}
+registry.Register(*entry)
 ```
 
 ## Consequences
