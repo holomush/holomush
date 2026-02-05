@@ -62,7 +62,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 		}
 
 		// Output write errors are logged but don't fail the command - the game action succeeded
-		writeOutputf(ctx, exec, "move", "%s\n%s\n", loc.Name, loc.Description)
+		writeLocationOutput(ctx, exec, "move", loc.Name, loc.Description)
 		return nil
 	}
 
