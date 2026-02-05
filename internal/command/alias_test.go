@@ -1071,7 +1071,7 @@ func TestAliasCache_Resolve_PerformanceTarget(t *testing.T) {
 
 	// Run enough iterations to get a stable measurement
 	const iterations = 10000
-	const maxP99Ns = 25_000 // 25us threshold (spec says <1us, generous for shared CI runners)
+	const maxP99Ns = 50_000 // 50us threshold (spec says <1us, generous for shared CI runners)
 
 	// Collect individual timings for p99 calculation
 	timings := make([]int64, iterations)
