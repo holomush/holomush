@@ -296,8 +296,8 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
-			{Name: "look", Help: "Look around", Source: "core"},                                                                                                           // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),                   // Admin only
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),             // Admin only
 			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}), // Multiple caps
 		},
 	}

@@ -327,7 +327,7 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 		AccessControl: accessControl,
 	})
 
-	registry := property.NewPropertyRegistry()
+	registry := property.NewRegistry()
 	require.NoError(t, registry.Register("custom", customPropertyDefinition{}))
 
 	var buf bytes.Buffer

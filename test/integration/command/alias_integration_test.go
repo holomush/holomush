@@ -1085,9 +1085,7 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 })
 
 var _ = Describe("Alias Cache Startup Loading from Database", func() {
-	var (
-		aliasRepo *inMemoryAliasRepo
-	)
+	var aliasRepo *inMemoryAliasRepo
 
 	BeforeEach(func() {
 		aliasRepo = newInMemoryAliasRepo()

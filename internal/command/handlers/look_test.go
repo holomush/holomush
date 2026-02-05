@@ -27,7 +27,7 @@ func TestLookHandler(t *testing.T) {
 	}{
 		{
 			name: "outputs room name and description",
-			setup: func(t *testing.T, fixture *testutil.WorldServiceFixture) {
+			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.AccessControl.EXPECT().
 					Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "location:"+location.ID.String()).
 					Return(true)
@@ -43,7 +43,7 @@ func TestLookHandler(t *testing.T) {
 		},
 		{
 			name: "returns world error on failure",
-			setup: func(t *testing.T, fixture *testutil.WorldServiceFixture) {
+			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.AccessControl.EXPECT().
 					Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "location:"+location.ID.String()).
 					Return(true)
@@ -59,7 +59,7 @@ func TestLookHandler(t *testing.T) {
 		},
 		{
 			name: "returns world error on access denied",
-			setup: func(t *testing.T, fixture *testutil.WorldServiceFixture) {
+			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.AccessControl.EXPECT().
 					Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "location:"+location.ID.String()).
 					Return(false)

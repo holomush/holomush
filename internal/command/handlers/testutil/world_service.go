@@ -51,36 +51,43 @@ func NewWorldServiceBuilder(t *testing.T) *WorldServiceBuilder {
 	}
 }
 
+// WithAccessControl sets the access control mock.
 func (b *WorldServiceBuilder) WithAccessControl(accessControl *worldtest.MockAccessControl) *WorldServiceBuilder {
 	b.accessControl = accessControl
 	return b
 }
 
+// WithLocationRepo sets the location repository mock.
 func (b *WorldServiceBuilder) WithLocationRepo(locationRepo *worldtest.MockLocationRepository) *WorldServiceBuilder {
 	b.locationRepo = locationRepo
 	return b
 }
 
+// WithExitRepo sets the exit repository mock.
 func (b *WorldServiceBuilder) WithExitRepo(exitRepo *worldtest.MockExitRepository) *WorldServiceBuilder {
 	b.exitRepo = exitRepo
 	return b
 }
 
+// WithObjectRepo sets the object repository mock.
 func (b *WorldServiceBuilder) WithObjectRepo(objectRepo *worldtest.MockObjectRepository) *WorldServiceBuilder {
 	b.objectRepo = objectRepo
 	return b
 }
 
+// WithSceneRepo sets the scene repository mock.
 func (b *WorldServiceBuilder) WithSceneRepo(sceneRepo *worldtest.MockSceneRepository) *WorldServiceBuilder {
 	b.sceneRepo = sceneRepo
 	return b
 }
 
+// WithCharacterRepo sets the character repository mock.
 func (b *WorldServiceBuilder) WithCharacterRepo(characterRepo *worldtest.MockCharacterRepository) *WorldServiceBuilder {
 	b.characterRepo = characterRepo
 	return b
 }
 
+// WithEventEmitter sets the event emitter mock.
 func (b *WorldServiceBuilder) WithEventEmitter(eventEmitter *worldtest.MockEventEmitter) *WorldServiceBuilder {
 	b.eventEmitter = eventEmitter
 	return b

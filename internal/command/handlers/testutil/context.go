@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package testutil provides test helpers for command handler tests.
 package testutil
 
 import (

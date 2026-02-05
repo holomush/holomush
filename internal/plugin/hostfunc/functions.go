@@ -45,7 +45,7 @@ type Functions struct {
 	worldMutator     WorldMutator
 	commandRegistry  CommandRegistry
 	access           AccessControl
-	propertyRegistry *property.PropertyRegistry
+	propertyRegistry *property.Registry
 }
 
 // Option configures Functions.
@@ -61,7 +61,7 @@ func WithWorldService(svc WorldMutator) Option {
 }
 
 // WithPropertyRegistry sets the property registry for property host functions.
-func WithPropertyRegistry(registry *property.PropertyRegistry) Option {
+func WithPropertyRegistry(registry *property.Registry) Option {
 	return func(f *Functions) {
 		f.propertyRegistry = registry
 	}
@@ -85,44 +85,6 @@ func WithWorldQuerier(_ WorldQuerier) Option {
 		"Use WithWorldService instead with a service that implements WorldMutator. " +
 		"WorldMutator includes all read methods (GetLocation, GetCharacter, etc.) " +
 		"plus write methods (CreateLocation, UpdateLocation, etc.).")
-}
-
-// passthroughWorldService wraps a WorldQuerier for backwards compatibility.
-// It ignores the subjectID parameter since the underlying querier doesn't use it.
-type passthroughWorldService struct {
-	querier WorldQuerier
-}
-
-func (p *passthroughWorldService) GetLocation(ctx context.Context, _ string, id ulid.ULID) (*world.Location, error) {
-	loc, err := p.querier.GetLocation(ctx, id)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return loc, nil
-}
-
-func (p *passthroughWorldService) GetCharacter(ctx context.Context, _ string, id ulid.ULID) (*world.Character, error) {
-	char, err := p.querier.GetCharacter(ctx, id)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return char, nil
-}
-
-func (p *passthroughWorldService) GetCharactersByLocation(ctx context.Context, _ string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error) {
-	chars, err := p.querier.GetCharactersByLocation(ctx, locationID, opts)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return chars, nil
-}
-
-func (p *passthroughWorldService) GetObject(ctx context.Context, _ string, id ulid.ULID) (*world.Object, error) {
-	obj, err := p.querier.GetObject(ctx, id)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // passthrough adapter preserves original errors
-	}
-	return obj, nil
 }
 
 // New creates host functions with dependencies.

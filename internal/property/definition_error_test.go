@@ -13,7 +13,7 @@ import (
 )
 
 func TestNamePropertyDefinition_MissingMutator(t *testing.T) {
-	def := namePropertyDefinition{}
+	def := nameDefinition{}
 
 	_, err := def.Get(context.Background(), nil, "widget", ulid.ULID{})
 	require.Error(t, err)
@@ -25,7 +25,7 @@ func TestNamePropertyDefinition_MissingMutator(t *testing.T) {
 }
 
 func TestDescriptionPropertyDefinition_MissingMutator(t *testing.T) {
-	def := descriptionPropertyDefinition{}
+	def := descriptionDefinition{}
 
 	_, err := def.Get(context.Background(), nil, "widget", ulid.ULID{})
 	require.Error(t, err)

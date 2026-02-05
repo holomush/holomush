@@ -11,28 +11,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testPropertyDefinition struct {
+type testDefinition struct {
 	validateErr error
 	getValue    string
 	setErr      error
 }
 
-func (d testPropertyDefinition) Validate(_ string) error {
+func (d testDefinition) Validate(_ string) error {
 	return d.validateErr
 }
 
-func (d testPropertyDefinition) Get(_ context.Context, _ WorldQuerier, _ string, _ ulid.ULID) (string, error) {
+func (d testDefinition) Get(_ context.Context, _ WorldQuerier, _ string, _ ulid.ULID) (string, error) {
 	return d.getValue, nil
 }
 
-func (d testPropertyDefinition) Set(_ context.Context, _ WorldQuerier, _ WorldMutator, _ string, _ string, _ ulid.ULID, _ string) error {
+func (d testDefinition) Set(_ context.Context, _ WorldQuerier, _ WorldMutator, _ string, _ string, _ ulid.ULID, _ string) error {
 	return d.setErr
 }
 
 func TestPropertyRegistry_RegisterAndLookup(t *testing.T) {
-	registry := NewPropertyRegistry()
+	registry := NewRegistry()
 
-	def := testPropertyDefinition{}
+	def := testDefinition{}
 	require.NoError(t, registry.Register("name", def))
 
 	got, ok := registry.Lookup("name")
@@ -41,8 +41,8 @@ func TestPropertyRegistry_RegisterAndLookup(t *testing.T) {
 }
 
 func TestPropertyRegistry_Register_DuplicateName(t *testing.T) {
-	registry := NewPropertyRegistry()
-	def := testPropertyDefinition{}
+	registry := NewRegistry()
+	def := testDefinition{}
 
 	require.NoError(t, registry.Register("name", def))
 	err := registry.Register("name", def)
@@ -51,15 +51,15 @@ func TestPropertyRegistry_Register_DuplicateName(t *testing.T) {
 }
 
 func TestPropertyRegistry_Register_EmptyName(t *testing.T) {
-	registry := NewPropertyRegistry()
+	registry := NewRegistry()
 
-	err := registry.Register("", testPropertyDefinition{})
+	err := registry.Register("", testDefinition{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrInvalidPropertyName)
 }
 
 func TestPropertyRegistry_Register_NilDefinition(t *testing.T) {
-	registry := NewPropertyRegistry()
+	registry := NewRegistry()
 
 	err := registry.Register("name", nil)
 	require.Error(t, err)
@@ -79,9 +79,9 @@ func TestPropertyRegistry_DefaultRegistrations(t *testing.T) {
 }
 
 func TestPropertyRegistry_Resolve_PrefixMatch(t *testing.T) {
-	registry := NewPropertyRegistry()
-	require.NoError(t, registry.Register("description", testPropertyDefinition{}))
-	require.NoError(t, registry.Register("name", testPropertyDefinition{}))
+	registry := NewRegistry()
+	require.NoError(t, registry.Register("description", testDefinition{}))
+	require.NoError(t, registry.Register("name", testDefinition{}))
 
 	entry, err := registry.Resolve("desc")
 	require.NoError(t, err)

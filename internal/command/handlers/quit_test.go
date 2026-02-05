@@ -23,7 +23,7 @@ func TestQuitHandler(t *testing.T) {
 	}{
 		{
 			name: "outputs goodbye message",
-			setup: func(t *testing.T, player testutil.PlayerContext) *core.SessionManager {
+			setup: func(_ *testing.T, player testutil.PlayerContext) *core.SessionManager {
 				sessionMgr := core.NewSessionManager()
 				sessionMgr.Connect(player.CharacterID, player.CharacterID)
 				return sessionMgr

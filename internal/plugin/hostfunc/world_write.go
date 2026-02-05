@@ -6,6 +6,7 @@ package hostfunc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -227,14 +228,14 @@ type propertyOpts struct {
 	entityID    ulid.ULID
 	entityIDStr string
 	property    string
-	definition  property.PropertyDefinition
+	definition  property.Definition
 }
 
 // validatePropertyArgs validates and parses common property function arguments.
 // Returns propertyOpts and true on success, or pushes error and returns false.
 //
 //nolint:gocritic // captLocal: L is the idiomatic name for lua.LState in gopher-lua
-func validatePropertyArgs(L *lua.LState, pluginName, fnName string, hasValue bool, registry *property.PropertyRegistry) (*propertyOpts, bool) {
+func validatePropertyArgs(L *lua.LState, pluginName, fnName string, hasValue bool, registry *property.Registry) (*propertyOpts, bool) {
 	entityType := L.CheckString(1)
 	entityIDStr := L.CheckString(2)
 	propertyName := L.CheckString(3)
@@ -301,7 +302,11 @@ func getEntityProperty(ctx context.Context, adapter *WorldQuerierAdapter, opts *
 	if opts.definition == nil {
 		return "", nil
 	}
-	return opts.definition.Get(ctx, adapter, opts.entityType, opts.entityID)
+	val, err := opts.definition.Get(ctx, adapter, opts.entityType, opts.entityID)
+	if err != nil {
+		return "", fmt.Errorf("get property: %w", err)
+	}
+	return val, nil
 }
 
 // setEntityProperty sets a property value on an entity.
@@ -309,7 +314,10 @@ func setEntityProperty(ctx context.Context, adapter *WorldQuerierAdapter, mutato
 	if opts.definition == nil {
 		return nil
 	}
-	return opts.definition.Set(ctx, adapter, mutator, subjectID, opts.entityType, opts.entityID, value)
+	if err := opts.definition.Set(ctx, adapter, mutator, subjectID, opts.entityType, opts.entityID, value); err != nil {
+		return fmt.Errorf("set property: %w", err)
+	}
+	return nil
 }
 
 // setPropertyFn returns a Lua function that sets a property on an entity.

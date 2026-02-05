@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
 package property
@@ -5,6 +6,7 @@ package property
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -35,8 +37,10 @@ type EntityMutatorRegistry struct {
 	mutators map[string]EntityMutator
 }
 
-var sharedEntityMutatorOnce sync.Once
-var sharedEntityMutatorRegistry *EntityMutatorRegistry
+var (
+	sharedEntityMutatorOnce     sync.Once
+	sharedEntityMutatorRegistry *EntityMutatorRegistry
+)
 
 // NewEntityMutatorRegistry creates an empty entity mutator registry.
 func NewEntityMutatorRegistry() *EntityMutatorRegistry {
@@ -124,7 +128,7 @@ func (locationEntityMutator) EntityType() string {
 func (locationEntityMutator) GetName(ctx context.Context, querier WorldQuerier, entityID ulid.ULID) (string, error) {
 	loc, err := querier.GetLocation(ctx, entityID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get location: %w", err)
 	}
 	return loc.Name, nil
 }
@@ -132,7 +136,7 @@ func (locationEntityMutator) GetName(ctx context.Context, querier WorldQuerier, 
 func (locationEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
 	loc, err := querier.GetLocation(ctx, entityID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get location: %w", err)
 	}
 	loc.Name = value
 	if err := mutator.UpdateLocation(ctx, subjectID, loc); err != nil {
@@ -144,7 +148,7 @@ func (locationEntityMutator) SetName(ctx context.Context, querier WorldQuerier, 
 func (locationEntityMutator) GetDescription(ctx context.Context, querier WorldQuerier, entityID ulid.ULID) (string, error) {
 	loc, err := querier.GetLocation(ctx, entityID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get location: %w", err)
 	}
 	return loc.Description, nil
 }
@@ -152,7 +156,7 @@ func (locationEntityMutator) GetDescription(ctx context.Context, querier WorldQu
 func (locationEntityMutator) SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
 	loc, err := querier.GetLocation(ctx, entityID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get location: %w", err)
 	}
 	loc.Description = value
 	if err := mutator.UpdateLocation(ctx, subjectID, loc); err != nil {
@@ -170,7 +174,7 @@ func (objectEntityMutator) EntityType() string {
 func (objectEntityMutator) GetName(ctx context.Context, querier WorldQuerier, entityID ulid.ULID) (string, error) {
 	obj, err := querier.GetObject(ctx, entityID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get object: %w", err)
 	}
 	return obj.Name, nil
 }
@@ -178,7 +182,7 @@ func (objectEntityMutator) GetName(ctx context.Context, querier WorldQuerier, en
 func (objectEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
 	obj, err := querier.GetObject(ctx, entityID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get object: %w", err)
 	}
 	obj.Name = value
 	if err := mutator.UpdateObject(ctx, subjectID, obj); err != nil {
@@ -190,7 +194,7 @@ func (objectEntityMutator) SetName(ctx context.Context, querier WorldQuerier, mu
 func (objectEntityMutator) GetDescription(ctx context.Context, querier WorldQuerier, entityID ulid.ULID) (string, error) {
 	obj, err := querier.GetObject(ctx, entityID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get object: %w", err)
 	}
 	return obj.Description, nil
 }
@@ -198,7 +202,7 @@ func (objectEntityMutator) GetDescription(ctx context.Context, querier WorldQuer
 func (objectEntityMutator) SetDescription(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityID ulid.ULID, value string) error {
 	obj, err := querier.GetObject(ctx, entityID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get object: %w", err)
 	}
 	obj.Description = value
 	if err := mutator.UpdateObject(ctx, subjectID, obj); err != nil {

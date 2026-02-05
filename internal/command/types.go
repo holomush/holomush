@@ -297,15 +297,15 @@ const (
 
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
-	World            WorldService               // world model queries and mutations
-	Session          core.SessionService        // session management
-	Access           access.AccessControl       // authorization checks
-	Events           core.EventStore            // event persistence
-	Broadcaster      EventBroadcaster           // event broadcasting
-	AliasCache       *AliasCache                // alias management (optional)
-	AliasRepo        AliasWriter                // alias persistence (optional, for alias handlers)
-	Registry         *Registry                  // command registry (optional)
-	PropertyRegistry *property.PropertyRegistry // property registry (optional)
+	World            WorldService         // world model queries and mutations
+	Session          core.SessionService  // session management
+	Access           access.AccessControl // authorization checks
+	Events           core.EventStore      // event persistence
+	Broadcaster      EventBroadcaster     // event broadcasting
+	AliasCache       *AliasCache          // alias management (optional)
+	AliasRepo        AliasWriter          // alias persistence (optional, for alias handlers)
+	Registry         *Registry            // command registry (optional)
+	PropertyRegistry *property.Registry   // property registry (optional)
 }
 
 // Services provides access to core services for command handlers.
@@ -317,15 +317,15 @@ type ServicesConfig struct {
 // the command handler's execution context. The Services struct is shared
 // across all command executions.
 type Services struct {
-	world            WorldService               // world model queries and mutations
-	session          core.SessionService        // session management
-	access           access.AccessControl       // authorization checks
-	events           core.EventStore            // event persistence
-	broadcaster      EventBroadcaster           // event broadcasting
-	aliasCache       *AliasCache                // alias management (optional, for alias commands)
-	aliasRepo        AliasWriter                // alias persistence (optional, for alias handlers)
-	registry         *Registry                  // command registry (optional, for alias shadow detection)
-	propertyRegistry *property.PropertyRegistry // property registry (optional, for property handlers)
+	world            WorldService         // world model queries and mutations
+	session          core.SessionService  // session management
+	access           access.AccessControl // authorization checks
+	events           core.EventStore      // event persistence
+	broadcaster      EventBroadcaster     // event broadcasting
+	aliasCache       *AliasCache          // alias management (optional, for alias commands)
+	aliasRepo        AliasWriter          // alias persistence (optional, for alias handlers)
+	registry         *Registry            // command registry (optional, for alias shadow detection)
+	propertyRegistry *property.Registry   // property registry (optional, for property handlers)
 }
 
 // World returns the world service for model queries and mutations.
@@ -353,7 +353,7 @@ func (s *Services) Registry() *Registry { return s.registry }
 func (s *Services) AliasRepo() AliasWriter { return s.aliasRepo }
 
 // PropertyRegistry returns the property registry (may be nil).
-func (s *Services) PropertyRegistry() *property.PropertyRegistry { return s.propertyRegistry }
+func (s *Services) PropertyRegistry() *property.Registry { return s.propertyRegistry }
 
 // NewServices creates a validated Services instance.
 // Returns an error if any required service is nil.

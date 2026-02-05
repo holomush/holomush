@@ -5,6 +5,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -201,7 +202,7 @@ func resolveTarget(ctx context.Context, exec *command.CommandExecution, target s
 		Errorf("target not found: %s", target)
 }
 
-func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName string, definition property.PropertyDefinition, value string) error {
+func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName string, definition property.Definition, value string) error {
 	subjectID := "char:" + exec.CharacterID().String()
 
 	switch entityType {
@@ -241,7 +242,10 @@ func applyProperty(ctx context.Context, exec *command.CommandExecution, entityTy
 		property: propName,
 	}
 
-	return definition.Set(ctx, querier, mutator, subjectID, entityType, entityID, value)
+	if err := definition.Set(ctx, querier, mutator, subjectID, entityType, entityID, value); err != nil {
+		return fmt.Errorf("set property: %w", err)
+	}
+	return nil
 }
 
 type propertyQuerier struct {

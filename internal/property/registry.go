@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package property provides a registry-based property system for entity attributes.
 package property
 
 import (
@@ -49,37 +51,39 @@ type WorldMutator interface {
 	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
 }
 
-// PropertyDefinition defines behavior for a settable property.
-type PropertyDefinition interface {
+// Definition defines behavior for a settable property.
+type Definition interface {
 	Validate(entityType string) error
 	Get(ctx context.Context, querier WorldQuerier, entityType string, entityID ulid.ULID) (string, error)
 	Set(ctx context.Context, querier WorldQuerier, mutator WorldMutator, subjectID string, entityType string, entityID ulid.ULID, value string) error
 }
 
-// PropertyEntry ties a property name to its definition.
-type PropertyEntry struct {
+// Entry ties a property name to its definition.
+type Entry struct {
 	Name       string
-	Definition PropertyDefinition
+	Definition Definition
 }
 
-// PropertyRegistry manages property definitions.
+// Registry manages property definitions.
 // It is safe for concurrent use by multiple goroutines.
-type PropertyRegistry struct {
+type Registry struct {
 	mu         sync.RWMutex
-	properties map[string]PropertyDefinition
+	properties map[string]Definition
 }
 
-var sharedRegistryOnce sync.Once
-var sharedRegistry *PropertyRegistry
+var (
+	sharedRegistryOnce sync.Once
+	sharedRegistry     *Registry
+)
 
-// NewPropertyRegistry creates an empty property registry.
-func NewPropertyRegistry() *PropertyRegistry {
-	return &PropertyRegistry{properties: make(map[string]PropertyDefinition)}
+// NewRegistry creates an empty property registry.
+func NewRegistry() *Registry {
+	return &Registry{properties: make(map[string]Definition)}
 }
 
 // Register adds a property definition to the registry.
 // Returns ErrInvalidPropertyName for empty names and ErrDuplicateProperty on duplicates.
-func (r *PropertyRegistry) Register(name string, definition PropertyDefinition) error {
+func (r *Registry) Register(name string, definition Definition) error {
 	if strings.TrimSpace(name) == "" {
 		return ErrInvalidPropertyName
 	}
@@ -94,7 +98,7 @@ func (r *PropertyRegistry) Register(name string, definition PropertyDefinition) 
 		return ErrDuplicateProperty
 	}
 	if r.properties == nil {
-		r.properties = make(map[string]PropertyDefinition)
+		r.properties = make(map[string]Definition)
 	}
 	r.properties[name] = definition
 	return nil
@@ -102,14 +106,14 @@ func (r *PropertyRegistry) Register(name string, definition PropertyDefinition) 
 
 // MustRegister adds a property definition to the registry, panicking on error.
 // This is intended for package initialization only.
-func (r *PropertyRegistry) MustRegister(name string, definition PropertyDefinition) {
+func (r *Registry) MustRegister(name string, definition Definition) {
 	if err := r.Register(name, definition); err != nil {
 		panic(err)
 	}
 }
 
 // Lookup returns the property definition for the given name.
-func (r *PropertyRegistry) Lookup(name string) (PropertyDefinition, bool) {
+func (r *Registry) Lookup(name string) (Definition, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -120,12 +124,12 @@ func (r *PropertyRegistry) Lookup(name string) (PropertyDefinition, bool) {
 // Resolve finds a property by exact name or unique prefix.
 // Returns AmbiguousPropertyError if multiple properties match.
 // Returns ErrPropertyNotFound if no properties match.
-func (r *PropertyRegistry) Resolve(nameOrPrefix string) (PropertyEntry, error) {
+func (r *Registry) Resolve(nameOrPrefix string) (Entry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	if def, ok := r.properties[nameOrPrefix]; ok {
-		return PropertyEntry{Name: nameOrPrefix, Definition: def}, nil
+		return Entry{Name: nameOrPrefix, Definition: def}, nil
 	}
 
 	var matches []string
@@ -137,26 +141,26 @@ func (r *PropertyRegistry) Resolve(nameOrPrefix string) (PropertyEntry, error) {
 
 	switch len(matches) {
 	case 0:
-		return PropertyEntry{}, ErrPropertyNotFound
+		return Entry{}, ErrPropertyNotFound
 	case 1:
 		def := r.properties[matches[0]]
-		return PropertyEntry{Name: matches[0], Definition: def}, nil
+		return Entry{Name: matches[0], Definition: def}, nil
 	default:
-		return PropertyEntry{}, &AmbiguousPropertyError{Prefix: nameOrPrefix, Matches: matches}
+		return Entry{}, &AmbiguousPropertyError{Prefix: nameOrPrefix, Matches: matches}
 	}
 }
 
 // DefaultRegistry returns a registry with standard properties registered.
-func DefaultRegistry() *PropertyRegistry {
-	r := NewPropertyRegistry()
-	r.MustRegister("description", descriptionPropertyDefinition{})
-	r.MustRegister("name", namePropertyDefinition{})
+func DefaultRegistry() *Registry {
+	r := NewRegistry()
+	r.MustRegister("description", descriptionDefinition{})
+	r.MustRegister("name", nameDefinition{})
 	return r
 }
 
 // SharedRegistry returns a shared default registry instance.
 // This is safe for concurrent access and avoids duplicate registrations.
-func SharedRegistry() *PropertyRegistry {
+func SharedRegistry() *Registry {
 	sharedRegistryOnce.Do(func() {
 		sharedRegistry = DefaultRegistry()
 	})

@@ -416,7 +416,7 @@ func (c *AliasCache) resolveExactLocked(input string, registry *Registry) bool {
 func (c *AliasCache) resolvePlayerAliasLocked(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
 	if playerAliases, ok := c.playerAliases[playerID]; ok {
 		if _, exists := playerAliases[firstWord]; exists {
-			resolvedCmd, _ := c.resolveWithDepth(playerID, firstWord, 0)
+			resolvedCmd := c.resolveWithDepth(playerID, firstWord, 0)
 			return aliasLookupResult{
 				resolvedCmd: resolvedCmd,
 				expanded:    true,
@@ -432,7 +432,7 @@ func (c *AliasCache) resolvePlayerAliasLocked(playerID ulid.ULID, firstWord stri
 // Returns the lookup result and true if a system alias was found.
 func (c *AliasCache) resolveSystemAliasLocked(firstWord string) (aliasLookupResult, bool) {
 	if _, exists := c.systemAliases[firstWord]; exists {
-		resolvedCmd, _ := c.resolveWithDepth(ulid.ULID{}, firstWord, 0)
+		resolvedCmd := c.resolveWithDepth(ulid.ULID{}, firstWord, 0)
 		return aliasLookupResult{
 			resolvedCmd: resolvedCmd,
 			expanded:    true,
@@ -556,9 +556,9 @@ func (c *AliasCache) resolveAlias(playerID ulid.ULID, firstWord string) (aliasLo
 
 // resolveWithDepth performs alias resolution with depth tracking.
 // Must be called with at least RLock held.
-func (c *AliasCache) resolveWithDepth(playerID ulid.ULID, cmd string, depth int) (string, bool) {
+func (c *AliasCache) resolveWithDepth(playerID ulid.ULID, cmd string, depth int) string {
 	if depth >= MaxExpansionDepth {
-		return cmd, depth > 0
+		return cmd
 	}
 
 	// Check player alias first
@@ -567,13 +567,13 @@ func (c *AliasCache) resolveWithDepth(playerID ulid.ULID, cmd string, depth int)
 			// Recursively resolve the expanded command's first word
 			expandedFirst, expandedArgs := splitFirstWord(expanded)
 			if expandedFirst != "" {
-				furtherResolved, _ := c.resolveWithDepth(playerID, expandedFirst, depth+1)
+				furtherResolved := c.resolveWithDepth(playerID, expandedFirst, depth+1)
 				if expandedArgs != "" {
-					return furtherResolved + " " + expandedArgs, true
+					return furtherResolved + " " + expandedArgs
 				}
-				return furtherResolved, true
+				return furtherResolved
 			}
-			return expanded, true
+			return expanded
 		}
 	}
 
@@ -582,17 +582,17 @@ func (c *AliasCache) resolveWithDepth(playerID ulid.ULID, cmd string, depth int)
 		// Recursively resolve the expanded command's first word
 		expandedFirst, expandedArgs := splitFirstWord(expanded)
 		if expandedFirst != "" {
-			furtherResolved, _ := c.resolveWithDepth(playerID, expandedFirst, depth+1)
+			furtherResolved := c.resolveWithDepth(playerID, expandedFirst, depth+1)
 			if expandedArgs != "" {
-				return furtherResolved + " " + expandedArgs, true
+				return furtherResolved + " " + expandedArgs
 			}
-			return furtherResolved, true
+			return furtherResolved
 		}
-		return expanded, true
+		return expanded
 	}
 
 	// No alias found
-	return cmd, depth > 0
+	return cmd
 }
 
 // validateAliasEntries checks that no alias key or value is empty or whitespace-only.
