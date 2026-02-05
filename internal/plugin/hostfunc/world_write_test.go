@@ -192,26 +192,6 @@ func TestCreateLocationFn_NoWorldService(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
-func TestCreateLocationFn_ServiceDoesNotSupportMutations(t *testing.T) {
-	// Use read-only world querier (not a mutator)
-	querier := &mockWorldQuerier{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.location"}))
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldQuerier(querier))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`result, err = holomush.create_location("Test", "", "persistent")`)
-	require.NoError(t, err)
-
-	result := L.GetGlobal("result")
-	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, result.Type())
-	assert.Contains(t, errVal.String(), "world service does not support mutations")
-}
-
 func TestCreateLocationFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createLocationErr: errors.New("database connection timeout with stack trace"),

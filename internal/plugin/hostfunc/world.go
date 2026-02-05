@@ -71,7 +71,7 @@ type WorldQuerier interface {
 // queryRoomFn returns a Lua function that queries room information.
 func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "query_room", pluginName)
 		}
 
@@ -106,7 +106,7 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 // queryCharacterFn returns a Lua function that queries character information.
 func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "query_character", pluginName)
 		}
 
@@ -148,7 +148,7 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 //   - offset: number of results to skip (default: 0)
 func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "query_room_characters", pluginName)
 		}
 
@@ -200,7 +200,7 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 // queryObjectFn returns a Lua function that queries object information.
 func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "query_object", pluginName)
 		}
 

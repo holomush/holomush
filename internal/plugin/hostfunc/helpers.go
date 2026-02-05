@@ -87,13 +87,13 @@ func (f *Functions) withQueryContext(
 	ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 	defer cancel()
 
-	adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
+	adapter := NewWorldQuerierAdapter(f.worldMutator, pluginName)
 	return fn(ctx, adapter)
 }
 
-// withMutatorContext is similar to withQueryContext but also checks that the world
-// service supports mutations (implements WorldMutator). If not, it pushes an error
-// and returns early.
+// withMutatorContext is similar to withQueryContext but for mutation operations.
+// The world service must implement WorldMutator, which is enforced at construction time
+// via WithWorldService, so this function assumes f.worldMutator is set.
 //
 // The subjectID for ABAC is constructed as "system:plugin:<pluginName>".
 func (f *Functions) withMutatorContext(
@@ -101,8 +101,7 @@ func (f *Functions) withMutatorContext(
 	funcName, pluginName string,
 	fn func(ctx context.Context, mutator WorldMutator, subjectID string, adapter *WorldQuerierAdapter) int,
 ) int {
-	mutator, ok := f.worldService.(WorldMutator)
-	if !ok {
+	if f.worldMutator == nil {
 		return pushMutatorUnavailable(L, funcName, pluginName)
 	}
 
@@ -114,6 +113,6 @@ func (f *Functions) withMutatorContext(
 	defer cancel()
 
 	subjectID := "system:plugin:" + pluginName
-	adapter := NewWorldQuerierAdapter(f.worldService, pluginName)
-	return fn(ctx, mutator, subjectID, adapter)
+	adapter := NewWorldQuerierAdapter(f.worldMutator, pluginName)
+	return fn(ctx, f.worldMutator, subjectID, adapter)
 }

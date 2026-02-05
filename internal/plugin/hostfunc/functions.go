@@ -41,7 +41,7 @@ type CapabilityChecker interface {
 type Functions struct {
 	kvStore         KVStore
 	enforcer        CapabilityChecker
-	worldService    WorldService
+	worldMutator    WorldMutator
 	commandRegistry CommandRegistry
 	access          AccessControl
 }
@@ -49,29 +49,33 @@ type Functions struct {
 // Option configures Functions.
 type Option func(*Functions)
 
-// WithWorldService sets the world service for world query functions.
+// WithWorldService sets the world service for world query and mutation functions.
 // Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
-func WithWorldService(svc WorldService) Option {
+// The service must implement WorldMutator; this is enforced at compile-time.
+func WithWorldService(svc WorldMutator) Option {
 	return func(f *Functions) {
-		f.worldService = svc
+		f.worldMutator = svc
 	}
 }
 
-// WithWorldQuerier wraps a WorldQuerier for backwards compatibility.
+// WithWorldQuerier is no longer supported and has been removed.
 //
-// Deprecated: WithWorldQuerier will be removed in v1.0.0.
-// Use [WithWorldService] instead, which enables per-plugin ABAC authorization.
-// This adapter exists for backwards compatibility during the transition period.
+// Deprecated: WithWorldQuerier was removed because WorldQuerier and WorldMutator
+// have incompatible method signatures. Use [WithWorldService] instead, which
+// requires a WorldMutator (which includes all read and write operations).
 //
 // Migration example:
 //
 //	// Before: WithWorldQuerier(querier)
-//	// After:  WithWorldService(worldService)
-func WithWorldQuerier(w WorldQuerier) Option {
-	return func(f *Functions) {
-		// Wrap the querier in a passthrough adapter that ignores authorization
-		f.worldService = &passthroughWorldService{querier: w}
-	}
+//	// After:  WithWorldService(service) // service must implement WorldMutator
+//
+// This function always panics to fail fast at startup. Update your code to use
+// WithWorldService with a service that implements the WorldMutator interface.
+func WithWorldQuerier(_ WorldQuerier) Option {
+	panic("hostfunc.WithWorldQuerier: this function has been removed. " +
+		"Use WithWorldService instead with a service that implements WorldMutator. " +
+		"WorldMutator includes all read methods (GetLocation, GetCharacter, etc.) " +
+		"plus write methods (CreateLocation, UpdateLocation, etc.).")
 }
 
 // passthroughWorldService wraps a WorldQuerier for backwards compatibility.

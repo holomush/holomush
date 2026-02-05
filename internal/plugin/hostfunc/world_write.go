@@ -16,9 +16,6 @@ import (
 	"github.com/holomush/holomush/pkg/holo"
 )
 
-// WorldMutator is an alias for [world.Mutator] used for type assertions.
-type WorldMutator = world.Mutator
-
 // propertyRegistry is used to validate properties for entity types.
 // Uses the default registry from pkg/holo which defines standard properties.
 var propertyRegistry = holo.DefaultRegistry()
@@ -27,7 +24,7 @@ var propertyRegistry = holo.DefaultRegistry()
 // Lua signature: create_location(name, description, type) -> {id, name} or nil, error
 func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "create_location", pluginName)
 		}
 
@@ -66,7 +63,7 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 // opts: { bidirectional = true, return_name = "south" }
 func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "create_exit", pluginName)
 		}
 
@@ -127,7 +124,7 @@ func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 // Exactly one containment field must be specified.
 func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "create_object", pluginName)
 		}
 
@@ -202,23 +199,15 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 // Lua signature: find_location(name) -> {id, name} or nil, error
 func (f *Functions) findLocationFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "find_location", pluginName)
-		}
-
-		// Check for mutator support (find_location needs FindLocationByName method)
-		mutator, ok := f.worldService.(WorldMutator)
-		if !ok {
-			slog.Warn("find_location called but world service does not support FindLocationByName",
-				"plugin", pluginName)
-			return pushError(L, "world service does not support location search")
 		}
 
 		name := L.CheckString(1)
 
 		return f.withQueryContext(L, pluginName, func(ctx context.Context, _ *WorldQuerierAdapter) int {
 			subjectID := "system:plugin:" + pluginName
-			loc, err := mutator.FindLocationByName(ctx, subjectID, name)
+			loc, err := f.worldMutator.FindLocationByName(ctx, subjectID, name)
 			if err != nil {
 				if errors.Is(err, world.ErrNotFound) {
 					slog.Debug("find_location: location not found",
@@ -354,7 +343,7 @@ func setEntityProperty(ctx context.Context, adapter *WorldQuerierAdapter, mutato
 // property: "name" or "description"
 func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "set_property", pluginName)
 		}
 
@@ -380,7 +369,7 @@ func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 // property: "name" or "description"
 func (f *Functions) getPropertyFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
-		if f.worldService == nil {
+		if f.worldMutator == nil {
 			return f.pushServiceUnavailable(L, "get_property", pluginName)
 		}
 
