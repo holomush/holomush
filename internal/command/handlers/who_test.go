@@ -16,77 +16,63 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
-	"github.com/holomush/holomush/internal/world/worldtest"
 )
 
 func TestWhoHandler_NoConnectedPlayers(t *testing.T) {
-	characterID := ulid.Make()
+	player := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	// No sessions connected
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{Session: sessionMgr}),
-	})
+	services := testutil.NewServicesBuilder().WithSession(sessionMgr).Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "No players online")
+	assert.Contains(t, buf.String(), "No players online")
 }
 
 func TestWhoHandler_SinglePlayer(t *testing.T) {
-	characterID := ulid.Make()
+	player := testutil.RegularPlayer()
 	connID := ulid.Make()
-	playerID := ulid.Make()
 
 	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(characterID, connID)
+	sessionMgr.Connect(player.CharacterID, connID)
 
 	char := &world.Character{
-		ID:       characterID,
-		PlayerID: playerID,
+		ID:       player.CharacterID,
+		PlayerID: player.PlayerID,
 		Name:     "TestPlayer",
 	}
-
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "character:"+characterID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
 		Return(true)
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "TestPlayer")
-	assert.Contains(t, output, "1 player online")
+	assert.Contains(t, buf.String(), "TestPlayer")
+	assert.Contains(t, buf.String(), "1 player online")
 }
 
 func TestWhoHandler_MultiplePlayers(t *testing.T) {
@@ -97,7 +83,7 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 	conn2 := ulid.Make()
 	conn3 := ulid.Make()
 	playerID := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(char1ID, conn1)
@@ -110,93 +96,72 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 		char3ID: {ID: char3ID, PlayerID: playerID, Name: "Charlie"},
 	}
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	for charID, char := range chars {
-		accessControl.EXPECT().
-			Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+charID.String()).
+		fixture.Mocks.AccessControl.EXPECT().
+			Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+charID.String()).
 			Return(true)
-		characterRepo.EXPECT().
+		fixture.Mocks.CharacterRepo.EXPECT().
 			Get(mock.Anything, charID).
 			Return(char, nil)
 	}
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "Alice")
-	assert.Contains(t, output, "Bob")
-	assert.Contains(t, output, "Charlie")
-	assert.Contains(t, output, "3 players online")
+	assert.Contains(t, buf.String(), "Alice")
+	assert.Contains(t, buf.String(), "Bob")
+	assert.Contains(t, buf.String(), "Charlie")
+	assert.Contains(t, buf.String(), "3 players online")
 }
 
 func TestWhoHandler_ShowsIdleTime(t *testing.T) {
-	characterID := ulid.Make()
+	player := testutil.RegularPlayer()
 	connID := ulid.Make()
-	playerID := ulid.Make()
 
 	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(characterID, connID)
+	sessionMgr.Connect(player.CharacterID, connID)
 
-	// Simulate 5 minutes of idle time by manipulating the session
-	// We need to wait briefly to have a non-zero idle time
+	// Simulate a small amount of idle time by waiting briefly.
 	time.Sleep(10 * time.Millisecond)
 
 	char := &world.Character{
-		ID:       characterID,
-		PlayerID: playerID,
+		ID:       player.CharacterID,
+		PlayerID: player.PlayerID,
 		Name:     "IdlePlayer",
 	}
-
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "character:"+characterID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
 		Return(true)
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "IdlePlayer")
+	assert.Contains(t, buf.String(), "IdlePlayer")
 	// Should show idle time (at least "0s" or similar)
-	assert.Regexp(t, `\d+[smh]`, output, "Should contain idle time format")
+	assert.Regexp(t, `\d+[smh]`, buf.String(), "Should contain idle time format")
 }
 
 func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
@@ -205,7 +170,7 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	conn1 := ulid.Make()
 	conn2 := ulid.Make()
 	playerID := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(char1ID, conn1)
@@ -214,44 +179,35 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 	// char2 is not accessible due to access control, so we don't need a Character object
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
 	// char1 is accessible
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+char1ID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil)
 
-	// char2 is not accessible (access denied)
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+char2ID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
 		Return(false)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "Visible")
-	assert.NotContains(t, output, "Hidden")
-	assert.Contains(t, output, "1 player online")
+	assert.Contains(t, buf.String(), "Visible")
+	assert.NotContains(t, buf.String(), "Hidden")
+	assert.Contains(t, buf.String(), "1 player online")
 }
 
 func TestFormatIdleTime(t *testing.T) {
@@ -295,7 +251,7 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 	conn1 := ulid.Make()
 	conn2 := ulid.Make()
 	playerID := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(char1ID, conn1)
@@ -303,46 +259,37 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Existing"}
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
 	// char1 exists and is accessible
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+char1ID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil)
 
 	// char2 check passes but character not found (stale session)
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+char2ID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char2ID).
 		Return(nil, world.ErrNotFound)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "Existing")
-	assert.Contains(t, output, "1 player online")
+	assert.Contains(t, buf.String(), "Existing")
+	assert.Contains(t, buf.String(), "1 player online")
 }
 
 func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
@@ -351,16 +298,13 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	conn1 := ulid.Make()
 	errorConn := ulid.Make()
 	playerID := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(char1ID, conn1)
 	sessionMgr.Connect(errorCharID, errorConn)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Normal"}
-
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
 
 	// Capture logs
 	var logBuf bytes.Buffer
@@ -373,36 +317,31 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	// char1 is accessible
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+char1ID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true).Maybe()
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil).Maybe()
 
 	// errorChar - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
 		Return(true).Maybe()
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, unexpectedErr).Maybe()
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
@@ -424,44 +363,35 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	// Force deterministic test by having only the error case
 	errorCharID := ulid.Make()
 	errorConn := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(errorCharID, errorConn)
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
 	// errorChar - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, unexpectedErr)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
 	// Should show warning about error
-	assert.Contains(t, output, "(Note: 1 player could not be displayed due to an error)")
+	assert.Contains(t, buf.String(), "(Note: 1 player could not be displayed due to an error)")
 }
 
 func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
@@ -470,53 +400,44 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	errorChar2ID := ulid.Make()
 	errorConn1 := ulid.Make()
 	errorConn2 := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(errorChar1ID, errorConn1)
 	sessionMgr.Connect(errorChar2ID, errorConn2)
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
 	// Both characters return unexpected errors
 	unexpectedErr := errors.New("database connection timeout")
 
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorChar1ID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorChar1ID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorChar1ID).
 		Return(nil, unexpectedErr)
 
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorChar2ID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorChar2ID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorChar2ID).
 		Return(nil, unexpectedErr)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
 	// Should show warning about errors (plural)
-	assert.Contains(t, output, "(Note: 2 players could not be displayed due to errors)")
+	assert.Contains(t, buf.String(), "(Note: 2 players could not be displayed due to errors)")
 }
 
 func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
@@ -525,54 +446,45 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 	deniedCharID := ulid.Make()
 	notFoundConn := ulid.Make()
 	deniedConn := ulid.Make()
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(notFoundCharID, notFoundConn)
 	sessionMgr.Connect(deniedCharID, deniedConn)
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
 	// notFoundChar - access allowed but returns ErrNotFound
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+notFoundCharID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
 		Return(true)
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
 		Return(nil, world.ErrNotFound)
 
 	// deniedChar - access denied
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+deniedCharID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
 		Return(false)
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
 	// Should NOT show warning for expected errors
-	assert.NotContains(t, output, "could not be displayed")
-	assert.NotContains(t, output, "Note:")
+	assert.NotContains(t, buf.String(), "could not be displayed")
+	assert.NotContains(t, buf.String(), "Note:")
 }
 
 func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
-	executorID := ulid.Make()
+	executor := testutil.RegularPlayer()
 	char1ID := ulid.Make()
 	notFoundCharID := ulid.Make()
 	deniedCharID := ulid.Make()
@@ -588,9 +500,6 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
 	// Capture logs - we expect NO logs for expected errors
 	var logBuf bytes.Buffer
 	originalLogger := slog.Default()
@@ -601,40 +510,35 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	defer slog.SetDefault(originalLogger)
 
 	// char1 is accessible
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+char1ID.String()).
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true).Maybe()
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil).Maybe()
 
 	// notFoundChar - access allowed but returns ErrNotFound (expected, should NOT log)
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+notFoundCharID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
 		Return(true).Maybe()
-	characterRepo.EXPECT().
+	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
 		Return(nil, world.ErrNotFound).Maybe()
 
 	// deniedChar - access denied (expected, should NOT log)
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+deniedCharID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
 		Return(false).Maybe()
 
-	worldService := world.NewService(world.ServiceConfig{
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: executorID,
-		Output:      &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
-			World:   worldService,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
 
 	err := WhoHandler(context.Background(), exec)
 	require.NoError(t, err)

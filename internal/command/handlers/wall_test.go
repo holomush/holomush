@@ -15,51 +15,37 @@ import (
 
 	"github.com/holomush/holomush/internal/access/accesstest"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
 )
 
-func TestWallHandler_NoArgs(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+func TestWallHandler_InvalidArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args string
+	}{
+		{name: "no args", args: ""},
+		{name: "whitespace only", args: "   "},
+	}
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "",
-		Output:        &buf,
-		Services:      command.NewTestServices(command.ServicesConfig{}),
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executor := testutil.AdminPlayer()
+			services := testutil.NewServicesBuilder().Build()
+			exec, _ := testutil.NewExecutionBuilder().
+				WithCharacter(executor).
+				WithArgs(tt.args).
+				WithServices(services).
+				Build()
 
-	err := WallHandler(context.Background(), exec)
-	require.Error(t, err)
+			err := WallHandler(context.Background(), exec)
+			require.Error(t, err)
 
-	oopsErr, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
-}
-
-func TestWallHandler_WhitespaceOnlyArgs(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "   ",
-		Output:        &buf,
-		Services:      command.NewTestServices(command.ServicesConfig{}),
-	})
-
-	err := WallHandler(context.Background(), exec)
-	require.Error(t, err)
-
-	oopsErr, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+		})
+	}
 }
 
 // Note: Capability checks are performed by the dispatcher, not the handler.

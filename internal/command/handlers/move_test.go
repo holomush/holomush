@@ -4,232 +4,162 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/world"
-	"github.com/holomush/holomush/internal/world/worldtest"
 )
 
 func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
-	characterID := ulid.Make()
-	fromLocationID := ulid.Make()
-	toLocationID := ulid.Make()
-	exitID := ulid.Make()
-
-	toLoc := &world.Location{
-		ID:          toLocationID,
-		Name:        "Destination Room",
-		Description: "A beautiful garden with flowers.",
-		Type:        world.LocationTypePersistent,
-	}
-
-	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "north")
-	require.NoError(t, err)
-	exit.Aliases = []string{"n"}
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "north", "n")
+	path.To.Name = "Destination Room"
+	path.To.Description = "A beautiful garden with flowers."
 
 	char := &world.Character{
-		ID:         characterID,
+		ID:         player.CharacterID,
 		Name:       "TestChar",
-		LocationID: &fromLocationID,
+		LocationID: &path.From.ID,
 	}
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	locationRepo := worldtest.NewMockLocationRepository(t)
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-	eventEmitter := worldtest.NewMockEventEmitter(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	// GetExitsByLocation check
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, fromLocationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	// MoveCharacter checks
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+player.CharacterID.String()).
 		Return(true)
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil)
-	characterRepo.EXPECT().
-		UpdateLocation(mock.Anything, characterID, &toLocationID).
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil)
+	fixture.Mocks.CharacterRepo.EXPECT().
+		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
-	eventEmitter.EXPECT().
+	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	// GetLocation for new room display
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+toLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.To.ID.String()).
 		Return(true)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil)
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		ExitRepo:      exitRepo,
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-		EventEmitter:  eventEmitter,
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("north").
+		WithServices(services).
+		Build()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  fromLocationID,
-		Args:        "north",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
-
-	err = MoveHandler(context.Background(), exec)
+	err := MoveHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "Destination Room")
-	assert.Contains(t, output, "A beautiful garden with flowers.")
+	assert.Contains(t, buf.String(), "Destination Room")
+	assert.Contains(t, buf.String(), "A beautiful garden with flowers.")
 }
 
 func TestMoveHandler_MatchesExitAlias(t *testing.T) {
-	characterID := ulid.Make()
-	fromLocationID := ulid.Make()
-	toLocationID := ulid.Make()
-	exitID := ulid.Make()
-
-	toLoc := &world.Location{
-		ID:          toLocationID,
-		Name:        "Garden",
-		Description: "A lovely garden.",
-		Type:        world.LocationTypePersistent,
-	}
-
-	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "north")
-	require.NoError(t, err)
-	exit.Aliases = []string{"n", "forward"}
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "north", "n", "forward")
+	path.To.Name = "Garden"
+	path.To.Description = "A lovely garden."
 
 	char := &world.Character{
-		ID:         characterID,
+		ID:         player.CharacterID,
 		Name:       "TestChar",
-		LocationID: &fromLocationID,
+		LocationID: &path.From.ID,
 	}
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	locationRepo := worldtest.NewMockLocationRepository(t)
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-	eventEmitter := worldtest.NewMockEventEmitter(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, fromLocationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+player.CharacterID.String()).
 		Return(true)
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil)
-	characterRepo.EXPECT().
-		UpdateLocation(mock.Anything, characterID, &toLocationID).
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil)
+	fixture.Mocks.CharacterRepo.EXPECT().
+		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
-	eventEmitter.EXPECT().
+	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+toLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.To.ID.String()).
 		Return(true)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil)
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		ExitRepo:      exitRepo,
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-		EventEmitter:  eventEmitter,
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("n").
+		WithServices(services).
+		Build()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  fromLocationID,
-		Args:        "n", // Using alias
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
-
-	err = MoveHandler(context.Background(), exec)
+	err := MoveHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	output := buf.String()
-	assert.Contains(t, output, "Garden")
+	assert.Contains(t, buf.String(), "Garden")
 }
 
 func TestMoveHandler_InvalidDirectionReturnsError(t *testing.T) {
-	characterID := ulid.Make()
-	locationID := ulid.Make()
-	exitID := ulid.Make()
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "north")
 
-	// Only a north exit exists
-	exit, err := world.NewExitWithID(exitID, locationID, ulid.Make(), "north")
-	require.NoError(t, err)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-
-	subjectID := "char:" + characterID.String()
-
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+locationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, locationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		ExitRepo:      exitRepo,
-		AccessControl: accessControl,
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("south").
+		WithServices(services).
+		Build()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  locationID,
-		Args:        "south", // Invalid - no south exit
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
-
-	err = MoveHandler(context.Background(), exec)
+	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
 
 	msg := command.PlayerMessage(err)
@@ -237,34 +167,26 @@ func TestMoveHandler_InvalidDirectionReturnsError(t *testing.T) {
 }
 
 func TestMoveHandler_NoExitsReturnsError(t *testing.T) {
-	characterID := ulid.Make()
-	locationID := ulid.Make()
+	player := testutil.RegularPlayer()
+	location := testutil.NewRoom("Lonely Room", "")
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+locationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+location.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, locationID).
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, location.ID).
 		Return([]*world.Exit{}, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		ExitRepo:      exitRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  locationID,
-		Args:        "north",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(location).
+		WithArgs("north").
+		WithServices(services).
+		Build()
 
 	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -274,21 +196,17 @@ func TestMoveHandler_NoExitsReturnsError(t *testing.T) {
 }
 
 func TestMoveHandler_NoDirectionReturnsError(t *testing.T) {
-	characterID := ulid.Make()
-	locationID := ulid.Make()
+	player := testutil.RegularPlayer()
+	location := testutil.NewRoom("Silent Room", "")
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
 
-	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: worldtest.NewMockAccessControl(t),
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  locationID,
-		Args:        "",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(location).
+		WithArgs("").
+		WithServices(services).
+		Build()
 
 	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -298,117 +216,85 @@ func TestMoveHandler_NoDirectionReturnsError(t *testing.T) {
 }
 
 func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
-	characterID := ulid.Make()
-	fromLocationID := ulid.Make()
-	toLocationID := ulid.Make()
-	exitID := ulid.Make()
-
-	toLoc := &world.Location{
-		ID:          toLocationID,
-		Name:        "Garden",
-		Description: "A lovely garden.",
-		Type:        world.LocationTypePersistent,
-	}
-
-	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "North")
-	require.NoError(t, err)
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "North")
+	path.To.Name = "Garden"
+	path.To.Description = "A lovely garden."
 
 	char := &world.Character{
-		ID:         characterID,
+		ID:         player.CharacterID,
 		Name:       "TestChar",
-		LocationID: &fromLocationID,
+		LocationID: &path.From.ID,
 	}
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	locationRepo := worldtest.NewMockLocationRepository(t)
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-	eventEmitter := worldtest.NewMockEventEmitter(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, fromLocationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+player.CharacterID.String()).
 		Return(true)
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil)
-	characterRepo.EXPECT().
-		UpdateLocation(mock.Anything, characterID, &toLocationID).
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil)
+	fixture.Mocks.CharacterRepo.EXPECT().
+		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
-	eventEmitter.EXPECT().
+	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+toLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.To.ID.String()).
 		Return(true)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil)
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		ExitRepo:      exitRepo,
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-		EventEmitter:  eventEmitter,
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("NORTH").
+		WithServices(services).
+		Build()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  fromLocationID,
-		Args:        "NORTH", // uppercase
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
-
-	err = MoveHandler(context.Background(), exec)
+	err := MoveHandler(context.Background(), exec)
 	require.NoError(t, err)
 
 	assert.Contains(t, buf.String(), "Garden")
 }
 
 func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
-	characterID := ulid.Make()
-	locationID := ulid.Make()
+	player := testutil.RegularPlayer()
+	location := testutil.NewRoom("Hallway", "")
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+locationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+location.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, locationID).
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, location.ID).
 		Return(nil, errors.New("database error"))
 
-	worldService := world.NewService(world.ServiceConfig{
-		ExitRepo:      exitRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  locationID,
-		Args:        "north",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(location).
+		WithArgs("north").
+		WithServices(services).
+		Build()
 
 	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -418,63 +304,44 @@ func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
 }
 
 func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
-	characterID := ulid.Make()
-	fromLocationID := ulid.Make()
-	toLocationID := ulid.Make()
-	exitID := ulid.Make()
-
-	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "north")
-	require.NoError(t, err)
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "north")
 
 	char := &world.Character{
-		ID:         characterID,
+		ID:         player.CharacterID,
 		Name:       "TestChar",
-		LocationID: &fromLocationID,
+		LocationID: &path.From.ID,
 	}
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	locationRepo := worldtest.NewMockLocationRepository(t)
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	// GetExitsByLocation succeeds
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, fromLocationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	// MoveCharacter fails (e.g., concurrent modification or access denied)
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+player.CharacterID.String()).
 		Return(true)
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
 		Return(nil, errors.New("concurrent modification: location deleted"))
 
-	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		ExitRepo:      exitRepo,
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("north").
+		WithServices(services).
+		Build()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  fromLocationID,
-		Args:        "north",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
-
-	err = MoveHandler(context.Background(), exec)
+	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
 
 	// Verify the error is wrapped with player-facing message in context
@@ -484,41 +351,29 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 }
 
 func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
-	characterID := ulid.Make()
-	locationID := ulid.Make()
-	exitID := ulid.Make()
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "north")
 
-	// Create a locked exit
-	exit, err := world.NewExitWithID(exitID, locationID, ulid.Make(), "north")
-	require.NoError(t, err)
-	err = exit.SetLocked(true, world.LockTypeKey, map[string]any{"key_id": "golden-key"})
+	err := path.Exit.SetLocked(true, world.LockTypeKey, map[string]any{"key_id": "golden-key"})
 	require.NoError(t, err)
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+locationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, locationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	worldService := world.NewService(world.ServiceConfig{
-		ExitRepo:      exitRepo,
-		AccessControl: accessControl,
-	})
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  locationID,
-		Args:        "north",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("north").
+		WithServices(services).
+		Build()
 
 	err = MoveHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -528,86 +383,59 @@ func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
 }
 
 func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
-	characterID := ulid.Make()
-	fromLocationID := ulid.Make()
-	toLocationID := ulid.Make()
-	exitID := ulid.Make()
-
-	toLoc := &world.Location{
-		ID:          toLocationID,
-		Name:        "Destination Room",
-		Description: "A room that will disappear.",
-		Type:        world.LocationTypePersistent,
-	}
-
-	exit, err := world.NewExitWithID(exitID, fromLocationID, toLocationID, "north")
-	require.NoError(t, err)
+	player := testutil.RegularPlayer()
+	path := testutil.NewExitContext(t, "north")
+	path.To.Name = "Destination Room"
+	path.To.Description = "A room that will disappear."
 
 	char := &world.Character{
-		ID:         characterID,
+		ID:         player.CharacterID,
 		Name:       "TestChar",
-		LocationID: &fromLocationID,
+		LocationID: &path.From.ID,
 	}
 
-	exitRepo := worldtest.NewMockExitRepository(t)
-	locationRepo := worldtest.NewMockLocationRepository(t)
-	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
-	eventEmitter := worldtest.NewMockEventEmitter(t)
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	subjectID := "char:" + player.CharacterID.String()
 
-	subjectID := "char:" + characterID.String()
-
-	// GetExitsByLocation succeeds
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+fromLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
 		Return(true)
-	exitRepo.EXPECT().
-		ListFromLocation(mock.Anything, fromLocationID).
-		Return([]*world.Exit{exit}, nil)
+	fixture.Mocks.ExitRepo.EXPECT().
+		ListFromLocation(mock.Anything, path.From.ID).
+		Return([]*world.Exit{path.Exit}, nil)
 
-	// MoveCharacter succeeds
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "write", "character:"+characterID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "write", "character:"+player.CharacterID.String()).
 		Return(true).Once()
-	characterRepo.EXPECT().
-		Get(mock.Anything, characterID).
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, player.CharacterID).
 		Return(char, nil).Once()
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
-		Return(toLoc, nil).Once()
-	characterRepo.EXPECT().
-		UpdateLocation(mock.Anything, characterID, &toLocationID).
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
+		Return(path.To, nil).Once()
+	fixture.Mocks.CharacterRepo.EXPECT().
+		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil).Once()
-	eventEmitter.EXPECT().
+	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil).Once()
 
-	// GetLocation for display fails (location deleted between move and lookup)
-	accessControl.EXPECT().
-		Check(mock.Anything, subjectID, "read", "location:"+toLocationID.String()).
+	fixture.Mocks.AccessControl.EXPECT().
+		Check(mock.Anything, subjectID, "read", "location:"+path.To.ID.String()).
 		Return(true).Once()
-	locationRepo.EXPECT().
-		Get(mock.Anything, toLocationID).
+	fixture.Mocks.LocationRepo.EXPECT().
+		Get(mock.Anything, path.To.ID).
 		Return(nil, errors.New("location not found: deleted between move and lookup")).Once()
 
-	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		ExitRepo:      exitRepo,
-		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
-		EventEmitter:  eventEmitter,
-	})
+	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(player).
+		WithLocation(path.From).
+		WithArgs("north").
+		WithServices(services).
+		Build()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID: characterID,
-		LocationID:  fromLocationID,
-		Args:        "north",
-		Output:      &buf,
-		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
-	})
-
-	err = MoveHandler(context.Background(), exec)
+	err := MoveHandler(context.Background(), exec)
 	require.Error(t, err)
 
 	// Verify the error is wrapped with player-facing message in context

@@ -4,18 +4,17 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/accesstest"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
 )
 
@@ -23,28 +22,24 @@ import (
 // See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
 func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+	executor := testutil.AdminPlayer()
 
 	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
+	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 	// Subscribe to system stream to capture broadcast
 	ch := broadcaster.Subscribe("system")
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "", // No delay = immediate
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access:      accessControl,
-			Broadcaster: broadcaster,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithAccess(accessControl).
+		WithBroadcaster(broadcaster).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithArgs("").
+		WithServices(services).
+		Build()
 
 	err := ShutdownHandler(context.Background(), exec)
 
@@ -63,32 +58,27 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 	}
 
 	// Verify executor feedback
-	output := buf.String()
-	assert.Contains(t, output, "Initiating server shutdown")
+	assert.Contains(t, buf.String(), "Initiating server shutdown")
 }
 
 func TestShutdownHandler_DelayedShutdown(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+	executor := testutil.AdminPlayer()
 
 	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
+	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("system")
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "60", // 60 second delay
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access:      accessControl,
-			Broadcaster: broadcaster,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithAccess(accessControl).
+		WithBroadcaster(broadcaster).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithArgs("60").
+		WithServices(services).
+		Build()
 
 	err := ShutdownHandler(context.Background(), exec)
 
@@ -112,62 +102,41 @@ func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 	}
 
 	// Verify executor feedback
-	output := buf.String()
-	assert.Contains(t, output, "60 seconds")
+	assert.Contains(t, buf.String(), "60 seconds")
 }
 
-func TestShutdownHandler_InvalidDelay_NotANumber(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+func TestShutdownHandler_InvalidDelay(t *testing.T) {
+	tests := []struct {
+		name string
+		args string
+	}{
+		{name: "not a number", args: "abc"},
+		{name: "negative", args: "-5"},
+	}
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executor := testutil.AdminPlayer()
+			accessControl := accesstest.NewMockAccessControl()
+			accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "abc", // Invalid delay
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access: accessControl,
-		}),
-	})
+			services := testutil.NewServicesBuilder().
+				WithAccess(accessControl).
+				Build()
+			exec, _ := testutil.NewExecutionBuilder().
+				WithCharacter(executor).
+				WithArgs(tt.args).
+				WithServices(services).
+				Build()
 
-	err := ShutdownHandler(context.Background(), exec)
-	require.Error(t, err)
+			err := ShutdownHandler(context.Background(), exec)
+			require.Error(t, err)
 
-	oopsErr, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
-}
-
-func TestShutdownHandler_InvalidDelay_Negative(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
-
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
-
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "-5", // Negative delay
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access: accessControl,
-		}),
-	})
-
-	err := ShutdownHandler(context.Background(), exec)
-	require.Error(t, err)
-
-	oopsErr, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, command.CodeInvalidArgs, oopsErr.Code())
+		})
+	}
 }
 
 func TestShutdownHandler_LogsAdminAction(t *testing.T) {
@@ -176,26 +145,22 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 	// returning the expected shutdown signal. In a production system,
 	// you might use a test logger to capture and verify log entries.
 
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+	executor := testutil.AdminPlayer()
 
 	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
+	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "30",
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access:      accessControl,
-			Broadcaster: broadcaster,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithAccess(accessControl).
+		WithBroadcaster(broadcaster).
+		Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithArgs("30").
+		WithServices(services).
+		Build()
 
 	err := ShutdownHandler(context.Background(), exec)
 	// Handler should execute successfully (returning shutdown signal)
@@ -204,11 +169,10 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 }
 
 func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+	executor := testutil.AdminPlayer()
 
 	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
+	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 
@@ -216,18 +180,15 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 	// which should be watched by all players
 	systemCh := broadcaster.Subscribe("system")
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "",
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access:      accessControl,
-			Broadcaster: broadcaster,
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithAccess(accessControl).
+		WithBroadcaster(broadcaster).
+		Build()
+	exec, _ := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithArgs("").
+		WithServices(services).
+		Build()
 
 	err := ShutdownHandler(context.Background(), exec)
 	require.Error(t, err)
@@ -245,24 +206,20 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 }
 
 func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
-	executorID := ulid.Make()
-	playerID := ulid.Make()
+	executor := testutil.AdminPlayer()
 
 	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.shutdown")
+	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
 
-	var buf bytes.Buffer
-	exec := command.NewTestExecution(command.CommandExecutionConfig{
-		CharacterID:   executorID,
-		CharacterName: "Admin",
-		PlayerID:      playerID,
-		Args:          "",
-		Output:        &buf,
-		Services: command.NewTestServices(command.ServicesConfig{
-			Access:      accessControl,
-			Broadcaster: nil, // No broadcaster
-		}),
-	})
+	services := testutil.NewServicesBuilder().
+		WithAccess(accessControl).
+		WithBroadcaster(nil).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithArgs("").
+		WithServices(services).
+		Build()
 
 	// Should still work, just skip broadcast
 	err := ShutdownHandler(context.Background(), exec)
@@ -270,6 +227,5 @@ func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))
 
 	// Verify executor feedback still works
-	output := buf.String()
-	assert.Contains(t, output, "Initiating server shutdown")
+	assert.Contains(t, buf.String(), "Initiating server shutdown")
 }
