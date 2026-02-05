@@ -261,14 +261,14 @@ a cycle or excessively long chain). Circular aliases MUST be rejected with the e
 
 ### Management Commands
 
-| Command                          | Capabilities   | Description         |
-| -------------------------------- | -------------- | ------------------- |
-| `alias <alias>=<command>`        | `player.alias` | Add player alias    |
-| `unalias <alias>`                | `player.alias` | Remove player alias |
-| `aliases`                        | `player.alias` | List player aliases |
-| `sysalias add <alias>=<command>` | `admin.alias`  | Add system alias    |
-| `sysalias remove <alias>`        | `admin.alias`  | Remove system alias |
-| `sysalias list`                  | `admin.alias`  | List system aliases |
+| Command                      | Capabilities   | Description         |
+| ---------------------------- | -------------- | ------------------- |
+| `alias <alias>=<command>`    | `player.alias` | Add player alias    |
+| `unalias <alias>`            | `player.alias` | Remove player alias |
+| `aliases`                    | `player.alias` | List player aliases |
+| `sysalias <alias>=<command>` | `admin.alias`  | Add system alias    |
+| `sysunsalias <alias>`        | `admin.alias`  | Remove system alias |
+| `sysaliases`                 | `admin.alias`  | List system aliases |
 
 ### Shadow Warnings
 
@@ -282,7 +282,7 @@ Warnings are informational - the operation MUST still succeed. Player has final 
 their own alias namespace.
 
 System alias creation SHOULD warn if shadowing a command but MUST block if shadowing
-another system alias (use `sysalias remove` first).
+another system alias (use `sysunsalias` first).
 
 ### Alias Caching
 
@@ -346,13 +346,14 @@ return entry.Handler(ctx, execution)
 
 Capabilities use dot-notation hierarchy:
 
-| Category   | Examples                                                    |
-| ---------- | ----------------------------------------------------------- |
-| `world.*`  | `world.look`, `world.move`, `world.examine`                 |
-| `comms.*`  | `comms.say`, `comms.pose`, `comms.emit`                     |
-| `build.*`  | `build.dig`, `build.create`, `build.link`, `build.set`      |
-| `player.*` | `player.alias`, `player.who`, `player.quit`                 |
-| `admin.*`  | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
+| Category    | Examples                                                    |
+| ----------- | ----------------------------------------------------------- |
+| `world.*`   | `world.look`, `world.move`, `world.examine`                 |
+| `comms.*`   | `comms.say`, `comms.pose`, `comms.emit`                     |
+| `build.*`   | `build.location`, `build.exit`                              |
+| `objects.*` | `objects.create`, `objects.set`                             |
+| `player.*`  | `player.alias`, `player.who`, `player.quit`                 |
+| `admin.*`   | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
 
 ### Default Grants
 
@@ -627,6 +628,7 @@ Help content MUST be markdown. Rendering depends on client:
 **Capability Requirements**:
 
 - Core navigation (`look`, `move`, `quit`, `who`): **Unrestricted** - no capability check
+- Object manipulation (`create`, `set`): Require `objects.*` capabilities
 - Admin commands (`boot`, `shutdown`, `wall`): Require `admin.*` capabilities
 - Lua plugin commands: Require capabilities declared in `plugin.yaml`
 
