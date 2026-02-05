@@ -798,22 +798,164 @@ simplified lock syntax. Locks compile to scoped policies behind the scenes.
 ```text
 > lock my-chest/read = faction:rebels
 > lock me/backstory/read = me | flag:storyteller
-> lock here/enter = level>=5 & !flag:banned
+> lock here/enter = level:>=5 & !flag:banned
+> lock armory/enter = (faction:rebels | faction:alliance) & rank:>=3
 > unlock my-chest/read
 ```
 
-**Lock syntax:**
+#### Lock Syntax
 
-| Token        | Meaning                       |
-| ------------ | ----------------------------- |
-| `faction:X`  | Character faction equals X    |
-| `flag:X`     | Character has flag X          |
-| `level>=N`   | Character level is at least N |
-| `me`         | The owning character (self)   |
-| `&`          | AND                           |
-| `\|`         | OR                            |
-| `!`          | NOT                           |
-| Char name/ID | Specific character reference  |
+The lock expression language has two kinds of primitives: **core primitives**
+built into the parser, and **token predicates** registered by attribute
+providers.
+
+**Core primitives** (built into the lock parser):
+
+| Primitive    | Meaning                                         |
+| ------------ | ----------------------------------------------- |
+| `me`         | The owning character (compiles to owner's ULID) |
+| Char name/ID | Specific character reference (resolved to ULID) |
+| `&`          | AND                                             |
+| `\|`         | OR                                              |
+| `!`          | NOT                                             |
+| `(` `)`      | Grouping for precedence                         |
+
+Core primitives are game-agnostic. The parser resolves character names via the
+world model at compile time, embedding the resolved ULID in the generated
+policy. If a character name cannot be resolved, the `lock` command MUST return
+an error.
+
+**Operator precedence** (highest to lowest): `!`, `&`, `|`. Parentheses
+override precedence. `a | b & !c` parses as `a | (b & (!c))`.
+
+#### Lock Token Registry
+
+All other lock vocabulary comes from **registered token predicates**. Each
+attribute provider MAY register tokens that expose its attributes to the lock
+syntax. Token registration defines how lock expressions compile to full DSL
+conditions.
+
+**Token types:**
+
+| Type       | Lock Syntax  | Compiles To                 | Example Lock       |
+| ---------- | ------------ | --------------------------- | ------------------ |
+| equality   | `name:value` | `principal.attr == "value"` | `faction:rebels`   |
+| membership | `name:value` | `"value" in principal.attr` | `flag:storyteller` |
+| numeric    | `name:op N`  | `principal.attr op N`       | `level:>=5`        |
+
+Numeric tokens support the full comparison set: `>=`, `>`, `<=`, `<`, `==`.
+When no operator is specified (e.g., `level:5`), the default is `==`.
+
+**Token registration interface:**
+
+```go
+// LockTokenDef defines how a lock token compiles to a DSL condition.
+type LockTokenDef struct {
+    // Name is the token identifier used in lock expressions (e.g., "faction").
+    Name string
+
+    // AttributePath is the full attribute reference in the DSL
+    // (e.g., "principal.faction").
+    AttributePath string
+
+    // Type determines parsing and compilation behavior.
+    Type LockTokenType // equality | membership | numeric
+}
+
+type LockTokenType int
+
+const (
+    LockTokenEquality   LockTokenType = iota // name:value → attr == "value"
+    LockTokenMembership                       // name:value → "value" in attr
+    LockTokenNumeric                          // name:opN  → attr op N
+)
+```
+
+Providers register tokens at startup alongside their attributes:
+
+```go
+// AttributeProvider (extended) — providers optionally declare lock tokens.
+type AttributeProvider interface {
+    Namespace() string
+    Resolve(ctx context.Context, entityID string) (map[string]any, error)
+    LockTokens() []LockTokenDef // Returns empty slice if no lock tokens
+}
+```
+
+**Core-shipped tokens** (registered by CharacterProvider, not hard-coded in
+parser):
+
+| Token     | Type       | Attribute Path      | Example            |
+| --------- | ---------- | ------------------- | ------------------ |
+| `faction` | equality   | `principal.faction` | `faction:rebels`   |
+| `flag`    | membership | `principal.flags`   | `flag:storyteller` |
+| `level`   | numeric    | `principal.level`   | `level:>=5`        |
+
+These ship with the engine because CharacterProvider is a core provider, but
+they are registered through the same mechanism as plugin tokens. The lock parser
+has no special knowledge of `faction`, `flag`, or `level`.
+
+**Plugin token examples:**
+
+| Token       | Type       | Attribute Path     | Example               |
+| ----------- | ---------- | ------------------ | --------------------- |
+| `rep.score` | numeric    | `reputation.score` | `rep.score:>=50`      |
+| `craft`     | equality   | `crafting.primary` | `craft:blacksmithing` |
+| `guild`     | equality   | `guilds.primary`   | `guild:merchants`     |
+| `cert`      | membership | `crafting.certs`   | `cert:master-smith`   |
+
+#### Lock Compilation
+
+The lock command compiles a lock expression into a full DSL policy. The
+compilation process:
+
+1. **Tokenize** the lock expression into core primitives and token references
+2. **Resolve** each token reference against the token registry
+3. **Validate** that all referenced tokens are registered (unknown token →
+   error)
+4. **Generate** a `permit` policy scoped to the specific resource and action
+5. **Store** the policy via `PolicyStore.Create()`
+
+Compilation example:
+
+```text
+Input:  lock my-chest/read = (faction:rebels | flag:ally) & level:>=3
+Output:
+  permit(
+    principal,
+    action == "read",
+    resource == "object:01ABC..."
+  ) when {
+    (principal.faction == "rebels" || "ally" in principal.flags)
+    && principal.level >= 3
+  };
+```
+
+**Validation rules:**
+
+- Unknown token names MUST produce a clear error: `unknown lock token "foo"
+  — available tokens: faction, flag, level, rep.score, ...`
+- Type mismatches MUST produce an error: `token "faction" expects a name, not a
+  number`
+- Numeric tokens with missing operators default to `==`
+- Empty values MUST be rejected: `faction:` is invalid
+
+#### Lock Token Discovery
+
+Characters can discover available lock tokens via the `lock tokens` command:
+
+```text
+> lock tokens
+Available lock tokens:
+  faction:X     — Character faction equals X
+  flag:X        — Character has flag X
+  level:OP N    — Character level (>=, >, <=, <, == N)
+  rep.score:OP N — Reputation score (plugin: reputation)
+  guild:X       — Primary guild membership (plugin: guilds)
+```
+
+The `lock tokens` command reads from the token registry at runtime. Plugin
+tokens appear automatically when the plugin is loaded.
 
 **Ownership constraint:** Lock-generated policies can ONLY target resources the
 character owns. The lock command MUST verify ownership before creating the
@@ -832,6 +974,9 @@ resources.
   existing lock policy and creates a new one in a single transaction.
 - Ownership verification occurs in the lock command handler before any policy
   store operation.
+- Token registry is consulted at compile time only — changing a plugin's
+  registered tokens does not invalidate existing lock policies (they are already
+  compiled to DSL).
 
 ### Layer 3: Full Policies (Admin Only)
 
