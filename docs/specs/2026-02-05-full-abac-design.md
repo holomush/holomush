@@ -79,7 +79,11 @@ Players control access to their own properties through a simplified lock system.
 │                    │ CharacterProvider     │ ← World model            │
 │                    │ LocationProvider      │ ← World model            │
 │                    │ PropertyProvider      │ ← Property store         │
-│                    │ SessionProvider       │ ← Session store          │
+│                    │ ObjectProvider        │ ← World model            │
+│                    │ StreamResolver        │ ← Derived from stream ID │
+│                    │ CommandResolver       │ ← Command registry       │
+│                    │ Session Resolver      │ ← Session store (not a   │
+│                    │                       │   provider; see §3.3)    │
 │                    │ EnvironmentProvider   │ ← Clock, game state      │
 │                    │ PluginProvider(s)     │ ← Registered by plugins  │
 │                    └──────────────────────┘                          │
@@ -121,8 +125,15 @@ internal/access/policy/        # NEW — AccessPolicyEngine, evaluation
     provider.go                # AttributeProvider interface
     character.go               # Core: character attributes
     location.go                # Core: location attributes
+    object.go                  # Core: object attributes
     property.go                # Core: property attributes
+    stream.go                  # Core: stream attributes (derived from ID)
+    command.go                 # Core: command attributes
     environment.go             # Core: env attributes (time, game state)
+  lock/                        # Lock expression system
+    parser.go                  # Lock expression parser
+    compiler.go                # Compiles lock AST to DSL policy text
+    registry.go                # LockTokenRegistry
   store/                       # Policy persistence
     postgres.go                # Policy CRUD + versioning + LISTEN/NOTIFY
   audit/                       # Audit logging
@@ -191,8 +202,9 @@ at the engine entry point, BEFORE attribute resolution:
 4. Attribute resolution proceeds using the character subject
 
 This ensures policies are always evaluated as `principal is character`, never
-`principal is session`. The `SessionProvider` in the architecture diagram exists
-only to perform this lookup — it does not contribute attributes to the bags.
+`principal is session`. The `Session Resolver` in the architecture diagram exists
+only to perform this lookup — it is NOT an `AttributeProvider` and does not
+contribute attributes to the bags.
 
 ### Decision
 
@@ -242,10 +254,13 @@ type AttributeBags struct {
 
 ```go
 // AttributeProvider resolves attributes for a specific namespace.
+// Providers that also contribute lock tokens implement LockTokens() to return
+// a non-empty slice; providers with no lock vocabulary return an empty slice.
 type AttributeProvider interface {
     Namespace() string
     ResolveSubject(ctx context.Context, subjectType, subjectID string) (map[string]any, error)
     ResolveResource(ctx context.Context, resourceType, resourceID string) (map[string]any, error)
+    LockTokens() []LockTokenDef // Returns empty slice if no lock tokens
 }
 
 // EnvironmentProvider resolves environment-level attributes (no entity context).
@@ -297,6 +312,7 @@ marked MUST always exist when the entity is valid; MAY attributes may be nil.
 | `flags`         | []string | MUST        | Arbitrary flags (empty array if none)     |
 | `visible_to`    | []string | MAY         | Character IDs (only when restricted)      |
 | `excluded_from` | []string | MAY         | Character IDs (only when restricted)      |
+| `parent_location` | string | MUST      | ULID of parent entity's location          |
 
 **EnvironmentProvider** (`env` namespace):
 
@@ -304,6 +320,38 @@ marked MUST always exist when the entity is valid; MAY attributes may be nil.
 | ------------- | ------ | ----------- | ------------------------------------- |
 | `time`        | string | MUST        | Current time (RFC 3339)               |
 | `maintenance` | bool   | MUST        | Whether server is in maintenance mode |
+
+**ObjectProvider** (`object` namespace):
+
+| Attribute  | Type   | Requirement | Description                               |
+| ---------- | ------ | ----------- | ----------------------------------------- |
+| `type`     | string | MUST        | Always `"object"`                         |
+| `id`       | string | MUST        | ULID of the object                        |
+| `name`     | string | MUST        | Object display name                       |
+| `location` | string | MUST        | ULID of containing location               |
+| `owner`    | string | MAY         | Subject who owns this object              |
+
+**StreamResolver** (`stream` namespace):
+
+Streams do not have a dedicated database table — their attributes are derived
+from the stream ID format (`location:01XYZ`, `character:01ABC`). The resolver
+parses the stream ID and extracts relevant fields.
+
+| Attribute  | Type   | Requirement | Description                                 |
+| ---------- | ------ | ----------- | ------------------------------------------- |
+| `type`     | string | MUST        | Always `"stream"`                           |
+| `name`     | string | MUST        | Full stream path (e.g., `"location:01XYZ"`) |
+| `location` | string | MAY         | Extracted location ULID (if location stream) |
+
+**CommandResolver** (`command` namespace):
+
+Commands are resolved from the command registry (Epic 6). The resolver looks up
+the command definition by name.
+
+| Attribute | Type   | Requirement | Description                     |
+| --------- | ------ | ----------- | ------------------------------- |
+| `type`    | string | MUST        | Always `"command"`              |
+| `name`    | string | MUST        | Command name (e.g., `"say"`)   |
 
 **Action bag** (constructed by the engine, not a provider):
 
@@ -354,7 +402,7 @@ effect     = "permit" | "forbid"
 target     = principal_clause "," action_clause "," resource_clause
 principal_clause = "principal" [ "is" type_name ]
 action_clause    = "action" [ "in" list ]
-resource_clause  = "resource" [ "is" type_name ]
+resource_clause  = "resource" [ "is" type_name | "==" string_literal ]
 
 conditions   = disjunction
 disjunction  = conjunction { "||" conjunction }
@@ -388,23 +436,52 @@ boolean        = "true" | "false"
    line by itself. *)
 ```
 
+**Operator precedence** (highest to lowest):
+
+| Precedence | Operator(s)                    | Associativity |
+| ---------- | ------------------------------ | ------------- |
+| 1          | `.` (attribute access)         | Left          |
+| 2          | `!` (boolean NOT)              | Right (unary) |
+| 3          | `has`, `in`, `like`            | Non-assoc     |
+| 4          | `==`, `!=`, `>`, `>=`, `<`, `<=` | Non-assoc  |
+| 5          | `containsAll`, `containsAny`  | Non-assoc     |
+| 6          | `&&` (boolean AND)             | Left          |
+| 7          | `\|\|` (boolean OR)            | Left          |
+| 8          | `if-then-else`                 | Right         |
+
 **Grammar notes:**
 
 - `&&` binds tighter than `||` (conjunction before disjunction), matching
   standard boolean logic and Cedar semantics.
-- `like` uses glob syntax (consistent with `gobwas/glob` already in the
-  project), NOT SQL `LIKE` semantics. Wildcards: `*` matches any sequence,
-  `?` matches one character. The glob is compiled with `:` as separator
-  (`glob.Compile(pattern, ':')`) for consistency with the existing
+- `like` uses `gobwas/glob` syntax (already in the project), NOT SQL `LIKE`
+  semantics. Supported wildcards: `*` matches any sequence of characters
+  (excluding the `:` separator), `?` matches exactly one character (excluding
+  `:`). Character classes (`[abc]`) and alternation (`{a,b}`) are NOT
+  supported — the glob is compiled with `glob.Compile(pattern, ':', glob.Simple)`
+  to restrict to simple wildcards only. To match a literal `*` or `?`, there is
+  no escape mechanism; use `==` for exact matches instead. The glob uses `:` as
+  separator (`glob.Compile(pattern, ':')`) for consistency with the existing
   `StaticAccessControl` permission matching.
 - `action` is a valid attribute root in conditions, providing access to the
   `AttributeBags.Action` map (e.g., `action.name`). Action matching in the
   target clause covers most use cases, but conditions MAY reference action
   attributes when needed.
-- `expr "in" expr` supports membership checks against attribute values that
-  are arrays (e.g., `principal.id in resource.visible_to`). The right-hand side
-  MUST resolve to a `[]string` or `[]any` attribute. This is distinct from
-  `expr "in" list` where the list is a literal.
+- `resource == string_literal` in the target clause pins a policy to a specific
+  resource instance (e.g., `resource == "object:01ABC"`). This is used by
+  lock-generated policies that target a single owned resource. Manually authored
+  policies SHOULD prefer `resource is type_name` with conditions for flexibility.
+- `expr "in" list` performs scalar-in-set membership: the left-hand value is
+  checked for equality against each element of the literal list. For example,
+  `principal.role in ["builder", "admin"]` returns true if `principal.role`
+  equals `"builder"` or `"admin"`.
+- `expr "in" expr` performs value-in-attribute-array membership: the left-hand
+  value is checked for presence in the right-hand attribute, which MUST resolve
+  to a `[]string` or `[]any` at evaluation time. For example,
+  `principal.id in resource.visible_to` checks whether the principal's ID
+  appears in the resource's `visible_to` list.
+- **Empty lists** are not valid in the grammar. `list` requires at least one
+  element. A policy matching no actions SHOULD be disabled instead of using an
+  empty list.
 - **Deferred: entity references.** Cedar defines `entity_ref` syntax
   (`Type::"value"`) for hierarchy membership checks (e.g.,
   `principal in Group::"admins"`). This is NOT included in the initial grammar.
@@ -412,6 +489,24 @@ boolean        = "true" | "false"
   directing admins to use attribute-based group checks
   (`principal.flags.containsAny(["admin"])`) instead. Entity references MAY be
   added in a future phase when group/hierarchy features are implemented.
+
+### Type System
+
+The DSL uses dynamic typing with fail-safe behavior on type mismatches:
+
+| Scenario                           | Behavior                              |
+| ---------------------------------- | ------------------------------------- |
+| Attribute missing                  | Condition evaluates to `false`        |
+| Type mismatch (e.g., string > int) | Condition evaluates to `false`        |
+| `>`, `>=`, `<`, `<=` on non-number | Condition evaluates to `false`        |
+| `containsAll`/`containsAny` on non-array | Condition evaluates to `false`  |
+| `has` on non-existent attribute    | Returns `false`                       |
+| `==`/`!=` across types             | `false` for `==`, `true` for `!=`    |
+
+**Number literals** in the grammar support decimals (e.g., `5.5`). All numbers
+are parsed as `float64`. Integer attributes (e.g., `level: int`) are promoted
+to `float64` for comparison. This enables plugin attributes to use fractional
+values (e.g., `reputation.score >= 75.5`) without grammar changes.
 
 ### Supported Operators
 
@@ -500,6 +595,14 @@ evaluates against using the same interface.
 The `PropertyProvider` (in `internal/access/policy/attribute/`) wraps
 `PropertyRepository` to resolve property attributes for policy evaluation.
 
+**Dependency layering:** `PropertyRepository` is pure data access — it performs
+no authorization checks. Ownership enforcement and visibility defaults are
+applied by `WorldService` (or the command handler) BEFORE calling the
+repository. During attribute resolution, `PropertyProvider` reads properties
+unconditionally; the engine decides whether the caller may *use* the resolved
+attributes. This prevents a circular dependency:
+`Engine → PropertyProvider → PropertyRepository` (no callback to Engine).
+
 ### Property Attributes
 
 | Attribute       | Type     | Description                                              |
@@ -528,6 +631,38 @@ The `PropertyProvider` (in `internal/access/policy/attribute/`) wraps
 When visibility is set to `restricted`, the Go property store MUST auto-populate
 `visible_to` with `[parent_id]` and `excluded_from` with `[]` if they are nil.
 This prevents the "nobody can see it" footgun.
+
+### Visibility Seed Policies
+
+Each visibility level is enforced by system-level seed policies. These are
+created during bootstrap alongside the role-based seed policies:
+
+```text
+// Public properties: readable by characters in the same location as the parent
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "public"
+    && principal.location == resource.parent_location };
+
+// Private properties: readable only by owner
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "private"
+    && resource.owner == principal.id };
+
+// Restricted properties: visible_to/excluded_from policies handle these
+// (already defined in Example Policies section)
+
+// System properties: only accessible by system subject (handled by system bypass)
+
+// Admin properties: readable only by admins
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "admin" && principal.role == "admin" };
+```
+
+**Note:** The `PropertyProvider` MUST also expose a `parent_location` attribute
+— the ULID of the parent entity's location. For character properties, this
+is the character's current location. For location properties, this is the
+location itself. For object properties, this is the object's containing
+location.
 
 ## Attribute Resolution
 
@@ -655,16 +790,46 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 | DSL condition evaluation | <1ms   | Per policy                       |
 | Cache reload             | <50ms  | Full policy set reload on NOTIFY |
 
+**Benchmark scenario:** Targets assume 50 active policies (25 permit, 25
+forbid), average condition complexity of 3 operators per policy, 10 attributes
+per entity (subject + resource), and warm per-request attribute cache (not the
+first `Evaluate()` call in a request).
+
 Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
 attribute resolution, policy filtering, condition evaluation, and audit logging
 to enable performance profiling.
 
-### Future: Attribute Caching
+### Attribute Caching
 
-If profiling shows attribute resolution as a bottleneck, introduce per-request
-caching in `AttributeResolver`. The cache is scoped to a single `Evaluate()`
-call and cleared afterward — no stale data risk across separate checks. This is
-deferred until profiling demonstrates the need.
+The `AttributeResolver` SHOULD implement per-request caching from the start.
+When a single user action triggers multiple `Evaluate()` calls (e.g., check
+command permission, then check location entry, then check property read), the
+same subject attributes are resolved repeatedly.
+
+**Caching strategy:**
+
+- **Scope:** Per `context.Context`. A shared `AttributeCache` is attached to
+  the context by the request handler. Multiple `Evaluate()` calls within the
+  same request context share the cache.
+- **Key:** `{entityType, entityID}` tuple (e.g., `{"character", "01ABC"}`).
+- **Invalidation:** Cache is garbage-collected when the context is cancelled
+  (end of request). No cross-request caching for MVP.
+- **Provider isolation:** Each provider's results are cached independently. A
+  plugin provider failure does not invalidate cached results from core providers.
+
+```go
+// AttributeCache provides per-request attribute caching.
+// Attach to context via WithAttributeCache(ctx) at the request boundary.
+type AttributeCache struct {
+    mu    sync.RWMutex
+    items map[string]map[string]any // "character:01ABC" → attributes
+}
+```
+
+**Future optimization:** If profiling shows cache misses dominate, consider a
+short-TTL cache (100ms) for read-only attributes like character roles. This
+requires careful invalidation and is deferred until profiling demonstrates the
+need.
 
 ## Policy Storage
 
@@ -732,7 +897,13 @@ CREATE TABLE entity_properties (
     excluded_from JSONB DEFAULT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(parent_type, parent_id, name)
+    UNIQUE(parent_type, parent_id, name),
+    CONSTRAINT visibility_restricted_requires_lists
+        CHECK (visibility != 'restricted'
+            OR (visible_to IS NOT NULL AND excluded_from IS NOT NULL)),
+    CONSTRAINT visibility_non_restricted_nulls_lists
+        CHECK (visibility = 'restricted'
+            OR (visible_to IS NULL AND excluded_from IS NULL))
 );
 
 CREATE INDEX idx_properties_parent ON entity_properties(parent_type, parent_id);
@@ -764,6 +935,21 @@ The `effect` column in `access_audit_log` maps to the Go `Effect` enum:
 
 The `decision` column is derived: `"allowed"` when `Effect == EffectAllow`,
 `"denied"` otherwise.
+
+### Policy Version Records
+
+A version record is created in `access_policy_versions` only when `dsl_text`
+changes (via `policy edit`). Toggling `enabled` via `policy enable`/`disable` or
+updating `description` modifies the main `access_policies` row directly without
+creating a version record. The `version` column on `access_policies` increments
+only on DSL changes.
+
+### Audit Log Retention
+
+Audit records older than 90 days SHOULD be purged by a periodic Go background
+job. The purge interval and retention period SHOULD be configurable via server
+settings. If the audit table exceeds 10M rows, PostgreSQL table partitioning by
+month MAY be introduced.
 
 ### Visibility Defaults
 
@@ -871,16 +1057,10 @@ const (
 )
 ```
 
-Providers register tokens at startup alongside their attributes:
-
-```go
-// AttributeProvider (extended) — providers optionally declare lock tokens.
-type AttributeProvider interface {
-    Namespace() string
-    Resolve(ctx context.Context, entityID string) (map[string]any, error)
-    LockTokens() []LockTokenDef // Returns empty slice if no lock tokens
-}
-```
+Providers register tokens at startup alongside their attributes. The
+`LockTokens()` method is part of the unified `AttributeProvider` interface
+(defined in §3.5). Providers that contribute no lock vocabulary return an empty
+slice.
 
 **Core-shipped tokens** (registered by CharacterProvider, not hard-coded in
 parser):
@@ -923,7 +1103,7 @@ Input:  lock my-chest/read = (faction:rebels | flag:ally) & level:>=3
 Output:
   permit(
     principal,
-    action == "read",
+    action in ["read"],
     resource == "object:01ABC..."
   ) when {
     (principal.faction == "rebels" || "ally" in principal.flags)
@@ -1041,7 +1221,7 @@ Environment:
 Evaluating 3 matching policies:
   faction-hq-access    permit  CONDITIONS FAILED (rebels != empire)
   maintenance-lockout  forbid  CONDITIONS FAILED (maintenance=false)
-  level-gate           forbid  CONDITIONS FAILED (level 7 >= 5)
+  level-gate           forbid  CONDITIONS FAILED (principal.level < 5: false, level=7)
 
 Decision: DENIED (default deny — no policies matched)
 ```
@@ -1076,6 +1256,21 @@ location entry control. The static system handles movement through
 `write:character:$self` (changing the character's location). Shadow mode
 validation MUST account for this semantic difference — `enter` checks are new
 policy-only paths with no static-system equivalent.
+
+**Command name normalization:** The static system uses `@`-prefixed command
+names (`@dig`, `@create`, etc.) in permission strings, while the ABAC seed
+policies use plain names (`dig`, `create`) matching Epic 6 conventions. Shadow
+mode validation MUST strip `@` prefixes from command names when comparing
+static-system results against ABAC engine results. This normalization SHOULD be
+performed in the shadow mode comparison harness, not in the adapter.
+
+**Intentional permission expansion:** The seed policies below intentionally
+grant builders `delete` on locations, which the static system does not. The
+static system's omission of `delete:location:*` for builders was a gap — builders
+who can `write` (create/modify) locations SHOULD also be able to delete them.
+This expansion is validated during shadow mode by excluding `delete` on
+`location` resources from the agreement comparison, alongside `enter` actions
+and `@`-prefixed command names.
 
 ```text
 // player-powers: self access
@@ -1115,6 +1310,22 @@ permit(principal is character, action, resource)
 when { principal.role == "admin" };
 ```
 
+### Bootstrap Sequence
+
+On first startup (or when the `access_policies` table is empty), the server
+MUST seed policies automatically:
+
+1. Server startup detects empty `access_policies` table
+2. Server inserts all seed policies (role-based + visibility) as `system` subject
+3. The `system` subject bypasses policy evaluation entirely (step 1 of the
+   evaluation algorithm), so no chicken-and-egg problem exists
+4. Subsequent policy changes require `policy.manage` permission via normal
+   ABAC evaluation
+
+The seed process is idempotent — policies are inserted with deterministic names
+(e.g., `seed:player-self-access`). If a policy with that name already exists,
+the seed is skipped for that policy.
+
 ### Migration Strategy
 
 1. **Phase 7.1 (Policy Schema):** Create DB tables and policy store. Seed with
@@ -1131,11 +1342,47 @@ when { principal.role == "admin" };
 
    **Cutover criteria:** Shadow mode runs in staging for at least 7 days with
    at least 10,000 authorization checks collected. 100% agreement means
-   `Decision.Allowed` matches `StaticAccessControl.Check()` for all checks
-   (excluding `enter` actions which have no static equivalent). Any disagreement
-   blocks cutover and triggers immediate investigation. After meeting criteria,
-   submit PR to remove `StaticAccessControl`. Rollback: revert the removal PR
-   if post-cutover bugs are found.
+   `Decision.Allowed` matches `StaticAccessControl.Check()` for all checks,
+   excluding known semantic differences:
+   - `enter` actions (new ABAC-only path, no static equivalent)
+   - `delete` on `location` resources (intentional permission expansion)
+   - `@`-prefixed command names (normalized to plain names in ABAC)
+
+   Any other disagreement blocks cutover and triggers immediate investigation.
+   After meeting criteria, submit PR to remove `StaticAccessControl`. Rollback:
+   revert the removal PR if post-cutover bugs are found.
+
+   **Shadow mode adapter:** During shadow mode, the adapter MUST preserve engine
+   errors for comparison rather than swallowing them:
+
+   ```go
+   // migrationAdapter wraps AccessPolicyEngine for shadow mode validation.
+   // Unlike accessControlAdapter, it preserves errors for disagreement analysis.
+   type migrationAdapter struct {
+       engine AccessPolicyEngine
+       static *StaticAccessControl
+       logger *slog.Logger
+   }
+
+   func (a *migrationAdapter) Check(ctx context.Context, subject, action, resource string) bool {
+       staticResult := a.static.Check(ctx, subject, action, resource)
+       decision, err := a.engine.Evaluate(ctx, AccessRequest{
+           Subject: subject, Action: action, Resource: resource,
+       })
+       if err != nil {
+           a.logger.Warn("shadow mode: engine error (not a disagreement)",
+               "error", err, "static_result", staticResult)
+           return staticResult // Static system is authoritative during shadow mode
+       }
+       if decision.Allowed != staticResult {
+           a.logger.Error("shadow mode: DISAGREEMENT",
+               "subject", subject, "action", action, "resource", resource,
+               "static", staticResult, "engine", decision.Allowed,
+               "policy", decision.PolicyID)
+       }
+       return staticResult // Static system is authoritative during shadow mode
+   }
+   ```
 
 4. **Caller migration (holomush-c6qch):** Callers incrementally migrate from
    `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()` for richer error

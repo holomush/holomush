@@ -353,7 +353,7 @@ are implemented.
 errors. Better to reject at parse time with a helpful message than to accept
 syntax that fails silently at evaluation time.
 
-**Updates decision #8:** The full expression language still includes all
+**Updates [decision #8](#8-dsl-expression-language-scope):** The full expression language still includes all
 operators from decision #8. Only `entity_ref` is deferred — `in` works with
 lists and attribute expressions.
 
@@ -395,7 +395,7 @@ and represent game-world data, not authorization metadata. Placing them in the
 world package maintains the separation of concerns: world model stores data,
 access control evaluates policies against it.
 
-**Updates decision #9:** Clarifies the implementation location of the property
+**Updates [decision #9](#9-property-model):** Clarifies the implementation location of the property
 model from decision #9.
 
 ---
@@ -459,7 +459,7 @@ that invites premature cutover. The 7-day window catches day-of-week variations
 in game activity. 10,000 checks provides statistical confidence. Explicit
 rollback plan reduces risk of the cutover being irreversible.
 
-**Updates decision #5:** Adds operational detail to the migration strategy from
+**Updates [decision #5](#5-migration-strategy):** Adds operational detail to the migration strategy from
 decision #5.
 
 ---
@@ -502,3 +502,74 @@ All targets assume 200 concurrent users. Implementation SHOULD add
 and give implementers a clear "good enough" threshold. The 5ms target leaves
 headroom for the full request path while keeping authorization invisible to
 players.
+
+---
+
+## 24. Bootstrap Sequence
+
+**Review finding:** The spec defined seed policies but didn't specify how they
+are created. With default-deny and no policies, the first admin would be locked
+out (chicken-and-egg problem).
+
+**Decision:** Server startup detects an empty `access_policies` table and seeds
+policies as the `system` subject, which bypasses policy evaluation entirely.
+Seed policies use deterministic names (`seed:player-self-access`, etc.) for
+idempotency.
+
+**Rationale:** The `system` subject bypass already exists in the evaluation
+algorithm (step 1). Seeding at startup is consistent with how the static system
+initializes default roles. Deterministic naming prevents duplicate seeds on
+restart.
+
+**Updates [decision #5](#5-migration-strategy):** Adds bootstrap mechanism to
+the migration strategy.
+
+---
+
+## 25. Intentional Builder Permission Expansion
+
+**Review finding:** Seed policies grant builders `delete` on locations, but the
+static system only grants `write:location:*` — no `delete:location:*`. This
+would cause shadow mode disagreements.
+
+**Decision:** Preserve the expansion as intentional. Builders who can create and
+modify locations SHOULD also be able to delete them. The static system's
+omission was a gap, not a deliberate restriction.
+
+**Rationale:** Builder workflow requires the ability to clean up test locations.
+Without `delete`, builders must ask an admin to remove locations, which is an
+unnecessary bottleneck. Shadow mode validation excludes `delete:location`
+comparisons alongside `enter` actions.
+
+---
+
+## 26. Per-Request Attribute Caching
+
+**Review finding:** Eager resolution without caching means repeated `Evaluate()`
+calls within a single user action re-resolve the same attributes. At 200 users
+with 5 auth checks per command, this creates unnecessary load.
+
+**Decision:** Implement per-request attribute caching from the start using a
+shared `AttributeCache` attached to the request context.
+
+**Rationale:** The cache is scoped to a single request (no stale data risk) and
+provides significant savings when a single user action triggers multiple
+authorization checks. The implementation cost is low (a map with a mutex) and
+avoids a predictable performance problem that would require retrofitting later.
+
+---
+
+## 27. Unified `AttributeProvider` Interface
+
+**Review finding:** The spec defined `AttributeProvider` twice with incompatible
+signatures — `ResolveSubject`/`ResolveResource` in the Core Interfaces section
+vs. a single `Resolve` with `LockTokens()` in the Lock section.
+
+**Decision:** Unify into a single interface with `ResolveSubject`,
+`ResolveResource`, and `LockTokens()`. Providers that contribute no lock
+vocabulary return an empty slice from `LockTokens()`.
+
+**Rationale:** The subject/resource distinction matters because providers may
+resolve different attributes depending on whether the entity is the principal or
+the target. A single `Resolve` method loses this context. Adding `LockTokens()`
+to the same interface keeps the provider contract in one place.
