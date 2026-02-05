@@ -185,7 +185,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// Execute
 	exec.Args = parsed.Args
 	exec.InvokedAs = invokedAs
-	err = entry.Handler(ctx, exec)
+	err = entry.Handler()(ctx, exec)
 	if err != nil {
 		metricsStatus = StatusError
 		slog.WarnContext(ctx, "command execution failed",

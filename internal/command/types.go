@@ -113,20 +113,27 @@ type CommandEntryConfig struct {
 // after registration do not affect the registered command. However, callers
 // SHOULD NOT modify fields after calling NewCommandEntry.
 //
-// The capabilities field is private to enforce immutability at compile time
-// for slice types (which are reference types). Use GetCapabilities() to access
-// capabilities safely; it returns a defensive copy. Other fields remain public
-// since by-value storage in Registry already provides implicit protection.
+// The handler and capabilities fields are private to enforce immutability at
+// compile time. Use Handler() to access the handler and GetCapabilities() to
+// access capabilities safely; GetCapabilities() returns a defensive copy.
+// Other fields remain public since by-value storage in Registry already
+// provides implicit protection.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")
-	Handler      CommandHandler // Go handler or Lua dispatcher
+	handler      CommandHandler // Go handler or Lua dispatcher - use Handler() getter
 	capabilities []string       // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g., "say <message>")
 	HelpText     string         // detailed markdown help
 	Source       string         // "core" or plugin name
+}
+
+// Handler returns the command's handler function.
+// This provides read-only access to the handler after construction.
+func (e *CommandEntry) Handler() CommandHandler {
+	return e.handler
 }
 
 // Error codes for constructor validation failures.
@@ -167,7 +174,7 @@ func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
 
 	return &CommandEntry{
 		Name:         cfg.Name,
-		Handler:      cfg.Handler,
+		handler:      cfg.Handler,
 		capabilities: cfg.Capabilities,
 		Help:         cfg.Help,
 		Usage:        cfg.Usage,
@@ -436,7 +443,7 @@ func NewTestServices(cfg ServicesConfig) *Services {
 func NewTestEntry(cfg CommandEntryConfig) CommandEntry {
 	return CommandEntry{
 		Name:         cfg.Name,
-		Handler:      cfg.Handler,
+		handler:      cfg.Handler,
 		capabilities: cfg.Capabilities,
 		Help:         cfg.Help,
 		Usage:        cfg.Usage,

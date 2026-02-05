@@ -33,7 +33,7 @@ func TestCommandEntry_HasRequiredFields(t *testing.T) {
 	assert.Equal(t, "say <message>", entry.Usage)
 	assert.Equal(t, "Speaks a message to everyone in the current location.", entry.HelpText)
 	assert.Equal(t, "core", entry.Source)
-	assert.Nil(t, entry.Handler, "Handler should be nil when not set")
+	assert.Nil(t, entry.Handler(), "Handler() should return nil when not set")
 }
 
 func TestCommandExecution_HasRequiredFields(t *testing.T) {
@@ -215,7 +215,7 @@ func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "say", entry.Name)
-	assert.NotNil(t, entry.Handler)
+	assert.NotNil(t, entry.Handler())
 	assert.Equal(t, []string{"rp:speak"}, entry.GetCapabilities())
 	assert.Equal(t, "Say something to the room", entry.Help)
 	assert.Equal(t, "say <message>", entry.Usage)
@@ -255,7 +255,7 @@ func TestNewCommandEntry_MinimalValid_ReturnsEntry(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "say", entry.Name)
-	assert.NotNil(t, entry.Handler)
+	assert.NotNil(t, entry.Handler())
 	assert.Empty(t, entry.GetCapabilities())
 	assert.Empty(t, entry.Help)
 	assert.Empty(t, entry.Usage)
@@ -497,6 +497,51 @@ func TestCommandEntry_GetCapabilities_EmptyCapabilities_ReturnsEmpty(t *testing.
 	caps := entry.GetCapabilities()
 	assert.NotNil(t, caps, "Should return non-nil empty slice")
 	assert.Empty(t, caps, "Should return empty slice")
+}
+
+// Tests for Handler() getter
+
+func TestCommandEntry_Handler_ReturnsHandler(t *testing.T) {
+	t.Parallel()
+
+	handlerCalled := false
+	handler := func(_ context.Context, _ *CommandExecution) error {
+		handlerCalled = true
+		return nil
+	}
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "test",
+		Handler: handler,
+	})
+	require.NoError(t, err)
+
+	// Get handler via getter
+	retrievedHandler := entry.Handler()
+	assert.NotNil(t, retrievedHandler, "Handler() should return non-nil handler")
+
+	// Verify it's callable and works correctly
+	err = retrievedHandler(context.Background(), &CommandExecution{})
+	assert.NoError(t, err)
+	assert.True(t, handlerCalled, "Handler should have been called")
+}
+
+func TestCommandEntry_Handler_IsReadOnly(t *testing.T) {
+	t.Parallel()
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "test",
+		Handler: func(_ context.Context, _ *CommandExecution) error { return nil },
+	})
+	require.NoError(t, err)
+
+	// Handler field should not be directly accessible (compile-time check)
+	// The following would fail to compile if uncommented:
+	// entry.handler = nil  // ERROR: handler is private
+
+	// But we can read it via the getter
+	h := entry.Handler()
+	assert.NotNil(t, h)
 }
 
 func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {

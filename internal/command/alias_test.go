@@ -214,7 +214,7 @@ func TestAliasCache_Resolve_RegisteredCommand(t *testing.T) {
 	// Register "look" as a command
 	err := registry.Register(CommandEntry{
 		Name:    "look",
-		Handler: testHandler,
+		handler: testHandler,
 		Source:  "core",
 	})
 	require.NoError(t, err)
@@ -795,7 +795,7 @@ func TestAliasCache_ShadowsCommand(t *testing.T) {
 
 	require.NoError(t, registry.Register(CommandEntry{
 		Name:    "look",
-		Handler: testHandler,
+		handler: testHandler,
 		Source:  "core",
 	}))
 

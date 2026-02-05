@@ -55,11 +55,11 @@ func TestAliasAddHandler(t *testing.T) {
 	t.Run("warns when shadowing existing command", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		require.NoError(t, registry.Register(command.CommandEntry{
+		require.NoError(t, registry.Register(command.NewTestEntry(command.CommandEntryConfig{
 			Name:    "look",
 			Handler: testHandler,
 			Source:  "core",
-		}))
+		})))
 		playerID := ulid.Make()
 
 		var buf bytes.Buffer
@@ -452,11 +452,11 @@ func TestSysaliasAddHandler(t *testing.T) {
 	t.Run("warns when shadowing existing command", func(t *testing.T) {
 		cache := command.NewAliasCache()
 		registry := command.NewRegistry()
-		require.NoError(t, registry.Register(command.CommandEntry{
+		require.NoError(t, registry.Register(command.NewTestEntry(command.CommandEntryConfig{
 			Name:    "look",
 			Handler: testHandler,
 			Source:  "core",
-		}))
+		})))
 
 		var buf bytes.Buffer
 		exec := command.NewTestExecution(command.CommandExecutionConfig{

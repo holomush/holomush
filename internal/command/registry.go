@@ -36,7 +36,7 @@ func (r *Registry) Register(entry CommandEntry) error {
 	if err := ValidateCommandName(entry.Name); err != nil {
 		return err
 	}
-	if entry.Handler == nil {
+	if entry.Handler() == nil {
 		return ErrNilHandler
 	}
 

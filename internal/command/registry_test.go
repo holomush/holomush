@@ -28,7 +28,7 @@ func TestRegistry_RegisterAndGet(t *testing.T) {
 
 	entry := CommandEntry{
 		Name:         "look",
-		Handler:      handler,
+		handler:      handler,
 		capabilities: []string{"world.look"},
 		Help:         "Look at your surroundings",
 		Usage:        "look [target]",
@@ -56,8 +56,8 @@ func TestRegistry_GetNotFound(t *testing.T) {
 func TestRegistry_All(t *testing.T) {
 	reg := NewRegistry()
 
-	_ = reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "core"})
-	_ = reg.Register(CommandEntry{Name: "say", Handler: noopHandler, Source: "comms"})
+	_ = reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "say", handler: noopHandler, Source: "comms"})
 
 	all := reg.All()
 	assert.Len(t, all, 2)
@@ -81,8 +81,8 @@ func TestRegistry_AllEmpty(t *testing.T) {
 func TestRegistry_ConflictWarning(t *testing.T) {
 	reg := NewRegistry()
 
-	_ = reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "core"})
-	err := reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "plugin-a"})
+	_ = reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "core"})
+	err := reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "plugin-a"})
 
 	// Should succeed but we can check it overwrote
 	require.NoError(t, err)
@@ -98,8 +98,8 @@ func TestRegistry_ConflictWarning_LogOutput(t *testing.T) {
 	defer slog.SetDefault(oldLogger)
 
 	reg := NewRegistry()
-	_ = reg.Register(CommandEntry{Name: "testcmd", Handler: noopHandler, Source: "core"})
-	_ = reg.Register(CommandEntry{Name: "testcmd", Handler: noopHandler, Source: "plugin-override"})
+	_ = reg.Register(CommandEntry{Name: "testcmd", handler: noopHandler, Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "testcmd", handler: noopHandler, Source: "plugin-override"})
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "command conflict: overwriting existing command")
@@ -115,7 +115,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 
 	// Pre-populate with some commands
 	for i := range 10 {
-		_ = reg.Register(CommandEntry{Name: "cmd" + string(rune('a'+i)), Handler: noopHandler, Source: "test"})
+		_ = reg.Register(CommandEntry{Name: "cmd" + string(rune('a'+i)), handler: noopHandler, Source: "test"})
 	}
 
 	var wg sync.WaitGroup
@@ -136,7 +136,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 					// Write operation
 					_ = reg.Register(CommandEntry{
 						Name:    "concurrent",
-						Handler: noopHandler,
+						handler: noopHandler,
 						Source:  "goroutine",
 					})
 				}
@@ -153,7 +153,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 
 func TestRegistry_AllReturnsCopy(t *testing.T) {
 	reg := NewRegistry()
-	_ = reg.Register(CommandEntry{Name: "look", Handler: noopHandler, Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "core"})
 
 	all1 := reg.All()
 	all2 := reg.All()
@@ -173,7 +173,7 @@ func TestRegistry_Register_EmptyName(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:    "",
-		Handler: noopHandler,
+		handler: noopHandler,
 		Source:  "core",
 	})
 
@@ -185,7 +185,7 @@ func TestRegistry_Register_NilHandler(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:    "test",
-		Handler: nil,
+		handler: nil,
 		Source:  "core",
 	})
 
@@ -231,7 +231,7 @@ func TestRegistry_Register_InvalidName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := reg.Register(CommandEntry{
 				Name:    tt.commandName,
-				Handler: noopHandler,
+				handler: noopHandler,
 				Source:  "test",
 			})
 

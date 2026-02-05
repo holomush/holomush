@@ -42,7 +42,7 @@ func TestRegisterAll_CommandsHaveHandlers(t *testing.T) {
 
 	commands := reg.All()
 	for _, cmd := range commands {
-		require.NotNil(t, cmd.Handler, "command %s should have a handler", cmd.Name)
+		require.NotNil(t, cmd.Handler(), "command %s should have a handler", cmd.Name)
 	}
 }
 
