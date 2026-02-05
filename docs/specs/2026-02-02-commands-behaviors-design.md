@@ -346,14 +346,14 @@ return entry.Handler(ctx, execution)
 
 Capabilities use dot-notation hierarchy:
 
-| Category   | Examples                                                    |
-| ---------- | ----------------------------------------------------------- |
-| `world.*`  | `world.look`, `world.move`, `world.examine`                 |
-| `comms.*`  | `comms.say`, `comms.pose`, `comms.emit`                     |
+| Category     | Examples                                                    |
+| ------------ | ----------------------------------------------------------- |
+| `world.*`    | `world.look`, `world.move`, `world.examine`                 |
+| `comms.*`    | `comms.say`, `comms.pose`, `comms.emit`                     |
 | `build.*`    | `build.location`, `build.exit`                              |
 | `objects.*`  | `objects.create`, `objects.set`                             |
-| `player.*` | `player.alias`, `player.who`, `player.quit`                 |
-| `admin.*`  | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
+| `player.*`   | `player.alias`, `player.who`, `player.quit`                 |
+| `admin.*`    | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
 
 ### Default Grants
 
