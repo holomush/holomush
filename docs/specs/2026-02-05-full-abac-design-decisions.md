@@ -36,8 +36,10 @@ integration with the plugin system, and a policy language readable by non-engine
 game admins.
 
 **Key insight:** Relationships can be modeled as attributes that get resolved at
-evaluation time. The existing `LocationResolver` already resolves `$here`
-dynamically — full ABAC generalizes this pattern to any entity property.
+evaluation time. The existing `LocationResolver` performs token replacement for
+`$here` in glob patterns — a form of dynamic context resolution. The ABAC
+engine's `AttributeProvider` generalizes this concept: instead of replacing
+tokens in strings, providers resolve full attribute bags for any entity.
 
 ---
 
@@ -114,15 +116,15 @@ simple: deny always wins, period.
 
 ## 5. Migration Strategy
 
-**Question:** How do we migrate ~35 callers from the old `AccessControl`
-interface to the new `AccessPolicyEngine`?
+**Question:** How do we migrate ~28 production call sites from the old
+`AccessControl` interface to the new `AccessPolicyEngine`?
 
 **Options considered:**
 
-| Option | Description                                 | Pros                                                  | Cons                                                                 |
-| ------ | ------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------- |
-| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all 35 callers need error handling added at once |
-| B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                     |
+| Option | Description                                 | Pros                                                  | Cons                                                                  |
+| ------ | ------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------- |
+| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~28 callers need error handling added at once |
+| B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                      |
 
 **Decision:** **Option B — New `AccessPolicyEngine` interface with adapter.**
 

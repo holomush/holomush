@@ -25,6 +25,7 @@ Players control access to their own properties through a simplified lock system.
 - In-game admin commands for policy CRUD and debugging (`policy` command set)
 - Full audit trail of access decisions in a dedicated PostgreSQL table
 - Backward-compatible migration from `AccessControl` to `AccessPolicyEngine`
+  (~28 production call sites)
 - Default-deny posture with deny-overrides conflict resolution
 
 ### Non-Goals
@@ -151,10 +152,30 @@ type AccessRequest struct {
 }
 ```
 
+The engine parses the prefixed string format to extract type and ID. The prefix
+mapping is:
+
+| Prefix      | DSL Type    | Example                 |
+| ----------- | ----------- | ----------------------- |
+| `char:`     | `character` | `char:01ABC`            |
+| `plugin:`   | `plugin`    | `plugin:echo-bot`       |
+| `system`    | (bypass)    | `system` (no ID)        |
+| `session:`  | `session`   | `session:web-123`       |
+| `location:` | `location`  | `location:01XYZ`        |
+| `object:`   | `object`    | `object:01DEF`          |
+| `command:`  | `command`   | `command:say`           |
+| `property:` | `property`  | `property:01GHI`        |
+| `stream:`   | `stream`    | `stream:location:01XYZ` |
+
+Session subjects (`session:web-123`) are resolved to their associated character
+before policy evaluation. The engine looks up the session's character ID and
+evaluates policies as if `principal is character`.
+
 ### Decision
 
 ```go
 // Decision represents the outcome of a policy evaluation.
+// Invariant: Allowed is true if and only if Effect == EffectAllow.
 type Decision struct {
     Allowed    bool
     Effect     Effect          // Allow, Deny, or DefaultDeny (no policy matched)
@@ -249,26 +270,55 @@ principal_clause = "principal" [ "is" type_name ]
 action_clause    = "action" [ "in" list ]
 resource_clause  = "resource" [ "is" type_name ]
 
-conditions = condition { "&&" condition }
-           | conditions "||" conditions
-condition  = expr comparator expr
-           | expr "in" list
-           | expr "in" entity_ref
-           | expr "." "containsAll" "(" list ")"
-           | expr "." "containsAny" "(" list ")"
-           | expr "has" identifier
-           | "!" condition
-           | "(" conditions ")"
-           | "if" condition "then" condition "else" condition
+conditions   = disjunction
+disjunction  = conjunction { "||" conjunction }
+conjunction  = condition { "&&" condition }
+condition    = expr comparator expr
+             | expr "like" string_literal
+             | expr "in" list
+             | expr "in" entity_ref
+             | expr "." "containsAll" "(" list ")"
+             | expr "." "containsAny" "(" list ")"
+             | expr "has" identifier
+             | "!" condition
+             | "(" conditions ")"
+             | "if" condition "then" condition "else" condition
 
 expr       = attribute_ref | literal | entity_ref
-attribute_ref = ("principal" | "resource" | "env") "." identifier { "." identifier }
+attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
 entity_ref = type_name "::" string_literal
-literal    = string | number | boolean
+literal    = string_literal | number | boolean
 list       = "[" literal { "," literal } "]"
 comparator = "==" | "!=" | ">" | ">=" | "<" | "<="
 type_name  = identifier
+
+(* Terminals *)
+identifier     = letter { letter | digit | "_" | "-" }
+string_literal = '"' { character } '"'
+number         = [ "-" ] digit { digit } [ "." digit { digit } ]
+boolean        = "true" | "false"
+
+(* Whitespace, including newlines, is insignificant within policy text.
+   The `policy create` command collects multi-line input until "." on a
+   line by itself. *)
 ```
+
+**Grammar notes:**
+
+- `&&` binds tighter than `||` (conjunction before disjunction), matching
+  standard boolean logic and Cedar semantics.
+- `like` uses glob syntax (consistent with `gobwas/glob` already in the
+  project), NOT SQL `LIKE` semantics. Wildcards: `*` matches any sequence,
+  `?` matches one character.
+- `action` is a valid attribute root in conditions, providing access to the
+  `AttributeBags.Action` map (e.g., `action.name`). Action matching in the
+  target clause covers most use cases, but conditions MAY reference action
+  attributes when needed.
+- The `entity_ref` syntax (`Type::"value"`) supports hierarchy membership
+  checks (e.g., `principal in Group::"admins"`). This is reserved for future
+  group/hierarchy features; initial implementation MAY defer entity references
+  and use attribute-based group checks (`principal.flags.containsAny(...)`)
+  instead.
 
 ### Supported Operators
 
@@ -475,18 +525,22 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 - **Cache invalidation:** The engine subscribes to PostgreSQL LISTEN/NOTIFY on
   the `policy_changed` channel. The Go policy store calls `pg_notify` after any
   Create/Update/Delete operation. On notification, the engine reloads all enabled
-  policies before the next evaluation.
+  policies before the next evaluation. On reconnect after a connection drop, the
+  engine MUST perform a full policy reload to account for any missed
+  notifications.
 
 ## Policy Storage
 
 ### Schema
 
+All `id` columns use ULID format, consistent with project conventions.
+
 ```sql
 CREATE TABLE access_policies (
-    id          TEXT PRIMARY KEY,
+    id          TEXT PRIMARY KEY,           -- ULID
     name        TEXT NOT NULL UNIQUE,
     description TEXT,
-    effect      TEXT NOT NULL,
+    effect      TEXT NOT NULL CHECK (effect IN ('permit', 'forbid')),
     dsl_text    TEXT NOT NULL,
     enabled     BOOLEAN NOT NULL DEFAULT true,
     created_by  TEXT NOT NULL,
@@ -495,8 +549,10 @@ CREATE TABLE access_policies (
     version     INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE INDEX idx_policies_enabled ON access_policies(enabled) WHERE enabled = true;
+
 CREATE TABLE access_policy_versions (
-    id          TEXT PRIMARY KEY,
+    id          TEXT PRIMARY KEY,           -- ULID
     policy_id   TEXT NOT NULL REFERENCES access_policies(id) ON DELETE CASCADE,
     version     INTEGER NOT NULL,
     dsl_text    TEXT NOT NULL,
@@ -507,13 +563,13 @@ CREATE TABLE access_policy_versions (
 );
 
 CREATE TABLE access_audit_log (
-    id            TEXT PRIMARY KEY,
+    id            TEXT PRIMARY KEY,         -- ULID
     timestamp     TIMESTAMPTZ NOT NULL DEFAULT now(),
     subject       TEXT NOT NULL,
     action        TEXT NOT NULL,
     resource      TEXT NOT NULL,
-    decision      TEXT NOT NULL,
-    effect        TEXT NOT NULL,
+    decision      TEXT NOT NULL CHECK (decision IN ('allowed', 'denied')),
+    effect        TEXT NOT NULL CHECK (effect IN ('allow', 'deny', 'default_deny')),
     policy_id     TEXT,
     policy_name   TEXT,
     attributes    JSONB,
@@ -522,16 +578,18 @@ CREATE TABLE access_audit_log (
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log(timestamp DESC);
 CREATE INDEX idx_audit_log_subject ON access_audit_log(subject, timestamp DESC);
+CREATE INDEX idx_audit_log_resource ON access_audit_log(resource, timestamp DESC);
 CREATE INDEX idx_audit_log_decision ON access_audit_log(decision, timestamp DESC);
 
 CREATE TABLE entity_properties (
-    id            TEXT PRIMARY KEY,
+    id            TEXT PRIMARY KEY,         -- ULID
     parent_type   TEXT NOT NULL,
     parent_id     TEXT NOT NULL,
     name          TEXT NOT NULL,
-    value         TEXT,
+    value         TEXT,                     -- NULL permitted for flag-style properties (name-only)
     owner         TEXT,
-    visibility    TEXT NOT NULL DEFAULT 'public',
+    visibility    TEXT NOT NULL DEFAULT 'public'
+                  CHECK (visibility IN ('public', 'private', 'restricted', 'system', 'admin')),
     flags         JSONB DEFAULT '[]',
     visible_to    JSONB DEFAULT NULL,
     excluded_from JSONB DEFAULT NULL,
@@ -720,7 +778,7 @@ when { principal.role in ["builder", "admin"] };
 
 permit(principal is character, action in ["execute"], resource is command)
 when { principal.role in ["builder", "admin"]
-    && resource.name in ["dig", "create", "describe", "link"] };
+    && resource.name in ["@dig", "@create", "@describe", "@link"] };
 
 // admin-powers: full access
 permit(principal is character, action, resource)
@@ -839,8 +897,13 @@ This confirms the seed policies faithfully reproduce the static role behavior.
 - [ ] Plugin attribute contribution interface designed (registration-based)
 - [ ] Admin commands documented for policy management
 - [ ] Player lock system designed for owned resource access control
+- [ ] Lock syntax compiles to scoped policies with ownership verification
 - [ ] Property model designed as first-class entities
 - [ ] Migration path documented from static permissions to full ABAC
+- [ ] Shadow mode validates seed policies match static role behavior
+- [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
+- [ ] System subject bypass returns allow without policy evaluation
+- [ ] Subject type prefix-to-DSL-type mapping documented
 
 ## References
 
