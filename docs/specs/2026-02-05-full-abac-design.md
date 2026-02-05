@@ -146,7 +146,7 @@ type AccessPolicyEngine interface {
 ```go
 // AccessRequest contains all information needed for an access decision.
 type AccessRequest struct {
-    Subject  string // "char:01ABC", "plugin:echo-bot", "system"
+    Subject  string // "character:01ABC", "plugin:echo-bot", "system"
     Action   string // "read", "write", "enter", "execute"
     Resource string // "location:01XYZ", "command:dig", "property:01DEF"
 }
@@ -155,21 +155,44 @@ type AccessRequest struct {
 The engine parses the prefixed string format to extract type and ID. The prefix
 mapping is:
 
-| Prefix      | DSL Type    | Example                 |
-| ----------- | ----------- | ----------------------- |
-| `char:`     | `character` | `char:01ABC`            |
-| `plugin:`   | `plugin`    | `plugin:echo-bot`       |
-| `system`    | (bypass)    | `system` (no ID)        |
-| `session:`  | `session`   | `session:web-123`       |
-| `location:` | `location`  | `location:01XYZ`        |
-| `object:`   | `object`    | `object:01DEF`          |
-| `command:`  | `command`   | `command:say`           |
-| `property:` | `property`  | `property:01GHI`        |
-| `stream:`   | `stream`    | `stream:location:01XYZ` |
+| Prefix       | DSL Type    | Example                 |
+| ------------ | ----------- | ----------------------- |
+| `character:` | `character` | `character:01ABC`       |
+| `plugin:`    | `plugin`    | `plugin:echo-bot`       |
+| `system`     | (bypass)    | `system` (no ID)        |
+| `session:`   | `session`   | `session:web-123`       |
+| `location:`  | `location`  | `location:01XYZ`        |
+| `object:`    | `object`    | `object:01DEF`          |
+| `command:`   | `command`   | `command:say`           |
+| `property:`  | `property`  | `property:01GHI`        |
+| `stream:`    | `stream`    | `stream:location:01XYZ` |
+
+**Subject prefix constants:** The `access` package SHOULD define these prefixes
+as constants (e.g., `SubjectCharacter = "character:"`, `SubjectPlugin =
+"plugin:"`) to prevent typos and enable compile-time references. The existing
+`ParseSubject()` function already handles prefix parsing. The static system uses
+`char:` as a legacy abbreviation; the adapter MUST accept both `char:` and
+`character:` during migration, normalizing to `character:` internally.
+
+**Design note:** Subject and resource use flat prefixed strings rather than typed
+structs to simplify serialization for audit logging and cross-process
+communication. Parsing overhead is negligible at <200 concurrent users. If
+profiling shows parsing as a bottleneck, introduce a cached parsed
+representation.
+
+### Session Subject Resolution
 
 Session subjects (`session:web-123`) are resolved to their associated character
-before policy evaluation. The engine looks up the session's character ID and
-evaluates policies as if `principal is character`.
+at the engine entry point, BEFORE attribute resolution:
+
+1. Engine receives `AccessRequest{Subject: "session:web-123", ...}`
+2. Engine queries the session store for the session's character ID
+3. Engine rewrites the request as `AccessRequest{Subject: "character:01ABC", ...}`
+4. Attribute resolution proceeds using the character subject
+
+This ensures policies are always evaluated as `principal is character`, never
+`principal is session`. The `SessionProvider` in the architecture diagram exists
+only to perform this lookup — it does not contribute attributes to the bags.
 
 ### Decision
 
@@ -232,6 +255,69 @@ type EnvironmentProvider interface {
 }
 ```
 
+### Core Attribute Schema
+
+Each attribute provider contributes a defined set of attributes. Attributes
+marked MUST always exist when the entity is valid; MAY attributes may be nil.
+
+**CharacterProvider** (`character` namespace):
+
+| Attribute  | Type     | Requirement | Description                                |
+| ---------- | -------- | ----------- | ------------------------------------------ |
+| `type`     | string   | MUST        | Always `"character"`                       |
+| `id`       | string   | MUST        | ULID of the character                      |
+| `name`     | string   | MUST        | Character display name                     |
+| `role`     | string   | MUST        | One of: `"player"`, `"builder"`, `"admin"` |
+| `faction`  | string   | MAY         | Faction affiliation (nil if unaffiliated)  |
+| `level`    | int      | MUST        | Character level (>= 0)                     |
+| `flags`    | []string | MUST        | Arbitrary flags (empty array if none)      |
+| `location` | string   | MUST        | ULID of current location                   |
+
+**LocationProvider** (`location` namespace):
+
+| Attribute    | Type   | Requirement | Description                               |
+| ------------ | ------ | ----------- | ----------------------------------------- |
+| `type`       | string | MUST        | Always `"location"`                       |
+| `id`         | string | MUST        | ULID of the location                      |
+| `name`       | string | MUST        | Location display name                     |
+| `faction`    | string | MAY         | Faction that controls this location       |
+| `restricted` | bool   | MUST        | Whether entry requires special permission |
+
+**PropertyProvider** (`property` namespace):
+
+| Attribute       | Type     | Requirement | Description                               |
+| --------------- | -------- | ----------- | ----------------------------------------- |
+| `type`          | string   | MUST        | Always `"property"`                       |
+| `id`            | string   | MUST        | ULID of the property                      |
+| `name`          | string   | MUST        | Property name                             |
+| `parent_type`   | string   | MUST        | Parent entity type                        |
+| `parent_id`     | string   | MUST        | Parent entity ULID                        |
+| `owner`         | string   | MAY         | Subject who created/set this property     |
+| `visibility`    | string   | MUST        | One of: public, private, restricted, etc. |
+| `flags`         | []string | MUST        | Arbitrary flags (empty array if none)     |
+| `visible_to`    | []string | MAY         | Character IDs (only when restricted)      |
+| `excluded_from` | []string | MAY         | Character IDs (only when restricted)      |
+
+**EnvironmentProvider** (`env` namespace):
+
+| Attribute     | Type   | Requirement | Description                           |
+| ------------- | ------ | ----------- | ------------------------------------- |
+| `time`        | string | MUST        | Current time (RFC 3339)               |
+| `maintenance` | bool   | MUST        | Whether server is in maintenance mode |
+
+**Action bag** (constructed by the engine, not a provider):
+
+| Attribute | Type   | Requirement | Description                        |
+| --------- | ------ | ----------- | ---------------------------------- |
+| `name`    | string | MUST        | The action string from the request |
+
+The engine constructs `AttributeBags.Action` directly from the `AccessRequest`
+— no provider is needed. `action.name` equals the `Action` field of the request.
+
+**Plugin providers** contribute attributes under their own namespace (e.g.,
+`reputation.score`). Plugin attributes are always MAY — the engine tolerates
+their absence.
+
 ### Backward-Compatible Adapter
 
 ```go
@@ -276,7 +362,7 @@ conjunction  = condition { "&&" condition }
 condition    = expr comparator expr
              | expr "like" string_literal
              | expr "in" list
-             | expr "in" entity_ref
+             | expr "in" expr
              | expr "." "containsAll" "(" list ")"
              | expr "." "containsAny" "(" list ")"
              | expr "has" identifier
@@ -284,9 +370,8 @@ condition    = expr comparator expr
              | "(" conditions ")"
              | "if" condition "then" condition "else" condition
 
-expr       = attribute_ref | literal | entity_ref
+expr       = attribute_ref | literal
 attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
-entity_ref = type_name "::" string_literal
 literal    = string_literal | number | boolean
 list       = "[" literal { "," literal } "]"
 comparator = "==" | "!=" | ">" | ">=" | "<" | "<="
@@ -309,16 +394,24 @@ boolean        = "true" | "false"
   standard boolean logic and Cedar semantics.
 - `like` uses glob syntax (consistent with `gobwas/glob` already in the
   project), NOT SQL `LIKE` semantics. Wildcards: `*` matches any sequence,
-  `?` matches one character.
+  `?` matches one character. The glob is compiled with `:` as separator
+  (`glob.Compile(pattern, ':')`) for consistency with the existing
+  `StaticAccessControl` permission matching.
 - `action` is a valid attribute root in conditions, providing access to the
   `AttributeBags.Action` map (e.g., `action.name`). Action matching in the
   target clause covers most use cases, but conditions MAY reference action
   attributes when needed.
-- The `entity_ref` syntax (`Type::"value"`) supports hierarchy membership
-  checks (e.g., `principal in Group::"admins"`). This is reserved for future
-  group/hierarchy features; initial implementation MAY defer entity references
-  and use attribute-based group checks (`principal.flags.containsAny(...)`)
-  instead.
+- `expr "in" expr` supports membership checks against attribute values that
+  are arrays (e.g., `principal.id in resource.visible_to`). The right-hand side
+  MUST resolve to a `[]string` or `[]any` attribute. This is distinct from
+  `expr "in" list` where the list is a literal.
+- **Deferred: entity references.** Cedar defines `entity_ref` syntax
+  (`Type::"value"`) for hierarchy membership checks (e.g.,
+  `principal in Group::"admins"`). This is NOT included in the initial grammar.
+  The parser MUST reject `Type::"value"` syntax with a clear error message
+  directing admins to use attribute-based group checks
+  (`principal.flags.containsAny(["admin"])`) instead. Entity references MAY be
+  added in a future phase when group/hierarchy features are implemented.
 
 ### Supported Operators
 
@@ -328,7 +421,7 @@ boolean        = "true" | "false"
 | `>`, `>=`      | Numbers          | `principal.level >= 5`                                       |
 | `<`, `<=`      | Numbers          | `principal.level < 10`                                       |
 | `in` (list)    | Value in list    | `action in ["read", "write"]`                                |
-| `in` (entity)  | Entity group     | `principal in Group::"admins"`                               |
+| `in` (expr)    | Value in attr    | `principal.id in resource.visible_to`                        |
 | `has`          | Attribute exists | `principal has faction`                                      |
 | `containsAll`  | Set: all present | `principal.flags.containsAll(["approved", "active"])`        |
 | `containsAny`  | Set: any present | `principal.flags.containsAny(["admin", "builder"])`          |
@@ -401,6 +494,12 @@ access control attributes. This provides conceptual uniformity — characters,
 locations, objects, and properties are all entities that the policy engine
 evaluates against using the same interface.
 
+**Package ownership:** Properties are world model entities managed by
+`internal/world/PropertyRepository`, consistent with `LocationRepository` and
+`ObjectRepository`. The `entity_properties` table is part of the world schema.
+The `PropertyProvider` (in `internal/access/policy/attribute/`) wraps
+`PropertyRepository` to resolve property attributes for policy evaluation.
+
 ### Property Attributes
 
 | Attribute       | Type     | Description                                              |
@@ -439,7 +538,7 @@ which powers audit logging and the `policy test` debugging command.
 ### Resolution Flow
 
 ```text
-Evaluate(ctx, AccessRequest{Subject: "char:01ABC", Action: "enter", Resource: "location:01XYZ"})
+Evaluate(ctx, AccessRequest{Subject: "character:01ABC", Action: "enter", Resource: "location:01XYZ"})
 
 1. Parse subject → type="character", id="01ABC"
 2. Parse resource → type="location", id="01XYZ"
@@ -470,12 +569,26 @@ engine.RegisterEnvironmentProvider(weatherProvider)
 
 ### Error Handling
 
-- If a core provider returns an error, the engine returns `Decision{error}`
-  rather than silently denying. The adapter translates this to `false` with a
-  log, but direct callers can distinguish "denied" from "broken."
-- If a plugin provider returns an error, the engine logs a warning and continues
-  with the remaining providers. Plugin failures SHOULD NOT block access
-  decisions.
+**Core provider errors:** The engine returns the error alongside a default-deny
+decision. Direct callers can distinguish "denied by policy" from "system
+failure":
+
+```go
+return Decision{Allowed: false, Effect: EffectDefaultDeny}, err
+```
+
+The adapter translates this to `false` with an error log (fail-closed). The
+audit log records the `error_message` field for these cases.
+
+**Plugin provider errors:** The engine logs a warning via slog and continues
+evaluation with the remaining providers. Missing plugin attributes cause
+conditions referencing them to evaluate to `false` (fail-safe). The audit log
+does NOT record plugin provider errors to prevent noise.
+
+```text
+slog.Warn("plugin attribute provider failed",
+    "namespace", provider.Namespace(), "error", err)
+```
 
 ## Evaluation Algorithm
 
@@ -528,6 +641,30 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
   policies before the next evaluation. On reconnect after a connection drop, the
   engine MUST perform a full policy reload to account for any missed
   notifications.
+- **Concurrency:** Policy evaluations use a snapshot of the in-memory policy
+  cache at the start of `Evaluate()`. If a policy changes during evaluation, the
+  decision reflects the pre-change policy. This is acceptable for MUSH workloads
+  where the stale window is <100ms.
+
+### Performance Targets
+
+| Metric                   | Target | Notes                            |
+| ------------------------ | ------ | -------------------------------- |
+| `Evaluate()` p99 latency | <5ms   | At 200 concurrent users          |
+| Attribute resolution     | <2ms   | All providers combined           |
+| DSL condition evaluation | <1ms   | Per policy                       |
+| Cache reload             | <50ms  | Full policy set reload on NOTIFY |
+
+Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
+attribute resolution, policy filtering, condition evaluation, and audit logging
+to enable performance profiling.
+
+### Future: Attribute Caching
+
+If profiling shows attribute resolution as a bottleneck, introduce per-request
+caching in `AttributeResolver`. The cache is scoped to a single `Evaluate()`
+call and cleared afterward — no stale data risk across separate checks. This is
+deferred until profiling demonstrates the need.
 
 ## Policy Storage
 
@@ -608,6 +745,26 @@ transaction as any policy CRUD operation. The engine subscribes to this channel
 and reloads its in-memory policy cache on notification. No database triggers are
 used — all notification logic lives in Go application code.
 
+The engine uses `pgx.Conn.Listen()` which requires a dedicated persistent
+connection outside the connection pool. On connection loss, the engine MUST:
+
+1. Reconnect with exponential backoff
+2. Re-subscribe to the `policy_changed` channel
+3. Perform a full policy reload (missed notifications cannot be recovered)
+
+### Audit Log Serialization
+
+The `effect` column in `access_audit_log` maps to the Go `Effect` enum:
+
+| Go Constant         | DB Value         |
+| ------------------- | ---------------- |
+| `EffectAllow`       | `"allow"`        |
+| `EffectDeny`        | `"deny"`         |
+| `EffectDefaultDeny` | `"default_deny"` |
+
+The `decision` column is derived: `"allowed"` when `Effect == EffectAllow`,
+`"denied"` otherwise.
+
 ### Visibility Defaults
 
 When the Go property store sets visibility to `restricted`, it MUST populate
@@ -629,7 +786,7 @@ policies evaluate.
 ```text
 > set me/secret_background.visibility = private
 > set me/wounds.visibility = restricted
-> set me/wounds.visible_to += char:01AAA
+> set me/wounds.visible_to += character:01AAA
 > set me/wounds.excluded_from += me
 ```
 
@@ -662,6 +819,19 @@ simplified lock syntax. Locks compile to scoped policies behind the scenes.
 character owns. The lock command MUST verify ownership before creating the
 policy. A character can never write a lock that affects another player's
 resources.
+
+**Lock policy lifecycle:**
+
+- Lock policies are NOT versioned. Each `lock`/`unlock` creates or deletes a
+  policy directly — no version history is maintained.
+- `lock X/action = condition` calls `PolicyStore.Create()` with generated DSL
+  text and the naming convention `lock:{resource-type}:{resource-id}:{action}`.
+- `unlock X/action` calls `PolicyStore.DeleteByName()` to remove the lock
+  policy.
+- Modifying a lock (re-running `lock X/action` with new conditions) deletes the
+  existing lock policy and creates a new one in a single transaction.
+- Ownership verification occurs in the lock command handler before any policy
+  store operation.
 
 ### Layer 3: Full Policies (Admin Only)
 
@@ -715,7 +885,7 @@ Dry-run evaluation showing resolved attributes, matching policies, and the
 final decision. Available to admins and builders (for debugging builds).
 
 ```text
-> policy test char:01ABC enter location:01XYZ --verbose
+> policy test character:01ABC enter location:01XYZ --verbose
 Subject attributes:
   type=character, id=01ABC, faction=rebels, level=7, role=player
 Resource attributes:
@@ -745,7 +915,22 @@ when { principal.role == "builder" && resource.name == "policy test" };
 
 ### Seed Policies
 
-The current static role permissions translate to seed policies:
+The current `StaticAccessControl` permissions translate to seed policies. Two
+naming corrections are applied during this translation:
+
+- **Subject prefix:** The static system uses `char:` as an abbreviation; the
+  ABAC system normalizes to `character:` for consistency with the resource prefix
+  format. The adapter accepts both during migration.
+- **Command names:** The static system uses legacy `@`-prefixed builder commands
+  (`@dig`, `@create`, etc.) inherited from traditional MU\* conventions.
+  HoloMUSH's command system (Epic 6) uses plain names without prefixes. The seed
+  policies use the correct plain names.
+
+**New actions:** The `enter` action is introduced by the ABAC system for
+location entry control. The static system handles movement through
+`write:character:$self` (changing the character's location). Shadow mode
+validation MUST account for this semantic difference — `enter` checks are new
+policy-only paths with no static-system equivalent.
 
 ```text
 // player-powers: self access
@@ -797,8 +982,15 @@ when { principal.role == "admin" };
    checks backed by seed policies.
 
 3. **Shadow mode validation:** Run both engines in parallel during testing.
-   Evaluate with both, log disagreements, fix policy gaps. Remove
-   `StaticAccessControl` once 100% agreement is confirmed.
+   Evaluate with both, log disagreements, fix policy gaps.
+
+   **Cutover criteria:** Shadow mode runs in staging for at least 7 days with
+   at least 10,000 authorization checks collected. 100% agreement means
+   `Decision.Allowed` matches `StaticAccessControl.Check()` for all checks
+   (excluding `enter` actions which have no static equivalent). Any disagreement
+   blocks cutover and triggers immediate investigation. After meeting criteria,
+   submit PR to remove `StaticAccessControl`. Rollback: revert the removal PR
+   if post-cutover bugs are found.
 
 4. **Caller migration (holomush-c6qch):** Callers incrementally migrate from
    `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()` for richer error

@@ -285,7 +285,25 @@ Admin `forbid` policies always trump player locks via deny-overrides.
 
 ---
 
-## 13. No Database Triggers
+## 13. Subject Prefix Normalization
+
+**Question:** The static system uses `char:` as the subject prefix for
+characters, but resources already use `character:` (e.g., `character:01ABC`).
+Should the ABAC system normalize?
+
+**Decision:** Normalize to `character:` everywhere. The adapter MUST accept
+both `char:` and `character:` during migration, normalizing to `character:`
+internally. The `access` package SHOULD define prefix constants
+(`SubjectCharacter`, `SubjectPlugin`, etc.) to prevent typos.
+
+**Rationale:** Asymmetric prefixes (`char:` for subjects, `character:` for
+resources) create confusion in policies and audit logs. Normalizing to
+`character:` aligns subjects with resources and with Cedar conventions where
+the principal type name matches the DSL type name.
+
+---
+
+## 14. No Database Triggers
 
 **Sean's hard constraint:** No database triggers or stored procedures. All logic
 must live in Go application code. PostgreSQL is storage only.
