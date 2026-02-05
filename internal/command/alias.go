@@ -358,10 +358,8 @@ type aliasLookupResult struct {
 //
 // Returns the resolved string, whether an alias was expanded, and which alias was used.
 //
-// Locking strategy: All map lookups are performed in lookupAliasLocked() under
-// a single RLock acquisition. The lock is released before any string building
-// or result assembly. This ensures exactly one lock/unlock pair per call and
-// makes the locking behavior predictable for future modifications.
+// Locking strategy: All map lookups are performed under a single RLock acquisition.
+// The lock is released before any string building or result assembly.
 func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registry) AliasResult {
 	if input == "" {
 		return NoAliasResult(input)
@@ -373,21 +371,133 @@ func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registr
 		return NoAliasResult(input)
 	}
 
+	// Acquire lock once for all alias lookups
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	// Step 1: Check if first word is a registered command
-	if registry != nil {
-		if _, ok := registry.Get(firstWord); ok {
-			return NoAliasResult(input)
-		}
-	}
-
-	// Step 2-4: Look up aliases under lock, then build result outside the lock
-	lookup := c.lookupAliasLocked(playerID, firstWord)
-
-	if !lookup.expanded {
+	if c.resolveExactLocked(firstWord, registry) {
 		return NoAliasResult(input)
 	}
 
-	// Build the resolved string (no lock needed)
+	// Step 2: Check player aliases (with recursive expansion)
+	if result, matched := c.resolvePlayerAliasLocked(playerID, firstWord); matched {
+		return c.buildResult(result, args)
+	}
+
+	// Step 3: Check system aliases (with recursive expansion)
+	if result, matched := c.resolveSystemAliasLocked(firstWord); matched {
+		return c.buildResult(result, args)
+	}
+
+	// Step 4: Check prefix aliases (player then system)
+	if result, matched := c.resolvePrefixLocked(playerID, firstWord); matched {
+		return c.buildResult(result, args)
+	}
+
+	// Step 5: No match found
+	return NoAliasResult(input)
+}
+
+// resolveExactLocked checks if the input matches a registered command.
+// Must be called with RLock held.
+// Returns true if the input matches a registered command.
+func (c *AliasCache) resolveExactLocked(input string, registry *Registry) bool {
+	if registry == nil || input == "" {
+		return false
+	}
+	_, exists := registry.Get(input)
+	return exists
+}
+
+// resolvePlayerAliasLocked checks player aliases with recursive expansion.
+// Must be called with RLock held.
+// Returns the lookup result and true if a player alias was found.
+func (c *AliasCache) resolvePlayerAliasLocked(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
+	if playerAliases, ok := c.playerAliases[playerID]; ok {
+		if _, exists := playerAliases[firstWord]; exists {
+			resolvedCmd, _ := c.resolveWithDepth(playerID, firstWord, 0)
+			return aliasLookupResult{
+				resolvedCmd: resolvedCmd,
+				expanded:    true,
+				aliasUsed:   firstWord,
+			}, true
+		}
+	}
+	return aliasLookupResult{}, false
+}
+
+// resolveSystemAliasLocked checks system aliases with recursive expansion.
+// Must be called with RLock held.
+// Returns the lookup result and true if a system alias was found.
+func (c *AliasCache) resolveSystemAliasLocked(firstWord string) (aliasLookupResult, bool) {
+	if _, exists := c.systemAliases[firstWord]; exists {
+		resolvedCmd, _ := c.resolveWithDepth(ulid.ULID{}, firstWord, 0)
+		return aliasLookupResult{
+			resolvedCmd: resolvedCmd,
+			expanded:    true,
+			aliasUsed:   firstWord,
+		}, true
+	}
+	return aliasLookupResult{}, false
+}
+
+// resolvePrefixLocked checks for single-character prefix aliases.
+// Player aliases take priority over system aliases.
+// Must be called with RLock held.
+// Returns the lookup result and true if a prefix alias was found.
+func (c *AliasCache) resolvePrefixLocked(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
+	// Prefix matching only for words with 2+ characters
+	if len(firstWord) <= 1 {
+		return aliasLookupResult{}, false
+	}
+
+	prefix := firstWord[:1]
+	rest := firstWord[1:]
+
+	// Check player prefix aliases first
+	if playerAliases, ok := c.playerAliases[playerID]; ok {
+		if prefixCmd, exists := playerAliases[prefix]; exists {
+			return aliasLookupResult{
+				resolvedCmd: prefixCmd,
+				expanded:    true,
+				aliasUsed:   prefix,
+				isPrefix:    true,
+				rest:        rest,
+			}, true
+		}
+	}
+
+	// Check system prefix aliases
+	if prefixCmd, exists := c.systemAliases[prefix]; exists {
+		return aliasLookupResult{
+			resolvedCmd: prefixCmd,
+			expanded:    true,
+			aliasUsed:   prefix,
+			isPrefix:    true,
+			rest:        rest,
+		}, true
+	}
+
+	return aliasLookupResult{}, false
+}
+
+// resolveAliasLocked checks both player and system aliases with recursive expansion.
+// This is a convenience method that combines player and system alias resolution.
+// Player aliases take priority over system aliases.
+// Must be called with RLock held.
+func (c *AliasCache) resolveAliasLocked(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
+	// Try player alias first
+	if result, matched := c.resolvePlayerAliasLocked(playerID, firstWord); matched {
+		return result, true
+	}
+
+	// Fall back to system alias
+	return c.resolveSystemAliasLocked(firstWord)
+}
+
+// buildResult constructs the final AliasResult from a lookup result and args.
+func (c *AliasCache) buildResult(lookup aliasLookupResult, args string) AliasResult {
 	parts := []string{lookup.resolvedCmd}
 	if lookup.isPrefix {
 		parts = append(parts, lookup.rest)
@@ -399,56 +509,49 @@ func (c *AliasCache) Resolve(playerID ulid.ULID, input string, registry *Registr
 	return NewAliasResult(resolved, lookup.aliasUsed)
 }
 
-// lookupAliasLocked performs all alias map lookups under a single RLock.
-// It checks regular aliases first (player then system), then prefix aliases.
-// The lock is acquired at entry and released before return.
-func (c *AliasCache) lookupAliasLocked(playerID ulid.ULID, firstWord string) aliasLookupResult {
+// resolveExact checks if the input matches a registered command.
+// This is a public wrapper for testing purposes.
+func (c *AliasCache) resolveExact(input string, registry *Registry) (string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
-	// Try regular alias resolution first
-	resolvedCmd, expanded := c.resolveWithDepth(playerID, firstWord, 0)
-	if expanded {
-		return aliasLookupResult{
-			resolvedCmd: resolvedCmd,
-			expanded:    true,
-			aliasUsed:   firstWord,
-		}
+	if c.resolveExactLocked(input, registry) {
+		return input, true
 	}
+	return "", false
+}
 
-	// Check for single-character prefix aliases.
-	// This handles MUSH-style shortcuts like ":waves" or ";'s eyes widen"
-	// where the alias is a single character attached to the text.
-	if len(firstWord) > 1 {
-		prefix := firstWord[:1]
-		rest := firstWord[1:]
+// resolvePlayerAlias checks player aliases with recursive expansion.
+// This is a public wrapper for testing purposes.
+func (c *AliasCache) resolvePlayerAlias(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.resolvePlayerAliasLocked(playerID, firstWord)
+}
 
-		// Check player prefix aliases first
-		if playerAliases, ok := c.playerAliases[playerID]; ok {
-			if prefixCmd, ok := playerAliases[prefix]; ok {
-				return aliasLookupResult{
-					resolvedCmd: prefixCmd,
-					expanded:    true,
-					aliasUsed:   prefix,
-					isPrefix:    true,
-					rest:        rest,
-				}
-			}
-		}
+// resolveSystemAlias checks system aliases with recursive expansion.
+// This is a public wrapper for testing purposes.
+func (c *AliasCache) resolveSystemAlias(firstWord string) (aliasLookupResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.resolveSystemAliasLocked(firstWord)
+}
 
-		// Check system prefix aliases
-		if prefixCmd, ok := c.systemAliases[prefix]; ok {
-			return aliasLookupResult{
-				resolvedCmd: prefixCmd,
-				expanded:    true,
-				aliasUsed:   prefix,
-				isPrefix:    true,
-				rest:        rest,
-			}
-		}
-	}
+// resolvePrefix checks for single-character prefix aliases.
+// Player aliases take priority over system aliases.
+// This is a public wrapper for testing purposes.
+func (c *AliasCache) resolvePrefix(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.resolvePrefixLocked(playerID, firstWord)
+}
 
-	return aliasLookupResult{expanded: false}
+// resolveAlias checks both player and system aliases with recursive expansion.
+// Player aliases take priority over system aliases.
+// This is a public wrapper for testing purposes.
+func (c *AliasCache) resolveAlias(playerID ulid.ULID, firstWord string) (aliasLookupResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.resolveAliasLocked(playerID, firstWord)
 }
 
 // resolveWithDepth performs alias resolution with depth tracking.
