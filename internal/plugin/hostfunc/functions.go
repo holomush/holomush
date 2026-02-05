@@ -17,6 +17,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -39,11 +40,12 @@ type CapabilityChecker interface {
 
 // Functions provides host functions to Lua plugins.
 type Functions struct {
-	kvStore         KVStore
-	enforcer        CapabilityChecker
-	worldMutator    WorldMutator
-	commandRegistry CommandRegistry
-	access          AccessControl
+	kvStore          KVStore
+	enforcer         CapabilityChecker
+	worldMutator     WorldMutator
+	commandRegistry  CommandRegistry
+	access           AccessControl
+	propertyRegistry *property.PropertyRegistry
 }
 
 // Option configures Functions.
@@ -55,6 +57,13 @@ type Option func(*Functions)
 func WithWorldService(svc WorldMutator) Option {
 	return func(f *Functions) {
 		f.worldMutator = svc
+	}
+}
+
+// WithPropertyRegistry sets the property registry for property host functions.
+func WithPropertyRegistry(registry *property.PropertyRegistry) Option {
+	return func(f *Functions) {
+		f.propertyRegistry = registry
 	}
 }
 
@@ -129,6 +138,9 @@ func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
 	}
 	for _, opt := range opts {
 		opt(f)
+	}
+	if f.propertyRegistry == nil {
+		f.propertyRegistry = property.SharedRegistry()
 	}
 	return f
 }

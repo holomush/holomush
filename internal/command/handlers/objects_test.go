@@ -16,9 +16,35 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
 )
+
+type customPropertyDefinition struct{}
+
+func (customPropertyDefinition) Validate(entityType string) error {
+	if entityType != "location" {
+		return errors.New("invalid entity type")
+	}
+	return nil
+}
+
+func (customPropertyDefinition) Get(_ context.Context, _ property.WorldQuerier, _ string, _ ulid.ULID) (string, error) {
+	return "", nil
+}
+
+func (customPropertyDefinition) Set(ctx context.Context, querier property.WorldQuerier, mutator property.WorldMutator, subjectID string, entityType string, entityID ulid.ULID, value string) error {
+	if entityType != "location" {
+		return nil
+	}
+	loc, err := querier.GetLocation(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	loc.Description = "custom:" + value
+	return mutator.UpdateLocation(ctx, subjectID, loc)
+}
 
 func TestCreateHandler_Object(t *testing.T) {
 	characterID := ulid.Make()
@@ -267,6 +293,60 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 	output := buf.String()
 	// Should resolve "desc" to "description"
 	assert.Contains(t, output, "Set description")
+}
+
+func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Return(true)
+	locationRepo.EXPECT().
+		Get(mock.Anything, locationID).
+		Return(&world.Location{
+			ID:   locationID,
+			Name: "Test Room",
+			Type: world.LocationTypePersistent,
+		}, nil)
+
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Return(true)
+	locationRepo.EXPECT().
+		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
+			return loc.Description == "custom:hello"
+		})).
+		Return(nil)
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  locationRepo,
+		AccessControl: accessControl,
+	})
+
+	registry := property.NewPropertyRegistry()
+	require.NoError(t, registry.Register("custom", customPropertyDefinition{}))
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "custom of here to hello",
+		Output:      &buf,
+		Services: command.NewTestServices(command.ServicesConfig{
+			World:            worldService,
+			PropertyRegistry: registry,
+		}),
+	})
+
+	err := SetHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "Set custom")
 }
 
 func TestSetHandler_PropertyNotFound(t *testing.T) {

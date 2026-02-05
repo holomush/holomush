@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -296,14 +297,15 @@ const (
 
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
-	World       WorldService         // world model queries and mutations
-	Session     core.SessionService  // session management
-	Access      access.AccessControl // authorization checks
-	Events      core.EventStore      // event persistence
-	Broadcaster EventBroadcaster     // event broadcasting
-	AliasCache  *AliasCache          // alias management (optional)
-	AliasRepo   AliasWriter          // alias persistence (optional, for alias handlers)
-	Registry    *Registry            // command registry (optional)
+	World            WorldService               // world model queries and mutations
+	Session          core.SessionService        // session management
+	Access           access.AccessControl       // authorization checks
+	Events           core.EventStore            // event persistence
+	Broadcaster      EventBroadcaster           // event broadcasting
+	AliasCache       *AliasCache                // alias management (optional)
+	AliasRepo        AliasWriter                // alias persistence (optional, for alias handlers)
+	Registry         *Registry                  // command registry (optional)
+	PropertyRegistry *property.PropertyRegistry // property registry (optional)
 }
 
 // Services provides access to core services for command handlers.
@@ -315,14 +317,15 @@ type ServicesConfig struct {
 // the command handler's execution context. The Services struct is shared
 // across all command executions.
 type Services struct {
-	world       WorldService         // world model queries and mutations
-	session     core.SessionService  // session management
-	access      access.AccessControl // authorization checks
-	events      core.EventStore      // event persistence
-	broadcaster EventBroadcaster     // event broadcasting
-	aliasCache  *AliasCache          // alias management (optional, for alias commands)
-	aliasRepo   AliasWriter          // alias persistence (optional, for alias handlers)
-	registry    *Registry            // command registry (optional, for alias shadow detection)
+	world            WorldService               // world model queries and mutations
+	session          core.SessionService        // session management
+	access           access.AccessControl       // authorization checks
+	events           core.EventStore            // event persistence
+	broadcaster      EventBroadcaster           // event broadcasting
+	aliasCache       *AliasCache                // alias management (optional, for alias commands)
+	aliasRepo        AliasWriter                // alias persistence (optional, for alias handlers)
+	registry         *Registry                  // command registry (optional, for alias shadow detection)
+	propertyRegistry *property.PropertyRegistry // property registry (optional, for property handlers)
 }
 
 // World returns the world service for model queries and mutations.
@@ -348,6 +351,9 @@ func (s *Services) Registry() *Registry { return s.registry }
 
 // AliasRepo returns the alias writer for persistence (may be nil).
 func (s *Services) AliasRepo() AliasWriter { return s.aliasRepo }
+
+// PropertyRegistry returns the property registry (may be nil).
+func (s *Services) PropertyRegistry() *property.PropertyRegistry { return s.propertyRegistry }
 
 // NewServices creates a validated Services instance.
 // Returns an error if any required service is nil.
@@ -377,16 +383,20 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 			With("service", "Broadcaster").
 			Errorf("Broadcaster service is required")
 	}
+	if cfg.PropertyRegistry == nil {
+		cfg.PropertyRegistry = property.SharedRegistry()
+	}
 
 	return &Services{
-		world:       cfg.World,
-		session:     cfg.Session,
-		access:      cfg.Access,
-		events:      cfg.Events,
-		broadcaster: cfg.Broadcaster,
-		aliasCache:  cfg.AliasCache,
-		aliasRepo:   cfg.AliasRepo,
-		registry:    cfg.Registry,
+		world:            cfg.World,
+		session:          cfg.Session,
+		access:           cfg.Access,
+		events:           cfg.Events,
+		broadcaster:      cfg.Broadcaster,
+		aliasCache:       cfg.AliasCache,
+		aliasRepo:        cfg.AliasRepo,
+		registry:         cfg.Registry,
+		propertyRegistry: cfg.PropertyRegistry,
 	}, nil
 }
 
@@ -426,15 +436,19 @@ func (s *Services) BroadcastSystemMessage(stream, message string) {
 // allowing tests to create minimal Services with only the dependencies they need.
 // This function should only be used in tests.
 func NewTestServices(cfg ServicesConfig) *Services {
+	if cfg.PropertyRegistry == nil {
+		cfg.PropertyRegistry = property.SharedRegistry()
+	}
 	return &Services{
-		world:       cfg.World,
-		session:     cfg.Session,
-		access:      cfg.Access,
-		events:      cfg.Events,
-		broadcaster: cfg.Broadcaster,
-		aliasCache:  cfg.AliasCache,
-		aliasRepo:   cfg.AliasRepo,
-		registry:    cfg.Registry,
+		world:            cfg.World,
+		session:          cfg.Session,
+		access:           cfg.Access,
+		events:           cfg.Events,
+		broadcaster:      cfg.Broadcaster,
+		aliasCache:       cfg.AliasCache,
+		aliasRepo:        cfg.AliasRepo,
+		registry:         cfg.Registry,
+		propertyRegistry: cfg.PropertyRegistry,
 	}
 }
 

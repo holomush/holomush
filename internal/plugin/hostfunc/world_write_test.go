@@ -879,6 +879,27 @@ func TestGetPropertyFn_ObjectName(t *testing.T) {
 	assert.Equal(t, "Magic Sword", result.String())
 }
 
+func TestGetPropertyFn_InvalidEntityType(t *testing.T) {
+	mutator := &mockWorldMutatorService{}
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
+
+	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	L := lua.NewState()
+	defer L.Close()
+	funcs.Register(L, "test-plugin")
+
+	entityID := ulid.Make()
+	code := fmt.Sprintf(`result, err = holomush.get_property("invalid", "%s", "description")`, entityID)
+	err := L.DoString(code)
+	require.NoError(t, err)
+
+	result := L.GetGlobal("result")
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LTNil, result.Type())
+	assert.Contains(t, errVal.String(), "invalid entity type")
+}
+
 func TestGetPropertyFn_EntityNotFound(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		err: world.ErrNotFound,

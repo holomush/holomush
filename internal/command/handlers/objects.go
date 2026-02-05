@@ -13,8 +13,8 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
-	"github.com/holomush/holomush/pkg/holo"
 )
 
 // createPattern matches: create <type> "<name>"
@@ -61,9 +61,7 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 			"character_id", exec.CharacterID(),
 			"object_name", name,
 			"error", err)
-		writeOutput(ctx, exec, "create", "Failed to create object.")
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Failed to create object.", err)
+		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create object.", err)
 	}
 
 	if err := exec.Services().World().CreateObject(ctx, subjectID, obj); err != nil {
@@ -71,9 +69,7 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 			"character_id", exec.CharacterID(),
 			"object_name", name,
 			"error", err)
-		writeOutput(ctx, exec, "create", "Failed to create object.")
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Failed to create object.", err)
+		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create object.", err)
 	}
 
 	writeOutputf(ctx, exec, "create", "Created object \"%s\" (#%s)\n", name, obj.ID)
@@ -87,9 +83,7 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 			"character_id", exec.CharacterID(),
 			"location_name", name,
 			"error", err)
-		writeOutput(ctx, exec, "create", "Failed to create location.")
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Failed to create location.", err)
+		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create location.", err)
 	}
 
 	if err := exec.Services().World().CreateLocation(ctx, subjectID, loc); err != nil {
@@ -97,9 +91,7 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 			"character_id", exec.CharacterID(),
 			"location_name", name,
 			"error", err)
-		writeOutput(ctx, exec, "create", "Failed to create location.")
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Failed to create location.", err)
+		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create location.", err)
 	}
 
 	writeOutputf(ctx, exec, "create", "Created location \"%s\" (#%s)\n", name, loc.ID)
@@ -129,17 +121,23 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	target := matches[2]
 	value := matches[3]
 
+	registry := exec.Services().PropertyRegistry()
+	if registry == nil {
+		err := oops.Code(command.CodeNilService).
+			With("service", "PropertyRegistry").
+			Errorf("property registry not configured")
+		writeOutput(ctx, exec, "set", "Failed to set property. Please try again.")
+		return err
+	}
+
 	// Resolve property with prefix matching
-	registry := holo.DefaultRegistry()
-	prop, err := registry.Resolve(propertyPrefix)
+	entry, err := registry.Resolve(propertyPrefix)
 	if err != nil {
 		slog.DebugContext(ctx, "set: property resolution failed",
 			"character_id", exec.CharacterID(),
 			"property_prefix", propertyPrefix,
 			"error", err)
-		writeOutputf(ctx, exec, "set", "Unknown property: %s\n", propertyPrefix)
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Property resolution failed.", err)
+		return writeOutputfWithWorldError(ctx, exec, "set", "Unknown property: %s\n", err, propertyPrefix)
 	}
 
 	// Resolve target
@@ -154,19 +152,17 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Apply the property change
-	if err := applyProperty(ctx, exec, entityType, entityID, prop.Name, value); err != nil {
+	if err := applyProperty(ctx, exec, entityType, entityID, entry.Name, entry.Definition, value); err != nil {
 		slog.ErrorContext(ctx, "set: apply property failed",
 			"character_id", exec.CharacterID(),
 			"entity_type", entityType,
 			"entity_id", entityID,
-			"property", prop.Name,
+			"property", entry.Name,
 			"error", err)
-		writeOutput(ctx, exec, "set", "Failed to set property. Please try again.")
-		//nolint:wrapcheck // WorldError creates a structured oops error
-		return command.WorldError("Failed to apply property.", err)
+		return writeOutputWithWorldError(ctx, exec, "set", "Failed to set property. Please try again.", err)
 	}
 
-	writeOutputf(ctx, exec, "set", "Set %s of %s.\n", prop.Name, target)
+	writeOutputf(ctx, exec, "set", "Set %s of %s.\n", entry.Name, target)
 	return nil
 }
 
@@ -205,85 +201,101 @@ func resolveTarget(ctx context.Context, exec *command.CommandExecution, target s
 		Errorf("target not found: %s", target)
 }
 
-func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName, value string) error {
+func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName string, definition property.PropertyDefinition, value string) error {
 	subjectID := "char:" + exec.CharacterID().String()
 
 	switch entityType {
-	case "location":
-		return applyPropertyToLocation(ctx, exec, subjectID, entityID, propName, value)
-	case "object":
-		return applyPropertyToObject(ctx, exec, subjectID, entityID, propName, value)
 	case "character":
 		return oops.Code(command.CodeInvalidArgs).
 			With("entity_type", entityType).
 			With("property", propName).
 			Errorf("setting properties on characters not yet supported")
+	case "location", "object":
+		// continue
 	default:
 		return oops.Code(command.CodeInvalidArgs).
 			With("entity_type", entityType).
 			With("property", propName).
 			Errorf("cannot set properties on %s", entityType)
 	}
+
+	if definition == nil {
+		return oops.Code(command.CodeInvalidArgs).
+			With("entity_type", entityType).
+			With("property", propName).
+			Errorf("property %s not registered", propName)
+	}
+	if err := definition.Validate(entityType); err != nil {
+		return oops.Code(command.CodeInvalidArgs).
+			With("entity_type", entityType).
+			With("property", propName).
+			Wrapf(err, "property %s not applicable", propName)
+	}
+
+	querier := propertyQuerier{
+		service:   exec.Services().World(),
+		subjectID: subjectID,
+	}
+	mutator := propertyMutator{
+		service:  exec.Services().World(),
+		property: propName,
+	}
+
+	return definition.Set(ctx, querier, mutator, subjectID, entityType, entityID, value)
 }
 
-func applyPropertyToLocation(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
-	loc, err := exec.Services().World().GetLocation(ctx, subjectID, entityID)
+type propertyQuerier struct {
+	service   command.WorldService
+	subjectID string
+}
+
+func (q propertyQuerier) GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error) {
+	loc, err := q.service.GetLocation(ctx, q.subjectID, id)
 	if err != nil {
-		return oops.Code(command.CodeWorldError).
+		return nil, oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
-			With("entity_id", entityID.String()).
+			With("entity_id", id.String()).
 			With("operation", "get").
 			Wrapf(err, "get location failed")
 	}
-	switch propName {
-	case "description":
-		loc.Description = value
-	case "name":
-		loc.Name = value
-	default:
-		return oops.Code(command.CodeInvalidArgs).
-			With("entity_type", "location").
-			With("entity_id", entityID.String()).
-			With("property", propName).
-			Errorf("property %s not applicable to location", propName)
+	return loc, nil
+}
+
+func (q propertyQuerier) GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error) {
+	obj, err := q.service.GetObject(ctx, q.subjectID, id)
+	if err != nil {
+		return nil, oops.Code(command.CodeWorldError).
+			With("entity_type", "object").
+			With("entity_id", id.String()).
+			With("operation", "get").
+			Wrapf(err, "get object failed")
 	}
-	if err := exec.Services().World().UpdateLocation(ctx, subjectID, loc); err != nil {
+	return obj, nil
+}
+
+type propertyMutator struct {
+	service  command.WorldService
+	property string
+}
+
+func (m propertyMutator) UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error {
+	if err := m.service.UpdateLocation(ctx, subjectID, loc); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
-			With("entity_id", entityID.String()).
-			With("property", propName).
+			With("entity_id", loc.ID.String()).
+			With("property", m.property).
 			With("operation", "update").
 			Wrapf(err, "update location failed")
 	}
 	return nil
 }
 
-func applyPropertyToObject(ctx context.Context, exec *command.CommandExecution, subjectID string, entityID ulid.ULID, propName, value string) error {
-	obj, err := exec.Services().World().GetObject(ctx, subjectID, entityID)
-	if err != nil {
+func (m propertyMutator) UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error {
+	if err := m.service.UpdateObject(ctx, subjectID, obj); err != nil {
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
-			With("entity_id", entityID.String()).
-			With("operation", "get").
-			Wrapf(err, "get object failed")
-	}
-	switch propName {
-	case "description":
-		obj.Description = value
-	case "name":
-		obj.Name = value
-	default:
-		return oops.Code(command.CodeInvalidArgs).
-			With("entity_type", "object").
-			With("entity_id", entityID.String()).
-			With("property", propName).
-			Errorf("property %s not applicable to object", propName)
-	}
-	if err := exec.Services().World().UpdateObject(ctx, subjectID, obj); err != nil {
-		return oops.Code(command.CodeWorldError).
-			With("entity_type", "object").
-			With("entity_id", entityID.String()).
-			With("property", propName).
+			With("entity_id", obj.ID.String()).
+			With("property", m.property).
 			With("operation", "update").
 			Wrapf(err, "update object failed")
 	}

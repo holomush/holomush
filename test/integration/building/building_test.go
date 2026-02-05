@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
+	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -23,6 +24,13 @@ type allowAllAccessControl struct{}
 
 func (a *allowAllAccessControl) Check(_ context.Context, _, _, _ string) bool {
 	return true
+}
+
+func testServices(worldService *world.Service) *command.Services {
+	return command.NewTestServices(command.ServicesConfig{
+		World:            worldService,
+		PropertyRegistry: property.SharedRegistry(),
+	})
 }
 
 var _ = Describe("Building & Objects Commands", func() {
@@ -61,7 +69,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        `object "Magic Sword"`,
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.CreateHandler(ctx, exec)
@@ -87,7 +95,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "object MissingSword",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.CreateHandler(ctx, exec)
@@ -106,7 +114,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        `location "Secret Chamber"`,
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.CreateHandler(ctx, exec)
@@ -124,7 +132,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        `widget "Something"`,
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.CreateHandler(ctx, exec)
@@ -145,7 +153,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "desc of here to A dark and mysterious place.",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.SetHandler(ctx, exec)
@@ -167,7 +175,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "n of here to Renamed Room",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.SetHandler(ctx, exec)
@@ -198,7 +206,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "description of #" + obj.ID.String() + " to A shiny magical item.",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.SetHandler(ctx, exec)
@@ -224,7 +232,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "xyz of here to value",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.SetHandler(ctx, exec)
@@ -241,7 +249,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "description of nonexistent to value",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.SetHandler(ctx, exec)
@@ -259,7 +267,7 @@ var _ = Describe("Building & Objects Commands", func() {
 					LocationID:  startRoom.ID,
 					Args:        "description of #invalid-id to value",
 					Output:      &buf,
-					Services:    &command.Services{World: worldService},
+					Services:    testServices(worldService),
 				}
 
 				err := handlers.SetHandler(ctx, exec)
