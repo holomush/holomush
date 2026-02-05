@@ -6,7 +6,6 @@ package command
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"go.opentelemetry.io/otel"
@@ -15,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/observability"
 )
 
 var tracer = otel.Tracer("holomush/command")
@@ -24,8 +22,8 @@ var tracer = otel.Tracer("holomush/command")
 type Dispatcher struct {
 	registry    *Registry
 	access      access.AccessControl
-	aliasCache  *AliasCache  // optional, can be nil
-	rateLimiter *RateLimiter // optional, can be nil
+	aliasCache  *AliasCache          // optional, can be nil
+	rateLimiter *RateLimitMiddleware // optional, can be nil
 }
 
 // DispatcherOption configures a Dispatcher during construction.
@@ -43,7 +41,7 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 // If not provided, rate limiting is disabled.
 func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 	return func(d *Dispatcher) {
-		d.rateLimiter = rl
+		d.rateLimiter = NewRateLimitMiddleware(rl, d.access)
 	}
 }
 
@@ -68,18 +66,8 @@ func NewDispatcher(registry *Registry, ac access.AccessControl, opts ...Dispatch
 
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
-	startTime := time.Now()
-
-	// Track command name and source for metrics (populated as we learn them)
-	var commandName, commandSource, metricsStatus string
-
-	// Record metrics on exit
-	defer func() {
-		if commandName != "" {
-			RecordCommandExecution(commandName, commandSource, metricsStatus)
-			RecordCommandDuration(commandName, commandSource, time.Since(startTime))
-		}
-	}()
+	metrics := NewMetricsRecorder()
+	defer metrics.Record()
 
 	// Validate execution context - commands require a character
 	if exec.CharacterID().Compare(ulid.ULID{}) == 0 {
@@ -119,7 +107,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}
 
 	// Set command name for metrics (now we know it)
-	commandName = parsed.Name
+	metrics.SetCommandName(parsed.Name)
 
 	// Start trace span
 	ctx, span := tracer.Start(ctx, "command.execute",
@@ -146,37 +134,28 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// Apply rate limiting if configured (after alias resolution, before capability check)
 	subject := "char:" + exec.CharacterID().String()
 	if d.rateLimiter != nil {
-		// Check if character has bypass capability
-		hasBypass := d.access.Check(ctx, subject, "execute", CapabilityRateLimitBypass)
-		if !hasBypass {
-			allowed, cooldownMs := d.rateLimiter.Allow(exec.SessionID())
-			if !allowed {
-				span.SetAttributes(attribute.Bool("command.rate_limited", true))
-				span.SetAttributes(attribute.Int64("command.cooldown_ms", cooldownMs))
-				observability.RecordCommandRateLimited(parsed.Name)
-				metricsStatus = StatusRateLimited
-				err = ErrRateLimited(cooldownMs)
-				return err
-			}
+		if rateErr := d.rateLimiter.Enforce(ctx, exec, parsed.Name, span); rateErr != nil {
+			metrics.SetStatus(StatusRateLimited)
+			return rateErr
 		}
 	}
 
 	// Look up command
 	entry, ok := d.registry.Get(parsed.Name)
 	if !ok {
-		metricsStatus = StatusNotFound
+		metrics.SetStatus(StatusNotFound)
 		err = ErrUnknownCommand(parsed.Name)
 		return err
 	}
 
 	// Set source for metrics (now we know it)
-	commandSource = entry.Source
+	metrics.SetCommandSource(entry.Source)
 	span.SetAttributes(attribute.String("command.source", entry.Source))
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
 		if !d.access.Check(ctx, subject, "execute", cap) {
-			metricsStatus = StatusPermissionDenied
+			metrics.SetStatus(StatusPermissionDenied)
 			err = ErrPermissionDenied(parsed.Name, cap)
 			return err
 		}
@@ -187,14 +166,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	exec.InvokedAs = invokedAs
 	err = entry.Handler()(ctx, exec)
 	if err != nil {
-		metricsStatus = StatusError
+		metrics.SetStatus(StatusError)
 		slog.WarnContext(ctx, "command execution failed",
 			"command", parsed.Name,
 			"character_id", exec.CharacterID().String(),
 			"error", err,
 		)
 	} else {
-		metricsStatus = StatusSuccess
+		metrics.SetStatus(StatusSuccess)
 	}
 	return err
 }
