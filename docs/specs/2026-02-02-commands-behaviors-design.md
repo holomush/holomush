@@ -261,14 +261,14 @@ a cycle or excessively long chain). Circular aliases MUST be rejected with the e
 
 ### Management Commands
 
-| Command                          | Capabilities   | Description         |
-| -------------------------------- | -------------- | ------------------- |
-| `alias <alias>=<command>`        | `player.alias` | Add player alias    |
-| `unalias <alias>`                | `player.alias` | Remove player alias |
-| `aliases`                        | `player.alias` | List player aliases |
-| `sysalias <alias>=<command>`     | `admin.alias`  | Add system alias    |
-| `sysunsalias <alias>`            | `admin.alias`  | Remove system alias |
-| `sysaliases`                     | `admin.alias`  | List system aliases |
+| Command                      | Capabilities   | Description         |
+| ---------------------------- | -------------- | ------------------- |
+| `alias <alias>=<command>`    | `player.alias` | Add player alias    |
+| `unalias <alias>`            | `player.alias` | Remove player alias |
+| `aliases`                    | `player.alias` | List player aliases |
+| `sysalias <alias>=<command>` | `admin.alias`  | Add system alias    |
+| `sysunsalias <alias>`        | `admin.alias`  | Remove system alias |
+| `sysaliases`                 | `admin.alias`  | List system aliases |
 
 ### Shadow Warnings
 
@@ -346,14 +346,14 @@ return entry.Handler(ctx, execution)
 
 Capabilities use dot-notation hierarchy:
 
-| Category     | Examples                                                    |
-| ------------ | ----------------------------------------------------------- |
-| `world.*`    | `world.look`, `world.move`, `world.examine`                 |
-| `comms.*`    | `comms.say`, `comms.pose`, `comms.emit`                     |
-| `build.*`    | `build.location`, `build.exit`                              |
-| `objects.*`  | `objects.create`, `objects.set`                             |
-| `player.*`   | `player.alias`, `player.who`, `player.quit`                 |
-| `admin.*`    | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
+| Category    | Examples                                                    |
+| ----------- | ----------------------------------------------------------- |
+| `world.*`   | `world.look`, `world.move`, `world.examine`                 |
+| `comms.*`   | `comms.say`, `comms.pose`, `comms.emit`                     |
+| `build.*`   | `build.location`, `build.exit`                              |
+| `objects.*` | `objects.create`, `objects.set`                             |
+| `player.*`  | `player.alias`, `player.who`, `player.quit`                 |
+| `admin.*`   | `admin.boot`, `admin.shutdown`, `admin.wall`, `admin.alias` |
 
 ### Default Grants
 
