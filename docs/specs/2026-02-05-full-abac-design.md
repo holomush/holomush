@@ -778,7 +778,7 @@ when { principal.role in ["builder", "admin"] };
 
 permit(principal is character, action in ["execute"], resource is command)
 when { principal.role in ["builder", "admin"]
-    && resource.name in ["@dig", "@create", "@describe", "@link"] };
+    && resource.name in ["dig", "create", "describe", "link"] };
 
 // admin-powers: full access
 permit(principal is character, action, resource)
