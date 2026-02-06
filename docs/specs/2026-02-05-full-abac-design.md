@@ -88,8 +88,8 @@ Players control access to their own properties through a simplified lock system.
 │                    │ LocationProvider      │ ← World model            │
 │                    │ PropertyProvider      │ ← Property store         │
 │                    │ ObjectProvider        │ ← World model            │
-│                    │ StreamResolver        │ ← Derived from stream ID │
-│                    │ CommandResolver       │ ← Command registry       │
+│                    │ StreamProvider        │ ← Derived from stream ID │
+│                    │ CommandProvider       │ ← Command registry       │
 │                    │ Session Resolver      │ ← Session store (not a   │
 │                    │                       │   provider; see Session  │
 │                    │                       │   Subject Resolution)    │
@@ -137,8 +137,8 @@ internal/access/policy/        # NEW — AccessPolicyEngine, evaluation
     location.go                # Core: location attributes
     object.go                  # Core: object attributes
     property.go                # Core: property attributes
-    stream.go                  # Core: stream attributes (derived from ID)
-    command.go                 # Core: command attributes
+    stream.go                  # Core: StreamProvider — stream attributes (derived from ID)
+    command.go                 # Core: CommandProvider — command attributes
     environment.go             # Core: env attributes (time, game state)
   lock/                        # Lock expression system
     parser.go                  # Lock expression parser
@@ -211,19 +211,26 @@ mapping is:
 | `character:` | `character` | `character:01ABC`       |
 | `plugin:`    | `plugin`    | `plugin:echo-bot`       |
 | `system`     | (bypass)    | `system` (no ID)        |
-| `session:`   | `session`   | `session:web-123`       |
+| `session:`   | (resolved)  | `session:web-123`       |
 | `location:`  | `location`  | `location:01XYZ`        |
 | `object:`    | `object`    | `object:01DEF`          |
 | `command:`   | `command`   | `command:say`           |
 | `property:`  | `property`  | `property:01GHI`        |
 | `stream:`    | `stream`    | `stream:location:01XYZ` |
 
+**Note:** The `session:` prefix is never a valid DSL type in policies. Sessions
+are always resolved to `character:` at the engine entry point before evaluation
+(see [Session Subject Resolution](#session-subject-resolution)). The `(resolved)`
+marker indicates this prefix does not appear in `principal is T` clauses.
+
 **Subject prefix constants:** The `access` package SHOULD define these prefixes
 as constants (e.g., `SubjectCharacter = "character:"`, `SubjectPlugin =
 "plugin:"`) to prevent typos and enable compile-time references. The existing
-`ParseSubject()` function already handles prefix parsing. The static system uses
-`char:` as a legacy abbreviation; the adapter MUST accept both `char:` and
-`character:` during migration, normalizing to `character:` internally.
+`ParseSubject()` function performs raw prefix splitting only — it returns `"char"`
+for input `"char:01ABC"`, NOT `"character"`. Normalization from `char:` to
+`character:` is a NEW responsibility that lives in the adapter layer (both
+`accessControlAdapter` and `migrationAdapter`) BEFORE the engine is called.
+The engine itself MUST only receive normalized `character:` prefixes.
 
 **Design note:** Subject and resource use flat prefixed strings rather than typed
 structs to simplify serialization for audit logging and cross-process
@@ -258,8 +265,15 @@ contribute attributes to the bags.
   EffectDefaultDeny}` with error `"session has no associated character"`. This
   handles unauthenticated sessions that have not yet selected a character.
 
+- **Character deleted after session creation:** Return `Decision{Allowed: false,
+  Effect: EffectDefaultDeny}` with error `"session character has been deleted:
+  01ABC"`. This handles the case where a character is deleted while sessions
+  referencing it still exist. Session cleanup SHOULD invalidate sessions on
+  character deletion.
+
 Session resolution errors SHOULD use oops error codes for structured handling:
-`SESSION_NOT_FOUND`, `SESSION_STORE_ERROR`, `SESSION_NO_CHARACTER`.
+`SESSION_NOT_FOUND`, `SESSION_STORE_ERROR`, `SESSION_NO_CHARACTER`,
+`SESSION_CHARACTER_DELETED`.
 
 ### Decision
 
@@ -319,7 +333,17 @@ To check plugin attribute existence, use the attribute in a condition directly
 — since missing attributes cause all comparisons to evaluate to `false`
 (Cedar-aligned behavior), `principal.reputation.score >= 50` safely returns
 `false` when the reputation plugin is not loaded. No explicit existence check
-is needed for gating on plugin attributes.
+is needed for gating on plugin attributes. Note that `principal has
+reputation.score` is NOT valid grammar — `has` is intentionally limited to
+top-level attributes. Plugin authors SHOULD design policies using direct
+attribute comparisons rather than existence checks.
+
+**Bag merge semantics:** The `AttributeResolver` assembles bags by merging all
+non-nil provider results. If multiple providers return the same key for the same
+entity, the **last-registered provider's value wins**. Core providers register
+before plugin providers (registration order: core first, then plugins in load
+order). The resolver SHOULD warn on key collisions: `slog.Warn("attribute key
+collision", "key", "faction", "providers", []string{"character", "guilds"})`.
 
 **Action bag construction:** The engine constructs `AttributeBags.Action`
 directly from the `AccessRequest` — no provider is needed:
@@ -359,7 +383,7 @@ access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
 
 **No-op methods:** Providers that only resolve one side (e.g.,
-`CommandResolver` only resolves resources, `CharacterProvider` primarily
+`CommandProvider` only resolves resources, `CharacterProvider` primarily
 resolves subjects) SHOULD return `(nil, nil)` from the inapplicable method.
 The resolver skips nil results during bag assembly.
 
@@ -379,7 +403,7 @@ marked MUST always exist when the entity is valid; MAY attributes may be nil.
 | `faction`  | string   | MAY         | Faction affiliation (nil if unaffiliated)  |
 | `level`    | float64  | MUST        | Character level (>= 0)                     |
 | `flags`    | []string | MUST        | Arbitrary flags (empty array if none)      |
-| `location` | string   | MUST        | ULID of current location                   |
+| `location` | string   | MUST        | ULID of current location (not a display name) |
 
 `CharacterProvider.ResolveSubject` MUST query the world model (or equivalent)
 to populate the `location` attribute, similar to how `StaticAccessControl` uses
@@ -416,8 +440,11 @@ provider's constructor.
 
 | Attribute     | Type   | Requirement | Description                           |
 | ------------- | ------ | ----------- | ------------------------------------- |
-| `time`        | string | MUST        | Current time (RFC 3339)               |
-| `maintenance` | bool   | MUST        | Whether server is in maintenance mode |
+| `time`        | string  | MUST        | Current time (RFC 3339)               |
+| `hour`        | float64 | MUST        | Current hour (0-23, UTC)              |
+| `minute`      | float64 | MUST        | Current minute (0-59, UTC)            |
+| `day_of_week` | string  | MUST        | Day name (e.g., `"monday"`, lowercase)|
+| `maintenance` | bool    | MUST        | Whether server is in maintenance mode |
 
 **ObjectProvider** (`object` namespace):
 
@@ -429,10 +456,10 @@ provider's constructor.
 | `location` | string | MUST        | ULID of containing location               |
 | `owner`    | string | MAY         | Subject who owns this object              |
 
-**StreamResolver** (`stream` namespace):
+**StreamProvider** (`stream` namespace):
 
 Streams do not have a dedicated database table — their attributes are derived
-from the stream ID format (`location:01XYZ`, `character:01ABC`). The resolver
+from the stream ID format (`location:01XYZ`, `character:01ABC`). The provider
 parses the stream ID and extracts relevant fields.
 
 | Attribute  | Type   | Requirement | Description                                 |
@@ -441,10 +468,17 @@ parses the stream ID and extracts relevant fields.
 | `name`     | string | MUST        | Full stream path (e.g., `"location:01XYZ"`) |
 | `location` | string | MAY         | Extracted location ULID (if location stream) |
 
-**CommandResolver** (`command` namespace):
+**CommandProvider** (`command` namespace):
 
-Commands are resolved from the command registry (Epic 6). The resolver looks up
+Commands are resolved from the command registry (Epic 6). The provider looks up
 the command definition by name.
+
+**Multi-word command names:** Commands with subcommands (e.g., `policy test`,
+`policy create`) are registered in the command registry as the full multi-word
+name. The resource string uses this full name: `command:policy test`. The
+`CommandProvider` resolves `resource.name` as the full registered name. Policies
+SHOULD use `resource.name like "policy*"` to match all subcommands, or
+`resource.name == "policy test"` for specific subcommands.
 
 | Attribute | Type   | Requirement | Description                     |
 | --------- | ------ | ----------- | ------------------------------- |
@@ -582,13 +616,18 @@ boolean        = "true" | "false"
   target clause covers most use cases, but conditions MAY reference action
   attributes when needed.
 - `resource == string_literal` in the target clause pins a policy to a specific
-  resource instance (e.g., `resource == "object:01ABC"`). This is used by
-  lock-generated policies that target a single owned resource. Manually authored
-  policies SHOULD prefer `resource is type_name` with conditions for flexibility.
-  The `principal_clause` and `action_clause` intentionally lack `==` forms.
-  For principal-specific matching, use conditions instead: e.g.,
-  `when { principal.id == "character:01ABC" }` rather than a hypothetical
-  `principal == "character:01ABC"` target clause.
+  resource instance (e.g., `resource == "object:01ABC"`). This is **early
+  filtering** — policies with target-level pinning are excluded from the
+  candidate set unless the resource matches. In contrast, `resource.id ==
+  "object:01ABC"` in a **condition** is late filtering — the policy enters the
+  candidate set, then the condition is evaluated against the attribute bags.
+  Prefer target-level pinning for fixed-resource policies (better performance,
+  clearer intent). Lock-generated policies use target-level pinning.
+  Manually authored policies SHOULD prefer `resource is type_name` with
+  conditions for flexibility. The `principal_clause` and `action_clause`
+  intentionally lack `==` forms. For principal-specific matching, use conditions
+  instead: e.g., `when { principal.id == "character:01ABC" }` rather than a
+  hypothetical `principal == "character:01ABC"` target clause.
 - `expr "in" list` performs scalar-in-set membership: the left-hand value is
   checked for equality against each element of the literal list. For example,
   `principal.role in ["builder", "admin"]` returns true if `principal.role`
@@ -711,6 +750,10 @@ when {
 permit(principal is character, action in ["read"], resource is property)
 when { resource.parent_type == "character" && resource.parent_id == principal.id };
 
+// NOTE: principal.role != "admin" evaluates to false when role is missing
+// (Cedar-aligned semantics). Characters without a role are NOT denied by this
+// forbid but are denied by default-deny (no permit matches them either).
+// The security outcome is the same; this forbid targets non-admin roles.
 forbid(principal is character, action in ["read"], resource is property)
 when { resource.visibility in ["system", "admin"] && principal.role != "admin" };
 
@@ -823,13 +866,17 @@ is the character's current location. For location properties, this is the
 location itself. For object properties, this is the object's containing
 location.
 
-**Dependency chain:** Resolving `parent_location` requires the
-`PropertyProvider` to query the parent entity's location. This creates an
-additional dependency beyond `PropertyRepository`: the provider needs a
-location-resolution mechanism. Implementation SHOULD accept a
-`LocationLookup func(entityType, entityID string) (string, error)` in the
-constructor, backed by a direct database query (NOT via `WorldService`, to
-maintain the no-circular-dependency invariant).
+**Dependency chain:** Resolving `parent_location` requires knowing the parent
+entity's current location. To avoid a second code path for world-model queries,
+`PropertyRepository.GetByID()` MUST use a SQL JOIN against the parent entity's
+table to fetch `parent_location` in the same query. The `PropertyProvider`
+reads `parent_location` from the repository result — no separate
+`LocationLookup` function or direct DB query is needed. This keeps a single
+code path for all location data: `PropertyProvider → PropertyRepository → DB`.
+The repository determines the join target based on `parent_type`:
+- `character` → join `characters` table for current location
+- `location` → use `parent_id` directly (the location IS the parent)
+- `object` → join `objects` table for containing location
 
 ## Attribute Resolution
 
@@ -906,11 +953,13 @@ No errors are retryable within a single `Evaluate()` call.
 
 | Error Type              | Fail Mode           | Caller Action                      |
 | ----------------------- | ------------------- | ---------------------------------- |
-| Core provider failure   | Deny + return error | Log and deny (adapter) or inspect  |
-| Plugin provider failure | Deny (conditions fail) | Automatic — plugin attrs missing |
-| Policy compilation error | Deny + return error | Should not occur (compiled at store time) |
-| Session not found       | Deny + return error | Log, deny, session likely expired  |
-| Context cancelled       | Deny + return error | Request was cancelled upstream     |
+| Core provider failure    | Deny + return error    | Log and deny (adapter) or inspect             |
+| Plugin provider failure  | Deny (conditions fail) | Automatic — plugin attrs missing              |
+| Policy compilation error | Deny + return error    | Should not occur (compiled at store time)      |
+| Corrupted compiled policy | Deny + skip policy    | Log CRITICAL, disable in cache, continue eval |
+| Session not found        | Deny + return error    | Log, deny, session likely expired              |
+| Character deleted        | Deny + return error    | Log, deny, invalidate session                  |
+| Context cancelled        | Deny + return error    | Request was cancelled upstream                  |
 
 Direct callers of `AccessPolicyEngine.Evaluate()` can distinguish "denied by
 policy" (`err == nil, Decision.Effect == EffectDeny`) from "system failure"
@@ -982,17 +1031,21 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 ### Performance Targets
 
-| Metric                   | Target | Notes                            |
-| ------------------------ | ------ | -------------------------------- |
-| `Evaluate()` p99 latency | <5ms   | At 200 concurrent users          |
-| Attribute resolution     | <2ms   | All providers combined           |
-| DSL condition evaluation | <1ms   | Per policy                       |
-| Cache reload             | <50ms  | Full policy set reload on NOTIFY |
+| Metric                              | Target  | Notes                            |
+| ----------------------------------- | ------- | -------------------------------- |
+| `Evaluate()` p99 latency (cold)    | <5ms    | First call in request            |
+| `Evaluate()` p99 latency (warm)    | <3ms    | Cached attributes from prior call|
+| Attribute resolution (cold)         | <2ms    | All providers combined           |
+| Attribute resolution (warm, cached) | <100μs  | Map lookup only                  |
+| DSL condition evaluation            | <1ms    | Per policy                       |
+| Cache reload                        | <50ms   | Full policy set reload on NOTIFY |
 
 **Benchmark scenario:** Targets assume 50 active policies (25 permit, 25
 forbid), average condition complexity of 3 operators per policy, 10 attributes
-per entity (subject + resource), and warm per-request attribute cache (not the
-first `Evaluate()` call in a request).
+per entity (subject + resource). "Cold" means first `Evaluate()` call in a
+request (no per-request cache). "Warm" means subsequent calls reusing the
+per-request `AttributeCache`. Implementation MUST include both
+`BenchmarkEvaluate_ColdCache` and `BenchmarkEvaluate_WarmCache` tests.
 
 **Worst-case bounds:**
 
@@ -1071,16 +1124,19 @@ All `id` columns use ULID format, consistent with project conventions.
 
 ```sql
 CREATE TABLE access_policies (
-    id          TEXT PRIMARY KEY,           -- ULID
-    name        TEXT NOT NULL UNIQUE,
-    description TEXT,
-    effect      TEXT NOT NULL CHECK (effect IN ('permit', 'forbid')),
-    dsl_text    TEXT NOT NULL,
-    enabled     BOOLEAN NOT NULL DEFAULT true,
-    created_by  TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    version     INTEGER NOT NULL DEFAULT 1
+    id           TEXT PRIMARY KEY,           -- ULID
+    name         TEXT NOT NULL UNIQUE,
+    description  TEXT,
+    effect       TEXT NOT NULL CHECK (effect IN ('permit', 'forbid')),
+    source       TEXT NOT NULL DEFAULT 'admin'
+                 CHECK (source IN ('seed', 'lock', 'admin')),
+    dsl_text     TEXT NOT NULL,
+    compiled_ast JSONB NOT NULL,             -- Pre-parsed AST from PolicyCompiler
+    enabled      BOOLEAN NOT NULL DEFAULT true,
+    created_by   TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    version      INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX idx_policies_enabled ON access_policies(enabled) WHERE enabled = true;
@@ -1102,22 +1158,20 @@ CREATE TABLE access_audit_log (
     subject       TEXT NOT NULL,
     action        TEXT NOT NULL,
     resource      TEXT NOT NULL,
-    decision      TEXT NOT NULL CHECK (decision IN ('allowed', 'denied')),
     effect        TEXT NOT NULL CHECK (effect IN ('allow', 'deny', 'default_deny')),
     policy_id     TEXT,
     policy_name   TEXT,
     attributes      JSONB,
     error_message   TEXT,
-    provider_errors JSONB                    -- e.g., ["reputation: connection refused"]
+    provider_errors JSONB                    -- e.g., [{"provider": "reputation", "error": "connection refused"}]
 );
 
+-- Essential indexes only. The effect column doubles as the decision indicator:
+-- allow = allowed, deny/default_deny = denied. No separate decision column needed.
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log(timestamp DESC);
 CREATE INDEX idx_audit_log_subject ON access_audit_log(subject, timestamp DESC);
-CREATE INDEX idx_audit_log_resource ON access_audit_log(resource, timestamp DESC);
-CREATE INDEX idx_audit_log_decision ON access_audit_log(decision, timestamp DESC);
-CREATE INDEX idx_audit_log_policy_denied ON access_audit_log(policy_id, timestamp DESC)
-    WHERE decision = 'denied';
-CREATE INDEX idx_audit_log_resource_action ON access_audit_log(resource, action, timestamp DESC);
+CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
+    WHERE effect IN ('deny', 'default_deny');
 
 CREATE TABLE entity_properties (
     id            TEXT PRIMARY KEY,         -- ULID
@@ -1180,8 +1234,9 @@ The `effect` column in `access_audit_log` maps to the Go `Effect` enum:
 | `EffectDeny`        | `"deny"`         |
 | `EffectDefaultDeny` | `"default_deny"` |
 
-The `decision` column is derived: `"allowed"` when `Effect == EffectAllow`,
-`"denied"` otherwise.
+The `effect` column is the sole decision indicator — there is no separate
+`decision` column. `allow` means the request was allowed; `deny` or
+`default_deny` means it was denied.
 
 The `Effect` type MUST serialize to the string values in the mapping table
 above, not to `iota` integer values. Implementation SHOULD define a
@@ -1317,8 +1372,10 @@ registrations at startup. Duplicate tokens are a fatal error — the server MUST
 NOT start if any token name conflicts are detected. This fail-fast behavior
 ensures naming collisions are caught immediately rather than causing subtle
 policy evaluation bugs at runtime. Core providers (CharacterProvider) register
-tokens first. Plugins SHOULD namespace their tokens to avoid collisions (e.g.,
-`rep.score` instead of `score`, `craft` instead of `type`).
+tokens first. Plugins MUST namespace their tokens using a dot-separated prefix
+matching their plugin ID (e.g., `rep.score` instead of `score`, `craft.type`
+instead of `type`). The engine validates this at registration — plugin tokens
+without a namespace prefix matching the registering plugin are rejected.
 The `policy create` command MUST also reject names starting with `seed:` to
 reserve that prefix for system use.
 
@@ -1407,7 +1464,9 @@ resources.
 - Lock policies are NOT versioned. Each `lock`/`unlock` creates or deletes a
   policy directly — no version history is maintained.
 - `lock X/action = condition` calls `PolicyStore.Create()` with generated DSL
-  text and the naming convention `lock:{resource-type}:{resource-id}:{action}`.
+  text and the naming convention `lock:{type}:{id}:{action}` where `{type}` is
+  the bare resource type without a trailing colon (e.g.,
+  `lock:object:01ABC:read`).
 - `unlock X/action` calls `PolicyStore.DeleteByName()` to remove the lock
   policy.
 - Modifying a lock (re-running `lock X/action` with new conditions) deletes the
@@ -1605,11 +1664,13 @@ On first startup (or when the `access_policies` table is empty), the server
 MUST seed policies automatically:
 
 1. Server startup detects empty `access_policies` table
-2. Server inserts all seed policies (role-based + visibility) as `system` subject
+2. Server inserts all seed policies via `PolicyStore.Create()` with `system`
+   subject context (NOT via `policy create` commands, which require ABAC
+   evaluation that isn't yet available)
 3. The `system` subject bypasses policy evaluation entirely (step 1 of the
    evaluation algorithm), so no chicken-and-egg problem exists
-4. Subsequent policy changes require `policy.manage` permission via normal
-   ABAC evaluation
+4. Subsequent policy changes require `execute` permission on `command:policy*`
+   resources via normal ABAC evaluation (granted to admins by the seed policies)
 
 The seed process is idempotent — policies are inserted with deterministic names
 (e.g., `seed:player-self-access`). If a policy with that name already exists,
@@ -1642,11 +1703,15 @@ change with a `change_note` explaining the upgrade.
    at least 10,000 authorization checks collected. 100% agreement means
    `Decision.Allowed` matches `StaticAccessControl.Check()` for all checks,
    excluding known semantic differences:
-   - `enter` actions (new ABAC-only path, no static equivalent)
-   - `delete` on `location` resources (intentional permission expansion)
-   - `@`-prefixed command names (normalized to plain names in ABAC)
+   - `action == "enter"` (new ABAC-only path, no static equivalent)
+   - `action == "delete" && resource starts with "location:"` (intentional
+     permission expansion for builders)
+   - `resource starts with "command:@"` (normalized to plain names in ABAC;
+     handled by `normalizeResource()` before engine evaluation)
 
-   Any other disagreement blocks cutover and triggers immediate investigation.
+   Exclusion matching is applied per-check in the `migrationAdapter` before
+   recording a disagreement. Any other disagreement blocks cutover and triggers
+   immediate investigation.
    After meeting criteria, submit PR to remove `StaticAccessControl`. Rollback:
    revert the removal PR if post-cutover bugs are found.
 
@@ -1730,15 +1795,15 @@ change with a `change_note` explaining the upgrade.
 
    **Call site inventory** (packages depending on `access.AccessControl`):
 
-   | Package                              | Usage                               |
-   | ------------------------------------ | ----------------------------------- |
-   | `internal/command/dispatcher`         | Command execution authorization     |
-   | `internal/command/rate_limit_middleware` | Rate limit bypass for admins     |
-   | `internal/command/handlers/boot`      | Boot command permission check       |
-   | `internal/world/service`              | World model operation authorization |
-   | `internal/plugin/hostfunc/commands`   | Plugin command execution auth       |
-   | `internal/plugin/hostfunc/functions`  | Plugin host function auth           |
-   | `internal/core/broadcaster` (test)    | Test mock injection                 |
+   | Package                                  | Usage                               |
+   | ---------------------------------------- | ----------------------------------- |
+   | `internal/command/dispatcher`             | Command execution authorization     |
+   | `internal/command/rate_limit_middleware`   | Rate limit bypass for admins        |
+   | `internal/command/handlers/boot`          | Boot command permission check       |
+   | `internal/world/service`                  | World model operation authorization |
+   | `internal/plugin/hostfunc/commands`       | Plugin command execution auth       |
+   | `internal/plugin/hostfunc/functions`      | Plugin host function auth           |
+   | `internal/core/broadcaster` (test)        | Test mock injection                 |
 
    This list is derived from the current codebase. Additional call sites may
    exist by the time phase 7.3 begins — run `grep -r "AccessControl"
@@ -1847,6 +1912,8 @@ This confirms the seed policies faithfully reproduce the static role behavior.
 
 ## References
 
+- [Design Decision Log](2026-02-05-full-abac-design-decisions.md) — Rationale
+  for key design choices made during review
 - [Core Access Control Design](2026-01-21-access-control-design.md) — Current
   static role implementation (Epic 3)
 - [HoloMUSH Roadmap](../plans/2026-01-18-holomush-roadmap-design.md) — Epic 7

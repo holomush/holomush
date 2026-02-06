@@ -656,3 +656,82 @@ by design. The existing `PropertyProvider → PropertyRepository` pattern
 (bypassing `WorldService`) already demonstrates the correct approach. Making
 this an explicit prohibition prevents plugin authors from introducing the
 same pattern.
+
+---
+
+## 32. PropertyProvider Uses SQL JOIN for Parent Location
+
+**Review finding:** The `PropertyProvider` needed the parent entity's location
+ULID when resolving `parent_location`. The original design used a
+`LocationLookup` dependency, creating a `PropertyProvider → LocationLookup →
+WorldService` chain that re-introduced the circular dependency the provider
+pattern was designed to avoid.
+
+**Decision:** `PropertyRepository` resolves `parent_location` via a SQL JOIN
+against `objects.location_id` (or `locations.id` for location properties)
+within the same query that fetches properties. No extra Go-level dependency is
+required.
+
+**Rationale:** The data is already in PostgreSQL. A single query with a JOIN is
+both simpler and faster than a separate lookup through the world model. This
+keeps the provider dependency chain flat: `PropertyProvider →
+PropertyRepository → PostgreSQL`.
+
+---
+
+## 33. Plugin Lock Tokens MUST Be Namespaced
+
+**Review finding:** Token conflict resolution was fatal at startup (server
+refuses to start on collision), but plugins only SHOULD namespace their tokens.
+Without enforcement, a plugin registering `score` would collide with any future
+core token or another plugin's `score`, causing server startup failures that are
+hard to diagnose.
+
+**Decision:** Plugin lock tokens MUST use a dot-separated prefix matching their
+plugin ID (e.g., `rep.score`, `craft.type`). The engine validates this at
+registration time — plugin tokens without the correct namespace prefix are
+rejected.
+
+**Rationale:** Fatal startup errors from token collisions should be preventable,
+not just detectable. Requiring namespacing makes collisions structurally
+impossible between plugins (each has a unique ID) while core tokens remain
+un-namespaced.
+
+---
+
+## 34. Time-of-Day Attributes for Environment Provider
+
+**Review finding:** The original spec included only `env.maintenance_mode` and
+`env.game_state` as environment attributes. Time-based policy gating (e.g.,
+restrict certain areas during night hours) was not possible.
+
+**Decision:** Add `env.hour` (float64, 0-23), `env.minute` (float64, 0-59),
+and `env.day_of_week` (string, e.g., `"monday"`) to the EnvironmentProvider.
+These are numeric/string attributes resolved from `time.Now()` at evaluation
+time, not duration-based.
+
+**Rationale:** Time-of-day gating is the common use case for MUSH environments
+(night-only areas, weekend events). Numeric hour/minute with string day_of_week
+matches the DSL's existing comparison operators naturally — no new time type
+needed.
+
+---
+
+## 35. Audit Log Source Column and No Decision Column
+
+**Review finding:** (a) The `access_audit_log` schema had both `decision` and
+`effect` columns where `decision` was strictly derivable from `effect`. (b) The
+schema had no way to distinguish whether an audit record came from the ABAC
+engine, the static adapter, or shadow mode.
+
+**Decision:** (a) Drop the `decision` column. The `effect` column alone
+indicates the outcome: `allow` = allowed, `deny`/`default_deny` = denied. (b)
+Add a `source TEXT NOT NULL DEFAULT 'admin'` column to `access_policies` to
+track where policies originate (`admin`, `lock`, `seed`, `plugin`).
+
+**Rationale:** (a) Redundant columns in append-heavy audit tables waste storage
+and create consistency risks. The `effect` column already encodes the decision.
+(b) The `source` column enables filtering and lifecycle management — e.g.,
+showing only admin-authored policies, or identifying lock-generated policies
+for cleanup.
+
