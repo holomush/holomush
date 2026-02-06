@@ -1649,7 +1649,18 @@ a hard backstop. A slow or misbehaving plugin cannot block the entire
 evaluation pipeline because both the per-provider and overall deadlines
 expire regardless of what the current provider is doing.
 
-**Circuit breaker for chronic slow providers:** Providers that stay just
+#### Circuit Breaker Summary
+
+The ABAC engine uses three distinct circuit breaker designs, each tuned for
+different failure modes:
+
+| Component         | Trigger                                                         | Window | Behavior                    | Metric                                            | Rationale                                                                                                  |
+| ----------------- | --------------------------------------------------------------- | ------ | --------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| General provider  | >80% budget utilization in >50% of calls (min 10 calls)        | 60s    | Skip provider for 60s       | `abac_provider_circuit_breaker_trips_total`       | Higher threshold because some transient slowness is expected; detects systematic performance degradation   |
+| PropertyProvider  | 3 timeout errors                                                | 60s    | Skip queries for 60s        | `abac_property_provider_circuit_breaker_trips_total` | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption    |
+| Session integrity | N/A (logging-only)                                              | N/A    | Log at CRITICAL, no circuit | `abac_session_integrity_errors_total`             | Integrity errors should never happen in correct operation; circuit breaker would create DoS attack surface |
+
+**General provider circuit breaker:** Providers that stay just
 under the timeout but consistently consume >80% of their allocated budget
 cause cumulative performance degradation. The engine MUST track per-provider
 lifetime budget utilization. If a provider exceeds 80% of its allocated
