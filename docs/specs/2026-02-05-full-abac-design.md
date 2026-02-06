@@ -1521,10 +1521,13 @@ expire regardless of what the current provider is doing.
   logging to enable performance profiling during development
 - Monitoring SHOULD export per-provider latency metrics (not just aggregate
   `Evaluate()` latency) to identify slow providers independently
-- Monitoring SHOULD export `policy_cache_last_reload_timestamp` gauge to
-  verify the LISTEN/NOTIFY connection is alive
+- Monitoring SHOULD export `policy_cache_last_update` gauge (Unix timestamp) to
+  verify the LISTEN/NOTIFY connection is alive and detect cache staleness
 - Monitoring SHOULD export per-policy evaluation counts
   (`abac_policy_evaluations_total{name, effect}`) to identify hot policies
+- Operators SHOULD configure alerting when
+  `time.Now() - policy_cache_last_update > cache_staleness_threshold` to detect
+  prolonged LISTEN/NOTIFY disconnections
 
 **`Decision.Policies` allocation note:** The `Policies []PolicyMatch` slice is
 populated for every `Evaluate()` call to support `policy test` debugging. At 50
@@ -1761,6 +1764,21 @@ During reconnection, `Evaluate()` uses the stale in-memory cache and logs a
 warning: `slog.Warn("policy cache may be stale, LISTEN/NOTIFY reconnecting")`.
 This is acceptable for MUSH workloads where a brief stale window (<30s) is
 tolerable.
+
+**Cache staleness threshold:** To limit the risk of serving stale policy
+decisions during prolonged reconnection windows, the engine **MUST** support a
+configurable `cache_staleness_threshold` (default: 5s). When the time since
+the last successful cache update exceeds this threshold, the engine **MUST**
+fail-closed for all non-admin subjects by returning `EffectDefaultDeny` without
+evaluating policies. Admin subjects (characters with `admin` role or equivalent)
+bypass the staleness check and undergo normal policy evaluation, ensuring
+operators can still access the system during degraded conditions. The engine
+**MUST** expose a Prometheus gauge `policy_cache_last_update` (Unix timestamp)
+that is updated on every successful cache reload. Operators **SHOULD** configure
+alerting when `time.Now() - policy_cache_last_update > cache_staleness_threshold`
+to detect prolonged LISTEN/NOTIFY disconnections before non-admin access is
+denied. Once the LISTEN/NOTIFY connection is restored and a full reload completes,
+normal evaluation resumes automatically.
 
 ### Audit Log Serialization
 
