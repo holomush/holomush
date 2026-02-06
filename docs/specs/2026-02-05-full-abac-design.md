@@ -1204,13 +1204,13 @@ The repository determines the resolution strategy based on `parent_type`:
     corruption), `parent_location` is nil and location-based visibility
     policies fail-safe (deny).
 
-  The recursive CTE **MUST** include both a depth limit of **10 iterations**
+  The recursive CTE **MUST** include both a depth limit of **20 iterations**
   and cycle detection (tracking visited IDs via an array path column,
   rejecting IDs already in the path) as defense-in-depth against data
   corruption. PostgreSQL `WITH RECURSIVE` does not automatically prevent
   cycles. If cycles are detected or the depth limit is exceeded,
   `parent_location` is nil and location-based visibility policies fail-safe
-  (deny). A 10-level nesting limit is sufficient for typical object
+  (deny). A 20-level nesting limit is sufficient for typical object
   containment hierarchies (e.g., gem → lockbox → drawer → chest → room)
   while preventing excessive query complexity.
 
