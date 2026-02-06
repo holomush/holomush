@@ -1332,13 +1332,16 @@ namespace and failure count. During the open period, the provider is
 skipped (attributes missing, conditions fail-safe). **Circuit breaker
 skip behavior:** Skipping a circuit-opened provider is an immediate
 check with no I/O and does **NOT** consume evaluation time budget.
-The per-provider timeout is recalculated at evaluation start, excluding
-circuit-opened providers from the fair-share distribution. For example,
-with a 100ms total budget and 5 registered providers where 2 have open
-circuits, the 3 active providers each receive 33ms (100ms / 3), not 20ms
-(100ms / 5). This ensures that functioning providers receive equitable
-time allocations and are not penalized by systematic failures in other
-providers.
+The per-provider timeout fair-share calculation excludes circuit-opened
+providers from the remaining provider count. All active providers use
+the same fair-share formula: `remaining_budget / remaining_providers`.
+For example, with a 100ms total budget and 5 registered providers where
+2 have open circuits, the first active provider receives 33ms because
+there are 3 remaining active providers (100ms / 3), not 20ms (100ms / 5).
+Each subsequent active provider receives its fair share using the same
+formula with updated remaining budget and provider counts. This ensures
+that functioning providers receive equitable time allocations and are
+not penalized by systematic failures in other providers.
 
 After the open duration, a single "half-open" probe request tests whether
 the provider has recovered. On success, the circuit closes (INFO log); on
@@ -1531,33 +1534,37 @@ order is non-deterministic.
 The 100ms deadline is the total budget for all providers combined.
 To prevent priority inversion (where early providers starve later ones),
 the engine **MUST** enforce per-provider timeouts within the total budget.
-Each provider receives an **equal-share timeout** calculated as
-`total_budget / provider_count`, distributed at evaluation start. For
-example, with 5 providers and a 100ms total budget, each provider receives
-20ms regardless of order or prior provider execution time. Unused time
-from a fast provider is **not** redistributed to later providers.
+Each provider receives a **fair-share timeout** calculated dynamically as
+`remaining_budget / remaining_providers`, recalculated after each provider
+completes. For example, with 5 providers and a 100ms total budget, the
+first provider receives 20ms (100ms / 5). If it completes in 5ms, the
+second provider receives 23.75ms ((100-5)ms / 4), and so on. This ensures
+that unused time from fast providers is redistributed to later providers.
 
-**Tradeoff:** Equal-share prevents priority inversion but may underutilize
-the time budget. For instance, if providers A, B, C each complete in 5ms
-(15ms total), the remaining 85ms is wasted. This is acceptable because:
+**Tradeoff:** Fair-share prevents priority inversion while maximizing
+budget utilization. Fast early providers create larger budgets for later
+providers, reducing timeout-induced failures. However, it requires dynamic
+recalculation after each provider and makes per-provider budgets less
+predictable for monitoring. This is acceptable because:
 
 1. Core providers (registered first during server startup) no longer
    squeeze plugin providers that register later
-2. Predictable per-provider budgets simplify debugging and monitoring
-3. The 100ms total budget is conservative for typical attribute lookups
+2. Fast providers benefit the entire evaluation chain
+3. The 100ms total budget remains a hard backstop regardless of distribution
 
 **Example calculation:**
 
 - Total budget: 100ms, 4 providers (core, plugin A, plugin B, plugin C)
-- Each provider timeout: `100ms / 4 = 25ms`
-- Provider timings: core=5ms, plugin A=10ms, plugin B=25ms (timeout),
-  plugin C=15ms
-- Total evaluation time: 5+10+25+15 = 55ms (45ms unused)
+- Provider 1 timeout: `100ms / 4 = 25ms`, actual: 5ms
+- Provider 2 timeout: `(100-5)ms / 3 = 31.67ms`, actual: 10ms
+- Provider 3 timeout: `(100-5-10)ms / 2 = 42.5ms`, actual: 25ms (timeout)
+- Provider 4 timeout: `(100-5-10-25)ms / 1 = 60ms`, actual: 15ms
+- Total evaluation time: 5+10+25+15 = 55ms (providers 1-2 finished early, giving provider 3 a larger 42.5ms budget which it fully consumed before timing out)
 
 If the parent context is cancelled during evaluation (e.g., client
 disconnect), all remaining providers receive the cancelled context
 immediately and the evaluation terminates with `EffectDefaultDeny`.
-Equal-share timeout allocation applies only when the parent context is
+Fair-share timeout allocation applies only when the parent context is
 active.
 
 The engine wraps each provider call with
