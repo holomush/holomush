@@ -438,9 +438,18 @@ distinction between "missing" and "present but non-matching" matters.
 
 **Bag merge semantics:** The `AttributeResolver` assembles bags by merging all
 non-nil provider results. If multiple providers return the same key for the same
-entity, the **last-registered provider's value wins**. Core providers register
-before plugin providers (registration order: core first, then plugins in load
-order). Key collision handling depends on the collision type:
+entity, the **last-registered provider's value wins** for scalar attributes. For
+**list-valued attributes**, if multiple providers contribute the same key, the
+values are **concatenated** into a single list, preserving all values from all
+providers in registration order (core providers first, then plugins in load
+order). This allows multiple plugins to contribute to shared list attributes
+(e.g., multiple faction plugins adding faction memberships to a character).
+Integration tests MUST verify list concatenation behavior with multiple
+providers contributing to the same list attribute key. Example: Provider A
+returns `{"factions": ["rebels"]}`, Provider B returns `{"factions": ["traders"]}`.
+The merged bag contains `{"factions": ["rebels", "traders"]}`.
+
+Key collision handling for scalar attributes depends on the collision type:
 
 - **Core-to-plugin collision** (a plugin overwrites a core attribute like
   `faction`): The server MUST reject the plugin's provider registration and
@@ -1049,18 +1058,19 @@ This prevents a circular dependency:
 
 ### Property Attributes
 
-| Attribute       | Type     | Description                                              |
-| --------------- | -------- | -------------------------------------------------------- |
-| `id`            | ULID     | Unique property identifier                               |
-| `parent_type`   | string   | Parent entity type: character, location, object          |
-| `parent_id`     | ULID     | Parent entity ID                                         |
-| `name`          | string   | Property name (unique per parent)                        |
-| `value`         | string   | Property value                                           |
-| `owner`         | string   | Subject who created/set this property                    |
-| `visibility`    | string   | Access level: public, private, restricted, system, admin |
-| `flags`         | []string | Arbitrary flags (JSON array)                             |
-| `visible_to`    | []string | Character IDs allowed to read (restricted, max 100)      |
-| `excluded_from` | []string | Character IDs denied from reading (max 100)              |
+| Attribute       | Type     | Description                                                                   |
+| --------------- | -------- | ----------------------------------------------------------------------------- |
+| `id`            | ULID     | Unique property identifier                                                    |
+| `parent_type`   | string   | Parent entity type: character, location, object                               |
+| `parent_id`     | ULID     | Parent entity ID                                                              |
+| `name`          | string   | Property name (unique per parent)                                             |
+| `value`         | string   | Property value                                                                |
+| `owner`         | string   | Subject who created/set this property                                         |
+| `visibility`    | string   | Access level: public, private, restricted, system, admin                      |
+| `flags`         | []string | Arbitrary flags (JSON array)                                                  |
+| `visible_to`    | []string | Character IDs allowed to read (restricted, max 100)                           |
+| `excluded_from` | []string | Character IDs denied from reading (max 100)                                   |
+| `parent_location` | ULID   | Resolved dynamically from parent entity's current location at evaluation time |
 
 ### Visibility Levels
 
@@ -1076,7 +1086,11 @@ This prevents a circular dependency:
 means the property is visible to characters in the same location as the owning
 character. As the owning character moves, the set of characters who can see
 their public properties changes accordingly. The `parent_location` attribute
-is resolved at evaluation time from the character's current location. If the
+is **resolved dynamically at policy evaluation time** from the parent entity's
+current location state in the database, NOT frozen at property creation time.
+The `PropertyProvider` queries the parent entity's current `location_id` via
+SQL JOIN (see [decision #32](#32-propertyprovider-uses-sql-join-for-parent-location))
+to populate the `parent_location` attribute in the resource bag. If the
 parent entity has no valid location (e.g., a character in the lobby before
 entering a room), `parent_location` is nil and location-based visibility
 policies fail-safe (deny).
@@ -2428,8 +2442,10 @@ rather than relying on ordering.
 There is no backward-compatibility adapter, no shadow mode, and no incremental
 migration. All call sites switch to `Evaluate()` directly. This simplifies the
 design and eliminates an entire class of complexity (normalization helpers,
-migration adapters, shadow mode metrics, cutover criteria). See decisions #36
-and #37 in the decisions log.
+migration adapters, shadow mode metrics, cutover criteria). See
+[decision #36](2026-02-05-full-abac-design-decisions.md#36-direct-replacement-no-adapter)
+and [decision #37](2026-02-05-full-abac-design-decisions.md#37-no-shadow-mode)
+in the decisions log.
 
 ### Seed Policies
 
@@ -2554,6 +2570,54 @@ mechanisms:
 
 Seed policy fixes **SHOULD** be shipped as explicit migration files with
 before/after diffs and a human-readable change note.
+
+#### Seed Policy Migrations
+
+When a server version needs to fix a seed policy bug or update seed policy
+logic, the fix MUST be delivered via a migration script that calls
+`PolicyStore.UpdateSeed(ctx, name, dsl)`. This method bypasses the normal
+collision check and updates the seed policy in-place, even if it has been
+customized by admins.
+
+**UpdateSeed behavior:**
+
+1. Check if a policy with the given name exists and has `source = 'seed'`.
+2. If the policy does not exist or `source != 'seed'`, the migration MUST fail
+   with an error.
+3. If the policy's current DSL matches the new DSL exactly (byte-for-byte), the
+   update is skipped (idempotent).
+4. If the policy has been customized by admins (detected by comparing the stored
+   DSL against the previously shipped seed text from the prior version), log a
+   **warning** and skip the update. The warning MUST include the policy name,
+   the fact that it was customized, and a recommendation to review the change
+   manually.
+5. Otherwise, update the policy's DSL and compiled condition, log at INFO level
+   with the policy name and change note, and invalidate the policy cache.
+
+**Customization detection:** The migration script embeds both the **old seed
+text** (from the version being upgraded from) and the **new seed text** (from
+the version being upgraded to). During migration, `UpdateSeed` compares the
+stored policy DSL against the old seed text. If they match, the policy is
+unchanged from the shipped default and the update proceeds. If they differ,
+the policy was customized and the update is skipped with a warning.
+
+**Example migration:**
+
+```go
+// 2026-02-10-fix-player-self-access.go
+func up(ctx context.Context, store PolicyStore) error {
+    oldDSL := `permit(principal is character, action in ["read"], resource is character)
+when { resource.id == principal.id };`
+    newDSL := `permit(principal is character, action in ["read", "write"], resource is character)
+when { resource.id == principal.id };`
+
+    return store.UpdateSeed(ctx, "seed:player-self-access", oldDSL, newDSL,
+        "Add 'write' action to player-self-access seed policy")
+}
+```
+
+**Integration test requirement:** Tests MUST verify that `UpdateSeed` correctly
+skips customized seeds and logs the appropriate warning.
 
 ### Implementation Sequence
 

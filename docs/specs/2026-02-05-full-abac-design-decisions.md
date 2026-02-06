@@ -350,7 +350,7 @@ resources) create confusion in policies and audit logs. Normalizing to
 `character:` aligns subjects with resources and with Cedar conventions where
 the principal type name matches the DSL type name.
 
-_Note: Decision #36 removed the adapter. All call sites switch directly to
+_Note: [decision #36](#36-direct-replacement-no-adapter) removed the adapter. All call sites switch directly to
 `character:` — the engine **MUST** reject the `char:` prefix with a clear
 error rather than normalizing it. The prefix constants (`SubjectCharacter`,
 `SubjectPlugin`, etc.) remain the recommended approach._
@@ -408,7 +408,7 @@ errors. Better to reject at parse time with a helpful message than to accept
 syntax that fails silently at evaluation time.
 
 **Updates [decision #8](#8-dsl-expression-language-scope):** The full expression language still includes all
-operators from decision #8. Only `entity_ref` is deferred — `in` works with
+operators from [decision #8](#8-dsl-expression-language-scope). Only `entity_ref` is deferred — `in` works with
 lists and attribute expressions.
 
 ---
@@ -450,7 +450,7 @@ world package maintains the separation of concerns: world model stores data,
 access control evaluates policies against it.
 
 **Updates [decision #9](#9-property-model):** Clarifies the implementation location of the property
-model from decision #9.
+model from [decision #9](#9-property-model).
 
 ---
 
@@ -654,7 +654,7 @@ the defensive pattern is `principal has faction && principal.faction !=
 "enemy"`.
 
 **Updates [decision #8](#8-dsl-expression-language-scope):** Changes the type
-system table from decision #8's implied semantics.
+system table from [decision #8](#8-dsl-expression-language-scope)'s implied semantics.
 
 ---
 
@@ -830,8 +830,8 @@ for cleanup.
 
 ## 36. Direct Replacement (No Adapter)
 
-**Review finding:** The adapter pattern (decision #5) and shadow mode
-(decision #21) add significant complexity: normalization helpers, migration
+**Review finding:** The adapter pattern ([decision #5](#5-migration-strategy)) and shadow mode
+([decision #21](#21-shadow-mode-cutover-criteria)) add significant complexity: normalization helpers, migration
 adapters, shadow mode metrics, cutover criteria, exclusion filtering. This
 complexity exists solely to support incremental migration from
 `StaticAccessControl`.
@@ -856,7 +856,7 @@ been released wastes effort and makes the design harder to understand.
 - The `AccessControl` interface and `StaticAccessControl` struct are deleted
   in phase 7.6
 
-**Supersedes:** [Decision #5](#5-migration-strategy) (adapter pattern),
+**Supersedes:** [decision #5](#5-migration-strategy) (adapter pattern),
 [decision #21](#21-shadow-mode-cutover-criteria) (shadow mode)
 
 ---
