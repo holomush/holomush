@@ -1785,7 +1785,8 @@ acceptable since the cache is per-request and batch operations are rare.
 The cache assumes **read-only world state** during request processing. If a
 command modifies character location, subsequent authorization checks in the
 same request use the pre-modification snapshot. This is consistent with the
-eager resolution model — attributes are a point-in-time snapshot.
+eager resolution model — attributes represent a per-request snapshot, though
+not necessarily a consistent cross-provider snapshot (see Known Limitations).
 
 **Multi-step commands:** For commands that modify an entity AND then check
 access to the modified state (e.g., a builder command that moves a character
@@ -3144,6 +3145,44 @@ Describe("AccessPolicyEngine", func() {
     })
 })
 ```
+
+## Known Limitations
+
+### Property Location Resolution Transaction Consistency
+
+At `READ COMMITTED` isolation level, the `PropertyProvider`'s recursive CTE
+query and the `CharacterProvider`'s subject attribute resolution run in
+**separate transactions**. This means attribute resolution does not provide
+point-in-time snapshot consistency across providers.
+
+**Scenario:** A character holding an object moves from room A to room B while
+an authorization check is in progress. The check may observe:
+
+- Character location resolved from room B (new state)
+- Object's `parent_location` chain still showing room A (old state)
+
+This creates a brief inconsistency where the character and their held object
+appear to be in different locations during policy evaluation.
+
+**Why this is acceptable:**
+
+1. **Low frequency:** MUSH character movement is infrequent (seconds to minutes
+   between moves), making the race condition window rare in practice.
+2. **Bounded window:** The 100ms `PropertyProvider` query timeout limits the
+   maximum duration of inconsistency. Most queries complete in <10ms.
+3. **Fail-safe behavior:** Authorization policies that depend on
+   location-hierarchy containment (e.g., "can access object if it's in your
+   location") will fail-safe to deny when inconsistencies occur, erring on the
+   side of security.
+4. **Circuit breaker protection:** The `PropertyProvider` circuit breaker (3
+   timeouts in 60s) prevents systematic timeout issues from overwhelming the
+   database, treating the operational symptom even if not the consistency root
+   cause.
+
+**What this means:** The system provides **eventual consistency** for property
+location resolution, not strict snapshot consistency. Authorization decisions
+reflect a consistent view within each provider's transaction, but not
+necessarily across all providers involved in a single `Evaluate()` call.
 
 ## Acceptance Criteria
 
