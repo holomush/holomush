@@ -340,6 +340,10 @@ const (
 )
 
 // PolicyMatch records a single policy's evaluation result.
+// ConditionsMet is primarily for `policy test --verbose` debugging: it
+// distinguishes "matched target but conditions failed" from "matched target
+// and conditions passed." This enables the verbose output to show why a
+// policy didn't fire, even though it was a candidate.
 type PolicyMatch struct {
     PolicyID       string
     PolicyName     string
@@ -511,11 +515,15 @@ provider's constructor.
 | `day_of_week` | string  | MUST        | Day name (e.g., `"monday"`, lowercase) |
 | `maintenance` | bool    | MUST        | Whether server is in maintenance mode  |
 
-**Timezone:** `hour`, `minute`, and `day_of_week` are always UTC. Game-world
-time zones are not modeled — if a future phase adds in-game time, it SHOULD use
-a separate attribute (e.g., `env.game_hour`) rather than overloading these
-values. Policies that need local-time semantics MUST account for the UTC offset
-explicitly (e.g., `env.hour >= 22` for 10 PM UTC, not local time).
+**Timezone:** All time attributes (`hour`, `minute`, `day_of_week`) are always
+UTC. Game-world time zones and player-local time are explicitly out of scope
+for this phase. MUSH games are inherently social environments where "night"
+means different things to players in different timezones — the UTC convention
+avoids embedding timezone assumptions into policies. If a future phase adds
+in-game time (e.g., a day/night cycle), it SHOULD use a separate attribute
+(e.g., `env.game_hour`) rather than overloading these values. Policies that
+need local-time semantics MUST account for the UTC offset explicitly (e.g.,
+`env.hour >= 22` for 10 PM UTC, not local time).
 
 **Note:** `game_state` was considered but is not included — HoloMUSH does not
 currently have a game state management system. This attribute MAY be added in a
@@ -934,6 +942,13 @@ access control involving larger groups, admins SHOULD use flag-based policies
 individual character IDs. This prevents linear-scan performance degradation
 during `principal.id in resource.visible_to` evaluation.
 
+**List overlap prohibition:** A character ID MUST NOT appear in both
+`visible_to` and `excluded_from` for the same property. The property store
+MUST reject updates that would create this overlap. Without this constraint,
+adding a character to `visible_to` has no observable effect if they are already
+in `excluded_from` (deny-overrides means the `forbid` policy on
+`excluded_from` always wins), creating confusing UX for property owners.
+
 ### Visibility Seed Policies
 
 Each visibility level is enforced by system-level seed policies. These are
@@ -1200,11 +1215,16 @@ order is non-deterministic.
 
 The 100ms deadline is the total budget for all providers combined — there is
 no per-provider timeout, only the overall 100ms deadline on `Evaluate()`.
-Providers that complete within the deadline contribute their results;
-providers still running when the deadline expires are cancelled via context
-cancellation. If 3 plugin providers each take 45ms, the third is cancelled at
-100ms total. A slow or misbehaving plugin cannot block the entire evaluation
-pipeline.
+Because provider resolution is sequential (not concurrent), the deadline
+manifests as context cancellation at provider entry boundaries: if providers
+A and B take 80ms combined, provider C receives an already-cancelled context
+when `ResolveSubject` is called. Provider C detects the cancelled context,
+returns immediately with `ctx.Err()`, and the engine treats it as a plugin
+provider failure (logged, attributes missing, conditions fail-safe). No
+mid-execution cancellation occurs within a provider — only pre-entry
+cancellation between sequential calls. A slow or misbehaving plugin cannot
+block the entire evaluation pipeline because the context deadline expires
+regardless of what the current provider is doing.
 
 **Operational limits:**
 
@@ -1495,8 +1515,13 @@ interval and retention periods are configurable via `AuditConfig`:
 - **Allows:** Retained for 7 days (default, only relevant in `all` mode)
 - **Purge interval:** Every 24 hours (default)
 
-If the audit table exceeds 10M rows, PostgreSQL table partitioning by
-month MAY be introduced.
+**Partitioning:** In `all` mode, the audit table reaches 10M rows on day one
+(~120 checks/sec × 86,400s). Even in `denials_only` mode, at a 5% denial
+rate, 10M rows is reached in ~20 days. Phase 7.1 SHOULD create the
+`access_audit_log` table with monthly range partitioning on the `timestamp`
+column from the start. This avoids a disruptive `ALTER TABLE` migration
+later and enables efficient partition-drop-based purging instead of
+row-by-row `DELETE`.
 
 ### Visibility Defaults
 
@@ -1997,7 +2022,11 @@ change with a `change_note` explaining the upgrade.
 
 2. **Phase 7.2 (DSL & Compiler):** Build DSL parser using
    [participle](https://github.com/alecthomas/participle) (struct-tag parser
-   generator), evaluator, and `PolicyCompiler`. Mandate fuzz testing for all
+   generator), evaluator, and `PolicyCompiler`. Participle is preferred over
+   `goyacc` (requires separate `.y` grammar file and manual AST mapping) and
+   hand-rolled recursive descent (more code, harder to maintain) because its
+   struct-tag approach generates Go AST structs directly from grammar
+   annotations, eliminating the mapping layer. Mandate fuzz testing for all
    parser entry points. Unit test with table-driven tests.
 
 3. **Phase 7.3 (Policy Engine):** Build `AccessPolicyEngine`, attribute
@@ -2147,8 +2176,10 @@ Describe("AccessPolicyEngine", func() {
 - [ ] Lock syntax compiles to scoped policies
 - [ ] Property model designed as first-class entities
 - [ ] Direct replacement of StaticAccessControl documented (no adapter)
-- [ ] Policy evaluation benchmarks: single-policy <10μs, 50-policy set <100μs,
-      attribute resolution <50μs (measured via `go test -bench`)
+- [ ] Microbenchmarks (pure evaluator, no I/O): single-policy <10μs,
+      50-policy set <100μs, attribute resolution <50μs (via `go test -bench`)
+- [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <5ms cold,
+      <3ms warm, matching the performance targets in the spec
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented
@@ -2167,6 +2198,12 @@ policy management system:
 - **`policy import <file>`** — Import policies from a DSL text file. Validates
   each policy via `PolicyCompiler` before persisting. Existing policies with the
   same name are skipped unless `--overwrite` is specified.
+- **`policy lint [<name>]`** — Semantic analysis of policies for common
+  mistakes. Unlike `policy validate` (syntax only), lint checks for: negation
+  without `has` guard (`principal.faction != "enemy"` without
+  `principal has faction`), overly broad `forbid` policies without conditions,
+  and `permit` policies logically subsumed by existing policies. Available to
+  admins and builders.
 
 ## References
 

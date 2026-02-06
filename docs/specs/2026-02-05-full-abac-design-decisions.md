@@ -933,13 +933,24 @@ location.
 
 ```sql
 WITH RECURSIVE chain AS (
-    SELECT id, location_id, contained_in_object_id FROM objects WHERE id = $1
+    SELECT id, location_id, contained_in_object_id,
+           ARRAY[id] AS path, 1 AS depth
+    FROM objects WHERE id = $1
     UNION ALL
-    SELECT o.id, o.location_id, o.contained_in_object_id
-    FROM objects o JOIN chain c ON o.id = c.contained_in_object_id
+    SELECT o.id, o.location_id, o.contained_in_object_id,
+           c.path || o.id, c.depth + 1
+    FROM objects o
+    JOIN chain c ON o.id = c.contained_in_object_id
+    WHERE NOT o.id = ANY(c.path)  -- cycle detection
+      AND c.depth < 20            -- depth limit
 )
 SELECT location_id FROM chain WHERE location_id IS NOT NULL LIMIT 1;
 ```
+
+**Note:** The `path` array column tracks visited IDs to detect cycles
+(corrupted containment data). The `depth < 20` limit provides defense-in-depth
+against pathological chains. Both guards are REQUIRED in the implementation —
+PostgreSQL `WITH RECURSIVE` does not automatically prevent cycles.
 
 **Rationale:** The existing `object_repo.go` already uses recursive CTEs for
 containment queries. Reusing this pattern in `PropertyRepository` ensures
