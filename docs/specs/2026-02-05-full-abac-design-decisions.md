@@ -373,8 +373,8 @@ passed the character subject directly.
 **Rationale:** Policies are always evaluated as `principal is character`, never
 `principal is session`. Resolving at the entry point keeps the provider layer
 clean — `CharacterProvider` only handles characters, not sessions. The
-`SessionProvider` in the architecture diagram exists solely for this lookup, not
-as an attribute contributor.
+`Session Resolver` in the architecture diagram exists solely for this lookup,
+not as an attribute contributor.
 
 ---
 
@@ -573,3 +573,86 @@ vocabulary return an empty slice from `LockTokens()`.
 resolve different attributes depending on whether the entity is the principal or
 the target. A single `Resolve` method loses this context. Adding `LockTokens()`
 to the same interface keeps the provider contract in one place.
+
+---
+
+## 28. Cedar-Aligned Missing Attribute Semantics
+
+**Review finding:** The type system defined `!=` across types as returning
+`true`, creating a security hazard. `principal.faction != "enemy"` would return
+`true` when `faction` is missing, accidentally granting access to characters
+without the attribute. The suggested workaround (`principal.reputation.score
+!= 0`) was also broken — it would return `true` when the reputation plugin
+was not loaded.
+
+**Decision:** Align with Cedar: ALL comparisons involving a missing attribute
+evaluate to `false`, regardless of operator (including `!=`). This matches
+Cedar's behavior where a missing attribute produces an error value that causes
+the entire condition to be unsatisfied.
+
+**Rationale:** The original `!=` semantics created a class of policies that
+silently granted unintended access. Cedar's behavior is proven safe: missing
+attributes are always conservative (deny). The `has` operator provides an
+explicit existence check for cases where presence matters. For negation,
+the defensive pattern is `principal has faction && principal.faction !=
+"enemy"`.
+
+**Updates [decision #8](#8-dsl-expression-language-scope):** Changes the type
+system table from decision #8's implied semantics.
+
+---
+
+## 29. DSL `like` Pattern Validation at Parser Layer
+
+**Review finding:** The spec referenced `glob.Compile(pattern, ':',
+glob.Simple)` but `gobwas/glob` has no `Simple` option. The library natively
+supports character classes (`[abc]`), alternation (`{a,b}`), and `**` — these
+cannot be disabled via API.
+
+**Decision:** Move the restriction to the DSL parser layer. The parser MUST
+reject `like` patterns containing `[`, `{`, or `**` syntax before passing them
+to `glob.Compile(pattern, ':')`. This restricts `like` to simple `*` and `?`
+wildcards only.
+
+**Rationale:** Parser-level validation gives clear error messages at policy
+creation time rather than unexpected matching behavior at evaluation time.
+Restricting to simple wildcards keeps the lock syntax approachable for
+non-technical game admins.
+
+---
+
+## 30. PolicyCompiler Component
+
+**Review finding:** The spec jumped from "DSL text stored in PostgreSQL" to
+"engine evaluates conditions" without defining the compilation pipeline.
+Without this, every `Evaluate()` would re-parse DSL text, violating the <5ms
+p99 target.
+
+**Decision:** Add a `PolicyCompiler` component responsible for parsing DSL text
+to AST, validating attribute references, pre-compiling glob patterns for `like`
+expressions, and producing a `CompiledPolicy` struct. The compiled form is
+stored alongside DSL text (as JSONB) and used by the in-memory policy cache.
+
+**Rationale:** Compilation at store time (not evaluation time) ensures
+`Evaluate()` only works with pre-parsed, pre-validated policies. The compiled
+form also enables validation feedback with line/column error information at
+`policy create`/`policy edit` time.
+
+---
+
+## 31. Provider Re-Entrance Prohibition
+
+**Review finding:** If a plugin's `ResolveSubject()` called back into the
+access control system, it would create a deadlock since the engine is already
+mid-evaluation.
+
+**Decision:** Attribute providers MUST NOT invoke `AccessControl.Check()` or
+`AccessPolicyEngine.Evaluate()` during attribute resolution. Providers that
+need authorization-gated data MUST access repositories directly, consistent
+with the `PropertyProvider` pattern.
+
+**Rationale:** The dependency chain `Engine → Provider → Engine` is a deadlock
+by design. The existing `PropertyProvider → PropertyRepository` pattern
+(bypassing `WorldService`) already demonstrates the correct approach. Making
+this an explicit prohibition prevents plugin authors from introducing the
+same pattern.
