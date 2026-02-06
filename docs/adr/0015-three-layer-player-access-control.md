@@ -156,10 +156,12 @@ ID string. The engine validates this at registration and rejects non-namespaced 
 incorrectly-prefixed plugin tokens. Core tokens (`faction`, `flag`, `level`) are
 un-namespaced because they ship with the engine.
 
-Duplicate token names are logged as a **WARN** and resolved by last-registered-wins.
-The server logs the collision (including both the existing and new provider) so operators
-can investigate, but continues startup. This avoids a single misbehaving plugin from
-preventing the entire server from starting.
+Duplicate token registrations between plugins MUST cause a startup error. The error
+message identifies both plugins and the conflicting token name, directing the operator to
+disable one plugin. Non-deterministic last-registered-wins behavior is operationally
+dangerous — server restarts could silently change lock semantics if plugin load order
+varies. Core-to-plugin collisions are structurally prevented by the namespacing
+requirement (core tokens are un-namespaced; plugin tokens require a dot prefix).
 
 ## Consequences
 

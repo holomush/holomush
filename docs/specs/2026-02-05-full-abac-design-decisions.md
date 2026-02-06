@@ -686,12 +686,19 @@ not just detectable. Requiring namespacing makes collisions structurally
 impossible between plugins (each has a unique ID) while core tokens remain
 un-namespaced.
 
+**Clarification (inter-plugin collisions):** Namespace enforcement prevents
+cross-plugin token collisions (plugin A cannot register `pluginB.score`).
+If two plugins with the same ID are loaded (a deployment error), duplicate
+token registrations MUST cause a startup error — see the main spec's token
+conflict resolution section for the updated policy.
+
 ---
 
 ## 34. Time-of-Day Attributes for Environment Provider
 
-**Review finding:** The original spec included only `env.maintenance_mode` and
-`env.game_state` as environment attributes. Time-based policy gating (e.g.,
+**Review finding:** The original spec included only `env.maintenance_mode`
+(since renamed to `env.maintenance` in the final spec) and `env.game_state`
+as environment attributes. Time-based policy gating (e.g.,
 restrict certain areas during night hours) was not possible.
 
 **Decision:** Add `env.hour` (float64, 0-23), `env.minute` (float64, 0-59),

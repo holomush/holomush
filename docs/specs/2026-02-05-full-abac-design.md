@@ -38,6 +38,20 @@ Players control access to their own properties through a simplified lock system.
 - Web-based policy editor (admin commands cover MVP, web UI deferred)
 - Database triggers or stored procedures — all logic lives in Go
 
+### Glossary
+
+| Term            | Definition                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Subject**     | The entity in `AccessRequest.Subject` — the Go-side identity string (e.g., `"character:01ABC"`)               |
+| **Principal**   | The DSL keyword referring to the subject — `principal is character` matches subjects with `character:` prefix |
+| **Resource**    | The target of the access request — entity string in `AccessRequest.Resource`                                  |
+| **Action**      | The operation being performed — string in `AccessRequest.Action` (e.g., `"read"`, `"execute"`)                |
+| **Environment** | Server-wide context attributes (time, maintenance mode) — the `env` prefix in DSL                             |
+| **Policy**      | A permit or forbid rule with target matching and conditions, stored in `access_policies`                      |
+| **Seed policy** | A system-installed default policy (prefixed `seed:`) created at first startup                                 |
+| **Lock**        | A player-authored simplified policy using token syntax, compiled to a scoped `lock:` policy                   |
+| **Decision**    | The outcome of `Evaluate()` — includes effect, reason, matched policies, and attribute snapshot               |
+
 ### Key Design Decisions
 
 | Decision              | Choice                                  | Rationale                                                         |
@@ -113,7 +127,8 @@ full set.
    plugin providers
 3. Engine loads matching policies from the in-memory cache
 4. Engine evaluates each policy's conditions against the attribute bags
-5. Deny-overrides: any deny → deny, any allow → allow, default → deny
+5. Deny-overrides: any forbid → deny (wins over permits); else any permit →
+   allow; else default deny
 6. Audit logger records the decision, matched policies, and attribute snapshot
 7. Returns `Decision` with allowed/denied, reason, and matched policy ID
 
@@ -178,8 +193,13 @@ type PolicyCompiler struct {
 
 // Compile parses DSL text, validates it, and returns a compiled policy.
 // Returns a descriptive error with line/column information on parse failure.
-// If schema is configured, also returns validation warnings for unknown
-// attributes (warnings do not block creation — schema evolves over time).
+// If schema is configured, also returns validation warnings for:
+// - Unknown attributes (schema evolves over time)
+// - Bare boolean expressions (recommend explicit `== true`)
+// - Unreachable conditions (e.g., `false && ...`)
+// - Always-true conditions (e.g., `principal.level >= 0`)
+// - Redundant sub-conditions
+// Warnings do not block creation.
 func (c *PolicyCompiler) Compile(dslText string) (*CompiledPolicy, []ValidationWarning, error)
 
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
@@ -292,22 +312,33 @@ contribute attributes to the bags.
 **Session resolution error handling:**
 
 - **Session not found:** Return `Decision{Allowed: false, Effect:
-  EffectDeny, PolicyID: "session-resolution-failure"}` with error `"session
-  not found: web-123"`. The audit log records the error in the
-  `error_message` field. Using `EffectDeny` (not `EffectDefaultDeny`)
-  distinguishes session failures from "no policy matched" in audit queries.
+  EffectDefaultDeny, PolicyID: "infra:session-not-found"}` with error
+  `"session not found: web-123"`. Using `EffectDefaultDeny` (not
+  `EffectDeny`) distinguishes infrastructure failures from explicit policy
+  denials in audit queries. The `infra:` prefix on the PolicyID further
+  disambiguates infrastructure errors from "no policy matched" (which has
+  an empty PolicyID).
 - **Session store failure:** Return `Decision{Allowed: false, Effect:
-  EffectDeny, PolicyID: "session-resolution-failure"}` with the wrapped store
-  error. Fail-closed — a session lookup failure MUST NOT grant access.
+  EffectDefaultDeny, PolicyID: "infra:session-store-error"}` with the
+  wrapped store error. Fail-closed — a session lookup failure MUST NOT
+  grant access.
 - **No associated character:** Return `Decision{Allowed: false, Effect:
-  EffectDeny, PolicyID: "session-resolution-failure"}` with error `"session
-  has no associated character"`. This handles unauthenticated sessions that
-  have not yet selected a character.
+  EffectDefaultDeny, PolicyID: "infra:session-no-character"}` with error
+  `"session has no associated character"`. This handles unauthenticated
+  sessions that have not yet selected a character.
 - **Character deleted after session creation:** Return `Decision{Allowed:
-  false, Effect: EffectDeny, PolicyID: "session-resolution-failure"}` with
-  error `"session character has been deleted: 01ABC"`. This handles the case
-  where a character is deleted while sessions referencing it still exist.
-  Session cleanup SHOULD invalidate sessions on character deletion.
+  false, Effect: EffectDefaultDeny, PolicyID:
+  "infra:session-character-integrity"}` with error `"session character has
+  been deleted: 01ABC"`. This handles the case where a character is deleted
+  while sessions referencing it still exist. Session cleanup SHOULD
+  invalidate sessions on character deletion.
+
+**Audit distinguishability:** Session resolution errors use
+`EffectDefaultDeny` with `infra:*` policy IDs, making them filterable in
+audit queries. `WHERE effect = 'deny'` returns only explicit policy denials.
+`WHERE policy_id LIKE 'infra:%'` returns only infrastructure failures.
+`WHERE effect = 'default_deny' AND policy_id = ''` returns "no policy
+matched" cases.
 
 Session resolution errors SHOULD use oops error codes for structured handling:
 `SESSION_NOT_FOUND`, `SESSION_STORE_ERROR`, `SESSION_NO_CHARACTER`,
@@ -324,7 +355,7 @@ prevent this from occurring.
 // Invariant: Allowed is true if and only if Effect is EffectAllow or EffectSystemBypass.
 type Decision struct {
     Allowed    bool
-    Effect     Effect          // Allow, Deny, or DefaultDeny (no policy matched)
+    Effect     Effect          // Allow, Deny, DefaultDeny (no policy matched), or SystemBypass
     Reason     string          // Human-readable explanation
     PolicyID   string          // ID of the determining policy ("" if default deny)
     Policies   []PolicyMatch   // All policies that matched (for debugging)
@@ -410,6 +441,11 @@ AttributeBags.Action = map[string]any{
 }
 ```
 
+**Note:** The action bag currently contains only `name`. Conditions
+referencing any other `action.*` attribute will evaluate to `false` (missing
+attribute, fail-safe). Future attributes (e.g., `action.type`,
+`action.scope`) MAY be added when use cases emerge.
+
 ### Attribute Providers
 
 ```go
@@ -438,15 +474,33 @@ authorization-gated data MUST use pre-resolved attributes from the bags or
 access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
 
-**Enforcement:** `Evaluate()` MUST set a context flag
-(`context.WithValue(ctx, resolving, true)`) at the very start of every call,
-before any other processing. All subsequent `Evaluate()` calls MUST check
-this flag at entry and panic if already set — including calls with different
-subjects or resources. This prevents a provider from calling `Evaluate()` on
-a different entity during resolution, which would still create a deadlock.
-The flag spans the entire `Evaluate()` execution (set on entry, cleared on
-return), making re-entrance violations fail-fast during development and
+**Enforcement:** The engine MUST use an `atomic.Bool` field on the
+`AccessPolicyEngine` struct (not a context value) to detect re-entrance.
+`Evaluate()` MUST call `CompareAndSwap(false, true)` at entry and
+`Store(false)` on return. If the swap fails, `Evaluate()` panics with a
+message identifying the re-entrance. Using an engine-scoped atomic instead
+of `context.WithValue` is critical: providers that create new contexts
+(e.g., `context.WithTimeout(context.Background(), ...)` for timeout
+isolation) would lose a context-carried flag, silently bypassing the guard.
+The atomic spans the entire `Evaluate()` execution (set on entry, cleared
+on return), making re-entrance violations fail-fast during development and
 testing rather than producing subtle deadlocks in production.
+
+```go
+type engine struct {
+    evaluating atomic.Bool
+    // ...
+}
+
+func (e *engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
+    if !e.evaluating.CompareAndSwap(false, true) {
+        panic("re-entrant Evaluate() call detected — " +
+            "an AttributeProvider is calling back into the engine")
+    }
+    defer e.evaluating.Store(false)
+    // ... proceed with resolution
+}
+```
 
 **Provider design principles:**
 
@@ -497,19 +551,19 @@ provider's constructor.
 
 **PropertyProvider** (`property` namespace):
 
-| Attribute         | Type     | Requirement | Description                                                   |
-| ----------------- | -------- | ----------- | ------------------------------------------------------------- |
-| `type`            | string   | MUST        | Always `"property"`                                           |
-| `id`              | string   | MUST        | ULID of the property                                          |
-| `name`            | string   | MUST        | Property name                                                 |
-| `parent_type`     | string   | MUST        | Parent entity type                                            |
-| `parent_id`       | string   | MUST        | Parent entity ULID                                            |
-| `owner`           | string   | MAY         | Subject who created/set this property                         |
-| `visibility`      | string   | MUST        | One of: "public", "private", "restricted", "system", "admin"  |
-| `flags`           | []string | MUST        | Arbitrary flags (empty array if none)                         |
-| `visible_to`      | []string | MAY         | Character IDs (only when restricted)                          |
-| `excluded_from`   | []string | MAY         | Character IDs (only when restricted)                          |
-| `parent_location` | string   | MAY         | ULID of parent entity's location                              |
+| Attribute         | Type     | Requirement | Description                                                  |
+| ----------------- | -------- | ----------- | ------------------------------------------------------------ |
+| `type`            | string   | MUST        | Always `"property"`                                          |
+| `id`              | string   | MUST        | ULID of the property                                         |
+| `name`            | string   | MUST        | Property name                                                |
+| `parent_type`     | string   | MUST        | Parent entity type                                           |
+| `parent_id`       | string   | MUST        | Parent entity ULID                                           |
+| `owner`           | string   | MAY         | Subject who created/set this property                        |
+| `visibility`      | string   | MUST        | One of: "public", "private", "restricted", "system", "admin" |
+| `flags`           | []string | MUST        | Arbitrary flags (empty array if none)                        |
+| `visible_to`      | []string | MAY         | Character IDs (only when restricted)                         |
+| `excluded_from`   | []string | MAY         | Character IDs (only when restricted)                         |
+| `parent_location` | string   | MAY         | ULID of parent entity's location                             |
 
 **EnvironmentProvider** (`env` namespace):
 
@@ -671,6 +725,15 @@ after parsing an `expr`, if the next token is a comparator (`==`, `!=`, `>`,
 `>=`, `<`, `<=`), `in`, `like`, `has`, or `.` followed by `containsAll`/
 `containsAny`, treat it as the corresponding compound condition; otherwise treat
 it as a bare boolean. This makes the grammar LL(1) at the implementation level.
+
+**Bare boolean deprecation:** While the grammar allows bare boolean
+expressions (e.g., `when { principal.restricted }` without `== true`), the
+implementation SHOULD emit a `ValidationWarning` when a bare boolean is
+used, recommending the explicit form `principal.restricted == true`. This
+avoids two ways to express the same condition and prevents future reserved
+word collisions (if `restricted` became a keyword, `principal.restricted`
+as a bare expression would be ambiguous). The explicit form is always
+unambiguous.
 
 **Operator precedence** (highest to lowest):
 
@@ -1108,6 +1171,15 @@ slog.Error("plugin attribute provider failed",
     "namespace", provider.Namespace(), "error", err)
 ```
 
+**Provider health monitoring:** In addition to per-error rate-limited
+logging, the engine SHOULD export Prometheus counter metrics per provider:
+`abac_provider_errors_total{namespace="reputation",error_type="timeout"}`.
+This provides aggregate visibility into chronic provider failures that
+individual log entries cannot. Implementation SHOULD consider a circuit
+breaker pattern: after N consecutive failures (default: 10), stop calling a
+provider for M seconds (default: 30), logging at WARN level when the
+circuit opens and closes.
+
 **Error classification:** All errors result in fail-closed (deny) behavior.
 No errors are retryable within a single `Evaluate()` call.
 
@@ -1175,9 +1247,9 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 │    ├─ Any satisfied permit → Decision{Allowed: true, Effect: Allow}
 │    └─ No policies satisfied → Decision{Allowed: false, Effect: DefaultDeny}
 │
-└─ 6. Audit
-     ├─ Always log denials (forbid + default deny)
-     ├─ Log allows when audit mode is enabled
+└─ 6. Audit (when mode != off)
+     ├─ Log denials (forbid + default deny) in denials_only and all modes
+     ├─ Log allows only in all mode
      └─ Include: decision, matched policies, attribute snapshot
 ```
 
@@ -1230,6 +1302,15 @@ per-request `AttributeCache`. Implementation MUST include both
 | Provider timeout                     | 100ms  | Context deadline; return deny + error     |
 | Cache miss storm (post-NOTIFY flood) | <100ms | Lock during reload; stale reads tolerable |
 | Plugin provider slow                 | 50ms   | Per-provider context deadline             |
+| 32-level nested if-then-else         | <5ms   | Recursive evaluator with depth limit      |
+| 20-level containment CTE             | <10ms  | Recursive SQL with depth limit            |
+| Provider starvation (80ms + 80ms)    | 100ms  | Second provider gets cancelled context    |
+
+Implementation MUST include benchmark tests for these pathological cases.
+The 32-level nesting and 20-level containment scenarios MUST be included in
+`BenchmarkEvaluate_WorstCase` as acceptance criteria. Provider starvation
+(one slow provider consuming most of the 100ms budget) MUST be tested to
+verify subsequent providers receive cancelled contexts and return promptly.
 
 The `Evaluate()` context MUST carry a 100ms deadline. If attribute resolution
 exceeds this, the engine returns `EffectDefaultDeny` with a timeout error.
@@ -1281,6 +1362,10 @@ regardless of what the current provider is doing.
   logging to enable performance profiling during development
 - Monitoring SHOULD export per-provider latency metrics (not just aggregate
   `Evaluate()` latency) to identify slow providers independently
+- Monitoring SHOULD export `policy_cache_last_reload_timestamp` gauge to
+  verify the LISTEN/NOTIFY connection is alive
+- Monitoring SHOULD export per-policy evaluation counts
+  (`abac_policy_evaluations_total{name, effect}`) to identify hot policies
 
 **`Decision.Policies` allocation note:** The `Policies []PolicyMatch` slice is
 populated for every `Evaluate()` call to support `policy test` debugging. At 50
@@ -1347,6 +1432,13 @@ command modifies character location, subsequent authorization checks in the
 same request use the pre-modification snapshot. This is consistent with the
 eager resolution model — attributes are a point-in-time snapshot.
 
+**Multi-step commands:** For commands that modify an entity AND then check
+access to the modified state (e.g., a builder command that moves a character
+and checks their access to the new location), callers SHOULD call
+`WithAttributeCache(ctx)` again to create a fresh cache for the post-
+modification checks. This pattern is documented here rather than enforced
+by the cache itself, since most commands do not modify and re-check.
+
 **Future optimization:** If profiling shows cache misses dominate, consider a
 short-TTL cache (100ms) for read-only attributes like character roles. This
 requires careful invalidation and is deferred until profiling demonstrates the
@@ -1388,10 +1480,11 @@ CREATE TABLE access_policy_versions (
     UNIQUE(policy_id, version)
 );
 
--- NOTE: Phase 7.1 SHOULD create this table with monthly range partitioning
--- on the timestamp column. See "Audit Log Retention" section for details.
--- If partitioned, use: CREATE TABLE access_audit_log (...) PARTITION BY RANGE (timestamp);
--- and create initial monthly partitions. The DDL below shows the unpartitioned form.
+-- Phase 7.1 MUST create this table with monthly range partitioning.
+-- Retrofitting partitioning onto an existing table requires exclusive locks
+-- and full table rewrites — at 10M rows/day in `all` mode, this becomes
+-- impractical within days. Partition-drop purging is also far more efficient
+-- than row-by-row DELETE.
 CREATE TABLE access_audit_log (
     id            TEXT PRIMARY KEY,         -- ULID
     timestamp     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1457,6 +1550,16 @@ properties when deleting parent entities:
 These deletions MUST occur in the same database transaction as the parent
 entity deletion. `PropertyRepository.DeleteByParent(parentType, parentID)`
 performs `DELETE FROM entity_properties WHERE parent_type = $1 AND parent_id = $2`.
+
+**Orphan detection:** Because `entity_properties` uses polymorphic parent
+references without FK constraints, orphaned properties can accumulate if a
+deletion path is added without calling `DeleteByParent()`. Implementation
+SHOULD include a periodic background job (daily) that detects orphaned
+properties — rows where `parent_id` does not match any existing entity of
+the declared `parent_type`. Orphans SHOULD be logged as warnings (not
+auto-deleted) to alert operators. Each entity deletion path MUST have a
+corresponding integration test that verifies child properties are deleted
+in the same transaction.
 This is Go-level cascading — no database triggers or FK constraints are used,
 consistent with the project's "all logic in Go" constraint.
 
@@ -1507,6 +1610,11 @@ changes (via `policy edit`). Toggling `enabled` via `policy enable`/`disable` or
 updating `description` modifies the main `access_policies` row directly without
 creating a version record. The `version` column on `access_policies` increments
 only on DSL changes.
+
+**Policy rollback:** Implementation SHOULD include a `policy rollback <name>
+<version>` admin command that restores a previous version's DSL text and
+creates a new version record for the rollback. This avoids requiring admins
+to manually reconstruct old policy text from the history output.
 
 ### Audit Log Configuration
 
@@ -1563,11 +1671,30 @@ interval and retention periods are configurable via `AuditConfig`:
 
 **Partitioning:** In `all` mode, the audit table reaches 10M rows on day one
 (~120 checks/sec × 86,400s). Even in `denials_only` mode, at a 5% denial
-rate, 10M rows is reached in ~20 days. Phase 7.1 SHOULD create the
+rate, 10M rows is reached in ~20 days. Phase 7.1 MUST create the
 `access_audit_log` table with monthly range partitioning on the `timestamp`
-column from the start. This avoids a disruptive `ALTER TABLE` migration
-later and enables efficient partition-drop-based purging instead of
-row-by-row `DELETE`.
+column from the start. Retrofitting partitioning onto a populated table
+requires exclusive locks and full table rewrites — at multi-million row
+scale, this locks the table for hours. Partition-drop purging is also orders
+of magnitude faster than row-by-row `DELETE`.
+
+```sql
+CREATE TABLE access_audit_log (
+    -- columns as defined above
+) PARTITION BY RANGE (timestamp);
+
+-- Create initial partitions (3 months ahead)
+CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+CREATE TABLE access_audit_log_2026_03 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+CREATE TABLE access_audit_log_2026_04 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+```
+
+The purge job SHOULD create future partitions (1 month ahead) and drop
+expired partitions (`DROP TABLE access_audit_log_YYYY_MM`) rather than
+issuing `DELETE` statements.
 
 ### Visibility Defaults
 
@@ -1698,12 +1825,16 @@ Providers register tokens at startup alongside their attributes. The
 (defined in the [Attribute Providers](#attribute-providers) section). Providers
 that contribute no lock vocabulary return an empty slice.
 
-**Token name conflict resolution:** Duplicate token registrations are resolved
-by last-registered-wins. The engine logs a WARN including both the existing and
-new provider names so operators can investigate. The server continues startup —
-a single misbehaving plugin MUST NOT prevent the server from running. Core
-providers (CharacterProvider) register
-tokens first. Plugin tokens MUST contain at least one dot separator.
+**Token name conflict resolution:** Duplicate token registrations between
+plugins MUST cause a startup error, not just a warning. Non-deterministic
+behavior from load-order-dependent last-registered-wins is operationally
+dangerous — restarting the server could silently change lock semantics. The
+error message MUST identify both plugins and the conflicting token name,
+directing the operator to disable one plugin. Core-to-plugin collisions are
+structurally prevented by the namespacing requirement below (core tokens are
+un-namespaced; plugin tokens require a dot prefix). Core providers
+(CharacterProvider) register tokens first. Plugin tokens MUST contain at
+least one dot separator.
 The segment before the first `.` MUST exactly match the plugin ID (e.g.,
 plugin `reputation` registers `reputation.score`, plugin `crafting` registers
 `crafting.type`). Abbreviations are not allowed. Dotless tokens (e.g.,
@@ -1940,6 +2071,27 @@ Evaluating 3 matching policies:
 Decision: DENIED (default deny — no policies matched)
 ```
 
+**Scenario test files:** For comprehensive seed policy verification,
+implementation SHOULD support a `policy test --suite <file>` mode that
+reads test scenarios from a YAML file:
+
+```yaml
+scenarios:
+  - name: "Player self-access"
+    subject: "character:01PLAYER"
+    action: "read"
+    resource: "character:01PLAYER"
+    expected: allow
+  - name: "Player cannot read admin property"
+    subject: "character:01PLAYER"
+    action: "read"
+    resource: "property:01ADMIN_SECRET"
+    expected: deny
+```
+
+This enables batch verification of all seed policies in integration tests
+and simplifies regression testing after policy changes.
+
 ### Command Permissions
 
 ```text
@@ -2076,6 +2228,14 @@ upgrades. If a server version needs to fix a seed policy bug, it MUST use a
 migration that explicitly updates the affected policy, logged as a version
 change with a `change_note` explaining the upgrade.
 
+**Seed verification command:** Implementation SHOULD include a
+`policy seed verify` admin command that compares installed seed policies
+against the shipped seed text and highlights differences. This enables
+operators to discover when they are running with modified seeds and whether
+a shipped fix applies to their customized version. Seed policy fixes SHOULD
+be shipped as explicit migration files with before/after diffs and a
+human-readable change note.
+
 ### Implementation Sequence
 
 1. **Phase 7.1 (Policy Schema):** Create DB tables and policy store.
@@ -2103,7 +2263,11 @@ change with a `change_note` explaining the upgrade.
 6. **Phase 7.6 (Cleanup):** Remove `StaticAccessControl`, `AccessControl`
    interface, `capability.Enforcer`, and all related code. Remove legacy
    `char:` prefix handling and `@`-prefixed command name support from the
-   codebase.
+   codebase. **Note:** The `@` prefix removal MUST happen before or
+   concurrently with Phase 7.4 seed policy creation, since seed policies
+   reference command names without the `@` prefix (e.g., `"dig"` not
+   `"@dig"`). If Phase 7.6 cleanup is deferred, seed policies MUST use
+   the current `@`-prefixed names and be updated when the prefix is removed.
 
 **Call site inventory** (packages to update from `AccessControl` to
 `AccessPolicyEngine`):
@@ -2115,6 +2279,7 @@ change with a `change_note` explaining the upgrade.
 | `internal/command/handlers/boot`         | Boot command permission check       |
 | `internal/world/service`                 | World model operation authorization |
 | `internal/plugin/hostfunc/commands`      | Plugin command execution auth       |
+| `internal/plugin/hostfunc/functions`     | Plugin host function auth           |
 | `internal/core/broadcaster` (test)       | Test mock injection                 |
 
 This list is derived from the current codebase. Run `grep -r "AccessControl"
@@ -2188,6 +2353,18 @@ attribute bags) and the lock expression parser. CI SHOULD run a short fuzz
 cycle (30 seconds) on every build; extended fuzzing (hours) SHOULD run as a
 scheduled nightly job. Crash-inducing inputs discovered by the scheduled
 fuzzer MUST be added as regression test cases in the unit test suite.
+
+**Fuzz corpus strategy:**
+
+- **Seeds:** All example policies from this spec + all seed policies + known
+  edge cases (empty input, max nesting, Unicode identifiers, reserved words
+  as attribute names)
+- **Structured mutation:** Valid DSL with randomized attribute paths, random
+  operators, random nesting depths (up to 32), and random literal values
+- **Crash storage:** Crash-inducing inputs MUST be stored in
+  `testdata/fuzz_crashes/` and added as deterministic regression tests
+- **Coverage target:** Fuzzing SHOULD achieve >80% code coverage of the
+  parser and evaluator packages before being considered sufficient
 
 ### Integration Tests (Ginkgo/Gomega)
 
