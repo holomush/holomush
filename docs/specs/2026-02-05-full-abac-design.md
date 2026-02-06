@@ -195,11 +195,12 @@ type PolicyCompiler struct {
 // Returns a descriptive error with line/column information on parse failure.
 // Validation warnings are returned for:
 // - Unknown attributes (schema evolves over time)
-// - Bare boolean expressions (recommend explicit `== true`)
 // - Unreachable conditions (e.g., `false && ...`)
 // - Always-true conditions (e.g., `principal.level >= 0`)
 // - Redundant sub-conditions
 // Warnings do not block creation.
+// Compile errors are returned for:
+// - Bare boolean attribute references (use explicit `== true` instead)
 func (c *PolicyCompiler) Compile(dslText string) (*CompiledPolicy, []ValidationWarning, error)
 
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
@@ -890,12 +891,11 @@ fixed using `policy lint --fix`, which rewrites bare attributes as
   participate in evaluation. Alternatively, use an impossible condition (e.g.,
   `when { false }`) to keep a policy visible but inactive.
 - **Bare boolean expressions:** The `| expr` alternative in `condition` allows
-  bare `true`, `false`, or boolean attribute references as conditions. This is
-  required for the `else true` pattern in `if-then-else` expressions. Bare
-  boolean attributes (e.g., `resource.restricted`) are equivalent to
-  `resource.restricted == true` — both forms are valid. If a bare expression
-  resolves to a non-boolean value, the condition evaluates to `false`
-  (fail-safe).
+  bare boolean literals (`true`, `false`) as conditions. This is required for
+  the `else true` pattern in `if-then-else` expressions and for disabled
+  policies (e.g., `when { false }`). Bare boolean attribute references are NOT
+  permitted — see **Bare boolean restriction** in the grammar section for
+  rationale and enforcement.
 - **Future: target-level parent type matching.** Property policies frequently
   filter by `resource.parent_type` in conditions (e.g.,
   `when { resource.parent_type == "character" }`). A future grammar extension
