@@ -667,10 +667,12 @@ Without enforcement, a plugin registering `score` would collide with any future
 core token or another plugin's `score`, causing server startup failures that are
 hard to diagnose.
 
-**Decision:** Plugin lock tokens MUST use a dot-separated prefix matching their
-plugin ID (e.g., `rep.score`, `craft.type`). The engine validates this at
-registration time — plugin tokens without the correct namespace prefix are
-rejected.
+**Decision:** Plugin lock tokens MUST use a dot-separated prefix that **exactly
+matches** their plugin ID (e.g., plugin `reputation` registers
+`reputation.score`, plugin `crafting` registers `crafting.type`). Abbreviations
+are not allowed — the prefix before the first `.` MUST equal the plugin ID
+string. The engine validates this at registration time — plugin tokens without
+the correct namespace prefix are rejected.
 
 **Rationale:** Fatal startup errors from token collisions should be preventable,
 not just detectable. Requiring namespacing makes collisions structurally
@@ -1019,13 +1021,14 @@ where the purpose is a kebab-case description of the policy's intent:
 - `seed:player-self-access`
 - `seed:player-location-read`
 - `seed:player-character-colocation`
-- `seed:player-default-commands`
+- `seed:player-object-colocation`
+- `seed:player-stream-emit`
 - `seed:player-movement`
-- `seed:builder-world-management`
-- `seed:builder-advanced-commands`
+- `seed:player-basic-commands`
+- `seed:builder-location-write`
+- `seed:builder-object-write`
+- `seed:builder-commands`
 - `seed:admin-full-access`
-- `seed:admin-command-access`
-- `seed:builder-policy-test`
 
 **Rationale:** Deterministic names enable idempotent seeding (upsert by name)
 and allow admins to identify seed policies via `policy list`. The `seed:`

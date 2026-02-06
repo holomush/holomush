@@ -89,10 +89,10 @@ The lock syntax uses registered token predicates — not hard-coded vocabulary. 
 
 **Plugin tokens** (registered at plugin load, namespaced by plugin ID):
 
-| Token       | Type     | Example           | Compiles To                               |
-| ----------- | -------- | ----------------- | ----------------------------------------- |
-| `rep.score` | numeric  | `rep.score:>=50`  | `principal.reputation.score >= 50`        |
-| `guild`     | equality | `guild:merchants` | `principal.guilds.primary == "merchants"` |
+| Token              | Type     | Example                  | Compiles To                               |
+| ------------------ | -------- | ------------------------ | ----------------------------------------- |
+| `reputation.score` | numeric  | `reputation.score:>=50`  | `principal.reputation.score >= 50`        |
+| `guilds.primary`   | equality | `guilds.primary:merchants` | `principal.guilds.primary == "merchants"` |
 
 Lock compilation generates a `permit` policy scoped to the specific resource and action:
 
@@ -136,8 +136,8 @@ Builders and engaged players use Layer 2 (lock a room to faction members). Only 
 use Layer 3. Each layer adds complexity only for users who need it.
 
 **Lock tokens are extensible:** The token registry means the lock vocabulary grows with
-the plugin ecosystem. A reputation plugin adds `rep.score:>=50` to locks automatically.
-Players discover available tokens via `lock tokens`.
+the plugin ecosystem. A reputation plugin adds `reputation.score:>=50` to locks
+automatically. Players discover available tokens via `lock tokens`.
 
 **Locks compile to policies:** Lock-generated policies are evaluated by the same engine
 as admin policies. No separate access control path exists. This ensures deny-overrides
@@ -149,10 +149,12 @@ context — locking a chest is a quick action, not a governance event.
 
 ### Token Namespace Enforcement
 
-Plugin lock tokens MUST use a dot-separated prefix matching their plugin ID (e.g.,
-`rep.score`, not `score`). The engine validates this at registration and rejects
-non-namespaced plugin tokens. Core tokens (`faction`, `flag`, `level`) are un-namespaced
-because they ship with the engine.
+Plugin lock tokens MUST use a dot-separated prefix that **exactly matches** their
+plugin ID (e.g., plugin `reputation` registers `reputation.score`, not `rep.score`).
+Abbreviations are not allowed — the prefix before the first `.` MUST equal the plugin
+ID string. The engine validates this at registration and rejects non-namespaced or
+incorrectly-prefixed plugin tokens. Core tokens (`faction`, `flag`, `level`) are
+un-namespaced because they ship with the engine.
 
 Duplicate token names are a **fatal startup error**. The server MUST NOT start if any
 token name collides. This fail-fast behavior catches naming conflicts at deploy time.

@@ -50,6 +50,12 @@ a dedicated PostgreSQL connection and reloads its cache on notification.
 
 **Option C: PostgreSQL LISTEN/NOTIFY in Go application code.**
 
+**Critical limitation:** PostgreSQL LISTEN/NOTIFY is **fire-and-forget with zero
+buffering**. Notifications are not queued — if the listener is disconnected when a
+notification is sent, that notification is permanently lost. There is no replay
+mechanism, no delivery guarantee, and no way to recover missed notifications. The
+reconnection protocol below handles this by performing a full reload on reconnect.
+
 The Go policy store sends `pg_notify('policy_changed', policyID)` within the same
 transaction as any Create, Update, or Delete operation on the `access_policies` table.
 The engine subscribes to the `policy_changed` channel and reloads all enabled policies

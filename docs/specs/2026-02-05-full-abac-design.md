@@ -373,8 +373,17 @@ distinction between "missing" and "present but non-matching" matters.
 non-nil provider results. If multiple providers return the same key for the same
 entity, the **last-registered provider's value wins**. Core providers register
 before plugin providers (registration order: core first, then plugins in load
-order). The resolver SHOULD warn on key collisions: `slog.Warn("attribute key
-collision", "key", "faction", "providers", []string{"character", "guilds"})`.
+order). Key collision handling depends on the collision type:
+
+- **Core-to-plugin collision** (a plugin overwrites a core attribute like
+  `faction`): MUST be a **fatal startup error**. Core attributes have semantic
+  guarantees the engine depends on. Plugin providers MUST use namespaced keys
+  (e.g., `guilds.faction`, not `faction`) to avoid overwriting core attributes.
+- **Plugin-to-plugin collision** (two plugins write the same namespaced key):
+  The resolver SHOULD warn at startup: `slog.Warn("attribute key collision",
+  "key", "guilds.faction", "providers", []string{"guilds-v1", "guilds-v2"})`.
+  The last-registered provider wins. This is a deployment configuration issue,
+  not a security issue.
 
 **Action bag construction:** The engine constructs `AttributeBags.Action`
 directly from the `AccessRequest` — no provider is needed:
@@ -481,10 +490,16 @@ provider's constructor.
 | Attribute     | Type   | Requirement | Description                           |
 | ------------- | ------ | ----------- | ------------------------------------- |
 | `time`        | string  | MUST        | Current time (RFC 3339)               |
-| `hour`        | float64 | MUST        | Current hour (0-23, UTC)              |
-| `minute`      | float64 | MUST        | Current minute (0-59, UTC)            |
+| `hour`        | float64 | MUST        | Current hour (0-23, always UTC)       |
+| `minute`      | float64 | MUST        | Current minute (0-59, always UTC)     |
 | `day_of_week` | string  | MUST        | Day name (e.g., `"monday"`, lowercase)|
 | `maintenance` | bool   | MUST        | Whether server is in maintenance mode |
+
+**Timezone:** `hour`, `minute`, and `day_of_week` are always UTC. Game-world
+time zones are not modeled — if a future phase adds in-game time, it SHOULD use
+a separate attribute (e.g., `env.game_hour`) rather than overloading these
+values. Policies that need local-time semantics MUST account for the UTC offset
+explicitly (e.g., `env.hour >= 22` for 10 PM UTC, not local time).
 
 **Note:** `game_state` was considered but is not included — HoloMUSH does not
 currently have a game state management system. This attribute MAY be added in a
@@ -492,13 +507,14 @@ future phase when game state is implemented.
 
 **ObjectProvider** (`object` namespace):
 
-| Attribute  | Type   | Requirement | Description                               |
-| ---------- | ------ | ----------- | ----------------------------------------- |
-| `type`     | string | MUST        | Always `"object"`                         |
-| `id`       | string | MUST        | ULID of the object                        |
-| `name`     | string | MUST        | Object display name                       |
-| `location` | string | MUST        | ULID of containing location               |
-| `owner`    | string | MAY         | Subject who owns this object              |
+| Attribute  | Type     | Requirement | Description                               |
+| ---------- | -------- | ----------- | ----------------------------------------- |
+| `type`     | string   | MUST        | Always `"object"`                         |
+| `id`       | string   | MUST        | ULID of the object                        |
+| `name`     | string   | MUST        | Object display name                       |
+| `location` | string   | MUST        | ULID of containing location               |
+| `owner`    | string   | MAY         | Subject who owns this object              |
+| `flags`    | []string | MUST        | Arbitrary flags (empty array if none)     |
 
 **StreamProvider** (`stream` namespace):
 
@@ -948,8 +964,11 @@ The repository determines the resolution strategy based on `parent_type`:
   repository MUST walk up the `contained_in_object_id` chain until reaching an
   object with a non-NULL `location_id`. The existing
   `checkCircularContainmentTx` already uses recursive CTEs for this pattern.
-  If the chain is broken (orphaned containment), `parent_location` is nil and
-  location-based visibility policies fail-safe (deny).
+  The recursive CTE SHOULD include a depth limit (e.g., `LIMIT 20`) as
+  defense-in-depth against data corruption creating containment cycles.
+  If the chain is broken (orphaned containment) or exceeds the depth limit,
+  `parent_location` is nil and location-based visibility policies fail-safe
+  (deny).
 
 ## Attribute Resolution
 
@@ -1171,6 +1190,17 @@ pipeline.
 - Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
   attribute resolution, policy filtering, condition evaluation, and audit
   logging to enable performance profiling during development
+- Monitoring SHOULD export per-provider latency metrics (not just aggregate
+  `Evaluate()` latency) to identify slow providers independently
+
+**`Decision.Policies` allocation note:** The `Policies []PolicyMatch` slice is
+populated for every `Evaluate()` call to support `policy test` debugging. At 50
+policies per evaluation and 120 evaluations/sec, this produces ~6,000
+`PolicyMatch` allocations/sec. If benchmarking shows allocation pressure,
+consider lazy population: only populate `Decision.Policies` when audit mode is
+`all` or the caller explicitly requests it (e.g., via a context flag set by
+`policy test`). For `denials_only` mode, `Decision.PolicyID` and
+`Decision.Reason` are sufficient.
 
 ### Attribute Caching
 
@@ -1200,7 +1230,12 @@ same subject attributes are resolved repeatedly.
 // Attach to context via WithAttributeCache(ctx) at the request boundary.
 type AttributeCache struct {
     mu    sync.RWMutex
-    items map[string]map[string]any // "character:01ABC" → attributes
+    items map[cacheKey]map[string]any
+}
+
+type cacheKey struct {
+    entityType string // "character", "location", etc.
+    entityID   string // "01ABC"
 }
 
 // WithAttributeCache attaches a new cache to the context.
@@ -1302,6 +1337,7 @@ CREATE TABLE entity_properties (
 );
 
 CREATE INDEX idx_properties_parent ON entity_properties(parent_type, parent_id);
+CREATE INDEX idx_properties_owner ON entity_properties(owner) WHERE owner IS NOT NULL;
 ```
 
 **Implementation note:** The `updated_at` column has no database trigger. The
@@ -1543,9 +1579,12 @@ NOT start if any token name conflicts are detected. This fail-fast behavior
 ensures naming collisions are caught immediately rather than causing subtle
 policy evaluation bugs at runtime. Core providers (CharacterProvider) register
 tokens first. Plugins MUST namespace their tokens using a dot-separated prefix
-matching their plugin ID (e.g., `rep.score` instead of `score`, `craft.type`
-instead of `type`). The engine validates this at registration — plugin tokens
-without a namespace prefix matching the registering plugin are rejected.
+that **exactly matches** their plugin ID (e.g., plugin `reputation` registers
+`reputation.score`, plugin `crafting` registers `crafting.type`). Abbreviations
+are not allowed — the prefix before the first `.` MUST equal the plugin ID
+string. The engine validates this at registration — plugin tokens without the
+correct prefix are rejected with a startup error indicating the expected
+namespace.
 The `policy create` command MUST also reject names starting with `seed:` to
 reserve that prefix for system use.
 
@@ -1564,12 +1603,12 @@ has no special knowledge of `faction`, `flag`, or `level`.
 
 **Plugin token examples:**
 
-| Token       | Type       | Attribute Path     | Example               |
-| ----------- | ---------- | ------------------ | --------------------- |
-| `rep.score` | numeric    | `reputation.score` | `rep.score:>=50`      |
-| `craft`     | equality   | `crafting.primary` | `craft:blacksmithing` |
-| `guild`     | equality   | `guilds.primary`   | `guild:merchants`     |
-| `cert`      | membership | `crafting.certs`   | `cert:master-smith`   |
+| Token                | Type       | Plugin ID    | Attribute Path      | Example                        |
+| -------------------- | ---------- | ------------ | ------------------- | ------------------------------ |
+| `reputation.score`   | numeric    | `reputation` | `reputation.score`  | `reputation.score:>=50`        |
+| `crafting.primary`   | equality   | `crafting`   | `crafting.primary`  | `crafting.primary:blacksmithing` |
+| `guilds.primary`     | equality   | `guilds`     | `guilds.primary`    | `guilds.primary:merchants`     |
+| `crafting.certs`     | membership | `crafting`   | `crafting.certs`    | `crafting.certs:master-smith`  |
 
 #### Lock Compilation
 
@@ -1601,7 +1640,7 @@ Output:
 **Validation rules:**
 
 - Unknown token names MUST produce a clear error: `unknown lock token "foo"
-  — available tokens: faction, flag, level, rep.score, ...`
+  — available tokens: faction, flag, level, reputation.score, ...`
 - Type mismatches MUST produce an error: `token "faction" expects a name, not a
   number`
 - Numeric tokens with missing operators default to `==`
@@ -1614,11 +1653,11 @@ Characters can discover available lock tokens via the `lock tokens` command:
 ```text
 > lock tokens
 Available lock tokens:
-  faction:X     — Character faction equals X
-  flag:X        — Character has flag X
-  level:OP N    — Character level (>=, >, <=, <, == N)
-  rep.score:OP N — Reputation score (plugin: reputation)
-  guild:X       — Primary guild membership (plugin: guilds)
+  faction:X             — Character faction equals X
+  flag:X                — Character has flag X
+  level:OP N            — Character level (>=, >, <=, <, == N)
+  reputation.score:OP N — Reputation score (plugin: reputation)
+  guilds.primary:X      — Primary guild membership (plugin: guilds)
 ```
 
 The `lock tokens` command reads from the token registry at runtime. Plugin
@@ -1675,7 +1714,7 @@ boundaries admins set.
 ### Policy Management
 
 ```text
-policy list [--enabled|--disabled] [--effect=permit|forbid]
+policy list [--enabled|--disabled] [--effect=permit|forbid] [--source=seed|lock|admin|plugin]
 policy show <name>
 policy create <name>
 policy edit <name>
@@ -1736,6 +1775,12 @@ characters are truncated with `... (truncated)` in text mode.
 
 **Visibility:** Builders see only policies whose target matches their test
 query, not the full policy set. Admins see all matching policies.
+
+**Condition failure detail:** When `--verbose` is set, the output shows **all
+failing sub-conditions** for each policy (not just the first failure). This
+provides full diagnostic information. Each sub-condition shows the operator,
+the resolved values, and the evaluation result. Without `--verbose`, only the
+policy name, effect, and final result are shown.
 
 ```text
 > policy test character:01ABC enter location:01XYZ --verbose
@@ -1826,6 +1871,9 @@ when { resource.location == principal.location };
 // seed:player-stream-emit
 permit(principal is character, action in ["emit"], resource is stream)
 when { resource.name like "location:*" && resource.location == principal.location };
+
+// seed:player-movement
+permit(principal is character, action in ["enter"], resource is location);
 
 // seed:player-basic-commands
 permit(principal is character, action in ["execute"], resource is command)
@@ -2037,6 +2085,20 @@ Describe("AccessPolicyEngine", func() {
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented
 - [ ] Provider timeout and operational limits defined
+
+## Future Commands (Deferred)
+
+The following commands are not part of the MVP but are natural extensions of the
+policy management system:
+
+- **`policy diff <name> [<version>]`** — Show what changed between policy
+  versions. Useful for audit investigation. Reads from `access_policy_versions`.
+- **`policy export [--source=X]`** — Export policies as DSL text files for
+  backup and environment promotion (dev → staging). The deterministic naming
+  convention already supports round-trip export/import.
+- **`policy import <file>`** — Import policies from a DSL text file. Validates
+  each policy via `PolicyCompiler` before persisting. Existing policies with the
+  same name are skipped unless `--overwrite` is specified.
 
 ## References
 
