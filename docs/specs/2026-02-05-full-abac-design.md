@@ -2040,13 +2040,21 @@ unbounded growth.
 SHOULD also be logged with `effect = "system_bypass"` to provide a complete
 audit trail. In `denials_only` mode, system bypasses are not logged.
 
-**Async audit writes:** Audit log inserts use async writes via a buffered
-channel. `Evaluate()` enqueues the audit entry to a channel, and a
-background goroutine batch-writes to PostgreSQL. The channel has a
-configurable buffer size (default TBD during implementation). When the
-channel is full, the audit logger MUST increment the counter metric
-`abac_audit_channel_full_total` and drop the entry. Audit logging is
-best-effort and MUST NOT block authorization decisions.
+**Synchronous denial audits:** Denial events (`deny` and `default_deny`) **MUST**
+be written synchronously to PostgreSQL before `Evaluate()` returns. This prevents
+attackers from flooding the system to erase evidence of access violations. Allow
+and system bypass events **MAY** be written asynchronously via a buffered channel
+with batch writes. Synchronous writes add ~1-2ms latency per denial evaluation.
+
+**WAL fallback for sync failures:** If the synchronous database write fails
+(connection unavailable, timeout, constraint violation), the engine **MUST** write
+the denial audit entry to a local Write-Ahead Log (WAL) file at
+`<xdg_data>/holomush/audit-wal.jsonl` for later replay. The WAL replay process
+**SHOULD** run on server startup and periodically (default: every 5 minutes) to
+flush accumulated entries to the database. If the WAL file grows beyond a
+configurable threshold (default: 10MB or 10,000 entries), the engine **SHOULD**
+log a warning but **MUST NOT** drop denial audit entries. The engine **MAY**
+expose a Prometheus gauge `abac_audit_wal_entries` to monitor backlog size.
 
 If an audit log insert fails (missing partition, disk full, connection error),
 the audit logger **MUST** log the failure at ERROR level but **MUST NOT**
