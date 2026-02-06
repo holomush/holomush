@@ -1157,6 +1157,9 @@ where the purpose is a kebab-case description of the policy's intent:
 - `seed:builder-object-write`
 - `seed:builder-commands`
 - `seed:admin-full-access`
+- `seed:property-public-read`
+- `seed:property-private-read`
+- `seed:property-admin-read`
 
 **Rationale:** Deterministic names enable idempotent seeding (upsert by name)
 and allow admins to identify seed policies via `policy list`. The `seed:`
