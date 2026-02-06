@@ -792,7 +792,9 @@ from the grammar alone whether this is a bare boolean expression or the start of
 after parsing an `expr`, if the next token is a comparator (`==`, `!=`, `>`,
 `>=`, `<`, `<=`), `in`, `like`, `has`, or `.` followed by `containsAll`/
 `containsAny`, treat it as the corresponding compound condition; otherwise treat
-it as a bare boolean. This makes the grammar LL(1) at the implementation level.
+it as a bare boolean. This makes the grammar LL(1) at the logical design level.
+**Implementation note:** See Decision #41 for how participle's PEG ordered-choice
+semantics achieve the same disambiguation effect.
 
 **Bare boolean restriction:** The compiler MUST reject bare boolean attribute
 references in `when` clauses, requiring explicit comparison operators. Bare
@@ -3019,8 +3021,13 @@ skips customized seeds and logs the appropriate warning.
    `goyacc` (requires separate `.y` grammar file and manual AST mapping) and
    hand-rolled recursive descent (more code, harder to maintain) because its
    struct-tag approach generates Go AST structs directly from grammar
-   annotations, eliminating the mapping layer. Mandate fuzz testing for all
-   parser entry points. Unit test with table-driven tests.
+   annotations, eliminating the mapping layer. **Note:** Decision #41 specifies
+   LL(1) disambiguation as the grammar design intent (one-token lookahead to
+   resolve ambiguities). Participle uses PEG-style ordered-choice semantics
+   which achieve the same disambiguation effect — the first matching alternative
+   is selected. Implementers MUST verify disambiguation behavior with test cases
+   regardless of parser choice. Mandate fuzz testing for all parser entry
+   points. Unit test with table-driven tests.
 
 3. **Phase 7.3 (Policy Engine):** Build `AccessPolicyEngine`, attribute
    providers, and audit logger. Replace `AccessControl` with

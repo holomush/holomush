@@ -989,6 +989,15 @@ the primary expression.
 cannot appear as an attribute name or operator. This keeps the parser simple
 (no backtracking, no GLR) while handling the full grammar.
 
+**Implementation note:** Phase 7.2 recommends participle (PEG-based parser)
+which uses ordered-choice semantics rather than explicit lookahead. The LL(1)
+specification describes the *logical grammar design* (what ambiguities exist,
+how to resolve them). Participle's PEG ordered-choice achieves the same
+disambiguation effect — when multiple alternatives match, the first one in
+source order is selected. Implementers MUST verify disambiguation behavior with
+test cases covering ambiguous inputs (e.g., `principal.faction` alone vs
+`principal.faction == "red"`) regardless of parser implementation choice.
+
 ---
 
 ## 42. Sequential Provider Resolution
