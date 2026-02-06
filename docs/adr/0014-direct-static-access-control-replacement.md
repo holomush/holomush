@@ -13,9 +13,9 @@ HoloMUSH's current authorization system consists of two components:
    `$self`/`$here` token resolution, and three static roles (player, builder, admin)
 2. **`capability.Enforcer`**: Plugin permission checking using manifest-declared capabilities
 
-These are used at ~35 call sites across the codebase (primarily `internal/world/service.go`
-and `internal/command/dispatcher.go`). All call sites use the `AccessControl.Check(ctx,
-subject, action, resource) bool` interface.
+These are used at ~29 production call sites across the codebase (plus 6 test mocks),
+primarily in `internal/world/service.go` and `internal/command/dispatcher.go`. All
+call sites use the `AccessControl.Check(ctx, subject, action, resource) bool` interface.
 
 The ABAC system introduces `AccessPolicyEngine.Evaluate(ctx, AccessRequest) (Decision,
 error)` with a richer return type (allowed/denied, effect, reason, matched policies,

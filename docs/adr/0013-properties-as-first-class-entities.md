@@ -107,7 +107,7 @@ attribute resolution); authorization happens AFTER attributes are resolved.
 
 - `character` → join `characters` table for current location
 - `location` → use `parent_id` directly (the location IS the parent)
-- `object` → join `objects` table for containing location
+- `object` → resolution by placement type: direct `location_id`, character holder's location via `characters` JOIN, or recursive CTE traversal of `contained_in_object_id` chain (see full spec for details)
 
 ## Rationale
 

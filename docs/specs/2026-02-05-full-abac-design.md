@@ -237,7 +237,7 @@ the <5ms p99 latency target is achievable.
 // AccessRequest contains all information needed for an access decision.
 type AccessRequest struct {
     Subject  string // "character:01ABC", "plugin:echo-bot", "system"
-    Action   string // "read", "write", "enter", "execute"
+    Action   string // Common: "read", "write", "delete", "enter", "execute", "emit". Open set — plugins MAY introduce additional actions.
     Resource string // "location:01XYZ", "command:dig", "property:01DEF"
 }
 ```
@@ -292,20 +292,22 @@ contribute attributes to the bags.
 **Session resolution error handling:**
 
 - **Session not found:** Return `Decision{Allowed: false, Effect:
-  EffectDefaultDeny}` with error `"session not found: web-123"`. The audit log
-  records the error in the `error_message` field.
+  EffectDeny, PolicyID: "session-resolution-failure"}` with error `"session
+  not found: web-123"`. The audit log records the error in the
+  `error_message` field. Using `EffectDeny` (not `EffectDefaultDeny`)
+  distinguishes session failures from "no policy matched" in audit queries.
 - **Session store failure:** Return `Decision{Allowed: false, Effect:
-  EffectDefaultDeny}` with the wrapped store error. Fail-closed — a session
-  lookup failure MUST NOT grant access.
+  EffectDeny, PolicyID: "session-resolution-failure"}` with the wrapped store
+  error. Fail-closed — a session lookup failure MUST NOT grant access.
 - **No associated character:** Return `Decision{Allowed: false, Effect:
-  EffectDefaultDeny}` with error `"session has no associated character"`. This
-  handles unauthenticated sessions that have not yet selected a character.
-
-- **Character deleted after session creation:** Return `Decision{Allowed: false,
-  Effect: EffectDefaultDeny}` with error `"session character has been deleted:
-  01ABC"`. This handles the case where a character is deleted while sessions
-  referencing it still exist. Session cleanup SHOULD invalidate sessions on
-  character deletion.
+  EffectDeny, PolicyID: "session-resolution-failure"}` with error `"session
+  has no associated character"`. This handles unauthenticated sessions that
+  have not yet selected a character.
+- **Character deleted after session creation:** Return `Decision{Allowed:
+  false, Effect: EffectDeny, PolicyID: "session-resolution-failure"}` with
+  error `"session character has been deleted: 01ABC"`. This handles the case
+  where a character is deleted while sessions referencing it still exist.
+  Session cleanup SHOULD invalidate sessions on character deletion.
 
 Session resolution errors SHOULD use oops error codes for structured handling:
 `SESSION_NOT_FOUND`, `SESSION_STORE_ERROR`, `SESSION_NO_CHARACTER`,
@@ -319,7 +321,7 @@ prevent this from occurring.
 
 ```go
 // Decision represents the outcome of a policy evaluation.
-// Invariant: Allowed is true if and only if Effect == EffectAllow.
+// Invariant: Allowed is true if and only if Effect is EffectAllow or EffectSystemBypass.
 type Decision struct {
     Allowed    bool
     Effect     Effect          // Allow, Deny, or DefaultDeny (no policy matched)
@@ -436,11 +438,15 @@ authorization-gated data MUST use pre-resolved attributes from the bags or
 access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
 
-**Enforcement:** The engine SHOULD set a context flag
-(`context.WithValue(ctx, resolving, true)`) before calling providers.
-`Evaluate()` MUST check this flag at entry and panic if already set. This
-makes re-entrance violations fail-fast during development and testing rather
-than producing subtle deadlocks in production.
+**Enforcement:** `Evaluate()` MUST set a context flag
+(`context.WithValue(ctx, resolving, true)`) at the very start of every call,
+before any other processing. All subsequent `Evaluate()` calls MUST check
+this flag at entry and panic if already set — including calls with different
+subjects or resources. This prevents a provider from calling `Evaluate()` on
+a different entity during resolution, which would still create a deadlock.
+The flag spans the entire `Evaluate()` execution (set on entry, cleared on
+return), making re-entrance violations fail-fast during development and
+testing rather than producing subtle deadlocks in production.
 
 **Provider design principles:**
 
@@ -491,19 +497,19 @@ provider's constructor.
 
 **PropertyProvider** (`property` namespace):
 
-| Attribute         | Type     | Requirement | Description                               |
-| ----------------- | -------- | ----------- | ----------------------------------------- |
-| `type`            | string   | MUST        | Always `"property"`                       |
-| `id`              | string   | MUST        | ULID of the property                      |
-| `name`            | string   | MUST        | Property name                             |
-| `parent_type`     | string   | MUST        | Parent entity type                        |
-| `parent_id`       | string   | MUST        | Parent entity ULID                        |
-| `owner`           | string   | MAY         | Subject who created/set this property     |
-| `visibility`      | string   | MUST        | One of: public, private, restricted, etc. |
-| `flags`           | []string | MUST        | Arbitrary flags (empty array if none)     |
-| `visible_to`      | []string | MAY         | Character IDs (only when restricted)      |
-| `excluded_from`   | []string | MAY         | Character IDs (only when restricted)      |
-| `parent_location` | string   | MAY         | ULID of parent entity's location          |
+| Attribute         | Type     | Requirement | Description                                                   |
+| ----------------- | -------- | ----------- | ------------------------------------------------------------- |
+| `type`            | string   | MUST        | Always `"property"`                                           |
+| `id`              | string   | MUST        | ULID of the property                                          |
+| `name`            | string   | MUST        | Property name                                                 |
+| `parent_type`     | string   | MUST        | Parent entity type                                            |
+| `parent_id`       | string   | MUST        | Parent entity ULID                                            |
+| `owner`           | string   | MAY         | Subject who created/set this property                         |
+| `visibility`      | string   | MUST        | One of: "public", "private", "restricted", "system", "admin"  |
+| `flags`           | []string | MUST        | Arbitrary flags (empty array if none)                         |
+| `visible_to`      | []string | MAY         | Character IDs (only when restricted)                          |
+| `excluded_from`   | []string | MAY         | Character IDs (only when restricted)                          |
+| `parent_location` | string   | MAY         | ULID of parent entity's location                              |
 
 **EnvironmentProvider** (`env` namespace):
 
@@ -607,7 +613,7 @@ condition    = expr comparator expr
              | expr "in" expr
              | expr "." "containsAll" "(" list ")"
              | expr "." "containsAny" "(" list ")"
-             | expr "has" identifier { "." identifier }  (* see note below *)
+             | attribute_root "has" identifier { "." identifier }
              | "!" condition
              | "(" conditions ")"
              | "if" condition "then" condition "else" condition
@@ -616,10 +622,13 @@ condition    = expr comparator expr
 expr       = attribute_ref | literal
 attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
 
-(* Note: The `has` production above uses `expr` as the left operand for grammar
-   simplicity, but the semantic restriction is stricter — the left side MUST be an
-   attribute root (`principal`, `resource`, `action`, or `env`). Expressions like
-   `5 has foo` MUST be rejected at parse or semantic-check time. *)
+attribute_root = "principal" | "resource" | "action" | "env"
+
+(* Note: The `has` production uses `attribute_root` as the left operand,
+   restricting it to entity references. Expressions like `5 has foo` are
+   rejected at parse time. The `attribute_root` non-terminal is defined
+   separately from `attribute_ref` because `has` takes a bare root, not
+   a dotted path. *)
 
              (* "containsAll" and "containsAny" are reserved words that MUST NOT
                 appear as attribute names. Parser disambiguation: when the parser
@@ -638,6 +647,12 @@ identifier     = letter { letter | digit | "_" | "-" }
 string_literal = '"' { character } '"'
 number         = [ "-" ] digit { digit } [ "." digit { digit } ]
 boolean        = "true" | "false"
+
+(* Reserved words — MUST NOT appear as attribute names or path segments:
+   permit, forbid, when, principal, resource, action, env, is, in, has,
+   like, true, false, if, then, else, containsAll, containsAny.
+   The parser SHOULD produce a clear error: "reserved word X cannot be
+   used as an attribute name." *)
 
 (* Whitespace, including newlines, is insignificant within policy text.
    The `policy create` command collects multi-line input until "." on a
@@ -993,21 +1008,31 @@ The repository determines the resolution strategy based on `parent_type`:
 
 - `character` → JOIN `characters` table for current `location_id`
 - `location` → use `parent_id` directly (the location IS the parent)
-- `object` → recursive CTE traversal of the containment hierarchy. Objects
-  support nested containment (chest inside a room, gem inside the chest). The
+- `object` → resolution depends on the object's placement column. The
   `objects` table has `location_id`, `held_by_character_id`, and
-  `contained_in_object_id` columns — exactly one is non-NULL. For an object
-  in a location, the JOIN is direct. For an object inside another object, the
-  repository MUST walk up the `contained_in_object_id` chain until reaching an
-  object with a non-NULL `location_id`. The existing
-  `checkCircularContainmentTx` already uses recursive CTEs for this pattern.
+  `contained_in_object_id` columns — exactly one is non-NULL (a world model
+  invariant enforced by `WorldService`). Resolution strategy:
+  - **Direct location:** If `location_id` is non-NULL, use it directly.
+  - **Held by character:** If `held_by_character_id` is non-NULL, JOIN
+    through the `characters` table to get the character's current
+    `location_id`. The object's location is its holder's location.
+  - **Contained in object:** If `contained_in_object_id` is non-NULL,
+    recursive CTE traversal of the containment hierarchy. Objects support
+    nested containment (chest inside a room, gem inside the chest). The
+    repository MUST walk up the `contained_in_object_id` chain until reaching
+    an object with a non-NULL `location_id` or `held_by_character_id`. The
+    existing `checkCircularContainmentTx` already uses recursive CTEs for
+    this pattern.
+  - **Orphaned objects:** If no placement column is non-NULL (data
+    corruption), `parent_location` is nil and location-based visibility
+    policies fail-safe (deny).
+
   The recursive CTE MUST include both a depth limit (e.g., 20 iterations) and
   cycle detection (tracking visited IDs via an array path column, rejecting
   IDs already in the path) as defense-in-depth against data corruption.
   PostgreSQL `WITH RECURSIVE` does not automatically prevent cycles.
-  If the chain is broken (orphaned containment), cycles are detected, or the
-  depth limit is exceeded, `parent_location` is nil and location-based
-  visibility policies fail-safe (deny).
+  If cycles are detected or the depth limit is exceeded, `parent_location` is
+  nil and location-based visibility policies fail-safe (deny).
 
 ## Attribute Resolution
 
@@ -1070,9 +1095,13 @@ The audit log records the `error_message` field for these cases.
 evaluation with the remaining providers. Missing plugin attributes cause
 conditions referencing them to evaluate to `false` (fail-safe). The audit log
 records plugin provider errors in a `provider_errors` JSONB field (structured
-as `[{"namespace": "reputation", "error": "connection refused"}]`) to aid
+as `[{"provider": "reputation", "error": "connection refused"}]`) to aid
 debugging "why was I denied?" investigations. Logging is rate-limited to 1
-error per minute per provider namespace to control spam.
+error per minute per `(namespace, error_hash)` tuple to control spam while
+preserving visibility of distinct failure modes. If a provider has two
+different error types (e.g., DB timeout and network error), both are logged
+independently. The rate limiter uses a bounded LRU cache keyed by namespace
+and error message hash.
 
 ```text
 slog.Error("plugin attribute provider failed",
@@ -1157,8 +1186,13 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 - **Missing attributes:** If a condition references an attribute that does not
   exist, the condition evaluates to `false`. A missing attribute can never grant
   access (fail-safe).
-- **No short-circuit:** The engine evaluates all candidate policies so the
-  `Decision` records all matches. This powers `policy test` debugging.
+- **No short-circuit (default):** The engine evaluates all candidate policies
+  so the `Decision` records all matches. This powers `policy test` debugging.
+  Implementations MAY optimize by short-circuiting after the first satisfied
+  `forbid` policy when audit mode is `denials_only` and no `policy test`
+  command is active, provided the triggering forbid is still recorded in
+  `Decision.Policies`. Full evaluation MUST be used when `policy test` is
+  active or audit mode is `all`.
 - **Cache invalidation:** The engine subscribes to PostgreSQL LISTEN/NOTIFY on
   the `policy_changed` channel. The Go policy store calls `pg_notify` after any
   Create/Update/Delete operation. On notification, the engine reloads all enabled
@@ -1280,6 +1314,13 @@ same subject attributes are resolved repeatedly.
   single request, and the fail-safe missing-attribute semantics ensure conditions
   referencing the absent plugin attributes evaluate to `false`.
 
+**Request duration guidance:** The per-request cache assumes request
+processing completes within milliseconds. Request handlers SHOULD complete
+within 1 second. For long-running operations (batch processing, multi-step
+commands exceeding 1s), callers SHOULD create a fresh context with a new
+`AttributeCache` rather than reusing a stale cache. The cache is designed
+for single-user command execution latencies (~10ms), not batch workloads.
+
 ```go
 // AttributeCache provides per-request attribute caching.
 // Attach to context via WithAttributeCache(ctx) at the request boundary.
@@ -1347,6 +1388,10 @@ CREATE TABLE access_policy_versions (
     UNIQUE(policy_id, version)
 );
 
+-- NOTE: Phase 7.1 SHOULD create this table with monthly range partitioning
+-- on the timestamp column. See "Audit Log Retention" section for details.
+-- If partitioned, use: CREATE TABLE access_audit_log (...) PARTITION BY RANGE (timestamp);
+-- and create initial monthly partitions. The DDL below shows the unpartitioned form.
 CREATE TABLE access_audit_log (
     id            TEXT PRIMARY KEY,         -- ULID
     timestamp     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1358,7 +1403,8 @@ CREATE TABLE access_audit_log (
     policy_name   TEXT,
     attributes      JSONB,
     error_message   TEXT,
-    provider_errors JSONB                    -- e.g., [{"provider": "reputation", "error": "connection refused"}]
+    provider_errors JSONB,                   -- e.g., [{"provider": "reputation", "error": "connection refused"}]
+    duration_us     INTEGER                  -- evaluation duration in microseconds (for performance debugging)
 );
 
 -- Essential indexes only. The effect column doubles as the decision indicator:
@@ -1594,6 +1640,16 @@ an error.
 **Operator precedence** (highest to lowest): `!`, `&`, `|`. Parentheses
 override precedence. `a | b & !c` parses as `a | (b & (!c))`.
 
+**Common lock expression patterns** (explicit parentheses recommended for
+clarity):
+
+```text
+GOOD:  (faction:rebels | flag:ally) & level:>=3
+AVOID: faction:rebels | flag:ally & level:>=3  # Equivalent but harder to read
+GOOD:  !flag:banned & (faction:rebels | faction:neutrals)
+AVOID: !flag:banned & faction:rebels | faction:neutrals  # NOT equivalent!
+```
+
 #### Lock Token Registry
 
 All other lock vocabulary comes from **registered token predicates**. Each
@@ -1647,15 +1703,19 @@ by last-registered-wins. The engine logs a WARN including both the existing and
 new provider names so operators can investigate. The server continues startup —
 a single misbehaving plugin MUST NOT prevent the server from running. Core
 providers (CharacterProvider) register
-tokens first. Plugins MUST namespace their tokens using a dot-separated prefix
-that **exactly matches** their plugin ID (e.g., plugin `reputation` registers
-`reputation.score`, plugin `crafting` registers `crafting.type`). Abbreviations
-are not allowed — the prefix before the first `.` MUST equal the plugin ID
-string. The engine validates this at registration — plugin tokens without the
-correct prefix are rejected with a startup error indicating the expected
-namespace.
-The `policy create` command MUST also reject names starting with `seed:` to
-reserve that prefix for system use.
+tokens first. Plugin tokens MUST contain at least one dot separator.
+The segment before the first `.` MUST exactly match the plugin ID (e.g.,
+plugin `reputation` registers `reputation.score`, plugin `crafting` registers
+`crafting.type`). Abbreviations are not allowed. Dotless tokens (e.g.,
+`reputation` without a dot) are rejected. Multi-segment tokens (e.g.,
+`reputation.score.detailed`) are valid — only the first segment is checked.
+The engine validates this at registration — plugin tokens without the correct
+prefix or missing a dot separator are rejected with a startup error indicating
+the expected namespace.
+The `policy create` command MUST reject names starting with reserved prefixes:
+`seed:` (system seed policies) and `lock:` (lock-generated policies). Both
+prefixes are reserved for system use. See [Naming conventions](#admin-commands)
+for the complete list of reserved prefixes.
 
 **Core-shipped tokens** (registered by CharacterProvider, not hard-coded in
 parser):
@@ -1697,7 +1757,7 @@ Compilation example:
 Input:  lock my-chest/read = (faction:rebels | flag:ally) & level:>=3
 Output:
   permit(
-    principal,
+    principal is character,
     action in ["read"],
     resource == "object:01ABC..."
   ) when {
@@ -1722,11 +1782,11 @@ Characters can discover available lock tokens via the `lock tokens` command:
 ```text
 > lock tokens
 Available lock tokens:
-  faction:X             — Character faction equals X
-  flag:X                — Character has flag X
-  level:OP N            — Character level (>=, >, <=, <, == N)
-  reputation.score:OP N — Reputation score (plugin: reputation)
-  guilds.primary:X      — Primary guild membership (plugin: guilds)
+  faction:X             (equality)   — Character faction equals X
+  flag:X                (membership) — Character has flag X
+  level:OP N            (numeric)    — Character level (>=, >, <=, <, == N)
+  reputation.score:OP N (numeric)    — Reputation score (plugin: reputation)
+  guilds.primary:X      (equality)   — Primary guild membership (plugin: guilds)
 ```
 
 The `lock tokens` command reads from the token registry at runtime. Plugin

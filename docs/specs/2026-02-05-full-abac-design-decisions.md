@@ -116,14 +116,14 @@ simple: deny always wins, period.
 
 ## 5. Migration Strategy
 
-**Question:** How do we migrate ~28 production call sites from the old
+**Question:** How do we migrate ~29 production call sites from the old
 `AccessControl` interface to the new `AccessPolicyEngine`?
 
 **Options considered:**
 
 | Option | Description                                 | Pros                                                  | Cons                                                                  |
 | ------ | ------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------- |
-| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~28 callers need error handling added at once |
+| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~29 callers need error handling added at once |
 | B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                      |
 
 **Decision:** ~~**Option B — New `AccessPolicyEngine` interface with adapter.**~~
@@ -423,9 +423,13 @@ entry control, but the static system handles movement through
 `write:character:$self` (changing character location). This semantic gap affects
 shadow mode validation.
 
-**Decision:** The `enter` action is a new capability introduced by the ABAC
+**Decision:** ~~The `enter` action is a new capability introduced by the ABAC
 system with no static-system equivalent. Shadow mode validation MUST exclude
-`enter` actions when comparing engine results against `StaticAccessControl`.
+`enter` actions when comparing engine results against `StaticAccessControl`.~~
+
+**Superseded by [decision #37](#37-no-shadow-mode).** Shadow mode was removed.
+The `enter` action remains a new ABAC capability with no static-system
+equivalent, but no shadow mode validation is performed.
 
 **Rationale:** The static system conflates "move yourself" with "enter a
 location" under the `write:character` permission. ABAC separates these concerns
@@ -518,8 +522,11 @@ omission was a gap, not a deliberate restriction.
 
 **Rationale:** Builder workflow requires the ability to clean up test locations.
 Without `delete`, builders must ask an admin to remove locations, which is an
-unnecessary bottleneck. Shadow mode validation excludes `delete:location`
-comparisons alongside `enter` actions.
+unnecessary bottleneck.
+
+*Note: Shadow mode was removed by [decision #37](#37-no-shadow-mode). The
+original rationale about shadow mode exclusions no longer applies, but the
+permission expansion itself is intentional.*
 
 ---
 
@@ -746,7 +753,7 @@ been released wastes effort and makes the design harder to understand.
   `normalizeResource()`, `shadowModeMetrics`
 - Removes shadow mode cutover criteria, exclusion filtering, disagreement
   tracking
-- All ~28 call sites update to `AccessPolicyEngine.Evaluate()` in a single
+- All ~29 production call sites update to `AccessPolicyEngine.Evaluate()` in a single
   phase (phase 7.3)
 - The `AccessControl` interface and `StaticAccessControl` struct are deleted
   in phase 7.6
