@@ -61,6 +61,15 @@ rationale for the chosen approach.
 47. [Fuzz Testing for DSL Parser](#47-fuzz-testing-for-dsl-parser)
 48. [Deterministic Seed Policy Names](#48-deterministic-seed-policy-names)
 49. [Revised Audit Volume Estimate](#49-revised-audit-volume-estimate)
+50. [Plugin Attribute Collision Behavior](#50-plugin-attribute-collision-behavior)
+51. [Session Integrity Error Classification](#51-session-integrity-error-classification)
+52. [Async Audit Writes](#52-async-audit-writes)
+53. [Audit WAL Best-Effort Semantics](#53-audit-wal-best-effort-semantics)
+54. [Property Location Resolution Eventual Consistency](#54-property-location-resolution-eventual-consistency)
+55. [Session Error Code Simplification](#55-session-error-code-simplification)
+56. [Audit Off Mode Includes System Bypasses](#56-audit-off-mode-includes-system-bypasses)
+57. [ADR Format Evolution](#57-adr-format-evolution)
+58. [Provider Re-Entrance Goroutine Prohibition](#58-provider-re-entrance-goroutine-prohibition)
 
 ---
 
@@ -1238,3 +1247,153 @@ from audit I/O. The best-effort model accepts that some audit entries may be
 lost under extreme load, which is preferable to blocking authorization.
 
 **Cross-reference:** Main spec, Audit Log section.
+
+---
+
+## 53. Audit WAL Best-Effort Semantics
+
+**Review finding:** The spec said denial audit logs "MUST be written
+synchronously" with a WAL fallback if the DB write fails, but also specified
+graceful degradation (increment counter and drop) when both DB and WAL fail.
+These requirements contradict each other — MUST-audit is incompatible with
+graceful degradation on dual failure.
+
+**Decision:** Change denial audit writes to SHOULD (best-effort). If both the
+database and WAL file are unavailable, log to stderr and increment
+`abac_audit_write_failures_total`. Accept that some denial audit entries may be
+lost during catastrophic failures. Additionally, standardize the WAL file path
+to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (XDG_STATE_HOME is semantically
+correct for transient state) and consolidate the duplicate WAL descriptions in
+the spec into a single section.
+
+**Rationale:** A pragmatic approach that preserves audit logging during normal
+operation while avoiding the impossible contract of guaranteed writes during
+infrastructure failure. The stderr fallback ensures operators can still observe
+failures through system-level log aggregation. XDG_STATE_HOME is the correct
+XDG directory for state data that is not essential to preserve across reinstalls.
+
+**Cross-reference:** Main spec, Audit Log Configuration section; bead
+`holomush-3hdt`.
+
+---
+
+## 54. Property Location Resolution Eventual Consistency
+
+**Review finding:** At READ COMMITTED isolation, the PropertyProvider's
+recursive CTE and subject attribute resolution run in separate transactions.
+During character movement, the authorization check could see inconsistent
+snapshots — e.g., character in Room B but object still in Room A's containment
+hierarchy — violating the design's stated "point-in-time snapshot" invariant.
+
+**Decision:** Document this as a known limitation. MUSH movement is
+low-frequency (human-speed, not machine-speed) and the practical impact is
+negligible. The 100ms timeout and circuit breaker handle operational concerns.
+Do not redesign the visibility model or add pessimistic locking.
+
+**Rationale:** The cost of strict consistency (pessimistic locks or
+REPEATABLE READ transactions spanning all providers) is disproportionate to the
+risk. In practice, a character moving between rooms takes 100-500ms of human
+reaction time, during which authorization checks for their objects are
+extremely unlikely. Accepting eventual consistency here follows the principle
+of not over-engineering for scenarios that cannot cause meaningful harm.
+
+**Cross-reference:** Main spec, Property Model section; bead `holomush-n0k5`.
+
+---
+
+## 55. Session Error Code Simplification
+
+**Review finding:** The spec defined four distinct error cases for session
+resolution (SESSION_NOT_FOUND, SESSION_STORE_ERROR, SESSION_NO_CHARACTER,
+SESSION_CHARACTER_INTEGRITY) with separate policy IDs, effect codes, and
+metrics. This was disproportionate complexity for an edge case.
+
+**Decision:** Simplify to two error codes:
+
+- **SESSION_INVALID** — covers not-found sessions and missing characters.
+  Normal operation (expired sessions, logout).
+- **SESSION_STORE_ERROR** — covers database unavailability and timeouts.
+  Infrastructure failure.
+
+Character deletion integrity (SESSION_CHARACTER_INTEGRITY) is moved to the
+world model's responsibility via CASCADE constraints on session deletion when
+characters are deleted.
+
+**Rationale:** Both SESSION_NOT_FOUND and SESSION_NO_CHARACTER result in the
+same `Decision{Allowed: false, Effect: EffectDefaultDeny}`. The distinction
+only matters for forensics, which is rare. The character deletion case is a
+world model invariant violation and should be prevented by the world service
+(CASCADE delete on sessions), not detected by the authorization layer.
+
+**Cross-reference:** Main spec, Session Subject Resolution section; bead
+`holomush-935g`.
+
+---
+
+## 56. Audit Off Mode Includes System Bypasses
+
+**Review finding:** The spec required system_bypass logging in ALL audit modes
+including `off`, but `off` mode was defined as "Nothing logged" in the
+configuration table. These statements contradicted each other.
+
+**Decision:** Update the `off` mode description from "Nothing" to "System
+bypasses only." This preserves the security intent of always logging when the
+`system` subject bypasses policy evaluation, while making the table description
+accurate.
+
+**Rationale:** System bypass events are security-significant — they indicate
+operations running outside normal policy evaluation. Even in development
+environments where `off` mode is used for performance, operators should be
+aware of bypass activity. The volume is negligible (system operations are
+rare), so there is no performance impact.
+
+**Cross-reference:** Main spec, Audit Log Configuration section; bead
+`holomush-75um`.
+
+---
+
+## 57. ADR Format Evolution
+
+**Review finding:** New ADRs (0009-0016) use a different section structure than
+existing ADRs (0001-0008). Old format: Context > Options Considered > Decision
+\> Consequences > References. New format: Context > Decision > Rationale >
+Consequences > References (with Options embedded in Context).
+
+**Decision:** This is intentional evolution. The new format is internally
+consistent across all 8 new ADRs and makes the Rationale more prominent.
+Document the new format in `docs/adr/README.md`. Do not retroactively change
+old ADRs. Additionally, move ADR 0010's unique "Testing Requirements" section
+into the Consequences section or the main spec's testing section to maintain
+ADR structural consistency.
+
+**Rationale:** ADR formats naturally evolve as teams learn what information is
+most useful. The new format emphasizes Rationale (why) over Options (what
+else), which is more valuable for future readers. Documenting the evolution
+prevents confusion without requiring retroactive changes.
+
+**Cross-reference:** All ADRs in `docs/adr/`; bead `holomush-ly15`.
+
+---
+
+## 58. Provider Re-Entrance Goroutine Prohibition
+
+**Review finding:** The context-based re-entrance sentinel only prevents
+synchronous re-entrance on the same goroutine. A provider spawning a new
+goroutine that calls `Evaluate()` with `context.Background()` bypasses the
+guard entirely, potentially causing deadlock or state corruption.
+
+**Decision:** Add an explicit MUST NOT prohibition in the provider contract
+stating that providers MUST NOT spawn goroutines that call back into
+`Evaluate()`. Detection remains convention-based — no runtime goroutine ID
+tracking. Integration tests SHOULD include a scenario verifying that
+goroutine-based re-entry is handled (panic or error).
+
+**Rationale:** Runtime goroutine ID tracking (via `sync.Map` or similar) adds
+complexity and performance overhead to every `Evaluate()` call. At the current
+scale, convention enforcement through code review and clear contract
+documentation is sufficient. The MUST NOT clause makes the prohibition explicit
+rather than implicit, and the integration test catches violations in CI rather
+than production.
+
+**Cross-reference:** Main spec, Attribute Providers section; decision #31
+(Provider Re-Entrance Prohibition); bead `holomush-npmk`.
