@@ -2778,6 +2778,16 @@ customizations to seed policies (via `policy edit`) but prevents automatic
 security patching. Operators using this flag **MUST** manually track seed
 policy updates and apply fixes via `policy edit` or explicit migrations.
 
+**Rollback mechanism:** If a buggy seed policy locks out admins (e.g., by
+removing `execute` permission on `command:policy*` required to edit policies),
+operators **MAY** use the `--force-seed-version=N` startup flag to force
+downgrade to a specific seed version. The bootstrap process treats this flag
+as the "current" shipped version and downgrades stored policies if their
+`seed_version > N`. Emergency recovery SQL: `UPDATE access_policies SET enabled = false WHERE source = 'seed' AND seed_version > N;` disables all seed
+policies newer than version N, allowing manual fix via `policy edit`. Operators
+**SHOULD** test seed policy changes in staging environments before deploying to
+production to avoid lockout scenarios.
+
 **Version mismatch detection:** The `policy seed status` admin command
 compares installed seed policies against shipped seed definitions and
 reports version discrepancies. Example output:
