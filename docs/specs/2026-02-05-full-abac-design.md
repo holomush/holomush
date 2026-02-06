@@ -350,6 +350,8 @@ as constants in the `internal/access` package. The following error code
 constants **MUST** be exported:
 
 - `ErrCodeSessionNotFound` — `"infra:session-not-found"`
+- `ErrCodeSessionStoreError` — `"infra:session-store-error"`
+- `ErrCodeSessionNoCharacter` — `"infra:session-no-character"`
 - `ErrCodeSessionCharacterIntegrity` — `"infra:session-character-integrity"`
 
 These constants ensure consistent error handling and filterable audit queries
