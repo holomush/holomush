@@ -1089,7 +1089,7 @@ their public properties changes accordingly. The `parent_location` attribute
 is **resolved dynamically at policy evaluation time** from the parent entity's
 current location state in the database, NOT frozen at property creation time.
 The `PropertyProvider` queries the parent entity's current `location_id` via
-SQL JOIN (see [decision #32](#32-propertyprovider-uses-sql-join-for-parent-location))
+SQL JOIN (see [decision #32](2026-02-05-full-abac-design-decisions.md#32-propertyprovider-uses-sql-join-for-parent-location))
 to populate the `parent_location` attribute in the resource bag. If the
 parent entity has no valid location (e.g., a character in the lobby before
 entering a room), `parent_location` is nil and location-based visibility
@@ -1884,6 +1884,23 @@ propagate the error to the caller. The `Evaluate()` decision is returned
 successfully — audit logging is best-effort and does not block authorization.
 A counter metric `abac_audit_failures_total{reason}` **SHOULD** be incremented
 to alert operators.
+
+**Write-Ahead Log fallback:** When a batch insert to PostgreSQL fails, the
+audit logger **MUST** write the failed entries to a write-ahead log (WAL) file
+for later replay. The WAL file **MUST** be located at
+`$XDG_STATE_HOME/holomush/audit_wal.jsonl` (or `/var/lib/holomush/audit_wal.jsonl`
+in production). Each line is a single JSON-encoded audit entry matching the
+`access_audit_log` table schema. The WAL file is append-only and written
+synchronously (O_APPEND | O_SYNC) to ensure durability. The audit logger
+**MUST** expose a `ReplayWAL()` method that reads entries from the WAL file,
+batch-inserts them to PostgreSQL, and truncates the file on success. The
+server **SHOULD** call `ReplayWAL()` on startup and **MAY** call it
+periodically (e.g., every 5 minutes) to drain the WAL during recovery from
+transient database failures. If WAL write fails (disk full, permissions), the
+audit logger **MUST** increment `abac_audit_wal_failures_total` and drop the
+entry — this is the final fallback. Operators **SHOULD** monitor WAL file size
+and alert if it exceeds a threshold (e.g., 10MB), indicating prolonged database
+unavailability.
 
 ### Audit Log Retention
 
@@ -2744,8 +2761,12 @@ fuzzer MUST be added as regression test cases in the unit test suite.
   as attribute names)
 - **Structured mutation:** Valid DSL with randomized attribute paths, random
   operators, random nesting depths (up to 32), and random literal values
-- **Crash storage:** Crash-inducing inputs MUST be stored in
-  `testdata/fuzz_crashes/` and added as deterministic regression tests
+- **Crash storage:** Crash-inducing inputs MUST be stored in the Go standard
+  fuzz corpus directory `testdata/fuzz/<FuzzTestName>/` (e.g.,
+  `testdata/fuzz/FuzzParseDSL/`) per Go 1.18+ conventions. Each crash input
+  is saved as a separate file in the corpus. CI **MUST** include a regression
+  test step that runs `go test -fuzz=. -fuzztime=1x` to verify all corpus
+  entries pass without panics or hangs before merging code changes.
 - **Coverage target:** Fuzzing SHOULD achieve >80% code coverage of the
   parser and evaluator packages before being considered sufficient
 
