@@ -1161,3 +1161,60 @@ practical at a fraction of this volume.
 **Rationale:** The corrected estimate affects operational guidance (disk
 provisioning, retention policy, partition strategy). Admins need accurate
 numbers to make informed decisions about audit mode selection.
+
+---
+
+## 50. Plugin Attribute Collision Behavior
+
+**Review finding:** The original spec had a fatal startup error when a plugin
+registered an attribute colliding with a core attribute, which was
+disproportionate — one bad plugin would brick the entire server.
+
+**Decision:** Reject the plugin's provider registration and continue startup.
+Server remains operational with other plugins. Log at ERROR level with plugin
+ID and colliding attribute name. Plugin is disabled.
+
+**Rationale:** A single misconfigured plugin should not prevent server startup.
+Rejecting the individual plugin preserves availability while core attribute
+guarantees remain intact.
+
+**Cross-reference:** Main spec, Provider Registration Order section.
+
+---
+
+## 51. Session Integrity Error Classification
+
+**Review finding:** The spec treated session-character-integrity errors (where
+a character is deleted while sessions referencing it still exist) as a normal
+operational path.
+
+**Decision:** Classify as a bug/exceptional condition, not a normal path. Log
+at CRITICAL level. Operators SHOULD configure alerting. Transactional cleanup
+requirement (delete sessions in same transaction as character deletion)
+unchanged.
+
+**Rationale:** If the transactional cleanup works correctly, this error should
+never occur. Its presence indicates a defect in session invalidation logic or
+data corruption — it deserves CRITICAL severity, not INFO.
+
+**Cross-reference:** Main spec, Session Subject Resolution section.
+
+---
+
+## 52. Async Audit Writes
+
+**Review finding:** The spec didn't specify whether audit log writes are
+synchronous or asynchronous, which has major performance implications.
+
+**Decision:** Audit log inserts use async writes via a buffered channel.
+`Evaluate()` enqueues the audit entry to a channel, and a background goroutine
+batch-writes to PostgreSQL. When the channel is full, increment counter metric
+`abac_audit_channel_full_total` and drop the entry. Audit logging is
+best-effort and MUST NOT block authorization decisions.
+
+**Rationale:** Synchronous audit writes in the authorization hot path would add
+latency to every access check. Async writes decouple authorization performance
+from audit I/O. The best-effort model accepts that some audit entries may be
+lost under extreme load, which is preferable to blocking authorization.
+
+**Cross-reference:** Main spec, Audit Log section.
