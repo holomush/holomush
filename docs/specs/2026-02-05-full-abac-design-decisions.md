@@ -277,7 +277,7 @@ call is explicit Go code.
 1. **Property metadata** (all characters) — Set visibility, visible_to,
    excluded_from on owned properties. No policy authoring needed.
 2. **Object locks** (resource owners) — Simplified lock syntax (`faction:X`,
-   `flag:X`, `level>=N`, `me`, `&`, `|`, `!`) that compiles to scoped policies.
+   `flag:X`, `level:>=N`, `me`, `&`, `|`, `!`) that compiles to scoped policies.
    Ownership verified before creation.
 3. **Full policies** (admin only) — Full DSL with unrestricted scope.
 

@@ -83,7 +83,8 @@ Players control access to their own properties through a simplified lock system.
 │                    │ StreamResolver        │ ← Derived from stream ID │
 │                    │ CommandResolver       │ ← Command registry       │
 │                    │ Session Resolver      │ ← Session store (not a   │
-│                    │                       │   provider; see §3.3)    │
+│                    │                       │   provider; see Session  │
+│                    │                       │   Subject Resolution)    │
 │                    │ EnvironmentProvider   │ ← Clock, game state      │
 │                    │ PluginProvider(s)     │ ← Registered by plugins  │
 │                    └──────────────────────┘                          │
@@ -206,6 +207,18 @@ This ensures policies are always evaluated as `principal is character`, never
 only to perform this lookup — it is NOT an `AttributeProvider` and does not
 contribute attributes to the bags.
 
+**Session resolution error handling:**
+
+- **Session not found:** Return `Decision{Allowed: false, Effect:
+  EffectDefaultDeny}` with error `"session not found: web-123"`. The audit log
+  records the error in the `error_message` field.
+- **Session store failure:** Return `Decision{Allowed: false, Effect:
+  EffectDefaultDeny}` with the wrapped store error. Fail-closed — a session
+  lookup failure MUST NOT grant access.
+- **No associated character:** Return `Decision{Allowed: false, Effect:
+  EffectDefaultDeny}` with error `"session has no associated character"`. This
+  handles unauthenticated sessions that have not yet selected a character.
+
 ### Decision
 
 ```go
@@ -250,6 +263,25 @@ type AttributeBags struct {
 }
 ```
 
+**Attribute namespace storage:** Plugin attributes use **flat dot-delimited
+keys** in the attribute bags, not nested maps. For example, the reputation
+plugin contributes `"reputation.score": 85` as a single key in the `Subject`
+map. The DSL expression `principal.reputation.score` is parsed as an attribute
+reference with path `["reputation", "score"]`, which the evaluator resolves by
+looking up the flat key `"reputation.score"` in the subject bag. The `has`
+operator checks flat key existence: `principal has reputation.score` is NOT
+valid grammar (grammar limits `has` to a single `identifier`). To check for
+plugin attribute existence, use `principal.reputation.score != 0` or equivalent.
+
+**Action bag construction:** The engine constructs `AttributeBags.Action`
+directly from the `AccessRequest` — no provider is needed:
+
+```go
+AttributeBags.Action = map[string]any{
+    "name": request.Action, // Always present
+}
+```
+
 ### Attribute Providers
 
 ```go
@@ -284,9 +316,14 @@ marked MUST always exist when the entity is valid; MAY attributes may be nil.
 | `name`     | string   | MUST        | Character display name                     |
 | `role`     | string   | MUST        | One of: `"player"`, `"builder"`, `"admin"` |
 | `faction`  | string   | MAY         | Faction affiliation (nil if unaffiliated)  |
-| `level`    | int      | MUST        | Character level (>= 0)                     |
+| `level`    | float64  | MUST        | Character level (>= 0)                     |
 | `flags`    | []string | MUST        | Arbitrary flags (empty array if none)      |
 | `location` | string   | MUST        | ULID of current location                   |
+
+`CharacterProvider.ResolveSubject` MUST query the world model (or equivalent)
+to populate the `location` attribute, similar to how `StaticAccessControl` uses
+`LocationResolver.CurrentLocation`. This dependency SHOULD be explicit in the
+provider's constructor.
 
 **LocationProvider** (`location` namespace):
 
@@ -417,9 +454,14 @@ condition    = expr comparator expr
              | "!" condition
              | "(" conditions ")"
              | "if" condition "then" condition "else" condition
+             | expr                                  (* bare boolean: true, false, or boolean attribute *)
 
 expr       = attribute_ref | literal
 attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
+             (* "containsAll" and "containsAny" are reserved words that MUST NOT
+                appear as attribute names. The parser terminates attribute path
+                extension when it encounters these tokens after "." and treats
+                them as method calls on the preceding expression. *)
 literal    = string_literal | number | boolean
 list       = "[" literal { "," literal } "]"
 comparator = "==" | "!=" | ">" | ">=" | "<" | "<="
@@ -459,8 +501,10 @@ boolean        = "true" | "false"
   `:`). Character classes (`[abc]`) and alternation (`{a,b}`) are NOT
   supported — the glob is compiled with `glob.Compile(pattern, ':', glob.Simple)`
   to restrict to simple wildcards only. To match a literal `*` or `?`, there is
-  no escape mechanism; use `==` for exact matches instead. The glob uses `:` as
-  separator (`glob.Compile(pattern, ':')`) for consistency with the existing
+  no escape mechanism; use `==` for exact matches instead. The `:` separator
+  provides natural namespace isolation: `*` does NOT match across `:`
+  boundaries. For example, `"location:*"` matches `"location:01ABC"` but not
+  `"location:sub:01ABC"`. This is consistent with the existing
   `StaticAccessControl` permission matching.
 - `action` is a valid attribute root in conditions, providing access to the
   `AttributeBags.Action` map (e.g., `action.name`). Action matching in the
@@ -470,6 +514,8 @@ boolean        = "true" | "false"
   resource instance (e.g., `resource == "object:01ABC"`). This is used by
   lock-generated policies that target a single owned resource. Manually authored
   policies SHOULD prefer `resource is type_name` with conditions for flexibility.
+  The `principal_clause` and `action_clause` intentionally lack `==` forms —
+  for principal-specific or multi-resource matching, use conditions instead.
 - `expr "in" list` performs scalar-in-set membership: the left-hand value is
   checked for equality against each element of the literal list. For example,
   `principal.role in ["builder", "admin"]` returns true if `principal.role`
@@ -480,8 +526,17 @@ boolean        = "true" | "false"
   `principal.id in resource.visible_to` checks whether the principal's ID
   appears in the resource's `visible_to` list.
 - **Empty lists** are not valid in the grammar. `list` requires at least one
-  element. A policy matching no actions SHOULD be disabled instead of using an
-  empty list.
+  element. A policy matching no actions SHOULD be disabled via `policy disable`.
+  Disabled policies remain visible in `policy list --disabled` but do not
+  participate in evaluation. Alternatively, use an impossible condition (e.g.,
+  `when { false }`) to keep a policy visible but inactive.
+- **Bare boolean expressions:** The `| expr` alternative in `condition` allows
+  bare `true`, `false`, or boolean attribute references as conditions. This is
+  required for the `else true` pattern in `if-then-else` expressions. Bare
+  boolean attributes (e.g., `resource.restricted`) are equivalent to
+  `resource.restricted == true` — both forms are valid. If a bare expression
+  resolves to a non-boolean value, the condition evaluates to `false`
+  (fail-safe).
 - **Deferred: entity references.** Cedar defines `entity_ref` syntax
   (`Type::"value"`) for hierarchy membership checks (e.g.,
   `principal in Group::"admins"`). This is NOT included in the initial grammar.
@@ -503,10 +558,15 @@ The DSL uses dynamic typing with fail-safe behavior on type mismatches:
 | `has` on non-existent attribute    | Returns `false`                       |
 | `==`/`!=` across types             | `false` for `==`, `true` for `!=`    |
 
-**Number literals** in the grammar support decimals (e.g., `5.5`). All numbers
-are parsed as `float64`. Integer attributes (e.g., `level: int`) are promoted
-to `float64` for comparison. This enables plugin attributes to use fractional
-values (e.g., `reputation.score >= 75.5`) without grammar changes.
+**Number coercion rules:**
+
+- DSL number literals are parsed as `float64`
+- `AttributeProvider` implementations MUST return numeric attributes as
+  `float64`. Integer database columns (e.g., `level`) are cast to `float64`
+  during attribute resolution, not at comparison time
+- All numeric comparisons operate on `float64` values
+- This enables plugin attributes to use fractional values (e.g.,
+  `reputation.score >= 75.5`) without grammar changes
 
 ### Supported Operators
 
@@ -598,10 +658,13 @@ The `PropertyProvider` (in `internal/access/policy/attribute/`) wraps
 **Dependency layering:** `PropertyRepository` is pure data access — it performs
 no authorization checks. Ownership enforcement and visibility defaults are
 applied by `WorldService` (or the command handler) BEFORE calling the
-repository. During attribute resolution, `PropertyProvider` reads properties
-unconditionally; the engine decides whether the caller may *use* the resolved
-attributes. This prevents a circular dependency:
+repository. During attribute resolution, `PropertyProvider` MUST call
+`PropertyRepository` methods directly, bypassing `WorldService`. The engine
+resolves property attributes unconditionally (no authorization check during
+attribute resolution); authorization happens AFTER attributes are resolved.
+This prevents a circular dependency:
 `Engine → PropertyProvider → PropertyRepository` (no callback to Engine).
+`PropertyProvider` MUST NOT depend on `WorldService` or `AccessPolicyEngine`.
 
 ### Property Attributes
 
@@ -715,13 +778,15 @@ return Decision{Allowed: false, Effect: EffectDefaultDeny}, err
 The adapter translates this to `false` with an error log (fail-closed). The
 audit log records the `error_message` field for these cases.
 
-**Plugin provider errors:** The engine logs a warning via slog and continues
+**Plugin provider errors:** The engine logs an error via slog and continues
 evaluation with the remaining providers. Missing plugin attributes cause
 conditions referencing them to evaluate to `false` (fail-safe). The audit log
-does NOT record plugin provider errors to prevent noise.
+records plugin provider errors in a `provider_errors` JSONB field to aid
+debugging "why was I denied?" investigations. Logging is rate-limited to 1
+error per minute per provider namespace to control spam.
 
 ```text
-slog.Warn("plugin attribute provider failed",
+slog.Error("plugin attribute provider failed",
     "namespace", provider.Namespace(), "error", err)
 ```
 
@@ -742,9 +807,16 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 ├─ 3. Find applicable policies
 │    ├─ Load from in-memory cache
 │    └─ Filter: policy target matches request
-│         ├─ principal type matches subject type (or unscoped)
-│         ├─ action matches (or unscoped)
-│         └─ resource type matches resource type (or unscoped)
+│         ├─ principal: "principal is T" matches when parsed subject
+│         │   prefix equals T (e.g., "character:", "plugin:").
+│         │   Valid types: character, plugin. "session" is never
+│         │   valid (resolved before this step). Bare "principal"
+│         │   matches all subject types.
+│         ├─ action: "action in [...]" matches when request action
+│         │   is in the list. Bare "action" matches all actions.
+│         └─ resource: "resource is T" matches when parsed resource
+│             prefix equals T. "resource == X" matches exact string.
+│             Bare "resource" matches all resource types.
 │
 ├─ 4. Evaluate conditions
 │    For each candidate policy:
@@ -795,9 +867,16 @@ forbid), average condition complexity of 3 operators per policy, 10 attributes
 per entity (subject + resource), and warm per-request attribute cache (not the
 first `Evaluate()` call in a request).
 
-Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
-attribute resolution, policy filtering, condition evaluation, and audit logging
-to enable performance profiling.
+**Measurement strategy:**
+
+- Export a Prometheus histogram metric for `Evaluate()` latency
+  (e.g., `abac_evaluate_duration_seconds`)
+- Add `BenchmarkEvaluate_*` tests with targets as failure thresholds (CI
+  fails if benchmarks regress >20% from baseline)
+- Staging monitoring alerts on p99 > 10ms (2x target)
+- Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
+  attribute resolution, policy filtering, condition evaluation, and audit
+  logging to enable performance profiling during development
 
 ### Attribute Caching
 
@@ -874,14 +953,18 @@ CREATE TABLE access_audit_log (
     effect        TEXT NOT NULL CHECK (effect IN ('allow', 'deny', 'default_deny')),
     policy_id     TEXT,
     policy_name   TEXT,
-    attributes    JSONB,
-    error_message TEXT
+    attributes      JSONB,
+    error_message   TEXT,
+    provider_errors JSONB                    -- e.g., ["reputation: connection refused"]
 );
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log(timestamp DESC);
 CREATE INDEX idx_audit_log_subject ON access_audit_log(subject, timestamp DESC);
 CREATE INDEX idx_audit_log_resource ON access_audit_log(resource, timestamp DESC);
 CREATE INDEX idx_audit_log_decision ON access_audit_log(decision, timestamp DESC);
+CREATE INDEX idx_audit_log_policy_denied ON access_audit_log(policy_id, timestamp DESC)
+    WHERE decision = 'denied';
+CREATE INDEX idx_audit_log_resource_action ON access_audit_log(resource, action, timestamp DESC);
 
 CREATE TABLE entity_properties (
     id            TEXT PRIMARY KEY,         -- ULID
@@ -919,9 +1002,16 @@ used — all notification logic lives in Go application code.
 The engine uses `pgx.Conn.Listen()` which requires a dedicated persistent
 connection outside the connection pool. On connection loss, the engine MUST:
 
-1. Reconnect with exponential backoff
+1. Reconnect with exponential backoff (initial: 100ms, multiplier: 2x, max:
+   30s, indefinite retries)
 2. Re-subscribe to the `policy_changed` channel
-3. Perform a full policy reload (missed notifications cannot be recovered)
+3. Perform a full policy reload before serving the next `Evaluate()` call
+   (missed notifications cannot be recovered)
+
+During reconnection, `Evaluate()` uses the stale in-memory cache and logs a
+warning: `slog.Warn("policy cache may be stale, LISTEN/NOTIFY reconnecting")`.
+This is acceptable for MUSH workloads where a brief stale window (<30s) is
+tolerable.
 
 ### Audit Log Serialization
 
@@ -935,6 +1025,10 @@ The `effect` column in `access_audit_log` maps to the Go `Effect` enum:
 
 The `decision` column is derived: `"allowed"` when `Effect == EffectAllow`,
 `"denied"` otherwise.
+
+The `Effect` type MUST serialize to the string values in the mapping table
+above, not to `iota` integer values. Implementation SHOULD define a
+`String() string` method on `Effect` that returns the DB-compatible string.
 
 ### Policy Version Records
 
@@ -1059,8 +1153,15 @@ const (
 
 Providers register tokens at startup alongside their attributes. The
 `LockTokens()` method is part of the unified `AttributeProvider` interface
-(defined in §3.5). Providers that contribute no lock vocabulary return an empty
-slice.
+(defined in the [Attribute Providers](#attribute-providers) section). Providers
+that contribute no lock vocabulary return an empty slice.
+
+**Token name conflict resolution:** The engine MUST reject duplicate token
+registrations with an error at startup. Core providers (CharacterProvider)
+register tokens first. Plugins SHOULD namespace their tokens to avoid
+collisions (e.g., `rep.score` instead of `score`, `craft` instead of `type`).
+The `policy create` command MUST also reject names starting with `seed:` to
+reserve that prefix for system use.
 
 **Core-shipped tokens** (registered by CharacterProvider, not hard-coded in
 parser):
@@ -1259,10 +1360,12 @@ policy-only paths with no static-system equivalent.
 
 **Command name normalization:** The static system uses `@`-prefixed command
 names (`@dig`, `@create`, etc.) in permission strings, while the ABAC seed
-policies use plain names (`dig`, `create`) matching Epic 6 conventions. Shadow
-mode validation MUST strip `@` prefixes from command names when comparing
-static-system results against ABAC engine results. This normalization SHOULD be
-performed in the shadow mode comparison harness, not in the adapter.
+policies use plain names (`dig`, `create`) matching Epic 6 conventions. The
+`accessControlAdapter` MUST normalize `@`-prefixed command names at its entry
+point, stripping the `@` prefix from resource strings matching
+`command:@*` before passing them to the engine. This protects all callers from
+the legacy naming convention rather than requiring each shadow mode comparison
+to handle it.
 
 **Intentional permission expansion:** The seed policies below intentionally
 grant builders `delete` on locations, which the static system does not. The
@@ -1324,7 +1427,9 @@ MUST seed policies automatically:
 
 The seed process is idempotent — policies are inserted with deterministic names
 (e.g., `seed:player-self-access`). If a policy with that name already exists,
-the seed is skipped for that policy.
+the seed is skipped for that policy. The `seed:` prefix is reserved for system
+use — the `policy create` command MUST reject names starting with `seed:` to
+prevent admins from accidentally colliding with seed policies.
 
 ### Migration Strategy
 
@@ -1359,30 +1464,49 @@ the seed is skipped for that policy.
    // migrationAdapter wraps AccessPolicyEngine for shadow mode validation.
    // Unlike accessControlAdapter, it preserves errors for disagreement analysis.
    type migrationAdapter struct {
-       engine AccessPolicyEngine
-       static *StaticAccessControl
-       logger *slog.Logger
+       engine  AccessPolicyEngine
+       static  *StaticAccessControl
+       logger  *slog.Logger
+       metrics *shadowModeMetrics
+   }
+
+   // shadowModeMetrics tracks shadow mode validation statistics.
+   // Export to Prometheus for visibility into cutover readiness.
+   type shadowModeMetrics struct {
+       totalChecks   atomic.Int64
+       agreements    atomic.Int64
+       disagreements atomic.Int64
+       engineErrors  atomic.Int64
    }
 
    func (a *migrationAdapter) Check(ctx context.Context, subject, action, resource string) bool {
+       a.metrics.totalChecks.Add(1)
        staticResult := a.static.Check(ctx, subject, action, resource)
        decision, err := a.engine.Evaluate(ctx, AccessRequest{
            Subject: subject, Action: action, Resource: resource,
        })
        if err != nil {
+           a.metrics.engineErrors.Add(1)
            a.logger.Warn("shadow mode: engine error (not a disagreement)",
                "error", err, "static_result", staticResult)
            return staticResult // Static system is authoritative during shadow mode
        }
        if decision.Allowed != staticResult {
+           a.metrics.disagreements.Add(1)
            a.logger.Error("shadow mode: DISAGREEMENT",
                "subject", subject, "action", action, "resource", resource,
                "static", staticResult, "engine", decision.Allowed,
                "policy", decision.PolicyID)
+       } else {
+           a.metrics.agreements.Add(1)
        }
        return staticResult // Static system is authoritative during shadow mode
    }
    ```
+
+   Shadow mode comparison operates per authorization check (subject+action+
+   resource tuple), not per policy match. Semantic difference exclusions apply
+   to individual checks, not to entire policies.
 
 4. **Caller migration (holomush-c6qch):** Callers incrementally migrate from
    `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()` for richer error
