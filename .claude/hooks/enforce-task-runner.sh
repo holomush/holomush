@@ -10,25 +10,34 @@
 set -euo pipefail
 
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || true
 
 [[ -z "$COMMAND" ]] && exit 0
 
-# Strips leading whitespace, env var assignments (FOO=bar), and shell
-# wrapper prefixes (env, sudo, command, exec, nice, nohup), then returns
-# the first real command word.
+# Strips leading whitespace, all KEY=value env var assignments, shell
+# wrapper prefixes (env, sudo, command, exec, nice, nohup) and their
+# flags, then returns the first real command word.
 first_cmd_word() {
   local segment="$1"
-  # Strip leading whitespace and a single simple env var assignment
-  # (FOO=bar cmd, no spaces in value)
-  segment=$(echo "$segment" | sed 's/^[[:space:]]*//' | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+  segment=$(echo "$segment" | sed 's/^[[:space:]]*//')
+  # Strip all leading KEY=value assignments (FOO=bar BAZ=qux cmd)
+  while echo "$segment" | grep -qE '^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* '; do
+    segment=$(echo "$segment" | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+  done
   local word="${segment%% *}"
-  # Skip shell wrapper commands and re-extract
+  # Skip shell wrapper commands, their flags, and subsequent KEY=value pairs
   while [[ "$word" == "env" || "$word" == "command" || "$word" == "exec" || "$word" == "sudo" || "$word" == "nice" || "$word" == "nohup" ]]; do
     segment="${segment#"$word"}"
     segment="${segment#"${segment%%[![:space:]]*}"}"
-    # Also strip any KEY=value after env
-    segment=$(echo "$segment" | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+    # Skip flags (words starting with -)
+    while [[ "${segment%% *}" == -* ]]; do
+      segment="${segment#"${segment%% *}"}"
+      segment="${segment#"${segment%%[![:space:]]*}"}"
+    done
+    # Strip all KEY=value assignments after wrapper prefix
+    while echo "$segment" | grep -qE '^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* '; do
+      segment=$(echo "$segment" | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+    done
     word="${segment%% *}"
   done
   echo "$word"
@@ -39,10 +48,14 @@ first_cmd_word() {
 #   "go test ./..."           → blocked (go)
 #   "cd foo && go test"       → blocked (go in second segment)
 #   "env go test ./..."       → blocked (env prefix stripped)
+#   "env -i go test ./..."    → blocked (env flag stripped)
+#   "FOO=a BAR=b go test"    → blocked (multiple env vars stripped)
 #   "git log | grep fix"      → allowed (grep is after pipe)
 #   "task test"               → allowed (task)
 #
-# Known limitation: commands inside $(...) or backticks are not inspected.
+# Known limitations:
+# - Commands inside $(...) or backticks are not inspected.
+# - Quoted strings containing && ; || are incorrectly split.
 
 # Split on && ; || (preserving pipe chains as single segments)
 SEGMENTS=$(echo "$COMMAND" | sed 's/ *&& */\n/g; s/ *; */\n/g; s/ *|| */\n/g')

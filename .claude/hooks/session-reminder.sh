@@ -3,13 +3,13 @@
 # Copyright 2026 HoloMUSH Contributors
 #
 # Stop hook: remind about unsynced beads and uncommitted changes
-# Fires at the end of each agent turn. Only outputs when there's
-# actually unsynced work to avoid noise.
+# Fires when the agent finishes responding (Stop event). Only outputs
+# when there's actually unsynced work to avoid noise.
 # Error strategy: convenience hook — fails open (errors don't block).
 set -euo pipefail
 
 INPUT=$(cat)
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) || true
 
 WORKDIR="${CWD:-.}"
 
@@ -18,7 +18,7 @@ REPO_ROOT=$(git -C "$WORKDIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
 REMINDERS=()
 
 # Check for uncommitted changes
-GIT_STATUS=$(git -C "$REPO_ROOT" status --porcelain 2>&1) || {
+GIT_STATUS=$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null) || {
   REMINDERS+=("git status failed — check repo health")
   GIT_STATUS=""
 }

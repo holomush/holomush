@@ -5,10 +5,14 @@
 # PreToolUse hook: prevent edits on main branch
 # Blocks Edit/Write tool calls when the target file is in a repo on main.
 # Error strategy: security hook — fails closed (unknown state = block).
+# Known limitation: detached HEAD at main's tip is not detected.
 set -euo pipefail
 
 INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+if ! FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null); then
+  echo "protect-main: failed to parse hook input" >&2
+  exit 2
+fi
 
 [[ -z "$FILE_PATH" ]] && exit 0
 
@@ -20,10 +24,10 @@ else
 fi
 
 # Files outside any git repo (tmp files, ~/.claude/ configs) are allowed.
-# Files inside a repo where git is broken get blocked (fail-closed).
-REPO_ROOT=$(git -C "$DIR" rev-parse --show-toplevel 2>&1) || exit 0
+REPO_ROOT=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
-BRANCH=$(git -C "$REPO_ROOT" branch --show-current 2>&1) || {
+# Within a repo, fail closed if branch cannot be determined.
+BRANCH=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null) || {
   echo "protect-main: cannot determine current branch in $REPO_ROOT" >&2
   echo "Blocking edit as a precaution." >&2
   exit 2
