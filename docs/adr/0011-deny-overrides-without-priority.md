@@ -94,10 +94,10 @@ narrow the `forbid`'s conditions, not to escalate priority.
 
 **Comparison table for admins from priority-based systems:**
 
-| Approach                 | Policy Example                                                                                                                                                            | Outcome                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **Wrong: priority-based** | Keep broad forbid: `forbid when { principal.level < 5 }` <br>Add higher-priority permit: `permit(priority=100) when { principal.flags.containsAny(["vip"]) }`           | **Not supported** — deny-overrides means the forbid always wins           |
-| **Correct: narrowing**    | Narrow the forbid to exclude VIPs: `forbid when { principal.level < 5 && !principal.flags.containsAny(["vip"]) }` <br>No separate permit needed — base permit handles it | VIPs under level 5 are no longer blocked; default permit grants access    |
+| Approach                  | Policy Example                                                                                                                                                            | Outcome                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Wrong: priority-based** | Keep broad forbid: `forbid when { principal.level < 5 }` <br>Add higher-priority permit: `permit(priority=100) when { principal.flags.containsAny(["vip"]) }`           | **Not supported** — deny-overrides means the forbid always wins        |
+| **Correct: narrowing**    | Narrow the forbid to exclude VIPs: `forbid when { principal.level < 5 && !principal.flags.containsAny(["vip"]) }` <br>No separate permit needed — base permit handles it | VIPs under level 5 are no longer blocked; default permit grants access |
 
 **Before (blocks all characters under level 5):**
 
