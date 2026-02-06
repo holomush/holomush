@@ -48,7 +48,7 @@ Players control access to their own properties through a simplified lock system.
 | **Action**      | The operation being performed — string in `AccessRequest.Action` (e.g., `"read"`, `"execute"`)                |
 | **Environment** | Server-wide context attributes (time, maintenance mode) — the `env` prefix in DSL                             |
 | **Policy**      | A permit or forbid rule with target matching and conditions, stored in `access_policies`                      |
-| **Seed policy** | A system-installed default policy (prefixed `seed:`) created at first startup                                 |
+| **Seed policy** | A system-installed default policy (prefixed `seed:`) created at first startup that defines baseline access (movement, self-access, builder/admin privileges) using the ABAC policy language |
 | **Lock**        | A player-authored simplified policy using token syntax, compiled to a scoped `lock:` policy                   |
 | **Decision**    | The outcome of `Evaluate()` — includes effect, reason, matched policies, and attribute snapshot               |
 
@@ -216,12 +216,13 @@ type CompiledPolicy struct {
 
 ```json
 {
+  "grammar_version": 1,
   "effect": "permit",
   "target": {
     "principal_type": "character",
     "action_list": ["read", "write"],
     "resource_type": "property",
-    "resource_exact": null
+    "resource_exact": null  // Target-level pinning: if non-null, policy applies only to this exact resource string
   },
   "conditions": [
     {
@@ -819,9 +820,14 @@ unambiguous.
   (excluding the `:` separator), `?` matches exactly one character (excluding
   `:`). Character classes (`[abc]`) and alternation (`{a,b}`) are NOT
   supported — the DSL parser MUST reject `like` patterns containing `[`, `{`,
-  or `**` syntax before passing them to `glob.Compile(pattern, ':')`. This
-  restricts `like` to simple `*` and `?` wildcards only. To match a literal `*`
-  or `?`, there is no escape mechanism; use `==` for exact matches instead. The `:` separator
+  or `**` syntax before passing them to `glob.Compile(pattern, ':')`. Glob
+  patterns MUST be limited to 100 characters in length and MUST NOT contain
+  more than 5 wildcard characters (`*` or `?` combined). The compiler MUST
+  reject patterns exceeding these limits at parse time with a clear error
+  message (e.g., `"glob pattern too long (150 chars, max 100)"` or
+  `"too many wildcards in glob pattern (7, max 5)"`). This restricts `like`
+  to simple `*` and `?` wildcards only. To match a literal `*` or `?`, there
+  is no escape mechanism; use `==` for exact matches instead. The `:` separator
   provides natural namespace isolation: `*` does NOT match across `:`
   boundaries. The `:` character is passed as the separator argument
   to `glob.Compile(pattern, ':')`, which prevents `*` from matching across `:`
@@ -1135,8 +1141,10 @@ in `excluded_from` (deny-overrides means the `forbid` policy on
 
 ### Visibility Seed Policies
 
-Each visibility level is enforced by system-level seed policies. These are
-created during bootstrap alongside the role-based seed policies:
+Each visibility level is enforced by system-level seed policies (see
+[Seed Policies](#seed-policies) for the complete set). These property
+visibility policies are created during bootstrap alongside the role-based
+seed policies:
 
 ```text
 // Public properties: readable by characters in the same location as the parent
@@ -1562,6 +1570,21 @@ a hard backstop. A slow or misbehaving plugin cannot block the entire
 evaluation pipeline because both the per-provider and overall deadlines
 expire regardless of what the current provider is doing.
 
+**Circuit breaker for chronic slow providers:** Providers that stay just
+under the timeout but consistently consume >80% of their allocated budget
+cause cumulative performance degradation. The engine MUST track per-provider
+lifetime budget utilization. If a provider exceeds 80% of its allocated
+budget in more than 50% of calls over a 60-second rolling window (minimum
+10 calls), the engine MUST trip a circuit breaker for that provider. Once
+tripped, the provider is skipped for 60 seconds and returns empty attributes
+(logged once at ERROR level: `"Provider {name} circuit breaker tripped:
+exceeded 80% budget in {N}% of calls"`). A Prometheus counter
+`abac_provider_circuit_breaker_trips_total{provider="name"}` MUST be
+incremented. After the 60-second cooldown, the provider is re-enabled with
+reset counters. The engine SHOULD expose a provider metrics endpoint
+(`/debug/abac/providers`) showing per-provider call counts, average latency,
+timeout rate, and circuit breaker status for operational visibility.
+
 **Operational limits:**
 
 | Limit                        | Value | Rationale                       |
@@ -1577,7 +1600,11 @@ expire regardless of what the current provider is doing.
 - Export a Prometheus histogram metric for `Evaluate()` latency
   (e.g., `abac_evaluate_duration_seconds`)
 - Add `BenchmarkEvaluate_*` tests with targets as failure thresholds (CI
-  fails if benchmarks regress >10% from baseline)
+  fails if benchmarks regress >10% from baseline). Specifically: CI MUST fail
+  if any benchmark exceeds 110% of its documented target value (e.g., cold
+  `Evaluate()` p99 must stay under 5.5ms, warm under 3.3ms). Benchmark
+  failures MUST be treated as build failures - PRs cannot merge with
+  performance regressions exceeding the 10% headroom
 - Staging monitoring alerts on p99 > 10ms (2x target)
 - Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
   attribute resolution, policy filtering, condition evaluation, and audit
@@ -1632,11 +1659,13 @@ commands exceeding 1s), callers SHOULD create a fresh context with a new
 for single-user command execution latencies (~10ms), not batch workloads.
 
 ```go
-// AttributeCache provides per-request attribute caching.
+// AttributeCache provides per-request attribute caching with LRU eviction.
 // Attach to context via WithAttributeCache(ctx) at the request boundary.
 type AttributeCache struct {
-    mu    sync.RWMutex
-    items map[cacheKey]map[string]any
+    mu           sync.RWMutex
+    items        map[cacheKey]map[string]any
+    accessOrder  []cacheKey  // LRU tracking
+    maxEntries   int         // Default: 100
 }
 
 type cacheKey struct {
@@ -1651,6 +1680,15 @@ func WithAttributeCache(ctx context.Context) context.Context
 // GetAttributeCache retrieves the cache from context, or nil if none attached.
 func GetAttributeCache(ctx context.Context) *AttributeCache
 ```
+
+**Cache size limit:** The `maxEntries` field (default: 100) limits the number
+of cached entity attribute bags. When the cache reaches capacity and a new
+entity is added, the least-recently-used entry is evicted. The `accessOrder`
+slice tracks access timestamps for LRU eviction. Typical commands access 2-10
+entities (actor, target, location, a few objects), so 100 entries provides
+substantial headroom. Commands that iterate over large entity sets (e.g., admin
+batch operations) MAY exceed this limit, triggering LRU eviction — this is
+acceptable since the cache is per-request and batch operations are rare.
 
 The cache assumes **read-only world state** during request processing. If a
 command modifies character location, subsequent authorization checks in the
@@ -1787,11 +1825,13 @@ defense-in-depth measures:
    timer (default: daily) **MUST** detect orphaned properties — rows where
    `parent_id` does not match any existing entity of the declared
    `parent_type`. Detected orphans are logged at WARN level on first
-   discovery. After a grace period (default: 24 hours), orphans that
-   persist across two consecutive runs **MUST** be actively deleted with
-   a batch `DELETE` and logged at INFO level with the count of removed
-   rows. The grace period prevents deleting properties whose parent is
-   being recreated (e.g., during a migration or restore).
+   discovery. After a configurable grace period (default: 24 hours, configured
+   via server YAML `world.orphan_grace_period` as a duration string like
+   `"24h"` or `"48h"`), orphans that persist across two consecutive runs
+   **MUST** be actively deleted with a batch `DELETE` and logged at INFO level
+   with the count of removed rows. The grace period prevents deleting
+   properties whose parent is being recreated (e.g., during a migration or
+   restore).
 
 2. **Startup integrity check:** On server startup, the engine **MUST**
    count orphaned properties. If the count exceeds a configurable
@@ -1999,6 +2039,55 @@ lifecycle on a configurable schedule (default: daily):
 
 The purge job **MUST** create future partitions and detach/drop expired
 partitions rather than issuing row-by-row `DELETE` statements.
+
+**Common audit investigation queries:**
+
+```sql
+-- Top 10 most denied resources (last 24h)
+SELECT resource, COUNT(*) as denials
+FROM access_audit_log
+WHERE timestamp > NOW() - INTERVAL '24 hours'
+  AND effect IN ('deny', 'default_deny')
+GROUP BY resource
+ORDER BY denials DESC
+LIMIT 10;
+
+-- Most frequently matched forbid policies (security hotspots)
+SELECT matched_policies[1] as policy_id, COUNT(*) as matches
+FROM access_audit_log
+WHERE timestamp > NOW() - INTERVAL '7 days'
+  AND effect = 'deny'
+  AND array_length(matched_policies, 1) > 0
+GROUP BY policy_id
+ORDER BY matches DESC
+LIMIT 10;
+
+-- Evaluation latency outliers (p99 > 10ms)
+SELECT subject, resource, action, latency_ms
+FROM access_audit_log
+WHERE timestamp > NOW() - INTERVAL '1 hour'
+  AND latency_ms > 10
+ORDER BY latency_ms DESC
+LIMIT 20;
+
+-- Provider timeout rate (attribute resolution failures)
+SELECT subject, resource, COUNT(*) as timeout_count
+FROM access_audit_log
+WHERE timestamp > NOW() - INTERVAL '1 hour'
+  AND reason LIKE '%timeout%'
+GROUP BY subject, resource
+ORDER BY timeout_count DESC
+LIMIT 10;
+
+-- Access pattern by character (actions per character)
+SELECT subject, action, COUNT(*) as count
+FROM access_audit_log
+WHERE timestamp > NOW() - INTERVAL '24 hours'
+  AND subject LIKE 'character:%'
+GROUP BY subject, action
+ORDER BY count DESC
+LIMIT 20;
+```
 
 ### Visibility Defaults
 
@@ -2251,11 +2340,11 @@ Characters can discover available lock tokens via the `lock tokens` command:
 ```text
 > lock tokens
 Available lock tokens:
-  faction:X             (equality)   — Character faction equals X
-  flag:X                (membership) — Character has flag X
-  level:OP N            (numeric)    — Character level (>=, >, <=, <, == N)
-  reputation.score:OP N (numeric)    — Reputation score (plugin: reputation)
-  guilds.primary:X      (equality)   — Primary guild membership (plugin: guilds)
+  faction:X             (equality, string)   — Character faction equals X
+  flag:X                (membership, string) — Character has flag X
+  level:OP N            (numeric, int)       — Character level (>=, >, <=, <, == N)
+  reputation.score:OP N (numeric, float64)   — Reputation score (plugin: reputation)
+  guilds.primary:X      (equality, string)   — Primary guild membership (plugin: guilds)
 ```
 
 The `lock tokens` command reads from the token registry at runtime. Plugin
@@ -2266,9 +2355,9 @@ SHOULD show the underlying DSL attribute path for debugging:
 > lock tokens --verbose
 Available lock tokens:
   faction:X             — Character faction equals X
-                          (maps to: principal.faction)
+                          (maps to: principal.faction, type: string)
   reputation.score:OP N — Reputation score (plugin: reputation)
-                          (maps to: principal.reputation.score)
+                          (maps to: principal.reputation.score, type: float64)
 ```
 
 **Access constraint:** Lock-generated policies can ONLY target resources the
@@ -2294,6 +2383,13 @@ character has write access to. The lock command MUST verify write permission
   `lock:property:01DEF:read` for `lock me/backstory/read`). This naming
   format is safe because lockable resources (objects, properties, locations)
   all use ULID identifiers which contain no colons or spaces.
+- **Rate limit:** Characters are limited to a maximum of 50 lock policies
+  (configurable via server YAML `access.max_lock_policies_per_character`,
+  default: 50). The lock command MUST check the current count of lock policies
+  authored by the character before creating a new lock. If the limit is
+  exceeded, the command MUST return an error: `"Cannot create lock: you have
+  reached the maximum of {N} lock policies. Use 'unlock' to remove unused
+  locks first."` This prevents abuse and unbounded policy set growth.
 - `unlock X/action` calls `PolicyStore.DeleteByName()` to remove the lock
   policy.
 - Modifying a lock (re-running `lock X/action` with new conditions) deletes the
@@ -2583,11 +2679,30 @@ when { principal.role in ["builder", "admin"]
 // seed:admin-full-access
 permit(principal is character, action, resource)
 when { principal.role == "admin" };
+
+// seed:property-public-read
+// Public properties: readable by characters in the same location as the parent
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "public"
+    && principal.location == resource.parent_location };
+
+// seed:property-private-read
+// Private properties: readable only by owner
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "private"
+    && resource.owner == principal.id };
+
+// seed:property-admin-read
+// Admin properties: readable only by admins
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "admin" && principal.role == "admin" };
 ```
 
 The comment preceding each policy IS the deterministic name used during
 bootstrap (e.g., `seed:player-self-access`). Each name is prefixed with
-`seed:` to prevent collision with admin-created policies.
+`seed:` to prevent collision with admin-created policies. Property visibility
+policies (`seed:property-*`) are also defined in [Visibility Seed Policies](#visibility-seed-policies)
+with additional implementation context.
 
 ### Bootstrap Sequence
 
