@@ -1389,14 +1389,15 @@ a policy is detected as corrupted, the engine **MUST** enter **degraded
 mode** by setting a global flag (`abac_degraded_mode` boolean) that
 persists until administratively cleared. In degraded mode:
 
-- All access evaluation requests where the subject is **not** an admin
-  receive `EffectDefaultDeny` without evaluating any policies
-- Admin subjects (characters with `admin` role or equivalent) bypass the
-  degraded mode check and undergo normal policy evaluation
+- All access evaluation requests receive `EffectDefaultDeny` without
+  evaluating any policies (fail-closed for all subjects)
 - The CRITICAL log entry **MUST** include the policy name, effect, and
   degraded mode activation message
 - A Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) **MUST**
   be exposed for alerting
+- Administrators **MUST** use CLI access or direct database access to
+  resolve the corruption; the policy engine is unavailable to all subjects
+  during degraded mode
 
 **Recovery:** The `policy clear-degraded-mode` admin command clears the
 degraded mode flag and allows normal evaluation to resume. Operators
@@ -1880,16 +1881,17 @@ tolerable.
 decisions during prolonged reconnection windows, the engine **MUST** support a
 configurable `cache_staleness_threshold` (default: 5s). When the time since
 the last successful cache update exceeds this threshold, the engine **MUST**
-fail-closed for all non-admin subjects by returning `EffectDefaultDeny` without
-evaluating policies. Admin subjects (characters with `admin` role or equivalent)
-bypass the staleness check and undergo normal policy evaluation, ensuring
-operators can still access the system during degraded conditions. The engine
-**MUST** expose a Prometheus gauge `policy_cache_last_update` (Unix timestamp)
-that is updated on every successful cache reload. Operators **SHOULD** configure
-alerting when `time.Now() - policy_cache_last_update > cache_staleness_threshold`
-to detect prolonged LISTEN/NOTIFY disconnections before non-admin access is
-denied. Once the LISTEN/NOTIFY connection is restored and a full reload completes,
-normal evaluation resumes automatically.
+fail-closed for all subjects by returning `EffectDefaultDeny` without
+evaluating policies. The engine **MUST** expose a Prometheus gauge
+`policy_cache_last_update` (Unix timestamp) that is updated on every successful
+cache reload. Operators **SHOULD** configure alerting when
+`time.Now() - policy_cache_last_update > cache_staleness_threshold` to detect
+prolonged LISTEN/NOTIFY disconnections before access is denied. Once the
+LISTEN/NOTIFY connection is restored and a full reload completes, normal
+evaluation resumes automatically. Administrators needing immediate access during
+prolonged staleness **MUST** use the `policy reload` command (see Policy
+Management Commands) to manually force a cache refresh, or use direct CLI/database
+access outside the policy engine.
 
 ### Audit Log Serialization
 
@@ -2599,9 +2601,18 @@ when { principal.role == "builder" && resource.name == "policy test" };
 ### policy reload
 
 Forces an immediate full reload of the in-memory policy cache from PostgreSQL.
-Available to admins only. Use this when the LISTEN/NOTIFY connection may be
-down and an emergency policy change needs to take effect immediately, without
-waiting for reconnection.
+Available to admins only. Use this when:
+
+- The LISTEN/NOTIFY connection is down and an emergency policy change needs to
+  take effect immediately, without waiting for reconnection
+- Cache staleness has triggered fail-closed behavior and manual refresh is
+  needed to restore access
+- Verifying that a recent policy change has been applied to the cache
+
+**Note:** This command does NOT bypass cache staleness or degraded mode
+restrictions. During degraded mode or prolonged staleness, administrators
+**MUST** use direct CLI or database access to resolve system issues, as the
+policy engine fails closed for all subjects including admins.
 
 ```text
 > policy reload
