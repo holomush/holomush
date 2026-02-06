@@ -148,6 +148,7 @@ code with no long-term value.
 - Error handling at call sites follows the existing `oops.Code()` pattern
 - Test helpers (`AllowAll`, `DenyAll`, `MockAccessControl`) need ABAC equivalents
 - Integration tests validate seed policies provide equivalent or expanded access
+- Each seed policy requires integration tests: allowed, denied, edge case (100% coverage before Phase 7.3 cutover)
 
 ## References
 
