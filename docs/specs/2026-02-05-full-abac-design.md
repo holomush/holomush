@@ -781,9 +781,9 @@ unambiguous.
   - `"*:01ABC"` matches `"location:01ABC"` — prefix wildcard
   - `"*:01ABC"` does NOT match `"character:01ABC"` if the resource string
     has additional segments (it does match here because there is no second `:`)
-  The DSL evaluator tests **MUST** verify this separator behavior explicitly,
-  including edge cases with current single-segment and potential future
-  multi-segment resource formats.
+    The DSL evaluator tests **MUST** verify this separator behavior explicitly,
+    including edge cases with current single-segment and potential future
+    multi-segment resource formats.
 - `action` is a valid attribute root in conditions, providing access to the
   `AttributeBags.Action` map (e.g., `action.name`). Action matching in the
   target clause covers most use cases, but conditions MAY reference action
@@ -1219,11 +1219,11 @@ This provides aggregate visibility into chronic provider failures that
 individual log entries cannot. Implementation **SHOULD** include a circuit
 breaker per provider with the following parameters:
 
-| Parameter          | Default | Description                             |
-| ------------------ | ------- | --------------------------------------- |
-| Failure threshold  | 10      | Consecutive errors to open the circuit  |
-| Open duration      | 30s     | Time to skip provider while circuit open|
-| Half-open attempts | 1       | Single probe request to test recovery   |
+| Parameter          | Default | Description                              |
+| ------------------ | ------- | ---------------------------------------- |
+| Failure threshold  | 10      | Consecutive errors to open the circuit   |
+| Open duration      | 30s     | Time to skip provider while circuit open |
+| Half-open attempts | 1       | Single probe request to test recovery    |
 
 When the circuit opens, the engine logs at WARN level with the provider
 namespace and failure count. During the open period, the provider is
