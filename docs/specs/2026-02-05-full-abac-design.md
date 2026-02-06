@@ -1457,6 +1457,8 @@ persists until administratively cleared. In degraded mode:
   evaluating any policies (fail-closed for all subjects)
 - The CRITICAL log entry **MUST** include the policy name, effect, and
   degraded mode activation message
+- All deny decisions during degraded mode **MUST** be audited with the reason
+  `degraded_mode` to ensure forensic visibility
 - A Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) **MUST**
   be exposed for alerting
 - Administrators **MUST** use CLI access or direct database access to
@@ -1469,6 +1471,11 @@ degraded mode flag and allows normal evaluation to resume. Operators
 `abac_degraded_mode` gauge. Policies with effect `permit` do **not**
 trigger degraded mode when corrupted, as skipping a permit policy defaults
 to deny, which is fail-safe.
+
+**Future work:** The current seed policy `seed:admin-full-access` grants
+unrestricted access. A future iteration **SHOULD** split admin privileges
+into scoped roles (e.g., `admin:policy`, `admin:world`, `admin:player`)
+rather than a blanket admin role, reducing risk from compromised credentials.
 
 Callers of `AccessPolicyEngine.Evaluate()` can distinguish "denied by
 policy" (`err == nil, Decision.Effect == EffectDeny`) from "system failure"
