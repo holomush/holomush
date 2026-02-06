@@ -949,7 +949,7 @@ the existence of plugin-contributed attributes.
 **Decision:** Extend the grammar to allow dotted paths after `has`:
 
 ```text
-| expr "has" identifier { "." identifier }
+| attribute_root "has" identifier { "." identifier }
 ```
 
 The parser joins segments with `.` and checks the resulting flat key against
