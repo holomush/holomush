@@ -148,7 +148,7 @@ granted. No error is thrown. The system degrades safely.
 - This behavior is identical to Cedar, so Cedar documentation serves as supplementary
   reference
 
-## Testing Requirements
+**Testing requirements:**
 
 Every DSL evaluator test case for every operator MUST include a "missing attribute" variant
 that asserts `false`. This is a non-negotiable testing requirement — the fail-safe behavior
