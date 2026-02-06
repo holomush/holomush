@@ -2960,6 +2960,10 @@ the policy was customized and the update is skipped with a warning.
 
 ```go
 // 2026-02-10-fix-player-self-access.go
+// NOTE: This is a hypothetical version 1→2 migration example.
+// The current seed policy already includes both "read" and "write" actions.
+// This example shows how a migration would add "write" if upgrading from
+// a hypothetical v1 that only had "read".
 func up(ctx context.Context, store PolicyStore) error {
     oldDSL := `permit(principal is character, action in ["read"], resource is character)
 when { resource.id == principal.id };`
