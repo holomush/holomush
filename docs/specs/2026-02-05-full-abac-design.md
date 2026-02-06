@@ -2049,9 +2049,10 @@ fraction of this (most checks result in allows). The 7-day allow retention
 and 24-hour purge interval are important to enforce in `all` mode to prevent
 unbounded growth.
 
-**System bypass auditing:** When audit mode is `all`, system subject bypasses
-SHOULD also be logged with `effect = "system_bypass"` to provide a complete
-audit trail. In `denials_only` mode, system bypasses are not logged.
+**System bypass auditing:** System subject bypasses **MUST** be logged with
+`effect = "system_bypass"` in **all** audit modes (`all`, `denials_only`, and
+`off`). This ensures bugs or compromised system contexts are never invisible in
+the audit trail, regardless of the configured audit mode.
 
 **Synchronous denial audits:** Denial events (`deny` and `default_deny`) **MUST**
 be written synchronously to PostgreSQL before `Evaluate()` returns. This prevents
