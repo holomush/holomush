@@ -122,15 +122,22 @@ full set.
 
 ### Request Flow
 
+This section provides a high-level overview. See [Evaluation
+Algorithm](#evaluation-algorithm) for the authoritative step-by-step specification.
+
 1. Caller invokes `Evaluate(ctx, AccessRequest)`
-2. Engine resolves all attributes eagerly — calls core providers + registered
+2. System bypass: if subject is `"system"`, immediately allow with
+   `SystemBypass` effect
+3. Session resolution: if subject is `"session:..."`, resolve to character ID
+   before attribute resolution
+4. Engine resolves all attributes eagerly — calls core providers + registered
    plugin providers
-3. Engine loads matching policies from the in-memory cache
-4. Engine evaluates each policy's conditions against the attribute bags
-5. Deny-overrides: any forbid → deny (wins over permits); else any permit →
+5. Engine loads matching policies from the in-memory cache
+6. Engine evaluates each policy's conditions against the attribute bags
+7. Deny-overrides: any forbid → deny (wins over permits); else any permit →
    allow; else default deny
-6. Audit logger records the decision, matched policies, and attribute snapshot
-7. Returns `Decision` with allowed/denied, reason, and matched policy ID
+8. Audit logger records the decision, matched policies, and attribute snapshot
+9. Returns `Decision` with allowed/denied, reason, and matched policy ID
 
 ### Package Structure
 
@@ -1494,19 +1501,23 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 ├─ 1. System bypass
 │    subject == "system" → return Decision{Allowed: true, Effect: SystemBypass}
 │
-├─ 2. Resolve attributes (eager)
+├─ 2. Session resolution
+│    subject starts with "session:" → resolve to character ID
+│    (subject string is mutated to "character:<id>" before step 3)
+│
+├─ 3. Resolve attributes (eager)
 │    ├─ Parse subject type/ID from subject string
 │    ├─ Parse resource type/ID from resource string
 │    ├─ Call all registered AttributeProviders
 │    └─ Assemble AttributeBags{Subject, Resource, Action, Environment}
 │
-├─ 3. Find applicable policies
+├─ 4. Find applicable policies
 │    ├─ Load from in-memory cache
 │    └─ Filter: policy target matches request
 │         ├─ principal: "principal is T" matches when parsed subject
 │         │   prefix equals T (e.g., "character:", "plugin:").
 │         │   Valid types: character, plugin. "session" is never
-│         │   valid (resolved before this step). Bare "principal"
+│         │   valid (resolved in step 2). Bare "principal"
 │         │   matches all subject types.
 │         ├─ action: "action in [...]" matches when request action
 │         │   is in the list. Bare "action" matches all actions.
@@ -1514,18 +1525,18 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 │             prefix equals T. "resource == X" matches exact string.
 │             Bare "resource" matches all resource types.
 │
-├─ 4. Evaluate conditions
+├─ 5. Evaluate conditions
 │    For each candidate policy:
 │    ├─ Evaluate DSL conditions against AttributeBags
 │    ├─ If all conditions true → policy is "satisfied"
 │    └─ If any condition false or attribute missing → policy does not apply
 │
-├─ 5. Combine decisions (deny-overrides)
+├─ 6. Combine decisions (deny-overrides)
 │    ├─ Any satisfied forbid → Decision{Allowed: false, Effect: Deny}
 │    ├─ Any satisfied permit → Decision{Allowed: true, Effect: Allow}
 │    └─ No policies satisfied → Decision{Allowed: false, Effect: DefaultDeny}
 │
-└─ 6. Audit
+└─ 7. Audit
      ├─ Log system bypasses in ALL modes (off, denials_only, all)
      ├─ Log denials (forbid + default deny) in denials_only and all modes
      ├─ Log allows only in all mode
