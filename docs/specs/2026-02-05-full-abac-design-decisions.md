@@ -516,10 +516,10 @@ world model's typed structs (`Location.ID ulid.ULID`).
 **Decision:** Keep flat prefixed strings for `AccessRequest`.
 
 **Rationale:** Flat strings simplify serialization for audit logging (no
-marshaling needed), cross-process communication (adapter signature matches
-existing `Check()` callers), and the `policy test` admin command (admins type
-`character:01ABC` directly). Parsing overhead is negligible at <200 concurrent
-users (~1μs per parse). If profiling shows parsing as a bottleneck, introduce a
+marshaling needed) and the `policy test` admin command (admins type
+`character:01ABC` directly — no struct construction required). The format is
+consistent with external API boundaries (telnet/web protocols already exchange
+string identifiers). If profiling shows parsing as a bottleneck, introduce a
 cached parsed representation without changing the public API.
 
 ---
@@ -670,6 +670,12 @@ reject `like` patterns containing `[`, `{`, or `**` syntax before passing them
 to `glob.Compile(pattern, ':')`. This restricts `like` to simple `*` and `?`
 wildcards only.
 
+**Note on backslash escapes:** Backslash characters in patterns are treated as
+literal (no escape mechanism). The parser validation MUST be tested against
+`gobwas/glob` behavior during implementation. If `gobwas/glob` interprets
+backslash as an escape character, the parser MUST reject patterns containing
+backslash at parse time to maintain the "no escape" guarantee.
+
 **Rationale:** Parser-level validation gives clear error messages at policy
 creation time rather than unexpected matching behavior at evaluation time.
 Restricting to simple wildcards keeps the lock syntax approachable for
@@ -808,6 +814,11 @@ engine, the static adapter, or shadow mode.
 indicates the outcome: `allow` = allowed, `deny`/`default_deny` = denied. (b)
 Add a `source TEXT NOT NULL DEFAULT 'admin'` column to `access_policies` to
 track where policies originate (`admin`, `lock`, `seed`, `plugin`).
+
+**Validation constraint:** Policies named `seed:*` MUST have `source='seed'`
+and vice versa. Policies named `lock:*` MUST have `source='lock'` and vice
+versa. Violations are rejected at creation time to prevent naming/source
+inconsistencies.
 
 **Rationale:** (a) Redundant columns in append-heavy audit tables waste storage
 and create consistency risks. The `effect` column already encodes the decision.
@@ -1068,11 +1079,12 @@ degrading `containsAny`/`in` evaluation performance.
 **Decision:** Enforce a maximum of 100 entries per list. The property store
 rejects updates that would exceed this limit with a clear error message.
 
-**Rationale:** 100 entries covers any realistic MUSH scenario (a property
-visible to 100 specific characters is already unusually granular). At 100
-entries, `in` evaluation is O(100) per check — negligible. Without a bound,
-adversarial or buggy input could create lists large enough to affect p99
-latency.
+**Rationale:** 100 entries balances flexibility (covers 99% of realistic MUSH
+use cases — a property visible to 100 specific characters is already unusually
+granular) with performance (avoids multi-millisecond scans). At 100 entries,
+`in` evaluation requires O(100) string comparisons per check. Adversarial lists
+(e.g., 10,000+ entries) would require hash set implementation instead of linear
+scan to maintain p99 latency targets.
 
 ---
 
@@ -1110,6 +1122,11 @@ expressions, pathological patterns) could cause panics or infinite loops.
 DSL parser. The fuzzer exercises `parser.Parse()` with random byte sequences
 and validates that it either returns a valid AST or a structured error —
 never panics, never hangs.
+
+**Note on lock expression parser:** The lock expression parser SHOULD also have
+a fuzz test (`func FuzzParseLock`) since lock expressions accept player input
+and must handle malformed input gracefully. Lock parsing is a separate code
+path from full DSL policy parsing.
 
 **Rationale:** Go 1.18+ includes built-in fuzz testing. The DSL parser is the
 primary attack surface for crafted input. Fuzz testing catches classes of bugs

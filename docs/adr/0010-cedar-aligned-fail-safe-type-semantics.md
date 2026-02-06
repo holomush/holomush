@@ -34,6 +34,12 @@ If a character has no `faction` attribute at all (e.g., a new character, or fact
 failed to load), the behavior of `principal.faction != "enemy"` determines whether they
 gain access.
 
+**Why this is safe:** With fail-safe semantics, when the `faction` attribute is missing,
+ALL comparisons (including `!=`) evaluate to `false`. So `principal.faction != "enemy"`
+evaluates to `false` → the permit never matches → access is denied by default (safe).
+However, this may not be what the admin intended. For the correct pattern that explicitly
+checks for attribute existence, see the **Defensive Patterns for Negation** section below.
+
 ### Options Considered
 
 **Option A: SQL-style NULL semantics**

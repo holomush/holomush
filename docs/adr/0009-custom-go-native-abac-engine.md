@@ -110,7 +110,10 @@ resolve full attribute bags for any entity.
 
 **Negative:**
 
-- Parser and evaluator must be built from scratch (~2,000 lines estimated)
+- Parser and evaluator must be built from scratch:
+  - ~2,000 lines for core engine (parser + evaluator)
+  - ~1,000 additional for lock compilation, token registry, and audit infrastructure
+  - Total estimate: 3,000-3,500 lines
 - No formal verification of policy correctness (Cedar has this; we rely on testing)
 - Smaller community — bugs and edge cases must be found by HoloMUSH contributors
 - Future contributors must learn a custom DSL rather than an industry-standard language

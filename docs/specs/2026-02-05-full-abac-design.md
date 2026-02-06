@@ -1215,9 +1215,12 @@ The audit log records the `error_message` field for these cases.
 **Plugin provider errors:** The engine logs an error via slog and continues
 evaluation with the remaining providers. Missing plugin attributes cause
 conditions referencing them to evaluate to `false` (fail-safe). The audit log
-records plugin provider errors in a `provider_errors` JSONB field (structured
-as `[{"provider": "reputation", "error": "connection refused"}]`) to aid
-debugging "why was I denied?" investigations. Logging is rate-limited to 1
+records plugin provider errors in a `provider_errors` JSONB field to aid
+debugging "why was I denied?" investigations. The field is an array of error
+objects with schema: `[{"namespace": "string", "error": "string", "timestamp":
+"RFC3339", "duration_us": "int"}]`. For example:
+`[{"namespace": "reputation", "error": "connection refused", "timestamp":
+"2026-02-06T12:00:00Z", "duration_us": 1500}]`. Logging is rate-limited to 1
 error per minute per `(namespace, error_hash)` tuple to control spam while
 preserving visibility of distinct failure modes. If a provider has two
 different error types (e.g., DB timeout and network error), both are logged
@@ -1456,7 +1459,7 @@ expire regardless of what the current provider is doing.
 - Export a Prometheus histogram metric for `Evaluate()` latency
   (e.g., `abac_evaluate_duration_seconds`)
 - Add `BenchmarkEvaluate_*` tests with targets as failure thresholds (CI
-  fails if benchmarks regress >20% from baseline)
+  fails if benchmarks regress >10% from baseline)
 - Staging monitoring alerts on p99 > 10ms (2x target)
 - Implementation SHOULD add `slog.Debug()` timers in `engine.Evaluate()` for
   attribute resolution, policy filtering, condition evaluation, and audit

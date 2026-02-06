@@ -90,18 +90,32 @@ no, the answer is no.
 ### How to Handle "Override" Scenarios
 
 When an admin needs to allow access that a `forbid` blocks, the correct approach is to
-narrow the `forbid`'s conditions, not to escalate priority:
+narrow the `forbid`'s conditions, not to escalate priority.
+
+**Comparison table for admins from priority-based systems:**
+
+| Approach                 | Policy Example                                                                                                                                                            | Outcome                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Wrong: priority-based** | Keep broad forbid: `forbid when { principal.level < 5 }` <br>Add higher-priority permit: `permit(priority=100) when { principal.flags.containsAny(["vip"]) }`           | **Not supported** — deny-overrides means the forbid always wins           |
+| **Correct: narrowing**    | Narrow the forbid to exclude VIPs: `forbid when { principal.level < 5 && !principal.flags.containsAny(["vip"]) }` <br>No separate permit needed — base permit handles it | VIPs under level 5 are no longer blocked; default permit grants access    |
+
+**Before (blocks all characters under level 5):**
 
 ```text
-// Original: blocks ALL characters under level 5
 forbid(principal is character, action in ["enter"], resource is location)
 when { resource.restricted && principal.level < 5 };
+```
 
-// To exempt VIPs, narrow the forbid — don't add a higher-priority permit
+**After (exempts VIPs by narrowing the forbid condition):**
+
+```text
 forbid(principal is character, action in ["enter"], resource is location)
 when { resource.restricted && principal.level < 5
     && !principal.flags.containsAny(["vip"]) };
 ```
+
+**Key insight:** Don't think "add a higher-priority permit to override the deny." Instead,
+think "narrow the deny condition itself so the unwanted cases no longer match."
 
 ## Consequences
 
