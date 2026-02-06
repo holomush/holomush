@@ -1524,7 +1524,8 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 │    ├─ Any satisfied permit → Decision{Allowed: true, Effect: Allow}
 │    └─ No policies satisfied → Decision{Allowed: false, Effect: DefaultDeny}
 │
-└─ 6. Audit (when mode != off)
+└─ 6. Audit
+     ├─ Log system bypasses in ALL modes (off, denials_only, all)
      ├─ Log denials (forbid + default deny) in denials_only and all modes
      ├─ Log allows only in all mode
      └─ Include: decision, matched policies, attribute snapshot
@@ -2018,7 +2019,7 @@ The audit logger supports three modes, configurable via server settings:
 type AuditMode string
 
 const (
-    AuditOff        AuditMode = "off"          // No audit logging
+    AuditOff        AuditMode = "off"          // System bypasses only
     AuditDenialsOnly AuditMode = "denials_only" // Log deny + default_deny only
     AuditAll        AuditMode = "all"           // Log all decisions
 )
@@ -2033,7 +2034,7 @@ type AuditConfig struct {
 
 | Mode           | What is logged            | Typical use case            |
 | -------------- | ------------------------- | --------------------------- |
-| `off`          | Nothing                   | Development, performance    |
+| `off`          | System bypasses only      | Development, performance    |
 | `denials_only` | Deny + default_deny       | Production default          |
 | `all`          | All decisions incl. allow | Debugging, compliance audit |
 
@@ -3134,7 +3135,7 @@ Describe("AccessPolicyEngine", func() {
     Describe("Audit logging", func() {
         It("logs denials in denials_only mode", func() { ... })
         It("logs all decisions in all mode", func() { ... })
-        It("logs nothing in off mode", func() { ... })
+        It("logs system bypasses only in off mode", func() { ... })
     })
 
     Describe("Cache invalidation via LISTEN/NOTIFY", func() {
