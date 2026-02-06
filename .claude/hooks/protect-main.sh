@@ -4,9 +4,10 @@
 #
 # PreToolUse hook: prevent edits on main branch
 # Blocks Edit/Write tool calls when the target file is in a repo on main.
-# Error strategy: security hook — fails closed (unknown state = block).
-# Known limitation: detached HEAD at main's tip is not detected.
-set -euo pipefail
+# Error strategy: security hook — fails open outside repos (allows non-repo
+# files), fails closed within repos (unknown branch = block).
+set -uo pipefail
+trap 'echo "protect-main: unexpected error" >&2; exit 2' ERR
 
 INPUT=$(cat)
 if ! FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null); then
@@ -16,11 +17,15 @@ fi
 
 [[ -z "$FILE_PATH" ]] && exit 0
 
-# Get the directory — if the file doesn't exist yet (Write), use parent dir
-if [[ -d "$(dirname "$FILE_PATH")" ]]; then
-  DIR="$(dirname "$FILE_PATH")"
-else
-  exit 0
+# Walk up to find the nearest existing directory for the target path.
+# Handles Write to new deep paths where parent dirs don't exist yet.
+DIR="$(dirname "$FILE_PATH")"
+while [[ ! -d "$DIR" && "$DIR" != "/" ]]; do
+  DIR="$(dirname "$DIR")"
+done
+if [[ ! -d "$DIR" ]]; then
+  echo "protect-main: cannot determine directory for $FILE_PATH" >&2
+  exit 2
 fi
 
 # Files outside any git repo (tmp files, ~/.claude/ configs) are allowed.
@@ -32,6 +37,14 @@ BRANCH=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null) || {
   echo "Blocking edit as a precaution." >&2
   exit 2
 }
+
+# Detached HEAD returns empty string — fail closed since we can't confirm
+# the user is NOT on main's tip.
+if [[ -z "$BRANCH" ]]; then
+  echo "protect-main: detached HEAD in $REPO_ROOT — cannot verify branch" >&2
+  echo "Blocking edit as a precaution. Checkout a named branch first." >&2
+  exit 2
+fi
 
 if [[ "$BRANCH" == "main" ]]; then
   echo "Cannot edit files on the main branch." >&2

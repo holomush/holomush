@@ -7,36 +7,42 @@
 # the proper task commands or native Claude Code tools.
 # Error strategy: enforcement hook — fails open on jq/parse errors
 # but deterministically blocks known bad commands.
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || true
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || {
+  echo "enforce-task-runner: failed to parse input — enforcement disabled for this command" >&2
+  exit 0
+}
 
 [[ -z "$COMMAND" ]] && exit 0
 
-# Strips leading whitespace, all KEY=value env var assignments, shell
-# wrapper prefixes (env, sudo, command, exec, nice, nohup) and their
-# flags, then returns the first real command word.
+# Strips leading whitespace, all KEY=value env var assignments (including
+# quoted values like FOO="bar baz"), shell wrapper prefixes (env, sudo,
+# command, exec, nice, nohup) and their flags, then returns the first
+# real command word.
 first_cmd_word() {
   local segment="$1"
-  segment=$(echo "$segment" | sed 's/^[[:space:]]*//')
-  # Strip all leading KEY=value assignments (FOO=bar BAZ=qux cmd)
-  while echo "$segment" | grep -qE '^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* '; do
-    segment=$(echo "$segment" | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+  # Strip leading whitespace
+  segment="${segment#"${segment%%[![:space:]]*}"}"
+  # Strip leading KEY=value assignments (unquoted, double-quoted, single-quoted)
+  while [[ "$segment" =~ ^[A-Za-z_][A-Za-z_0-9]*=(\"[^\"]*\"|\'[^\']*\'|[^[:space:]]*)[[:space:]] ]]; do
+    segment="${segment#"${BASH_REMATCH[0]}"}"
+    segment="${segment#"${segment%%[![:space:]]*}"}"
   done
   local word="${segment%% *}"
   # Skip shell wrapper commands, their flags, and subsequent KEY=value pairs
-  while [[ "$word" == "env" || "$word" == "command" || "$word" == "exec" || "$word" == "sudo" || "$word" == "nice" || "$word" == "nohup" ]]; do
+  while [[ "$word" =~ ^(env|command|exec|sudo|nice|nohup)$ ]]; do
     segment="${segment#"$word"}"
     segment="${segment#"${segment%%[![:space:]]*}"}"
-    # Skip flags (words starting with -)
     while [[ "${segment%% *}" == -* ]]; do
       segment="${segment#"${segment%% *}"}"
       segment="${segment#"${segment%%[![:space:]]*}"}"
     done
-    # Strip all KEY=value assignments after wrapper prefix
-    while echo "$segment" | grep -qE '^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* '; do
-      segment=$(echo "$segment" | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+    while [[ "$segment" =~ ^[A-Za-z_][A-Za-z_0-9]*=(\"[^\"]*\"|\'[^\']*\'|[^[:space:]]*)[[:space:]] ]]; do
+      segment="${segment#"${BASH_REMATCH[0]}"}"
+      segment="${segment#"${segment%%[![:space:]]*}"}"
     done
     word="${segment%% *}"
   done
@@ -57,8 +63,9 @@ first_cmd_word() {
 # - Commands inside $(...) or backticks are not inspected.
 # - Quoted strings containing && ; || are incorrectly split.
 
-# Split on && ; || (preserving pipe chains as single segments)
-SEGMENTS=$(echo "$COMMAND" | sed 's/ *&& */\n/g; s/ *; */\n/g; s/ *|| */\n/g')
+# Split on && ; || using awk for portability (BSD sed does not support \n
+# in replacement strings).
+SEGMENTS=$(echo "$COMMAND" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 
 while IFS= read -r segment; do
   [[ -z "$segment" ]] && continue
@@ -89,36 +96,24 @@ while IFS= read -r segment; do
       echo "Use 'task lint' instead of 'golangci-lint'" >&2
       exit 2
       ;;
-    gofmt)
-      echo "Use 'task fmt' instead of 'gofmt'" >&2
+    gofmt|goimports)
+      echo "Use 'task fmt' instead of '$word'" >&2
       exit 2
       ;;
-    goimports)
-      echo "Use 'task fmt' instead of 'goimports'" >&2
-      exit 2
-      ;;
-    grep|egrep|fgrep)
+    grep|egrep|fgrep|rg)
       echo "Use the Grep tool instead of $word" >&2
-      exit 2
-      ;;
-    rg)
-      echo "Use the Grep tool instead of rg" >&2
       exit 2
       ;;
     cat)
       # Allow heredocs: cat <<EOF, cat <<'EOF'
       # Allow /dev/null: cat /dev/null
-      if ! echo "$before_pipe" | grep -qE "cat[[:space:]]+(<<|/dev/)"; then
+      if ! echo "$before_pipe" | command grep -qE "cat[[:space:]]+(<<|/dev/)"; then
         echo "Use the Read tool instead of cat" >&2
         exit 2
       fi
       ;;
-    head)
-      echo "Use the Read tool with offset/limit instead of head" >&2
-      exit 2
-      ;;
-    tail)
-      echo "Use the Read tool with offset/limit instead of tail" >&2
+    head|tail)
+      echo "Use the Read tool with offset/limit instead of $word" >&2
       exit 2
       ;;
     find)

@@ -5,8 +5,10 @@
 # Stop hook: remind about unsynced beads and uncommitted changes
 # Fires when the agent finishes responding (Stop event). Only outputs
 # when there's actually unsynced work to avoid noise.
+# Does not fire on user interrupts (Ctrl+C) — only on natural completion.
 # Error strategy: convenience hook — fails open (errors don't block).
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 INPUT=$(cat)
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null) || true
@@ -29,8 +31,11 @@ fi
 
 # bd sync --status outputs "ahead", "dirty", or "unsync" when out of sync
 if command -v bd >/dev/null 2>&1; then
-  BEADS_STATUS=$(bd sync --status 2>/dev/null) || true
-  if echo "$BEADS_STATUS" | grep -qi "ahead\|dirty\|unsync"; then
+  BEADS_STATUS=$(bd sync --status 2>/dev/null) || {
+    REMINDERS+=("beads sync check failed — run 'bd sync --status' manually")
+    BEADS_STATUS=""
+  }
+  if [[ -n "$BEADS_STATUS" ]] && echo "$BEADS_STATUS" | command grep -qi "ahead\|dirty\|unsync"; then
     REMINDERS+=("beads issues need syncing (run 'bd sync')")
   fi
 fi
