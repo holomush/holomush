@@ -1610,11 +1610,13 @@ The 100ms deadline is the total budget for all providers combined.
 To prevent priority inversion (where early providers starve later ones),
 the engine **MUST** enforce per-provider timeouts within the total budget.
 Each provider receives a **fair-share timeout** calculated dynamically as
-`remaining_budget / remaining_providers`, recalculated after each provider
-completes. For example, with 5 providers and a 100ms total budget, the
-first provider receives 20ms (100ms / 5). If it completes in 5ms, the
+`max(remaining_budget / remaining_providers, 5ms)`, recalculated after each
+provider completes. For example, with 5 providers and a 100ms total budget,
+the first provider receives 20ms (100ms / 5). If it completes in 5ms, the
 second provider receives 23.75ms ((100-5)ms / 4), and so on. This ensures
 that unused time from fast providers is redistributed to later providers.
+The 5ms floor prevents sub-millisecond timeouts if early providers consume
+most of the budget.
 
 **Tradeoff:** Fair-share prevents priority inversion while maximizing
 budget utilization. Fast early providers create larger budgets for later
@@ -1626,6 +1628,14 @@ predictable for monitoring. This is acceptable because:
    squeeze plugin providers that register later
 2. Fast providers benefit the entire evaluation chain
 3. The 100ms total budget remains a hard backstop regardless of distribution
+
+**Registration order dependency:** While fair-share prevents priority
+inversion, registration order still matters for slow providers. If a slow
+provider registers early, it will consume budget before faster providers
+can run. Plugin authors **SHOULD** register attribute providers at server
+startup (in plugin `Init()`) rather than lazily, to ensure predictable
+ordering. Core providers **SHOULD** be lightweight and register first to
+avoid delaying plugin providers.
 
 **Example calculation:**
 
@@ -1965,7 +1975,7 @@ tolerable.
 
 **Cache staleness threshold:** To limit the risk of serving stale policy
 decisions during prolonged reconnection windows, the engine **MUST** support a
-configurable `cache_staleness_threshold` (default: 5s). When the time since
+configurable `cache_staleness_threshold` (default: 30s). When the time since
 the last successful cache update exceeds this threshold, the engine **MUST**
 fail-closed for all subjects by returning `EffectDefaultDeny` without
 evaluating policies. The engine **MUST** expose a Prometheus gauge
@@ -1978,6 +1988,15 @@ evaluation resumes automatically. Administrators needing immediate access during
 prolonged staleness **MUST** use the `policy reload` command (see Policy
 Management Commands) to manually force a cache refresh, or use direct CLI/database
 access outside the policy engine.
+
+**Rationale for 30s default:** The staleness threshold must exceed the
+maximum expected reconnection backoff to avoid triggering fail-closed during
+brief network disruptions. The `pgconn` reconnection backoff schedule is:
+100ms, 200ms, 400ms, 800ms, 1600ms, 3200ms (cumulative: 6.3s before first
+successful reconnect attempt). A 30s threshold provides ~5x headroom for
+retries while still limiting the window of stale policy exposure. Operators
+experiencing frequent network blips **MAY** increase this threshold further,
+accepting a longer stale window in exchange for reduced fail-closed events.
 
 ### Audit Log Serialization
 
