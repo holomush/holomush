@@ -507,6 +507,13 @@ authorization-gated data MUST use pre-resolved attributes from the bags or
 access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
 
+**Goroutine prohibition:** Attribute providers MUST NOT spawn goroutines that
+call `Evaluate()` or perform any engine operations. The context-based re-entrance
+guard only prevents synchronous re-entrance on the same goroutine. A buggy
+provider spawning a goroutine that calls `Evaluate()` bypasses the sentinel
+entirely, creating undetected re-entrance. Providers MUST complete all attribute
+resolution synchronously within the calling goroutine.
+
 **Enforcement:** The engine MUST use a context-value sentinel to detect
 re-entrance on a per-goroutine basis. `Evaluate()` sets a sentinel key in
 the context at entry and checks for its presence at the start of every
@@ -518,10 +525,14 @@ detecting true re-entrance (a provider calling back into the engine within
 the same goroutine's call stack).
 
 **Sentinel scope limitation:** The sentinel prevents synchronous re-entrance
-on the same call stack only. Providers MUST NOT spawn goroutines during
-attribute resolution. Spawning goroutines that perform I/O or call other
-engine methods is explicitly prohibited. Cross-goroutine re-entrance is
-prevented by convention and code review, not runtime enforcement.
+on the same call stack only. It does NOT detect cross-goroutine re-entrance.
+A provider spawning a goroutine that calls `Evaluate()` bypasses the guard
+entirely because the sentinel is stored in the calling goroutine's context,
+not in goroutine-global state. Cross-goroutine re-entrance is prevented by
+the MUST NOT prohibition in the provider contract (see above), enforced
+through convention and code review, not runtime checks. Integration tests
+MUST verify that goroutine-based re-entry attempts are detected (via panic
+or error) to prevent regression in guard implementation.
 
 **Provider context contract:** Providers **MUST** propagate the parent
 context when creating sub-contexts for timeout isolation. Specifically,
@@ -3132,6 +3143,11 @@ Describe("AccessPolicyEngine", func() {
         It("resolves character attributes from world model", func() { ... })
         It("handles property visibility with visible_to lists", func() { ... })
         It("plugin attribute providers contribute to evaluation", func() { ... })
+    })
+
+    Describe("Re-entrance guard", func() {
+        It("panics when provider calls Evaluate() synchronously", func() { ... })
+        It("detects goroutine-based re-entry attempts", func() { ... })
     })
 
     Describe("Lock-generated policies", func() {
