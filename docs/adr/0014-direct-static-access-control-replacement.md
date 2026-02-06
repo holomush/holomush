@@ -13,7 +13,7 @@ HoloMUSH's current authorization system consists of two components:
    `$self`/`$here` token resolution, and three static roles (player, builder, admin)
 2. **`capability.Enforcer`**: Plugin permission checking using manifest-declared capabilities
 
-These are used at ~24 production call sites across the codebase (plus 6 test mocks),
+These are used at ~29 production call sites across the codebase (plus 6 test mocks),
 primarily in `internal/world/service.go` and `internal/command/dispatcher.go`. All
 call sites use the `AccessControl.Check(ctx, subject, action, resource) bool` interface.
 
@@ -58,13 +58,13 @@ and `capability.Enforcer` are deleted.
 | Aspect     | Assessment                                                                                                          |
 | ---------- | ------------------------------------------------------------------------------------------------------------------- |
 | Strengths  | Clean cutover; no temporary adapter code; callers get rich `Decision` type; no subject/resource normalization layer |
-| Weaknesses | All ~24 production call sites must add error handling for `(Decision, error)` return; large single-phase change     |
+| Weaknesses | All ~29 production call sites must add error handling for `(Decision, error)` return; large single-phase change     |
 
 ## Decision
 
 **Option C: Direct replacement.** No backward-compatibility adapter. No shadow mode.
 
-All ~24 production call sites (plus test mocks) update from `AccessControl.Check()` to
+All ~29 production call sites (plus test mocks) update from `AccessControl.Check()` to
 `AccessPolicyEngine.Evaluate()` in phase 7.3 of the implementation. The `AccessControl`
 interface, `StaticAccessControl`, and `capability.Enforcer` are deleted in phase 7.6.
 
@@ -139,7 +139,7 @@ code with no long-term value.
 
 **Negative:**
 
-- All ~24 production call sites must be updated in a single phase (large but mechanical change)
+- All ~29 production call sites must be updated in a single phase (large but mechanical change)
 - Call sites must handle `(Decision, error)` return instead of simple `bool`
 - No gradual rollout — all authorization switches at once
 
