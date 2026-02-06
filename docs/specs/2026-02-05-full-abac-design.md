@@ -432,6 +432,11 @@ the segments with `.` and checks the resulting flat key. This allows defensive
 patterns for plugin-contributed attributes:
 `principal has reputation.score && principal.reputation.score >= 50`.
 
+**Note:** The DSL compiler enforces explicit boolean comparisons
+(`principal.admin == true`, never bare `principal.admin`) to prevent fragile
+policies where type evolution silently breaks conditions. See **Bare boolean
+restriction** in the grammar section.
+
 Missing attributes cause all comparisons to evaluate to `false`
 (Cedar-aligned behavior), so `principal.reputation.score >= 50` safely returns
 `false` when the reputation plugin is not loaded. The `has` check is only
@@ -717,7 +722,7 @@ condition    = expr comparator expr
              | "!" condition
              | "(" conditions ")"
              | "if" condition "then" condition "else" condition
-             | expr                                  (* bare boolean: true, false, or boolean attribute *)
+             | expr                                  (* bare boolean literals only: true, false *)
 
 expr       = attribute_ref | literal
 attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
@@ -778,14 +783,33 @@ after parsing an `expr`, if the next token is a comparator (`==`, `!=`, `>`,
 `containsAny`, treat it as the corresponding compound condition; otherwise treat
 it as a bare boolean. This makes the grammar LL(1) at the implementation level.
 
-**Bare boolean deprecation:** While the grammar allows bare boolean
-expressions (e.g., `when { principal.restricted }` without `== true`), the
-implementation SHOULD emit a `ValidationWarning` when a bare boolean is
-used, recommending the explicit form `principal.restricted == true`. This
-avoids two ways to express the same condition and prevents future reserved
-word collisions (if `restricted` became a keyword, `principal.restricted`
-as a bare expression would be ambiguous). The explicit form is always
-unambiguous.
+**Bare boolean restriction:** The compiler MUST reject bare boolean attribute
+references in `when` clauses, requiring explicit comparison operators. Bare
+literals (`true`, `false`) remain valid. This prevents fragile policies where
+attribute type evolution silently breaks conditions via fail-safe false.
+
+**Examples:**
+
+```
+// INVALID - compile error
+permit(principal, action in ["read"], resource)
+  when { principal.admin };
+
+// Error: "Bare boolean attribute 'principal.admin' requires explicit comparison.
+//         Use 'principal.admin == true' instead."
+
+// VALID - explicit comparison
+permit(principal, action in ["read"], resource)
+  when { principal.admin == true };
+
+// VALID - bare literals allowed
+permit(principal, action in ["debug"], resource)
+  when { false };  // Policy disabled
+```
+
+**Migration:** Existing policies with bare boolean attributes can be automatically
+fixed using `policy lint --fix`, which rewrites bare attributes as
+`<attribute> == true` while preserving all other formatting.
 
 **Operator precedence** (highest to lowest):
 
