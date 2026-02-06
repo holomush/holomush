@@ -700,10 +700,14 @@ attribute_root = "principal" | "resource" | "action" | "env"
 (* Note: The `has` production uses `attribute_root` as the left operand,
    restricting it to entity references. Expressions like `5 has foo` are
    rejected at parse time. The `attribute_root` non-terminal is defined
-   separately from `attribute_ref` because `has` takes a bare root, not
-   a dotted path. `has` expressions return a boolean value and participate
-   in `&&`/`||` chains like any other condition. Parenthesized forms are
-   valid: `(principal has faction) && (resource has restricted)`. *)
+   separately from `attribute_ref` to emphasize the semantic difference:
+   `has` tests for attribute existence, which applies to entity roots
+   (`principal`, `resource`, `action`, `env`) and their nested paths.
+   Both simple (`principal has role`) and dotted paths
+   (`resource has metadata.tags`) are valid. `has` expressions return a
+   boolean value and participate in `&&`/`||` chains like any other
+   condition. Parenthesized forms are valid:
+   `(principal has faction) && (resource has metadata.restricted)`. *)
 
              (* "containsAll" and "containsAny" are reserved words that MUST NOT
                 appear as attribute names. Parser disambiguation: when the parser
@@ -1283,15 +1287,33 @@ should not occur in normal operation because policies are compiled at
 policy management CLI) re-compiles the policy from its `dsl_text` column,
 overwrites the `compiled_ast` JSONB, and re-enables the policy. If
 `dsl_text` is also corrupted, the operator must `policy edit <name>` to
-provide corrected DSL text. The `policy test --suite` validation workflow
-**SHOULD** include a corruption detection pass that unmarshals every
-`compiled_ast` and verifies structural invariants.
+provide corrected DSL text. After repairing or disabling the corrupted
+policy, use `policy clear-degraded-mode` to restore normal evaluation.
+The `policy test --suite` validation workflow **SHOULD** include a
+corruption detection pass that unmarshals every `compiled_ast` and
+verifies structural invariants.
 
-**Security note:** If a corrupted policy is a security-critical `forbid`
-rule, silently skipping it creates an access control gap. The CRITICAL
-log entry **MUST** include the policy's effect (`permit` or `forbid`) so
-operators can assess the security impact. Operators **SHOULD** configure
-alerting on CRITICAL-level ABAC log entries.
+**Security note (Degraded Mode):** If a corrupted policy has effect
+`forbid` or `deny`, silently skipping it creates a security gap. When such
+a policy is detected as corrupted, the engine **MUST** enter **degraded
+mode** by setting a global flag (`abac_degraded_mode` boolean) that
+persists until administratively cleared. In degraded mode:
+
+- All access evaluation requests where the subject is **not** an admin
+  receive `EffectDefaultDeny` without evaluating any policies
+- Admin subjects (characters with `admin` role or equivalent) bypass the
+  degraded mode check and undergo normal policy evaluation
+- The CRITICAL log entry **MUST** include the policy name, effect, and
+  degraded mode activation message
+- A Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) **MUST**
+  be exposed for alerting
+
+**Recovery:** The `policy clear-degraded-mode` admin command clears the
+degraded mode flag and allows normal evaluation to resume. Operators
+**SHOULD** configure alerting on CRITICAL-level ABAC log entries and the
+`abac_degraded_mode` gauge. Policies with effect `permit` do **not**
+trigger degraded mode when corrupted, as skipping a permit policy defaults
+to deny, which is fail-safe.
 
 Callers of `AccessPolicyEngine.Evaluate()` can distinguish "denied by
 policy" (`err == nil, Decision.Effect == EffectDeny`) from "system failure"
@@ -1422,16 +1444,33 @@ order is non-deterministic.
 The 100ms deadline is the total budget for all providers combined.
 To prevent priority inversion (where early providers starve later ones),
 the engine **MUST** enforce per-provider timeouts within the total budget.
-Each provider receives a fair-share timeout calculated as
-`remaining_budget / remaining_providers`. For example, with 5 providers
-and a 100ms total budget: provider A gets 20ms; if A completes in 5ms,
-provider B gets `95ms / 4 = ~24ms`; and so on. This ensures that a slow
-provider cannot consume the entire budget and starve subsequent providers.
+Each provider receives an **equal-share timeout** calculated as
+`total_budget / provider_count`, distributed at evaluation start. For
+example, with 5 providers and a 100ms total budget, each provider receives
+20ms regardless of order or prior provider execution time. Unused time
+from a fast provider is **not** redistributed to later providers.
+
+**Tradeoff:** Equal-share prevents priority inversion but may underutilize
+the time budget. For instance, if providers A, B, C each complete in 5ms
+(15ms total), the remaining 85ms is wasted. This is acceptable because:
+
+1. Core providers (registered first during server startup) no longer
+   squeeze plugin providers that register later
+2. Predictable per-provider budgets simplify debugging and monitoring
+3. The 100ms total budget is conservative for typical attribute lookups
+
+**Example calculation:**
+
+- Total budget: 100ms, 4 providers (core, plugin A, plugin B, plugin C)
+- Each provider timeout: `100ms / 4 = 25ms`
+- Provider timings: core=5ms, plugin A=10ms, plugin B=25ms (timeout),
+  plugin C=15ms
+- Total evaluation time: 5+10+25+15 = 55ms (45ms unused)
 
 If the parent context is cancelled during evaluation (e.g., client
 disconnect), all remaining providers receive the cancelled context
 immediately and the evaluation terminates with `EffectDefaultDeny`.
-Fair-share timeout allocation applies only when the parent context is
+Equal-share timeout allocation applies only when the parent context is
 active.
 
 The engine wraps each provider call with
