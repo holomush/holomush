@@ -350,8 +350,20 @@ circuit breaker trip is logged once at ERROR level with message `"session
 circuit breaker tripped for session 01XYZ after 3 integrity failures —
 session invalidated"`. A Prometheus counter metric
 `abac_session_circuit_breaker_trips_total` **MUST** be incremented when the
-circuit breaker trips. The 60-second window **SHOULD** be configurable via
+circuit breaker trips. The 60-second window **MUST** be configurable via
 server config for testing and tuning.
+
+**Error code constants:** Session resolution error codes **MUST** be defined
+as constants in the `internal/access` package. The following error code
+constants **MUST** be exported:
+
+- `ErrCodeSessionNotFound` — `"infra:session-not-found"`
+- `ErrCodeSessionCharacterIntegrity` — `"infra:session-character-integrity"`
+- `ErrCodeSessionInvalidatedByCircuitBreaker` —
+  `"infra:session-invalidated-by-circuit-breaker"`
+
+These constants ensure consistent error handling and filterable audit queries
+(e.g., `WHERE policy_id LIKE 'infra:%'` returns only infrastructure failures).
 
 **Audit distinguishability:** Session resolution errors use
 `EffectDefaultDeny` with `infra:*` policy IDs, making them filterable in
@@ -888,8 +900,16 @@ evolution:
   supports both version N and N+1 simultaneously.
 - **Migration:** The `policy recompile-all` admin command recompiles every
   policy's `dsl_text` with the current grammar version, updating the stored
-  AST. Policies that fail recompilation are logged and left at their
-  original version.
+  AST. Policies that fail recompilation are logged at ERROR level with
+  policy name, policy ID, and compilation error message, then **left at their
+  original grammar version**. A failed recompilation does **NOT** disable the
+  policy — it continues to evaluate using its existing AST with the old
+  grammar version. Operators **MUST** use `policy list --old-grammar` to
+  identify policies still using a previous grammar version after migration,
+  then manually fix the DSL text via `policy edit` and retry
+  `policy recompile <id>` until all policies are migrated. The
+  `--old-grammar` flag filters the policy list to show only policies where
+  `compiled_ast.grammar_version` is less than the current parser version.
 - **Audit preservation:** Because `dsl_text` (source of truth) and
   `compiled_ast` are both stored, historical audit log entries remain valid
   — the DSL text is human-readable regardless of grammar version, and the
@@ -1176,18 +1196,37 @@ The repository determines the resolution strategy based on `parent_type`:
     corruption), `parent_location` is nil and location-based visibility
     policies fail-safe (deny).
 
-  The recursive CTE MUST include both a depth limit (e.g., 20 iterations) and
-  cycle detection (tracking visited IDs via an array path column, rejecting
-  IDs already in the path) as defense-in-depth against data corruption.
-  PostgreSQL `WITH RECURSIVE` does not automatically prevent cycles.
-  If cycles are detected or the depth limit is exceeded, `parent_location` is
-  nil and location-based visibility policies fail-safe (deny).
+  The recursive CTE **MUST** include both a depth limit of **10 iterations**
+  and cycle detection (tracking visited IDs via an array path column,
+  rejecting IDs already in the path) as defense-in-depth against data
+  corruption. PostgreSQL `WITH RECURSIVE` does not automatically prevent
+  cycles. If cycles are detected or the depth limit is exceeded,
+  `parent_location` is nil and location-based visibility policies fail-safe
+  (deny). A 10-level nesting limit is sufficient for typical object
+  containment hierarchies (e.g., gem → lockbox → drawer → chest → room)
+  while preventing excessive query complexity.
 
-  If the recursive CTE encounters a PostgreSQL error (timeout, resource
-  exhaustion), the PropertyProvider **MUST** propagate this as a core provider
+  The `PropertyProvider` **MUST** set a per-query timeout of **100ms** using
+  `SET LOCAL statement_timeout = '100ms'` at the start of each
+  `PropertyRepository.GetByID()` transaction. This ensures that recursive CTE
+  queries for deeply nested or corrupted data do not block the evaluation
+  pipeline. If the query timeout is exceeded, PostgreSQL returns a timeout
+  error, which the PropertyProvider **MUST** propagate as a core provider
   error (return `(nil, err)`), triggering EffectDefaultDeny with error
-  propagation. Operators **SHOULD** monitor for CTE timeout errors and
-  investigate data model integrity.
+  propagation.
+
+  If the PropertyProvider encounters **3 or more** query timeout errors within
+  a **60-second window**, it **MUST** trip a circuit breaker and return
+  default-deny for all subsequent resource attribute requests for that
+  60-second window without executing additional queries. This prevents
+  systematic timeout errors from overwhelming the database connection pool.
+  The circuit breaker trip is logged once at ERROR level with message
+  `"PropertyProvider circuit breaker tripped after 3 timeout errors in 60s —
+  skipping queries"`. A Prometheus counter metric
+  `abac_property_provider_circuit_breaker_trips_total` **MUST** be
+  incremented when the circuit breaker trips. Operators **SHOULD** configure
+  alerting on this metric and investigate data model integrity issues (deep
+  nesting, circular containment) when circuit breaker trips occur.
 
 ## Attribute Resolution
 
@@ -1282,10 +1321,20 @@ breaker per provider with the following parameters:
 
 When the circuit opens, the engine logs at WARN level with the provider
 namespace and failure count. During the open period, the provider is
-skipped (attributes missing, conditions fail-safe). After the open
-duration, a single "half-open" probe request tests whether the provider
-has recovered. On success, the circuit closes (INFO log); on failure, it
-re-opens for another cycle.
+skipped (attributes missing, conditions fail-safe). **Circuit breaker
+skip behavior:** Skipping a circuit-opened provider is an immediate
+check with no I/O and does **NOT** consume evaluation time budget.
+The per-provider timeout is recalculated at evaluation start, excluding
+circuit-opened providers from the fair-share distribution. For example,
+with a 100ms total budget and 5 registered providers where 2 have open
+circuits, the 3 active providers each receive 33ms (100ms / 3), not 20ms
+(100ms / 5). This ensures that functioning providers receive equitable
+time allocations and are not penalized by systematic failures in other
+providers.
+
+After the open duration, a single "half-open" probe request tests whether
+the provider has recovered. On success, the circuit closes (INFO log); on
+failure, it re-opens for another cycle.
 
 **Error classification:** All errors result in fail-closed (deny) behavior.
 No errors are retryable within a single `Evaluate()` call.
@@ -1986,7 +2035,24 @@ simplified lock syntax. Locks compile to scoped policies behind the scenes.
 > lock here/enter = level:>=5 & !flag:banned
 > lock armory/enter = (faction:rebels | faction:alliance) & level:>=3
 > unlock my-chest/read
+> unlock my-chest
 ```
+
+**Unlock semantics:** The `unlock` command removes lock-generated policies.
+Two forms are supported:
+
+1. **Action-specific unlock:** `unlock <resource>/<action>` removes the lock
+   policy for the specified action on the resource. Example:
+   `unlock my-chest/read` deletes the policy named
+   `lock:<resource_ulid>:read`.
+
+2. **Resource-wide unlock:** `unlock <resource>` removes **all** lock policies
+   for the resource across all actions. Example: `unlock my-chest` deletes all
+   policies matching the pattern `lock:<resource_ulid>:*`. The implementation
+   **MUST** query `PolicyStore` with
+   `WHERE name LIKE 'lock:<resource_ulid>:%'` and delete all matching
+   policies. This ensures bulk unlock for resources with multiple action
+   locks.
 
 **Resource target resolution:** The lock command resolves the resource target
 (the part before `/`) using the same name resolution as other world commands:
@@ -2563,12 +2629,44 @@ The `seed:` prefix is reserved for system use — the `policy create` command
 MUST reject names starting with `seed:` to prevent admins from accidentally
 colliding with seed policies.
 
-**Seed policy upgrades:** Seed policies are immutable after first creation.
-Server upgrades that ship updated seed text do NOT overwrite existing seeds.
-This ensures admin customizations to seed policies (via `policy edit`) survive
-upgrades. If a server version needs to fix a seed policy bug, it MUST use a
-migration that explicitly updates the affected policy, logged as a version
-change with a `change_note` explaining the upgrade.
+**Seed policy upgrades:** Seed policies track a `seed_version` integer field
+(default: 1). Server upgrades that ship updated seed text with an incremented
+version number **MUST** automatically update the corresponding seed policy
+during bootstrap. The bootstrap process compares `seed_version` in the
+shipped seed definition against the stored policy's `seed_version`. If the
+shipped version is greater, the policy's `dsl_text` and `compiled_ast` are
+updated, and `seed_version` is incremented. The `change_note` field is
+populated with `"Auto-upgraded from seed v{N} to v{N+1} on server upgrade"`.
+This enables automatic security patches and bug fixes for seed policies
+without manual intervention.
+
+**Opt-out mechanism:** Operators **MAY** disable automatic seed upgrades via
+the `--skip-seed-migrations` server startup flag. When this flag is set,
+the bootstrap process skips seed version comparisons and does not update
+existing seed policies, regardless of version mismatch. This preserves admin
+customizations to seed policies (via `policy edit`) but prevents automatic
+security patching. Operators using this flag **MUST** manually track seed
+policy updates and apply fixes via `policy edit` or explicit migrations.
+
+**Version mismatch detection:** The `policy seed status` admin command
+compares installed seed policies against shipped seed definitions and
+reports version discrepancies. Example output:
+
+```text
+> policy seed status
+seed:player-self-access       v1 (current: v2 available) — OUTDATED
+seed:admin-full-access        v2 (current: v2)           — UP TO DATE
+seed:location-visibility      v1 (current: v1)           — UP TO DATE
+```
+
+If any seed policy has `installed_version < shipped_version`, the command
+prints a summary line: `"2 seed policies outdated — restart without
+--skip-seed-migrations to auto-upgrade"`. If `--skip-seed-migrations` is NOT
+set but seed policies are outdated (should not occur in normal operation),
+the server logs a CRITICAL-level message during bootstrap:
+`"Seed policy version mismatch detected: {policy_name} installed v{N},
+shipped v{M} — restart to apply auto-upgrade"`. This ensures operators are
+alerted to configuration drift.
 
 **Seed verification:** Implementation **MUST** include two verification
 mechanisms:
