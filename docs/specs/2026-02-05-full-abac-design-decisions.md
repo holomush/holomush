@@ -126,16 +126,11 @@ simple: deny always wins, period.
 | A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~28 callers need error handling added at once |
 | B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                      |
 
-**Decision:** **Option B — New `AccessPolicyEngine` interface with adapter.**
+**Decision:** ~~**Option B — New `AccessPolicyEngine` interface with adapter.**~~
 
-**Rationale:** The adapter wraps the new engine to satisfy the old
-`AccessControl` interface (logging errors internally, returning `false`). Callers
-migrate incrementally — those needing richer error info (like the command
-dispatcher) move to `AccessPolicyEngine.Evaluate()` directly, while others stay
-on the adapter. The new interface also accepts structured `AccessRequest` and
-returns structured `Decision` with reason, matched policy, and attributes.
-
-**Tracking:** Migration tracked as `holomush-c6qch` (P3, depends on phase 7.3).
+**Superseded by [decision #36](#36-direct-replacement-no-adapter).** With no
+production releases, the adapter adds unnecessary complexity. All call sites
+switch to `AccessPolicyEngine.Evaluate()` directly.
 
 **Naming:** The new interface is called `AccessPolicyEngine` (per Sean's
 preference).
@@ -441,26 +436,11 @@ requirements) independent of character modification permissions.
 
 ## 21. Shadow Mode Cutover Criteria
 
-**Review finding:** The migration strategy said "remove `StaticAccessControl`
-once 100% agreement is confirmed" without defining what that means
-operationally.
+**Superseded by [decision #37](#37-no-shadow-mode).** Shadow mode is removed
+entirely — there are no production releases to validate against.
 
-**Decision:** Objective cutover criteria:
-
-- Shadow mode runs in staging for at least **7 days**
-- At least **10,000 authorization checks** collected
-- **100% agreement** between `Decision.Allowed` and `StaticAccessControl.Check()`
-  for all checks (excluding `enter` actions per decision #20)
-- Any disagreement blocks cutover and triggers immediate investigation
-- Rollback: revert the `StaticAccessControl` removal PR
-
-**Rationale:** Without objective criteria, "100% agreement" is a judgement call
-that invites premature cutover. The 7-day window catches day-of-week variations
-in game activity. 10,000 checks provides statistical confidence. Explicit
-rollback plan reduces risk of the cutover being irreversible.
-
-**Updates [decision #5](#5-migration-strategy):** Adds operational detail to the migration strategy from
-decision #5.
+~~**Original decision:** Objective cutover criteria (7 days, 10K checks, 100%
+agreement). No longer applicable.~~
 
 ---
 
@@ -715,6 +695,10 @@ time, not duration-based.
 matches the DSL's existing comparison operators naturally — no new time type
 needed.
 
+**Note:** `game_state` was mentioned in the original spec but is not included
+in the final EnvironmentProvider schema — HoloMUSH does not currently have a
+game state management system. It MAY be added when that system is implemented.
+
 ---
 
 ## 35. Audit Log Source Column and No Decision Column
@@ -734,4 +718,83 @@ and create consistency risks. The `effect` column already encodes the decision.
 (b) The `source` column enables filtering and lifecycle management — e.g.,
 showing only admin-authored policies, or identifying lock-generated policies
 for cleanup.
+
+---
+
+## 36. Direct Replacement (No Adapter)
+
+**Review finding:** The adapter pattern (decision #5) and shadow mode
+(decision #21) add significant complexity: normalization helpers, migration
+adapters, shadow mode metrics, cutover criteria, exclusion filtering. This
+complexity exists solely to support incremental migration from
+`StaticAccessControl`.
+
+**Decision:** Replace `StaticAccessControl` directly with `AccessPolicyEngine`.
+No backward-compatibility adapter. All call sites switch to `Evaluate()`
+directly.
+
+**Rationale:** HoloMUSH has no production releases and no deployed users. The
+static access control system has no consumers to preserve compatibility with.
+Building adapter and shadow mode infrastructure for a system that has never
+been released wastes effort and makes the design harder to understand.
+
+**Impact:**
+
+- Removes `accessControlAdapter`, `migrationAdapter`, `normalizeSubjectPrefix()`,
+  `normalizeResource()`, `shadowModeMetrics`
+- Removes shadow mode cutover criteria, exclusion filtering, disagreement
+  tracking
+- All ~28 call sites update to `AccessPolicyEngine.Evaluate()` in a single
+  phase (phase 7.3)
+- The `AccessControl` interface and `StaticAccessControl` struct are deleted
+  in phase 7.6
+
+**Supersedes:** [Decision #5](#5-migration-strategy) (adapter pattern),
+[decision #21](#21-shadow-mode-cutover-criteria) (shadow mode)
+
+---
+
+## 37. No Shadow Mode
+
+**Review finding:** Shadow mode validates that seed policies replicate the
+static system's behavior. But the static system has known gaps: `$here` resource
+patterns that never match actual call site resource strings (dead permissions),
+missing `delete:location` for builders, legacy `@`-prefixed command names. The
+seed policies intentionally fix these gaps, making 100% agreement impossible
+without exclusion filtering — which itself is bug-prone.
+
+**Decision:** Remove shadow mode entirely. The ABAC seed policies define the
+correct permission model from scratch, not a replica of the static system.
+
+**Rationale:** Shadow mode is only valuable when migrating a live system with
+existing users. HoloMUSH has no releases. The seed policies are validated by
+integration tests, not by runtime comparison with a legacy system. This
+eliminates an entire class of complexity and removes the risk of exclusion
+filtering bugs masking real policy errors.
+
+---
+
+## 38. Audit Log Configuration Modes
+
+**Review finding:** The original spec logged all denials unconditionally with
+optional allow logging. There was no way to disable audit logging entirely
+(for development/performance) or to control the mode at runtime.
+
+**Decision:** Add three audit modes: `off`, `denials_only`, `all`. Default to
+`denials_only` for production.
+
+| Mode           | What is logged              | Use case                     |
+| -------------- | --------------------------- | ---------------------------- |
+| `off`          | Nothing                     | Development, performance     |
+| `denials_only` | Deny + default_deny         | Production default           |
+| `all`          | All decisions incl. allow   | Debugging, compliance audit  |
+
+When mode is `all`, system subject bypasses are also logged with
+`effect = "system_bypass"` to provide a complete audit trail.
+
+**Rationale:** At 200 users with ~5 checks/sec, `all` mode produces ~864K
+records/day. `denials_only` mode reduces this to a small fraction (most checks
+result in allows). `off` mode eliminates audit overhead entirely for
+development. The mode is configurable via server settings and can be changed
+at runtime without restart.
 

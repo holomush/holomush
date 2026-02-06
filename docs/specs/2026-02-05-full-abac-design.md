@@ -23,9 +23,9 @@ Players control access to their own properties through a simplified lock system.
 - Properties as first-class entities with per-property access control
 - Player-authored locks for owned resources (simplified policy syntax)
 - In-game admin commands for policy CRUD and debugging (`policy` command set)
-- Full audit trail of access decisions in a dedicated PostgreSQL table
-- Backward-compatible migration from `AccessControl` to `AccessPolicyEngine`
-  (~28 production call sites)
+- Configurable audit logging with mode control (off, denials-only, all)
+- Direct replacement of `AccessControl` with `AccessPolicyEngine` across all
+  call sites (greenfield deployment — no backward-compatibility adapter)
 - Default-deny posture with deny-overrides conflict resolution
 
 ### Non-Goals
@@ -49,7 +49,7 @@ Players control access to their own properties through a simplified lock system.
 | Property model        | First-class entities                    | Conceptual uniformity — everything is an entity                   |
 | Plugin attributes     | Registration-based providers            | Synchronous, consistent with eager resolution                     |
 | Audit logging         | Separate PostgreSQL table               | Clean separation from game events, independent retention          |
-| Migration             | New interface + adapter                 | Incremental caller migration, no big-bang change                  |
+| Migration             | Direct replacement (no adapter)         | Greenfield — no releases, clean cutover to ABAC                   |
 | Cache invalidation    | PostgreSQL LISTEN/NOTIFY (in Go code)   | Push-based, no polling overhead                                   |
 | Player access control | Layered: metadata + locks + full policy | Progressive complexity for different user roles                   |
 
@@ -97,19 +97,12 @@ Players control access to their own properties through a simplified lock system.
 │                    │ PluginProvider(s)     │ ← Registered by plugins  │
 │                    └──────────────────────┘                          │
 │                                                                      │
-├──────────────────────────────────────────────────────────────────────┤
-│   ┌──────────────────────────────────────┐                           │
-│   │ accessControlAdapter                  │                           │
-│   │ Wraps AccessPolicyEngine → old        │                           │
-│   │ AccessControl interface               │                           │
-│   │ (for incremental migration)           │                           │
-│   └──────────────────────────────────────┘                           │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Request Flow
 
-1. Caller invokes `Evaluate(ctx, AccessRequest)` (or `Check()` via adapter)
+1. Caller invokes `Evaluate(ctx, AccessRequest)`
 2. Engine resolves all attributes eagerly — calls core providers + registered
    plugin providers
 3. Engine loads matching policies from the in-memory cache
@@ -121,7 +114,7 @@ Players control access to their own properties through a simplified lock system.
 ### Package Structure
 
 ```text
-internal/access/               # Existing — keeps AccessControl interface + adapter
+internal/access/               # Existing — AccessPolicyEngine replaces AccessControl
 internal/access/policy/        # NEW — AccessPolicyEngine, evaluation
   engine.go                    # AccessPolicyEngine implementation
   policy.go                    # Policy type, parsing, validation
@@ -171,11 +164,17 @@ stored alongside the DSL text in the policy store (as JSONB).
 
 ```go
 // PolicyCompiler parses and validates DSL policy text.
-type PolicyCompiler interface {
-    // Compile parses DSL text, validates it, and returns a compiled policy.
-    // Returns a descriptive error with line/column information on parse failure.
-    Compile(dslText string) (*CompiledPolicy, error)
+// This is a concrete struct (not an interface) because there is only one
+// implementation. The policy store accepts it as a constructor dependency.
+type PolicyCompiler struct {
+    schema *AttributeSchema // Optional: for validation warnings
 }
+
+// Compile parses DSL text, validates it, and returns a compiled policy.
+// Returns a descriptive error with line/column information on parse failure.
+// If schema is configured, also returns validation warnings for unknown
+// attributes (warnings do not block creation — schema evolves over time).
+func (c *PolicyCompiler) Compile(dslText string) (*CompiledPolicy, []ValidationWarning, error)
 
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
 // The engine evaluates CompiledPolicy instances, never raw DSL text.
@@ -223,14 +222,11 @@ are always resolved to `character:` at the engine entry point before evaluation
 (see [Session Subject Resolution](#session-subject-resolution)). The `(resolved)`
 marker indicates this prefix does not appear in `principal is T` clauses.
 
-**Subject prefix constants:** The `access` package SHOULD define these prefixes
+**Subject prefix constants:** The `access` package MUST define these prefixes
 as constants (e.g., `SubjectCharacter = "character:"`, `SubjectPlugin =
-"plugin:"`) to prevent typos and enable compile-time references. The existing
-`ParseSubject()` function performs raw prefix splitting only — it returns `"char"`
-for input `"char:01ABC"`, NOT `"character"`. Normalization from `char:` to
-`character:` is a NEW responsibility that lives in the adapter layer (both
-`accessControlAdapter` and `migrationAdapter`) BEFORE the engine is called.
-The engine itself MUST only receive normalized `character:` prefixes.
+"plugin:"`) to prevent typos and enable compile-time references. All call sites
+MUST use the full `character:` prefix (not the legacy `char:` abbreviation).
+The engine MUST reject unknown prefixes with a clear error.
 
 **Design note:** Subject and resource use flat prefixed strings rather than typed
 structs to simplify serialization for audit logging and cross-process
@@ -333,10 +329,7 @@ To check plugin attribute existence, use the attribute in a condition directly
 — since missing attributes cause all comparisons to evaluate to `false`
 (Cedar-aligned behavior), `principal.reputation.score >= 50` safely returns
 `false` when the reputation plugin is not loaded. No explicit existence check
-is needed for gating on plugin attributes. Note that `principal has
-reputation.score` is NOT valid grammar — `has` is intentionally limited to
-top-level attributes. Plugin authors SHOULD design policies using direct
-attribute comparisons rather than existence checks.
+is needed for gating on plugin attributes. See the `has` limitation above.
 
 **Bag merge semantics:** The `AttributeResolver` assembles bags by merging all
 non-nil provider results. If multiple providers return the same key for the same
@@ -381,6 +374,15 @@ calling back into the engine creates a deadlock. Providers that need
 authorization-gated data MUST use pre-resolved attributes from the bags or
 access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
+
+**Provider design principles:**
+
+1. Providers MUST only access repositories, never services
+2. Providers MUST NOT perform authorization checks
+3. If a provider needs authorization-gated data, the data model must be
+   restructured to separate authorization metadata from business data
+4. Providers resolve attributes unconditionally — the engine performs
+   authorization AFTER resolution
 
 **No-op methods:** Providers that only resolve one side (e.g.,
 `CommandProvider` only resolves resources, `CharacterProvider` primarily
@@ -434,7 +436,7 @@ provider's constructor.
 | `flags`         | []string | MUST        | Arbitrary flags (empty array if none)     |
 | `visible_to`    | []string | MAY         | Character IDs (only when restricted)      |
 | `excluded_from` | []string | MAY         | Character IDs (only when restricted)      |
-| `parent_location` | string | MUST      | ULID of parent entity's location          |
+| `parent_location` | string | MAY         | ULID of parent entity's location          |
 
 **EnvironmentProvider** (`env` namespace):
 
@@ -444,7 +446,11 @@ provider's constructor.
 | `hour`        | float64 | MUST        | Current hour (0-23, UTC)              |
 | `minute`      | float64 | MUST        | Current minute (0-59, UTC)            |
 | `day_of_week` | string  | MUST        | Day name (e.g., `"monday"`, lowercase)|
-| `maintenance` | bool    | MUST        | Whether server is in maintenance mode |
+| `maintenance` | bool   | MUST        | Whether server is in maintenance mode |
+
+**Note:** `game_state` was considered but is not included — HoloMUSH does not
+currently have a game state management system. This attribute MAY be added in a
+future phase when game state is implemented.
 
 **ObjectProvider** (`object` namespace):
 
@@ -499,31 +505,6 @@ reputation-gated guild policy can reference both namespaces:
 Each plugin resolves its own namespace; the DSL evaluator reads from the
 merged bag. No direct plugin-to-plugin dependency is needed.
 
-### Backward-Compatible Adapter
-
-```go
-// accessControlAdapter bridges AccessPolicyEngine to the legacy AccessControl interface.
-// Callers that need richer error handling SHOULD migrate to AccessPolicyEngine directly.
-type accessControlAdapter struct {
-    engine AccessPolicyEngine
-    logger *slog.Logger
-}
-
-func (a *accessControlAdapter) Check(ctx context.Context, subject, action, resource string) bool {
-    decision, err := a.engine.Evaluate(ctx, AccessRequest{
-        Subject:  normalizeSubjectPrefix(subject),
-        Action:   action,
-        Resource: normalizeResource(resource),
-    })
-    if err != nil {
-        a.logger.Error("access policy engine error", "error", err,
-            "subject", subject, "action", action, "resource", resource)
-        return false // fail-closed
-    }
-    return decision.Allowed
-}
-```
-
 ## Policy DSL
 
 The DSL is Cedar-inspired with a full expression language. Policies have a
@@ -577,6 +558,10 @@ boolean        = "true" | "false"
 (* Whitespace, including newlines, is insignificant within policy text.
    The `policy create` command collects multi-line input until "." on a
    line by itself. *)
+
+(* The parser SHOULD enforce a maximum nesting depth of 32 levels for
+   conditions, rejecting deeply nested policies with a clear error. This
+   prevents stack overflow during evaluation from naive or malicious input. *)
 ```
 
 **Operator precedence** (highest to lowest):
@@ -789,6 +774,14 @@ evaluates against using the same interface.
 The `PropertyProvider` (in `internal/access/policy/attribute/`) wraps
 `PropertyRepository` to resolve property attributes for policy evaluation.
 
+**Intentional coupling:** Properties embed access control metadata (`owner`,
+`visibility`, `visible_to`, `excluded_from`) directly in the world model struct.
+This is an intentional architectural tradeoff — properties are the ONLY world
+entity with first-class access control fields. Other entities (locations,
+objects) rely on external policies. The coupling exists because property
+visibility is a core gameplay feature (players configure it directly), not just
+an admin concern.
+
 **Dependency layering:** `PropertyRepository` owns data access AND data
 invariants. Specifically, `PropertyRepository.Create()` and
 `PropertyRepository.Update()` MUST enforce visibility defaults in Go code: when
@@ -829,6 +822,15 @@ This prevents a circular dependency:
 | `restricted` | Explicit list       | Defaults: [self], []     |
 | `system`     | System only         | Not applicable (NULL)    |
 | `admin`      | Admins only         | Not applicable (NULL)    |
+
+**Public visibility and movement:** Public visibility on character properties
+means the property is visible to characters in the same location as the owning
+character. As the owning character moves, the set of characters who can see
+their public properties changes accordingly. The `parent_location` attribute
+is resolved at evaluation time from the character's current location. If the
+parent entity has no valid location (e.g., a character in the lobby before
+entering a room), `parent_location` is nil and location-based visibility
+policies fail-safe (deny).
 
 When visibility is set to `restricted`, the Go property store MUST auto-populate
 `visible_to` with `[parent_id]` and `excluded_from` with `[]` if they are nil.
@@ -1056,10 +1058,24 @@ per-request `AttributeCache`. Implementation MUST include both
 | Cache miss storm (post-NOTIFY flood) | <100ms  | Lock during reload; stale reads tolerable |
 | Plugin provider slow                 | 50ms    | Per-provider context deadline             |
 
-The `Evaluate()` context SHOULD carry a 100ms deadline. If attribute resolution
+The `Evaluate()` context MUST carry a 100ms deadline. If attribute resolution
 exceeds this, the engine returns `EffectDefaultDeny` with a timeout error.
-Individual plugin providers inherit this deadline — a slow plugin cannot block
-the entire evaluation pipeline beyond the request timeout.
+
+**Provider resolution is sequential.** Core providers are called in registration
+order, then plugin providers. The 100ms deadline is the total budget for all
+providers combined — individual 50ms per-provider timeouts are subsumed by the
+overall deadline. If 3 plugin providers each take 45ms, the third will be
+cancelled when the 100ms deadline expires. A slow or misbehaving plugin cannot
+block the entire evaluation pipeline.
+
+**Operational limits:**
+
+| Limit                          | Value | Rationale                        |
+| ------------------------------ | ----- | -------------------------------- |
+| Maximum registered providers   | 20    | 10 core + 10 plugins             |
+| Maximum active policies        | 500   | Linear scan acceptable at scale  |
+| Maximum condition nesting      | 32    | Prevents stack overflow          |
+| Provider timeout (total)       | 100ms | Hard deadline on `Evaluate()`    |
 
 **Measurement strategy:**
 
@@ -1129,7 +1145,7 @@ CREATE TABLE access_policies (
     description  TEXT,
     effect       TEXT NOT NULL CHECK (effect IN ('permit', 'forbid')),
     source       TEXT NOT NULL DEFAULT 'admin'
-                 CHECK (source IN ('seed', 'lock', 'admin')),
+                 CHECK (source IN ('seed', 'lock', 'admin', 'plugin')),
     dsl_text     TEXT NOT NULL,
     compiled_ast JSONB NOT NULL,             -- Pre-parsed AST from PolicyCompiler
     enabled      BOOLEAN NOT NULL DEFAULT true,
@@ -1158,7 +1174,7 @@ CREATE TABLE access_audit_log (
     subject       TEXT NOT NULL,
     action        TEXT NOT NULL,
     resource      TEXT NOT NULL,
-    effect        TEXT NOT NULL CHECK (effect IN ('allow', 'deny', 'default_deny')),
+    effect        TEXT NOT NULL CHECK (effect IN ('allow', 'deny', 'default_deny', 'system_bypass')),
     policy_id     TEXT,
     policy_name   TEXT,
     attributes      JSONB,
@@ -1228,11 +1244,12 @@ tolerable.
 
 The `effect` column in `access_audit_log` maps to the Go `Effect` enum:
 
-| Go Constant         | DB Value         |
-| ------------------- | ---------------- |
-| `EffectAllow`       | `"allow"`        |
-| `EffectDeny`        | `"deny"`         |
-| `EffectDefaultDeny` | `"default_deny"` |
+| Go Constant           | DB Value           |
+| --------------------- | ------------------ |
+| `EffectAllow`         | `"allow"`          |
+| `EffectDeny`          | `"deny"`           |
+| `EffectDefaultDeny`   | `"default_deny"`   |
+| `EffectSystemBypass`  | `"system_bypass"`  |
 
 The `effect` column is the sole decision indicator — there is no separate
 `decision` column. `allow` means the request was allowed; `deny` or
@@ -1250,11 +1267,51 @@ updating `description` modifies the main `access_policies` row directly without
 creating a version record. The `version` column on `access_policies` increments
 only on DSL changes.
 
+### Audit Log Configuration
+
+The audit logger supports three modes, configurable via server settings:
+
+```go
+type AuditMode string
+
+const (
+    AuditOff        AuditMode = "off"          // No audit logging
+    AuditDenialsOnly AuditMode = "denials_only" // Log deny + default_deny only
+    AuditAll        AuditMode = "all"           // Log all decisions
+)
+
+type AuditConfig struct {
+    Mode           AuditMode     // Default: AuditDenialsOnly
+    RetainDenials  time.Duration // Default: 90 days
+    RetainAllows   time.Duration // Default: 7 days (only relevant when Mode=all)
+    PurgeInterval  time.Duration // Default: 24 hours
+}
+```
+
+| Mode           | What is logged            | Typical use case             |
+| -------------- | ------------------------- | ---------------------------- |
+| `off`          | Nothing                   | Development, performance     |
+| `denials_only` | Deny + default_deny       | Production default           |
+| `all`          | All decisions incl. allow | Debugging, compliance audit  |
+
+The default mode is `denials_only` — this balances operational visibility with
+storage efficiency. At 200 users with ~5 checks/sec, `denials_only` mode
+produces far fewer records than `all` mode (most checks result in allows).
+
+**System bypass auditing:** When audit mode is `all`, system subject bypasses
+SHOULD also be logged with `effect = "system_bypass"` to provide a complete
+audit trail. In `denials_only` mode, system bypasses are not logged.
+
 ### Audit Log Retention
 
-Audit records older than 90 days SHOULD be purged by a periodic Go background
-job. The purge interval and retention period SHOULD be configurable via server
-settings. If the audit table exceeds 10M rows, PostgreSQL table partitioning by
+Audit records MUST be purged by a periodic Go background job. The purge
+interval and retention periods are configurable via `AuditConfig`:
+
+- **Denials:** Retained for 90 days (default)
+- **Allows:** Retained for 7 days (default, only relevant in `all` mode)
+- **Purge interval:** Every 24 hours (default)
+
+If the audit table exceeds 10M rows, PostgreSQL table partitioning by
 month MAY be introduced.
 
 ### Visibility Defaults
@@ -1290,7 +1347,7 @@ simplified lock syntax. Locks compile to scoped policies behind the scenes.
 > lock my-chest/read = faction:rebels
 > lock me/backstory/read = me | flag:storyteller
 > lock here/enter = level:>=5 & !flag:banned
-> lock armory/enter = (faction:rebels | faction:alliance) & rank:>=3
+> lock armory/enter = (faction:rebels | faction:alliance) & level:>=3
 > unlock my-chest/read
 ```
 
@@ -1454,10 +1511,14 @@ Available lock tokens:
 The `lock tokens` command reads from the token registry at runtime. Plugin
 tokens appear automatically when the plugin is loaded.
 
-**Ownership constraint:** Lock-generated policies can ONLY target resources the
-character owns. The lock command MUST verify ownership before creating the
-policy. A character can never write a lock that affects another player's
-resources.
+**Access constraint:** Lock-generated policies can ONLY target resources the
+character has write access to. The lock command MUST verify write permission
+(via `Evaluate()`) before creating the policy. This means:
+
+- Characters can lock their own properties and objects (they have write access)
+- Builders can lock locations they have write access to (no ownership concept
+  for locations — write access is sufficient)
+- A character can never write a lock that affects resources they cannot modify
 
 **Lock policy lifecycle:**
 
@@ -1506,7 +1567,7 @@ policy enable <name>
 policy disable <name>
 policy test <subject> <action> <resource> [--verbose] [--json]
 policy history <name> [--limit=N]
-policy audit [--subject=X] [--action=Y] [--decision=denied] [--last=1h] [--limit=N]
+policy audit [--subject=X] [--action=Y] [--effect=denied] [--last=1h] [--limit=N]
 ```
 
 **Naming conventions:** The `seed:` prefix is reserved for system use. The
@@ -1582,43 +1643,21 @@ order does not matter — a `forbid` added last still blocks a `permit` added
 first. If this causes confusion, admins SHOULD write more specific conditions
 rather than relying on ordering.
 
-## Migration from Static Roles
+## Replacing Static Roles
+
+**Design decision:** HoloMUSH has no production releases. The static
+`AccessControl` system from Epic 3 is replaced entirely by `AccessPolicyEngine`.
+There is no backward-compatibility adapter, no shadow mode, and no incremental
+migration. All call sites switch to `Evaluate()` directly. This simplifies the
+design and eliminates an entire class of complexity (normalization helpers,
+migration adapters, shadow mode metrics, cutover criteria). See decisions #36
+and #37 in the decisions log.
 
 ### Seed Policies
 
-The current `StaticAccessControl` permissions translate to seed policies. Two
-naming corrections are applied during this translation:
-
-- **Subject prefix:** The static system uses `char:` as an abbreviation; the
-  ABAC system normalizes to `character:` for consistency with the resource prefix
-  format. The adapter accepts both during migration.
-- **Command names:** The static system uses legacy `@`-prefixed builder commands
-  (`@dig`, `@create`, etc.) inherited from traditional MU\* conventions.
-  HoloMUSH's command system (Epic 6) uses plain names without prefixes. The seed
-  policies use the correct plain names.
-
-**New actions:** The `enter` action is introduced by the ABAC system for
-location entry control. The static system handles movement through
-`write:character:$self` (changing the character's location). Shadow mode
-validation MUST account for this semantic difference — `enter` checks are new
-policy-only paths with no static-system equivalent.
-
-**Command name normalization:** The static system uses `@`-prefixed command
-names (`@dig`, `@create`, etc.) in permission strings, while the ABAC seed
-policies use plain names (`dig`, `create`) matching Epic 6 conventions. The
-`accessControlAdapter` MUST normalize `@`-prefixed command names at its entry
-point, stripping the `@` prefix from resource strings matching
-`command:@*` before passing them to the engine. This protects all callers from
-the legacy naming convention rather than requiring each shadow mode comparison
-to handle it.
-
-**Intentional permission expansion:** The seed policies below intentionally
-grant builders `delete` on locations, which the static system does not. The
-static system's omission of `delete:location:*` for builders was a gap — builders
-who can `write` (create/modify) locations SHOULD also be able to delete them.
-This expansion is validated during shadow mode by excluding `delete` on
-`location` resources from the agreement comparison, alongside `enter` actions
-and `@`-prefixed command names.
+The seed policies define the default permission model. They use the ABAC
+engine's full capabilities (attribute-based conditions, `enter` action for
+location control) rather than replicating the static system's limitations.
 
 ```text
 // player-powers: self access
@@ -1685,136 +1724,50 @@ upgrades. If a server version needs to fix a seed policy bug, it MUST use a
 migration that explicitly updates the affected policy, logged as a version
 change with a `change_note` explaining the upgrade.
 
-### Migration Strategy
+### Implementation Sequence
 
-1. **Phase 7.1 (Policy Schema):** Create DB tables and policy store. Seed with
-   the translated policies above. `StaticAccessControl` continues to serve all
-   checks.
+1. **Phase 7.1 (Policy Schema):** Create DB tables and policy store.
 
-2. **Phase 7.3 (Policy Engine):** Build `AccessPolicyEngine` and wrap with
-   adapter. Swap the adapter into dependency injection where
-   `StaticAccessControl` was. Both implementations exist — the adapter now serves
-   checks backed by seed policies.
+2. **Phase 7.2 (DSL & Compiler):** Build DSL parser, evaluator, and
+   `PolicyCompiler`. Unit test with table-driven tests.
 
-3. **Shadow mode validation:** Run both engines in parallel during testing.
-   Evaluate with both, log disagreements, fix policy gaps.
+3. **Phase 7.3 (Policy Engine):** Build `AccessPolicyEngine`, attribute
+   providers, and audit logger. Replace `AccessControl` with
+   `AccessPolicyEngine` in dependency injection. Update all call sites to use
+   `Evaluate()` directly.
 
-   **Cutover criteria:** Shadow mode runs in staging for at least 7 days with
-   at least 10,000 authorization checks collected. 100% agreement means
-   `Decision.Allowed` matches `StaticAccessControl.Check()` for all checks,
-   excluding known semantic differences:
-   - `action == "enter"` (new ABAC-only path, no static equivalent)
-   - `action == "delete" && resource starts with "location:"` (intentional
-     permission expansion for builders)
-   - `resource starts with "command:@"` (normalized to plain names in ABAC;
-     handled by `normalizeResource()` before engine evaluation)
+4. **Phase 7.4 (Seed & Bootstrap):** Seed policies on first startup. Verify
+   with integration tests.
 
-   Exclusion matching is applied per-check in the `migrationAdapter` before
-   recording a disagreement. Any other disagreement blocks cutover and triggers
-   immediate investigation.
-   After meeting criteria, submit PR to remove `StaticAccessControl`. Rollback:
-   revert the removal PR if post-cutover bugs are found.
+5. **Phase 7.5 (Locks & Admin):** Build lock system, admin commands, property
+   model.
 
-   **Shadow mode adapter:** During shadow mode, the adapter MUST preserve engine
-   errors for comparison rather than swallowing them:
+6. **Phase 7.6 (Cleanup):** Remove `StaticAccessControl`, `AccessControl`
+   interface, `capability.Enforcer`, and all related code. Remove legacy
+   `char:` prefix handling and `@`-prefixed command name support from the
+   codebase.
 
-   ```go
-   // migrationAdapter wraps AccessPolicyEngine for shadow mode validation.
-   // Unlike accessControlAdapter, it preserves errors for disagreement analysis.
-   type migrationAdapter struct {
-       engine  AccessPolicyEngine
-       static  *StaticAccessControl
-       logger  *slog.Logger
-       metrics *shadowModeMetrics
-   }
+**Call site inventory** (packages to update from `AccessControl` to
+`AccessPolicyEngine`):
 
-   // shadowModeMetrics tracks shadow mode validation statistics.
-   // Export to Prometheus for visibility into cutover readiness.
-   type shadowModeMetrics struct {
-       totalChecks   atomic.Int64
-       agreements    atomic.Int64
-       disagreements atomic.Int64
-       engineErrors  atomic.Int64
-   }
+| Package                                | Usage                               |
+| -------------------------------------- | ----------------------------------- |
+| `internal/command/dispatcher`          | Command execution authorization     |
+| `internal/command/rate_limit_middleware`| Rate limit bypass for admins        |
+| `internal/command/handlers/boot`       | Boot command permission check       |
+| `internal/world/service`               | World model operation authorization |
+| `internal/plugin/hostfunc/commands`    | Plugin command execution auth       |
+| `internal/core/broadcaster` (test)     | Test mock injection                 |
 
-   func (a *migrationAdapter) Check(ctx context.Context, subject, action, resource string) bool {
-       a.metrics.totalChecks.Add(1)
-       staticResult := a.static.Check(ctx, subject, action, resource)
-
-       // Normalize for engine: strip @ prefix from command names, normalize char: → character:
-       engineSubject := normalizeSubjectPrefix(subject)
-       engineResource := normalizeResource(resource)
-       decision, err := a.engine.Evaluate(ctx, AccessRequest{
-           Subject: engineSubject, Action: action, Resource: engineResource,
-       })
-       if err != nil {
-           a.metrics.engineErrors.Add(1)
-           a.logger.Warn("shadow mode: engine error (not a disagreement)",
-               "error", err, "static_result", staticResult)
-           return staticResult // Static system is authoritative during shadow mode
-       }
-       if decision.Allowed != staticResult {
-           a.metrics.disagreements.Add(1)
-           a.logger.Error("shadow mode: DISAGREEMENT",
-               "subject", subject, "action", action, "resource", resource,
-               "static", staticResult, "engine", decision.Allowed,
-               "policy", decision.PolicyID)
-       } else {
-           a.metrics.agreements.Add(1)
-       }
-       return staticResult // Static system is authoritative during shadow mode
-   }
-   ```
-
-   **Normalization helpers** (used by both `accessControlAdapter` and
-   `migrationAdapter`):
-
-   ```go
-   func normalizeSubjectPrefix(subject string) string {
-       if strings.HasPrefix(subject, "char:") {
-           return "character:" + strings.TrimPrefix(subject, "char:")
-       }
-       return subject
-   }
-
-   func normalizeResource(resource string) string {
-       if strings.HasPrefix(resource, "command:@") {
-           return "command:" + strings.TrimPrefix(resource, "command:@")
-       }
-       return resource
-   }
-   ```
-
-   Shadow mode comparison operates per authorization check (subject+action+
-   resource tuple), not per policy match. Semantic difference exclusions apply
-   to individual checks, not to entire policies.
-
-4. **Caller migration (holomush-c6qch):** Callers incrementally migrate from
-   `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()` for richer error
-   handling.
-
-   **Call site inventory** (packages depending on `access.AccessControl`):
-
-   | Package                                  | Usage                               |
-   | ---------------------------------------- | ----------------------------------- |
-   | `internal/command/dispatcher`             | Command execution authorization     |
-   | `internal/command/rate_limit_middleware`   | Rate limit bypass for admins        |
-   | `internal/command/handlers/boot`          | Boot command permission check       |
-   | `internal/world/service`                  | World model operation authorization |
-   | `internal/plugin/hostfunc/commands`       | Plugin command execution auth       |
-   | `internal/plugin/hostfunc/functions`      | Plugin host function auth           |
-   | `internal/core/broadcaster` (test)        | Test mock injection                 |
-
-   This list is derived from the current codebase. Additional call sites may
-   exist by the time phase 7.3 begins — run `grep -r "AccessControl"
-   internal/ --include="*.go"` to get the current inventory.
+This list is derived from the current codebase. Run `grep -r "AccessControl"
+internal/ --include="*.go"` to get the current inventory before starting
+phase 7.3.
 
 ### Plugin Capability Migration
 
 The current `capability.Enforcer` handles plugin permissions separately. Under
-ABAC, plugin manifests become seed policies. The Enforcer becomes unnecessary
-once all plugin capabilities are expressed as policies and can be removed
-alongside `StaticAccessControl`.
+ABAC, plugin manifests become seed policies. The Enforcer is removed alongside
+`StaticAccessControl` in phase 7.6.
 
 ## Testing Strategy
 
@@ -1833,20 +1786,17 @@ internal/access/policy/
                           provider errors, cache invalidation
 
 internal/access/policy/attribute/
-  resolver_test.go      — Orchestrates multiple providers
+  resolver_test.go      — Orchestrates multiple providers, timeout enforcement
   character_test.go     — Resolves character attrs from mock world service
   location_test.go      — Resolves location attrs from mock world service
   property_test.go      — Resolves property attrs including visibility/lists
-  environment_test.go   — Time, maintenance mode, game state
+  environment_test.go   — Time, maintenance mode
 
 internal/access/policy/store/
   postgres_test.go      — CRUD, versioning, LISTEN/NOTIFY dispatch
 
 internal/access/policy/audit/
-  logger_test.go        — Logs denials, optional allows, attribute snapshots
-
-internal/access/
-  adapter_test.go       — Adapter wraps engine, fail-closed on error
+  logger_test.go        — Mode control (off/denials/all), attribute snapshots
 ```
 
 ### DSL Evaluator Coverage
@@ -1869,12 +1819,14 @@ Describe("AccessPolicyEngine", func() {
 
     Describe("Lock-generated policies", func() {
         It("creates a scoped policy from lock syntax", func() { ... })
-        It("rejects locks on unowned resources", func() { ... })
+        It("rejects locks on resources without write access", func() { ... })
         It("admin forbid overrides player lock permit", func() { ... })
     })
 
-    Describe("Shadow mode migration", func() {
-        It("StaticAccessControl and AccessPolicyEngine agree on seed policies", func() { ... })
+    Describe("Audit logging", func() {
+        It("logs denials in denials_only mode", func() { ... })
+        It("logs all decisions in all mode", func() { ... })
+        It("logs nothing in off mode", func() { ... })
     })
 
     Describe("Cache invalidation via LISTEN/NOTIFY", func() {
@@ -1883,32 +1835,26 @@ Describe("AccessPolicyEngine", func() {
 })
 ```
 
-### Shadow Mode Validation
-
-During migration, a test harness runs both `StaticAccessControl` and
-`AccessPolicyEngine` against the same requests and asserts identical results.
-This confirms the seed policies faithfully reproduce the static role behavior.
-
 ## Acceptance Criteria
 
 - [ ] ABAC policy data model documented (subjects, resources, actions, conditions)
 - [ ] Attribute schema defined for subjects (players, plugins, connections)
 - [ ] Attribute schema defined for resources (objects, rooms, commands, properties)
-- [ ] Environment attributes defined (time, location, game state)
+- [ ] Environment attributes defined (time, maintenance mode)
 - [ ] Policy DSL grammar specified with full expression language
 - [ ] Policy storage format designed (PostgreSQL schema with versioning)
 - [ ] Policy evaluation algorithm documented (deny-overrides, no priority)
-- [ ] Audit event schema defined for access decisions
+- [ ] Audit log with configurable modes (off, denials-only, all)
 - [ ] Plugin attribute contribution interface designed (registration-based)
 - [ ] Admin commands documented for policy management
-- [ ] Player lock system designed for owned resource access control
-- [ ] Lock syntax compiles to scoped policies with ownership verification
+- [ ] Player lock system designed with write-access verification
+- [ ] Lock syntax compiles to scoped policies
 - [ ] Property model designed as first-class entities
-- [ ] Migration path documented from static permissions to full ABAC
-- [ ] Shadow mode validates seed policies match static role behavior
+- [ ] Direct replacement of StaticAccessControl documented (no adapter)
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented
+- [ ] Provider timeout and operational limits defined
 
 ## References
 
