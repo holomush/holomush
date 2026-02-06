@@ -89,9 +89,9 @@ The lock syntax uses registered token predicates — not hard-coded vocabulary. 
 
 **Plugin tokens** (registered at plugin load, namespaced by plugin ID):
 
-| Token              | Type     | Example                  | Compiles To                               |
-| ------------------ | -------- | ------------------------ | ----------------------------------------- |
-| `reputation.score` | numeric  | `reputation.score:>=50`  | `principal.reputation.score >= 50`        |
+| Token              | Type     | Example                    | Compiles To                               |
+| ------------------ | -------- | -------------------------- | ----------------------------------------- |
+| `reputation.score` | numeric  | `reputation.score:>=50`    | `principal.reputation.score >= 50`        |
 | `guilds.primary`   | equality | `guilds.primary:merchants` | `principal.guilds.primary == "merchants"` |
 
 Lock compilation generates a `permit` policy scoped to the specific resource and action:
@@ -156,8 +156,10 @@ ID string. The engine validates this at registration and rejects non-namespaced 
 incorrectly-prefixed plugin tokens. Core tokens (`faction`, `flag`, `level`) are
 un-namespaced because they ship with the engine.
 
-Duplicate token names are a **fatal startup error**. The server MUST NOT start if any
-token name collides. This fail-fast behavior catches naming conflicts at deploy time.
+Duplicate token names are logged as a **WARN** and resolved by last-registered-wins.
+The server logs the collision (including both the existing and new provider) so operators
+can investigate, but continues startup. This avoids a single misbehaving plugin from
+preventing the entire server from starting.
 
 ## Consequences
 
@@ -179,7 +181,8 @@ token name collides. This fail-fast behavior catches naming conflicts at deploy 
 
 - Lock-generated policies use the naming convention `lock:{type}:{id}:{action}` for
   identification and cleanup
-- Token conflicts are caught at server startup, not at lock authoring time
+- Token conflicts are logged as WARN at startup (last-registered-wins), not at lock
+  authoring time
 - The `lock tokens` command reads from the registry at runtime — output changes as
   plugins load and unload
 

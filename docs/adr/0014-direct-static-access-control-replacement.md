@@ -13,7 +13,7 @@ HoloMUSH's current authorization system consists of two components:
    `$self`/`$here` token resolution, and three static roles (player, builder, admin)
 2. **`capability.Enforcer`**: Plugin permission checking using manifest-declared capabilities
 
-These are used at ~29 call sites across the codebase (primarily `internal/world/service.go`
+These are used at ~35 call sites across the codebase (primarily `internal/world/service.go`
 and `internal/command/dispatcher.go`). All call sites use the `AccessControl.Check(ctx,
 subject, action, resource) bool` interface.
 
@@ -58,13 +58,13 @@ and `capability.Enforcer` are deleted.
 | Aspect     | Assessment                                                                                                          |
 | ---------- | ------------------------------------------------------------------------------------------------------------------- |
 | Strengths  | Clean cutover; no temporary adapter code; callers get rich `Decision` type; no subject/resource normalization layer |
-| Weaknesses | All ~29 call sites must add error handling for `(Decision, error)` return; large single-phase change                |
+| Weaknesses | All ~29 production call sites must add error handling for `(Decision, error)` return; large single-phase change     |
 
 ## Decision
 
 **Option C: Direct replacement.** No backward-compatibility adapter. No shadow mode.
 
-All ~29 call sites update from `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()`
+All ~29 production call sites update from `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()`
 in phase 7.3 of the implementation. The `AccessControl` interface, `StaticAccessControl`,
 and `capability.Enforcer` are deleted in phase 7.6.
 
@@ -99,12 +99,13 @@ package defines prefix constants). The `char:` prefix is not supported by the ne
 
 | Package                                     | Call Sites | Change Required                         |
 | ------------------------------------------- | ---------- | --------------------------------------- |
-| `internal/world/service.go`                 | 18         | `Check()` → `Evaluate()` + error handle |
+| `internal/world/service.go`                 | 24         | `Check()` → `Evaluate()` + error handle |
 | `internal/command/dispatcher.go`            | 1          | Capability loop → single `Evaluate()`   |
 | `internal/command/rate_limit_middleware.go` | 1          | `Check()` → `Evaluate()` + error handle |
 | `internal/command/handlers/boot.go`         | 1          | `Check()` → `Evaluate()` + error handle |
 | `internal/plugin/hostfunc/commands.go`      | 1          | `Check()` → `Evaluate()` + error handle |
-| `internal/core/broadcaster` (test)          | ~7         | Update mock injection                   |
+| `internal/plugin/hostfunc/functions.go`     | 1          | `Check()` → `Evaluate()` + error handle |
+| `internal/core/broadcaster` (test only)     | 6          | Update mock injection (no migration)    |
 
 ## Rationale
 
@@ -138,7 +139,7 @@ code with no long-term value.
 
 **Negative:**
 
-- All ~29 call sites must be updated in a single phase (large but mechanical change)
+- All ~29 production call sites must be updated in a single phase (large but mechanical change)
 - Call sites must handle `(Decision, error)` return instead of simple `bool`
 - No gradual rollout — all authorization switches at once
 

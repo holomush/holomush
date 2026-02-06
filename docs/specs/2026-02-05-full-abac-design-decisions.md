@@ -785,16 +785,16 @@ optional allow logging. There was no way to disable audit logging entirely
 **Decision:** Add three audit modes: `off`, `denials_only`, `all`. Default to
 `denials_only` for production.
 
-| Mode           | What is logged              | Use case                     |
-| -------------- | --------------------------- | ---------------------------- |
-| `off`          | Nothing                     | Development, performance     |
-| `denials_only` | Deny + default_deny         | Production default           |
-| `all`          | All decisions incl. allow   | Debugging, compliance audit  |
+| Mode           | What is logged            | Use case                    |
+| -------------- | ------------------------- | --------------------------- |
+| `off`          | Nothing                   | Development, performance    |
+| `denials_only` | Deny + default_deny       | Production default          |
+| `all`          | All decisions incl. allow | Debugging, compliance audit |
 
 When mode is `all`, system subject bypasses are also logged with
 `effect = "system_bypass"` to provide a complete audit trail.
 
-**Rationale:** At 200 users with ~50 checks/sec peak, `all` mode produces
+**Rationale:** At 200 users with ~120 checks/sec peak, `all` mode produces
 ~10M records/day (~35GB at 7-day retention). `denials_only` mode reduces this
 to a small fraction (most checks result in allows). `off` mode eliminates
 audit overhead entirely for development. The mode is configurable via server
@@ -933,10 +933,10 @@ location.
 
 ```sql
 WITH RECURSIVE chain AS (
-    SELECT id, location_id, contained_in FROM objects WHERE id = $1
+    SELECT id, location_id, contained_in_object_id FROM objects WHERE id = $1
     UNION ALL
-    SELECT o.id, o.location_id, o.contained_in
-    FROM objects o JOIN chain c ON o.id = c.contained_in
+    SELECT o.id, o.location_id, o.contained_in_object_id
+    FROM objects o JOIN chain c ON o.id = c.contained_in_object_id
 )
 SELECT location_id FROM chain WHERE location_id IS NOT NULL LIMIT 1;
 ```
@@ -1041,7 +1041,7 @@ prefix prevents accidental collision with admin-created policies and enables
 
 **Review finding (I7):** The original estimate of ~864K records/day assumed
 ~5 checks/sec. Real MUSH workloads (movement, look, inventory, say, property
-reads) produce ~50 checks/sec peak at 200 users.
+reads) produce ~120 checks/sec peak at 200 users.
 
 **Decision:** Revise the estimate: `all` mode produces ~10M records/day (~35GB
 at 7-day retention with uncompressed audit rows). `denials_only` mode remains
@@ -1050,4 +1050,3 @@ practical at a fraction of this volume.
 **Rationale:** The corrected estimate affects operational guidance (disk
 provisioning, retention policy, partition strategy). Admins need accurate
 numbers to make informed decisions about audit mode selection.
-

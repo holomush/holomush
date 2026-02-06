@@ -49,9 +49,15 @@ Players control access to their own properties through a simplified lock system.
 | Property model        | First-class entities                    | Conceptual uniformity — everything is an entity                   |
 | Plugin attributes     | Registration-based providers            | Synchronous, consistent with eager resolution                     |
 | Audit logging         | Separate PostgreSQL table               | Clean separation from game events, independent retention          |
-| Migration             | Direct replacement (no adapter)         | Greenfield — no releases, clean cutover to ABAC                   |
+| Migration             | Direct replacement (no adapter)         | Greenfield — no releases, clean cutover via seed policies         |
 | Cache invalidation    | PostgreSQL LISTEN/NOTIFY (in Go code)   | Push-based, no polling overhead                                   |
 | Player access control | Layered: metadata + locks + full policy | Progressive complexity for different user roles                   |
+
+**Seed policies** are the default permission policies installed automatically
+at first server startup, replacing the static role definitions from Epic 3.
+They define baseline access (movement, self-access, builder/admin privileges)
+using the ABAC policy language. See [Seed Policies](#seed-policies) for the
+full set.
 
 ## Architecture
 
@@ -200,13 +206,13 @@ type CompiledPolicy struct {
   "conditions": [
     {
       "op": "==",
-      "left": {"type": "attr_ref", "root": "resource", "path": ["parent_type"]},
-      "right": {"type": "literal", "value": "character"}
+      "left": { "type": "attr_ref", "root": "resource", "path": ["parent_type"] },
+      "right": { "type": "literal", "value": "character" }
     },
     {
       "op": "==",
-      "left": {"type": "attr_ref", "root": "resource", "path": ["parent_id"]},
-      "right": {"type": "attr_ref", "root": "principal", "path": ["id"]}
+      "left": { "type": "attr_ref", "root": "resource", "path": ["parent_id"] },
+      "right": { "type": "attr_ref", "root": "principal", "path": ["id"] }
     }
   ],
   "globs": {
@@ -303,7 +309,11 @@ contribute attributes to the bags.
 
 Session resolution errors SHOULD use oops error codes for structured handling:
 `SESSION_NOT_FOUND`, `SESSION_STORE_ERROR`, `SESSION_NO_CHARACTER`,
-`SESSION_CHARACTER_DELETED`.
+`SESSION_CHARACTER_INTEGRITY`. The `SESSION_CHARACTER_INTEGRITY` code
+reflects that this is a world model integrity violation (the character was
+deleted while sessions still referenced it), not a normal session lifecycle
+event. Session cleanup SHOULD invalidate sessions on character deletion to
+prevent this from occurring.
 
 ### Decision
 
@@ -422,6 +432,12 @@ authorization-gated data MUST use pre-resolved attributes from the bags or
 access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
 
+**Enforcement:** The engine SHOULD set a context flag
+(`context.WithValue(ctx, resolving, true)`) before calling providers.
+`Evaluate()` MUST check this flag at entry and panic if already set. This
+makes re-entrance violations fail-fast during development and testing rather
+than producing subtle deadlocks in production.
+
 **Provider design principles:**
 
 1. Providers MUST only access repositories, never services
@@ -443,15 +459,15 @@ marked MUST always exist when the entity is valid; MAY attributes may be nil.
 
 **CharacterProvider** (`character` namespace):
 
-| Attribute  | Type     | Requirement | Description                                |
-| ---------- | -------- | ----------- | ------------------------------------------ |
-| `type`     | string   | MUST        | Always `"character"`                       |
-| `id`       | string   | MUST        | ULID of the character                      |
-| `name`     | string   | MUST        | Character display name                     |
-| `role`     | string   | MUST        | One of: `"player"`, `"builder"`, `"admin"` |
-| `faction`  | string   | MAY         | Faction affiliation (nil if unaffiliated)  |
-| `level`    | float64  | MUST        | Character level (>= 0)                     |
-| `flags`    | []string | MUST        | Arbitrary flags (empty array if none)      |
+| Attribute  | Type     | Requirement | Description                                   |
+| ---------- | -------- | ----------- | --------------------------------------------- |
+| `type`     | string   | MUST        | Always `"character"`                          |
+| `id`       | string   | MUST        | ULID of the character                         |
+| `name`     | string   | MUST        | Character display name                        |
+| `role`     | string   | MUST        | One of: `"player"`, `"builder"`, `"admin"`    |
+| `faction`  | string   | MAY         | Faction affiliation (nil if unaffiliated)     |
+| `level`    | float64  | MUST        | Character level (>= 0)                        |
+| `flags`    | []string | MUST        | Arbitrary flags (empty array if none)         |
 | `location` | string   | MUST        | ULID of current location (not a display name) |
 
 `CharacterProvider.ResolveSubject` MUST query the world model (or equivalent)
@@ -471,29 +487,29 @@ provider's constructor.
 
 **PropertyProvider** (`property` namespace):
 
-| Attribute       | Type     | Requirement | Description                               |
-| --------------- | -------- | ----------- | ----------------------------------------- |
-| `type`          | string   | MUST        | Always `"property"`                       |
-| `id`            | string   | MUST        | ULID of the property                      |
-| `name`          | string   | MUST        | Property name                             |
-| `parent_type`   | string   | MUST        | Parent entity type                        |
-| `parent_id`     | string   | MUST        | Parent entity ULID                        |
-| `owner`         | string   | MAY         | Subject who created/set this property     |
-| `visibility`    | string   | MUST        | One of: public, private, restricted, etc. |
-| `flags`         | []string | MUST        | Arbitrary flags (empty array if none)     |
-| `visible_to`    | []string | MAY         | Character IDs (only when restricted)      |
-| `excluded_from` | []string | MAY         | Character IDs (only when restricted)      |
-| `parent_location` | string | MAY         | ULID of parent entity's location          |
+| Attribute         | Type     | Requirement | Description                               |
+| ----------------- | -------- | ----------- | ----------------------------------------- |
+| `type`            | string   | MUST        | Always `"property"`                       |
+| `id`              | string   | MUST        | ULID of the property                      |
+| `name`            | string   | MUST        | Property name                             |
+| `parent_type`     | string   | MUST        | Parent entity type                        |
+| `parent_id`       | string   | MUST        | Parent entity ULID                        |
+| `owner`           | string   | MAY         | Subject who created/set this property     |
+| `visibility`      | string   | MUST        | One of: public, private, restricted, etc. |
+| `flags`           | []string | MUST        | Arbitrary flags (empty array if none)     |
+| `visible_to`      | []string | MAY         | Character IDs (only when restricted)      |
+| `excluded_from`   | []string | MAY         | Character IDs (only when restricted)      |
+| `parent_location` | string   | MAY         | ULID of parent entity's location          |
 
 **EnvironmentProvider** (`env` namespace):
 
-| Attribute     | Type   | Requirement | Description                           |
-| ------------- | ------ | ----------- | ------------------------------------- |
-| `time`        | string  | MUST        | Current time (RFC 3339)               |
-| `hour`        | float64 | MUST        | Current hour (0-23, always UTC)       |
-| `minute`      | float64 | MUST        | Current minute (0-59, always UTC)     |
-| `day_of_week` | string  | MUST        | Day name (e.g., `"monday"`, lowercase)|
-| `maintenance` | bool   | MUST        | Whether server is in maintenance mode |
+| Attribute     | Type    | Requirement | Description                            |
+| ------------- | ------- | ----------- | -------------------------------------- |
+| `time`        | string  | MUST        | Current time (RFC 3339)                |
+| `hour`        | float64 | MUST        | Current hour (0-23, always UTC)        |
+| `minute`      | float64 | MUST        | Current minute (0-59, always UTC)      |
+| `day_of_week` | string  | MUST        | Day name (e.g., `"monday"`, lowercase) |
+| `maintenance` | bool    | MUST        | Whether server is in maintenance mode  |
 
 **Timezone:** `hour`, `minute`, and `day_of_week` are always UTC. Game-world
 time zones are not modeled — if a future phase adds in-game time, it SHOULD use
@@ -507,14 +523,14 @@ future phase when game state is implemented.
 
 **ObjectProvider** (`object` namespace):
 
-| Attribute  | Type     | Requirement | Description                               |
-| ---------- | -------- | ----------- | ----------------------------------------- |
-| `type`     | string   | MUST        | Always `"object"`                         |
-| `id`       | string   | MUST        | ULID of the object                        |
-| `name`     | string   | MUST        | Object display name                       |
-| `location` | string   | MUST        | ULID of containing location               |
-| `owner`    | string   | MAY         | Subject who owns this object              |
-| `flags`    | []string | MUST        | Arbitrary flags (empty array if none)     |
+| Attribute  | Type     | Requirement | Description                           |
+| ---------- | -------- | ----------- | ------------------------------------- |
+| `type`     | string   | MUST        | Always `"object"`                     |
+| `id`       | string   | MUST        | ULID of the object                    |
+| `name`     | string   | MUST        | Object display name                   |
+| `location` | string   | MUST        | ULID of containing location           |
+| `owner`    | string   | MAY         | Subject who owns this object          |
+| `flags`    | []string | MUST        | Arbitrary flags (empty array if none) |
 
 **StreamProvider** (`stream` namespace):
 
@@ -522,10 +538,10 @@ Streams do not have a dedicated database table — their attributes are derived
 from the stream ID format (`location:01XYZ`, `character:01ABC`). The provider
 parses the stream ID and extracts relevant fields.
 
-| Attribute  | Type   | Requirement | Description                                 |
-| ---------- | ------ | ----------- | ------------------------------------------- |
-| `type`     | string | MUST        | Always `"stream"`                           |
-| `name`     | string | MUST        | Full stream path (e.g., `"location:01XYZ"`) |
+| Attribute  | Type   | Requirement | Description                                  |
+| ---------- | ------ | ----------- | -------------------------------------------- |
+| `type`     | string | MUST        | Always `"stream"`                            |
+| `name`     | string | MUST        | Full stream path (e.g., `"location:01XYZ"`)  |
 | `location` | string | MAY         | Extracted location ULID (if location stream) |
 
 **CommandProvider** (`command` namespace):
@@ -540,10 +556,10 @@ name. The resource string uses this full name: `command:policy test`. The
 SHOULD use `resource.name like "policy*"` to match all subcommands, or
 `resource.name == "policy test"` for specific subcommands.
 
-| Attribute | Type   | Requirement | Description                     |
-| --------- | ------ | ----------- | ------------------------------- |
-| `type`    | string | MUST        | Always `"command"`              |
-| `name`    | string | MUST        | Command name (e.g., `"say"`)   |
+| Attribute | Type   | Requirement | Description                  |
+| --------- | ------ | ----------- | ---------------------------- |
+| `type`    | string | MUST        | Always `"command"`           |
+| `name`    | string | MUST        | Command name (e.g., `"say"`) |
 
 **Action bag** is constructed by the engine directly from the `AccessRequest` —
 see [Action bag construction](#attributebags) above.
@@ -583,7 +599,7 @@ condition    = expr comparator expr
              | expr "in" expr
              | expr "." "containsAll" "(" list ")"
              | expr "." "containsAny" "(" list ")"
-             | expr "has" identifier { "." identifier }
+             | expr "has" identifier { "." identifier }  (* see note below *)
              | "!" condition
              | "(" conditions ")"
              | "if" condition "then" condition "else" condition
@@ -591,6 +607,12 @@ condition    = expr comparator expr
 
 expr       = attribute_ref | literal
 attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
+
+(* Note: The `has` production above uses `expr` as the left operand for grammar
+   simplicity, but the semantic restriction is stricter — the left side MUST be an
+   attribute root (`principal`, `resource`, `action`, or `env`). Expressions like
+   `5 has foo` MUST be rejected at parse or semantic-check time. *)
+
              (* "containsAll" and "containsAny" are reserved words that MUST NOT
                 appear as attribute names. Parser disambiguation: when the parser
                 encounters one of these tokens after ".", it uses one-token
@@ -629,16 +651,16 @@ it as a bare boolean. This makes the grammar LL(1) at the implementation level.
 
 **Operator precedence** (highest to lowest):
 
-| Precedence | Operator(s)                    | Associativity |
-| ---------- | ------------------------------ | ------------- |
-| 1          | `.` (attribute access)         | Left          |
-| 2          | `!` (boolean NOT)              | Right (unary) |
-| 3          | `has`, `in`, `like`            | Non-assoc     |
-| 4          | `==`, `!=`, `>`, `>=`, `<`, `<=` | Non-assoc  |
-| 5          | `containsAll`, `containsAny`  | Non-assoc     |
-| 6          | `&&` (boolean AND)             | Left          |
-| 7          | `\|\|` (boolean OR)            | Left          |
-| 8          | `if-then-else`                 | Right         |
+| Precedence | Operator(s)                      | Associativity |
+| ---------- | -------------------------------- | ------------- |
+| 1          | `.` (attribute access)           | Left          |
+| 2          | `!` (boolean NOT)                | Right (unary) |
+| 3          | `has`, `in`, `like`              | Non-assoc     |
+| 4          | `==`, `!=`, `>`, `>=`, `<`, `<=` | Non-assoc     |
+| 5          | `containsAll`, `containsAny`     | Non-assoc     |
+| 6          | `&&` (boolean AND)               | Left          |
+| 7          | `\|\|` (boolean OR)              | Left          |
+| 8          | `if-then-else`                   | Right         |
 
 **Grammar notes:**
 
@@ -715,14 +737,14 @@ it as a bare boolean. This makes the grammar LL(1) at the implementation level.
 
 The DSL uses dynamic typing with fail-safe behavior on type mismatches:
 
-| Scenario                              | Behavior                       |
-| ------------------------------------- | ------------------------------ |
-| Attribute missing (any operator)      | Condition evaluates to `false` |
-| Type mismatch (e.g., string > int)    | Condition evaluates to `false` |
-| `>`, `>=`, `<`, `<=` on non-number   | Condition evaluates to `false` |
+| Scenario                                 | Behavior                       |
+| ---------------------------------------- | ------------------------------ |
+| Attribute missing (any operator)         | Condition evaluates to `false` |
+| Type mismatch (e.g., string > int)       | Condition evaluates to `false` |
+| `>`, `>=`, `<`, `<=` on non-number       | Condition evaluates to `false` |
 | `containsAll`/`containsAny` on non-array | Condition evaluates to `false` |
-| `has` on non-existent attribute       | Returns `false`                |
-| `==`/`!=` across types               | Condition evaluates to `false` |
+| `has` on non-existent attribute          | Returns `false`                |
+| `==`/`!=` across types                   | Condition evaluates to `false` |
 
 **Cedar alignment:** When an attribute is missing, ALL comparisons — including
 `!=` — evaluate to `false`. This matches Cedar's behavior where a missing
@@ -761,7 +783,7 @@ when { if principal has faction then principal.faction != "enemy" else false };
 | `<`, `<=`      | Numbers          | `principal.level < 10`                                       |
 | `in` (list)    | Value in list    | `action in ["read", "write"]`                                |
 | `in` (expr)    | Value in attr    | `principal.id in resource.visible_to`                        |
-| `has`          | Attribute exists | `principal has faction`, `principal has reputation.score`     |
+| `has`          | Attribute exists | `principal has faction`, `principal has reputation.score`    |
 | `containsAll`  | Set: all present | `principal.flags.containsAll(["approved", "active"])`        |
 | `containsAny`  | Set: any present | `principal.flags.containsAny(["admin", "builder"])`          |
 | `if-then-else` | Conditional      | `if resource.restricted then principal.level >= 5 else true` |
@@ -964,11 +986,13 @@ The repository determines the resolution strategy based on `parent_type`:
   repository MUST walk up the `contained_in_object_id` chain until reaching an
   object with a non-NULL `location_id`. The existing
   `checkCircularContainmentTx` already uses recursive CTEs for this pattern.
-  The recursive CTE SHOULD include a depth limit (e.g., `LIMIT 20`) as
-  defense-in-depth against data corruption creating containment cycles.
-  If the chain is broken (orphaned containment) or exceeds the depth limit,
-  `parent_location` is nil and location-based visibility policies fail-safe
-  (deny).
+  The recursive CTE MUST include both a depth limit (e.g., 20 iterations) and
+  cycle detection (tracking visited IDs via an array path column, rejecting
+  IDs already in the path) as defense-in-depth against data corruption.
+  PostgreSQL `WITH RECURSIVE` does not automatically prevent cycles.
+  If the chain is broken (orphaned containment), cycles are detected, or the
+  depth limit is exceeded, `parent_location` is nil and location-based
+  visibility policies fail-safe (deny).
 
 ## Attribute Resolution
 
@@ -1043,15 +1067,24 @@ slog.Error("plugin attribute provider failed",
 **Error classification:** All errors result in fail-closed (deny) behavior.
 No errors are retryable within a single `Evaluate()` call.
 
-| Error Type              | Fail Mode           | Caller Action                      |
-| ----------------------- | ------------------- | ---------------------------------- |
-| Core provider failure    | Deny + return error    | Log and deny; callers inspect `err`            |
-| Plugin provider failure  | Deny (conditions fail) | Automatic — plugin attrs missing              |
-| Policy compilation error | Deny + return error    | Should not occur (compiled at store time)      |
-| Corrupted compiled policy | Deny + skip policy    | Log CRITICAL, disable in cache, continue eval |
-| Session not found        | Deny + return error    | Log, deny, session likely expired              |
-| Character deleted        | Deny + return error    | Log, deny, invalidate session                  |
-| Context cancelled        | Deny + return error    | Request was cancelled upstream                  |
+| Error Type                | Fail Mode              | Caller Action                                             |
+| ------------------------- | ---------------------- | --------------------------------------------------------- |
+| Core provider failure     | Deny + return error    | Log and deny; callers inspect `err`                       |
+| Plugin provider failure   | Deny (conditions fail) | Automatic — plugin attrs missing                          |
+| Policy compilation error  | Deny + return error    | Should not occur (compiled at store time)                 |
+| Corrupted compiled policy | Deny + skip policy     | Log CRITICAL, disable in cache, continue eval (see below) |
+| Session not found         | Deny + return error    | Log, deny, session likely expired                         |
+| Character deleted         | Deny + return error    | Log, deny, invalidate session                             |
+| Context cancelled         | Deny + return error    | Request was cancelled upstream                            |
+
+**Corrupted compiled policy** means the `CompiledPolicy` JSONB fails to
+unmarshal into the AST struct, or the unmarshaled AST violates structural
+invariants (e.g., a binary operator node missing a required operand). This
+should not occur in normal operation because policies are compiled at
+`PolicyStore.Create()` time. Corruption indicates data-level issues
+(direct DB edits, storage failures). When detected, the engine logs at
+CRITICAL level, disables the specific policy in the cache, and continues
+evaluating remaining policies.
 
 Callers of `AccessPolicyEngine.Evaluate()` can distinguish "denied by
 policy" (`err == nil, Decision.Effect == EffectDeny`) from "system failure"
@@ -1065,7 +1098,7 @@ alert).
 Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 │
 ├─ 1. System bypass
-│    subject == "system" → return Decision{Allowed: true, Effect: Allow}
+│    subject == "system" → return Decision{Allowed: true, Effect: SystemBypass}
 │
 ├─ 2. Resolve attributes (eager)
 │    ├─ Parse subject type/ID from subject string
@@ -1124,14 +1157,14 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 ### Performance Targets
 
-| Metric                              | Target  | Notes                            |
-| ----------------------------------- | ------- | -------------------------------- |
-| `Evaluate()` p99 latency (cold)    | <5ms    | First call in request            |
-| `Evaluate()` p99 latency (warm)    | <3ms    | Cached attributes from prior call|
-| Attribute resolution (cold)         | <2ms    | All providers combined           |
-| Attribute resolution (warm, cached) | <100μs  | Map lookup only                  |
-| DSL condition evaluation            | <1ms    | Per policy                       |
-| Cache reload                        | <50ms   | Full policy set reload on NOTIFY |
+| Metric                              | Target | Notes                             |
+| ----------------------------------- | ------ | --------------------------------- |
+| `Evaluate()` p99 latency (cold)     | <5ms   | First call in request             |
+| `Evaluate()` p99 latency (warm)     | <3ms   | Cached attributes from prior call |
+| Attribute resolution (cold)         | <2ms   | All providers combined            |
+| Attribute resolution (warm, cached) | <100μs | Map lookup only                   |
+| DSL condition evaluation            | <1ms   | Per policy                        |
+| Cache reload                        | <50ms  | Full policy set reload on NOTIFY  |
 
 **Benchmark scenario:** Targets assume 50 active policies (25 permit, 25
 forbid), average condition complexity of 3 operators per policy, 10 attributes
@@ -1142,12 +1175,12 @@ per-request `AttributeCache`. Implementation MUST include both
 
 **Worst-case bounds:**
 
-| Scenario                             | Bound   | Handling                                  |
-| ------------------------------------ | ------- | ----------------------------------------- |
-| All 50 policies match (pathological) | <10ms   | Linear scan is acceptable at this scale   |
-| Provider timeout                     | 100ms   | Context deadline; return deny + error     |
-| Cache miss storm (post-NOTIFY flood) | <100ms  | Lock during reload; stale reads tolerable |
-| Plugin provider slow                 | 50ms    | Per-provider context deadline             |
+| Scenario                             | Bound  | Handling                                  |
+| ------------------------------------ | ------ | ----------------------------------------- |
+| All 50 policies match (pathological) | <10ms  | Linear scan is acceptable at this scale   |
+| Provider timeout                     | 100ms  | Context deadline; return deny + error     |
+| Cache miss storm (post-NOTIFY flood) | <100ms | Lock during reload; stale reads tolerable |
+| Plugin provider slow                 | 50ms   | Per-provider context deadline             |
 
 The `Evaluate()` context MUST carry a 100ms deadline. If attribute resolution
 exceeds this, the engine returns `EffectDefaultDeny` with a timeout error.
@@ -1165,20 +1198,22 @@ be introduced — this would require changing the merge semantics from
 "last-registered wins" to a priority-based merge, since goroutine completion
 order is non-deterministic.
 
-The 100ms deadline is the total budget for all providers combined — individual
-50ms per-provider timeouts are subsumed by the overall deadline. If 3 plugin
-providers each take 45ms, the third will be cancelled when the 100ms deadline
-expires. A slow or misbehaving plugin cannot block the entire evaluation
+The 100ms deadline is the total budget for all providers combined — there is
+no per-provider timeout, only the overall 100ms deadline on `Evaluate()`.
+Providers that complete within the deadline contribute their results;
+providers still running when the deadline expires are cancelled via context
+cancellation. If 3 plugin providers each take 45ms, the third is cancelled at
+100ms total. A slow or misbehaving plugin cannot block the entire evaluation
 pipeline.
 
 **Operational limits:**
 
-| Limit                          | Value | Rationale                        |
-| ------------------------------ | ----- | -------------------------------- |
-| Maximum registered providers   | 20    | 10 core + 10 plugins             |
-| Maximum active policies        | 500   | Linear scan acceptable at scale  |
-| Maximum condition nesting      | 32    | Prevents stack overflow          |
-| Provider timeout (total)       | 100ms | Hard deadline on `Evaluate()`    |
+| Limit                        | Value | Rationale                       |
+| ---------------------------- | ----- | ------------------------------- |
+| Maximum registered providers | 20    | 10 core + 10 plugins            |
+| Maximum active policies      | 500   | Linear scan acceptable at scale |
+| Maximum condition nesting    | 32    | Prevents stack overflow         |
+| Provider timeout (total)     | 100ms | Hard deadline on `Evaluate()`   |
 
 **Measurement strategy:**
 
@@ -1384,12 +1419,12 @@ tolerable.
 
 The `effect` column in `access_audit_log` maps to the Go `Effect` enum:
 
-| Go Constant           | DB Value           |
-| --------------------- | ------------------ |
-| `EffectAllow`         | `"allow"`          |
-| `EffectDeny`          | `"deny"`           |
-| `EffectDefaultDeny`   | `"default_deny"`   |
-| `EffectSystemBypass`  | `"system_bypass"`  |
+| Go Constant          | DB Value          |
+| -------------------- | ----------------- |
+| `EffectAllow`        | `"allow"`         |
+| `EffectDeny`         | `"deny"`          |
+| `EffectDefaultDeny`  | `"default_deny"`  |
+| `EffectSystemBypass` | `"system_bypass"` |
 
 The `effect` column is the sole decision indicator — there is no separate
 `decision` column. `allow` means the request was allowed; `deny` or
@@ -1428,11 +1463,11 @@ type AuditConfig struct {
 }
 ```
 
-| Mode           | What is logged            | Typical use case             |
-| -------------- | ------------------------- | ---------------------------- |
-| `off`          | Nothing                   | Development, performance     |
-| `denials_only` | Deny + default_deny       | Production default           |
-| `all`          | All decisions incl. allow | Debugging, compliance audit  |
+| Mode           | What is logged            | Typical use case            |
+| -------------- | ------------------------- | --------------------------- |
+| `off`          | Nothing                   | Development, performance    |
+| `denials_only` | Deny + default_deny       | Production default          |
+| `all`          | All decisions incl. allow | Debugging, compliance audit |
 
 The default mode is `denials_only` — this balances operational visibility with
 storage efficiency.
@@ -1499,6 +1534,15 @@ simplified lock syntax. Locks compile to scoped policies behind the scenes.
 > lock armory/enter = (faction:rebels | faction:alliance) & level:>=3
 > unlock my-chest/read
 ```
+
+**Resource target resolution:** The lock command resolves the resource target
+(the part before `/`) using the same name resolution as other world commands:
+`me` resolves to the character issuing the command, `here` resolves to their
+current location, and object names (e.g., `my-chest`, `armory`) are looked up
+in the world model using the standard object matching rules (exact name match,
+then disambiguation if multiple objects share the name in the same location).
+All targets are resolved to ULIDs at lock compile time — the generated policy
+uses the resolved ULID, not the display name.
 
 #### Lock Syntax
 
@@ -1573,11 +1617,11 @@ Providers register tokens at startup alongside their attributes. The
 (defined in the [Attribute Providers](#attribute-providers) section). Providers
 that contribute no lock vocabulary return an empty slice.
 
-**Token name conflict resolution:** The engine MUST reject duplicate token
-registrations at startup. Duplicate tokens are a fatal error — the server MUST
-NOT start if any token name conflicts are detected. This fail-fast behavior
-ensures naming collisions are caught immediately rather than causing subtle
-policy evaluation bugs at runtime. Core providers (CharacterProvider) register
+**Token name conflict resolution:** Duplicate token registrations are resolved
+by last-registered-wins. The engine logs a WARN including both the existing and
+new provider names so operators can investigate. The server continues startup —
+a single misbehaving plugin MUST NOT prevent the server from running. Core
+providers (CharacterProvider) register
 tokens first. Plugins MUST namespace their tokens using a dot-separated prefix
 that **exactly matches** their plugin ID (e.g., plugin `reputation` registers
 `reputation.score`, plugin `crafting` registers `crafting.type`). Abbreviations
@@ -1603,12 +1647,12 @@ has no special knowledge of `faction`, `flag`, or `level`.
 
 **Plugin token examples:**
 
-| Token                | Type       | Plugin ID    | Attribute Path      | Example                        |
-| -------------------- | ---------- | ------------ | ------------------- | ------------------------------ |
-| `reputation.score`   | numeric    | `reputation` | `reputation.score`  | `reputation.score:>=50`        |
-| `crafting.primary`   | equality   | `crafting`   | `crafting.primary`  | `crafting.primary:blacksmithing` |
-| `guilds.primary`     | equality   | `guilds`     | `guilds.primary`    | `guilds.primary:merchants`     |
-| `crafting.certs`     | membership | `crafting`   | `crafting.certs`    | `crafting.certs:master-smith`  |
+| Token              | Type       | Plugin ID    | Attribute Path     | Example                          |
+| ------------------ | ---------- | ------------ | ------------------ | -------------------------------- |
+| `reputation.score` | numeric    | `reputation` | `reputation.score` | `reputation.score:>=50`          |
+| `crafting.primary` | equality   | `crafting`   | `crafting.primary` | `crafting.primary:blacksmithing` |
+| `guilds.primary`   | equality   | `guilds`     | `guilds.primary`   | `guilds.primary:merchants`       |
+| `crafting.certs`   | membership | `crafting`   | `crafting.certs`   | `crafting.certs:master-smith`    |
 
 #### Lock Compilation
 
@@ -1661,7 +1705,17 @@ Available lock tokens:
 ```
 
 The `lock tokens` command reads from the token registry at runtime. Plugin
-tokens appear automatically when the plugin is loaded.
+tokens appear automatically when the plugin is loaded. A `--verbose` flag
+SHOULD show the underlying DSL attribute path for debugging:
+
+```text
+> lock tokens --verbose
+Available lock tokens:
+  faction:X             — Character faction equals X
+                          (maps to: principal.faction)
+  reputation.score:OP N — Reputation score (plugin: reputation)
+                          (maps to: principal.reputation.score)
+```
 
 **Access constraint:** Lock-generated policies can ONLY target resources the
 character has write access to. The lock command MUST verify write permission
@@ -1681,9 +1735,11 @@ character has write access to. The lock command MUST verify write permission
 - `lock X/action = condition` calls `PolicyStore.Create()` with generated DSL
   text and the naming convention `lock:{type}:{id}:{action}` where `{type}` is
   the bare resource type without a trailing colon (e.g.,
-  `lock:object:01ABC:read`). This naming format is safe because lockable
-  resources (objects, properties, locations) all use ULID identifiers which
-  contain no colons or spaces.
+  `lock:object:01ABC:read`). For property locks, the `{type}` is `property`
+  and the `{id}` is the property's own ULID (e.g.,
+  `lock:property:01DEF:read` for `lock me/backstory/read`). This naming
+  format is safe because lockable resources (objects, properties, locations)
+  all use ULID identifiers which contain no colons or spaces.
 - `unlock X/action` calls `PolicyStore.DeleteByName()` to remove the lock
   policy.
 - Modifying a lock (re-running `lock X/action` with new conditions) deletes the
@@ -1721,7 +1777,7 @@ policy edit <name>
 policy delete <name>
 policy enable <name>
 policy disable <name>
-policy validate
+policy validate                                          (interactive multiline input)
 policy test <subject> <action> <resource> [--verbose] [--json]
 policy reload
 policy history <name> [--limit=N]
@@ -1873,6 +1929,9 @@ permit(principal is character, action in ["emit"], resource is stream)
 when { resource.name like "location:*" && resource.location == principal.location };
 
 // seed:player-movement
+// Intentionally unconditional — movement is allowed by default for all
+// characters. Admins restrict specific locations via forbid policies
+// (deny-overrides ensures forbid always wins over this permit).
 permit(principal is character, action in ["enter"], resource is location);
 
 // seed:player-basic-commands
@@ -1916,10 +1975,14 @@ MUST seed policies automatically:
    resources via normal ABAC evaluation (granted to admins by the seed policies)
 
 The seed process is idempotent — policies are inserted with deterministic names
-(e.g., `seed:player-self-access`). If a policy with that name already exists,
-the seed is skipped for that policy. The `seed:` prefix is reserved for system
-use — the `policy create` command MUST reject names starting with `seed:` to
-prevent admins from accidentally colliding with seed policies.
+(e.g., `seed:player-self-access`). The bootstrap checks
+`WHERE name = ? AND source = 'seed'`. If a seed policy with that name and
+source already exists, it is skipped. If a policy exists with the seed name but
+`source != 'seed'` (e.g., an admin accidentally used a `seed:` name), the
+bootstrap logs a warning and skips (does not overwrite admin customizations).
+The `seed:` prefix is reserved for system use — the `policy create` command
+MUST reject names starting with `seed:` to prevent admins from accidentally
+colliding with seed policies.
 
 **Seed policy upgrades:** Seed policies are immutable after first creation.
 Server upgrades that ship updated seed text do NOT overwrite existing seeds.
@@ -1932,8 +1995,10 @@ change with a `change_note` explaining the upgrade.
 
 1. **Phase 7.1 (Policy Schema):** Create DB tables and policy store.
 
-2. **Phase 7.2 (DSL & Compiler):** Build DSL parser, evaluator, and
-   `PolicyCompiler`. Unit test with table-driven tests.
+2. **Phase 7.2 (DSL & Compiler):** Build DSL parser using
+   [participle](https://github.com/alecthomas/participle) (struct-tag parser
+   generator), evaluator, and `PolicyCompiler`. Mandate fuzz testing for all
+   parser entry points. Unit test with table-driven tests.
 
 3. **Phase 7.3 (Policy Engine):** Build `AccessPolicyEngine`, attribute
    providers, and audit logger. Replace `AccessControl` with
@@ -1954,14 +2019,14 @@ change with a `change_note` explaining the upgrade.
 **Call site inventory** (packages to update from `AccessControl` to
 `AccessPolicyEngine`):
 
-| Package                                | Usage                               |
-| -------------------------------------- | ----------------------------------- |
-| `internal/command/dispatcher`          | Command execution authorization     |
-| `internal/command/rate_limit_middleware`| Rate limit bypass for admins        |
-| `internal/command/handlers/boot`       | Boot command permission check       |
-| `internal/world/service`               | World model operation authorization |
-| `internal/plugin/hostfunc/commands`    | Plugin command execution auth       |
-| `internal/core/broadcaster` (test)     | Test mock injection                 |
+| Package                                  | Usage                               |
+| ---------------------------------------- | ----------------------------------- |
+| `internal/command/dispatcher`            | Command execution authorization     |
+| `internal/command/rate_limit_middleware` | Rate limit bypass for admins        |
+| `internal/command/handlers/boot`         | Boot command permission check       |
+| `internal/world/service`                 | World model operation authorization |
+| `internal/plugin/hostfunc/commands`      | Plugin command execution auth       |
+| `internal/core/broadcaster` (test)       | Test mock injection                 |
 
 This list is derived from the current codebase. Run `grep -r "AccessControl"
 internal/ --include="*.go"` to get the current inventory before starting
@@ -2031,8 +2096,9 @@ func FuzzParseDSL(f *testing.F) {
 
 Fuzz targets SHOULD also cover the evaluator (random ASTs against random
 attribute bags) and the lock expression parser. CI SHOULD run a short fuzz
-cycle (30 seconds) on every build; extended fuzzing (hours) SHOULD run
-periodically on a schedule.
+cycle (30 seconds) on every build; extended fuzzing (hours) SHOULD run as a
+scheduled nightly job. Crash-inducing inputs discovered by the scheduled
+fuzzer MUST be added as regression test cases in the unit test suite.
 
 ### Integration Tests (Ginkgo/Gomega)
 
@@ -2081,6 +2147,8 @@ Describe("AccessPolicyEngine", func() {
 - [ ] Lock syntax compiles to scoped policies
 - [ ] Property model designed as first-class entities
 - [ ] Direct replacement of StaticAccessControl documented (no adapter)
+- [ ] Policy evaluation benchmarks: single-policy <10μs, 50-policy set <100μs,
+      attribute resolution <50μs (measured via `go test -bench`)
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented
@@ -2111,3 +2179,14 @@ policy management system:
 - [Cedar Language Specification](https://docs.cedarpolicy.com/) — DSL inspiration
 - [Commands & Behaviors Design](2026-02-02-commands-behaviors-design.md) —
   Command system integration
+
+### Related ADRs
+
+- [ADR 0009: Custom Go-Native ABAC Engine](../adr/0009-custom-go-native-abac-engine.md)
+- [ADR 0010: Cedar-Aligned Fail-Safe Type Semantics](../adr/0010-cedar-aligned-fail-safe-type-semantics.md)
+- [ADR 0011: Deny-Overrides Without Priority](../adr/0011-deny-overrides-without-priority.md)
+- [ADR 0012: Eager Attribute Resolution](../adr/0012-eager-attribute-resolution.md)
+- [ADR 0013: Properties as First-Class Entities](../adr/0013-properties-as-first-class-entities.md)
+- [ADR 0014: Direct Static Access Control Replacement](../adr/0014-direct-static-access-control-replacement.md)
+- [ADR 0015: Three-Layer Player Access Control](../adr/0015-three-layer-player-access-control.md)
+- [ADR 0016: LISTEN/NOTIFY Policy Cache Invalidation](../adr/0016-listen-notify-policy-cache-invalidation.md)
