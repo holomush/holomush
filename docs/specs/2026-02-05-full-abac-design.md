@@ -188,12 +188,12 @@ stored alongside the DSL text in the policy store (as JSONB).
 // This is a concrete struct (not an interface) because there is only one
 // implementation. The policy store accepts it as a constructor dependency.
 type PolicyCompiler struct {
-    schema *AttributeSchema // Optional: for validation warnings
+    schema *AttributeSchema // MUST be provided at engine init
 }
 
 // Compile parses DSL text, validates it, and returns a compiled policy.
 // Returns a descriptive error with line/column information on parse failure.
-// If schema is configured, also returns validation warnings for:
+// Validation warnings are returned for:
 // - Unknown attributes (schema evolves over time)
 // - Bare boolean expressions (recommend explicit `== true`)
 // - Unreachable conditions (e.g., `false && ...`)
@@ -1299,6 +1299,50 @@ collisions.
 engine.RegisterAttributeProvider(reputationProvider)
 engine.RegisterEnvironmentProvider(weatherProvider)
 ```
+
+### Attribute Schema Registry
+
+The `AttributeSchema` is a **mandatory** component provided at engine
+initialization. All attribute providers MUST register their attribute schemas
+(namespace, keys, types) during the registration phase. The schema registry serves
+three purposes:
+
+1. **Validation**: The `PolicyCompiler` MUST reject policies that reference
+   attribute namespaces not present in the registry. Unknown namespace references
+   cause compile-time errors, not runtime failures.
+2. **Discovery**: The `policy attributes` admin command lists all registered
+   attributes, their types, and source providers for operator inspection.
+3. **Version tracking**: Plugins declare their schema version in their manifest.
+   The engine detects schema changes on plugin reload and logs warnings when
+   existing policies reference deprecated attributes.
+
+**Schema registration example:**
+
+```go
+schema.RegisterNamespace("reputation", []AttributeDef{
+    {Key: "score", Type: "number", Description: "Player reputation score"},
+    {Key: "tier", Type: "string", Description: "Reputation tier: bronze/silver/gold"},
+}, "reputation-plugin-v2")
+```
+
+**`policy attributes` command:** Operators can run `policy attributes` to view
+all registered attributes. Output format:
+
+```text
+Core Attributes:
+  character.id          ULID     (core)
+  character.level       number   (core)
+  character.faction     string   (core)
+  location.restricted   boolean  (core)
+
+Plugin Attributes:
+  reputation.score      number   (reputation-plugin-v2)
+  reputation.tier       string   (reputation-plugin-v2)
+  guilds.primary        string   (guild-system-v1)
+```
+
+Optional filtering: `policy attributes --namespace reputation` shows only
+attributes in the `reputation` namespace.
 
 ### Error Handling
 
