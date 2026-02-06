@@ -1,7 +1,7 @@
 # ADR 0007: Command Security Model
 
 **Date:** 2026-02-02
-**Status:** Accepted
+**Status:** Superseded by [ADR 0014](0014-direct-static-access-control-replacement.md)
 **Deciders:** HoloMUSH Contributors
 
 ## Context
