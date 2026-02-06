@@ -1758,7 +1758,7 @@ CREATE TABLE access_audit_log (
     policy_name   TEXT,
     attributes      JSONB,
     error_message   TEXT,
-    provider_errors JSONB,                   -- e.g., [{"provider": "reputation", "error": "connection refused"}]
+    provider_errors JSONB,                   -- e.g., [{"namespace": "reputation", "error": "connection refused", "timestamp": "2026-02-06T12:00:00Z", "duration_us": 1500}]
     duration_us     INTEGER                  -- evaluation duration in microseconds (for performance debugging)
 );
 
