@@ -1225,6 +1225,13 @@ The repository determines the resolution strategy based on `parent_type`:
   alerting on this metric and investigate data model integrity issues (deep
   nesting, circular containment) when circuit breaker trips occur.
 
+  **N+1 Query Pattern:** Resolving multiple properties with `parent_location`
+  triggers separate recursive CTE executions per property (e.g., a `look`
+  command checking 10 properties executes 10 CTEs). The per-request attribute
+  cache mitigates within-request duplication. Implementations **SHOULD**
+  prefer batch resolution: collect all needed properties upfront and resolve
+  `parent_location` once per unique object.
+
 ## Attribute Resolution
 
 The engine uses eager resolution: all attributes are collected before any policy
