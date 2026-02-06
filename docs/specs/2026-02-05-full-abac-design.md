@@ -313,47 +313,39 @@ contribute attributes to the bags.
 
 **Session resolution error handling:**
 
-- **Session not found:** Return `Decision{Allowed: false, Effect:
-  EffectDefaultDeny, PolicyID: "infra:session-not-found"}` with error
-  `"session not found: web-123"`. Using `EffectDefaultDeny` (not
-  `EffectDeny`) distinguishes infrastructure failures from explicit policy
-  denials in audit queries. The `infra:` prefix on the PolicyID further
-  disambiguates infrastructure errors from "no policy matched" (which has
-  an empty PolicyID).
-- **Session store failure:** Return `Decision{Allowed: false, Effect:
-  EffectDefaultDeny, PolicyID: "infra:session-store-error"}` with the
-  wrapped store error. Fail-closed — a session lookup failure MUST NOT
-  grant access.
-- **No associated character:** Return `Decision{Allowed: false, Effect:
-  EffectDefaultDeny, PolicyID: "infra:session-no-character"}` with error
-  `"session has no associated character"`. This handles unauthenticated
-  sessions that have not yet selected a character.
-- **Character deleted after session creation:** Return `Decision{Allowed:
-  false, Effect: EffectDefaultDeny, PolicyID:
-  "infra:session-character-integrity"}` with error `"session character has
-  been deleted: 01ABC"`. This error **SHOULD** never occur in correct
-  operation — it indicates a defect in the session invalidation logic or data
-  corruption. The server **MUST** log at CRITICAL level and operators
-  **SHOULD** configure alerting on this error. Session cleanup **MUST**
-  invalidate sessions on character deletion: `WorldService.DeleteCharacter()`
-  **MUST** query the session store and delete all sessions for the character
-  within the same transaction.
+Session resolution defines 2 error codes, distinguishing normal operation
+(invalid/expired sessions) from infrastructure failures:
 
-**Session integrity error logging:** Every `SESSION_CHARACTER_INTEGRITY`
-error **MUST** be logged at CRITICAL level. A Prometheus counter metric
-`abac_session_integrity_errors_total` **MUST** be incremented for each
-occurrence to enable monitoring and alerting. The engine **MUST NOT**
-auto-invalidate sessions on repeated integrity errors, as this creates a DoS
-attack surface where stolen tokens could permanently kill sessions.
+- **SESSION_INVALID:** Session not found, expired, or has no associated
+  character. Return `Decision{Allowed: false, Effect: EffectDefaultDeny,
+  PolicyID: "infra:session-invalid"}` with descriptive error (e.g., `"session
+  not found: web-123"` or `"session has no associated character"`). This
+  covers normal operation — expired sessions, unauthenticated sessions that
+  have not yet selected a character, or sessions referencing deleted
+  characters. Using `EffectDefaultDeny` (not `EffectDeny`) distinguishes
+  infrastructure errors from explicit policy denials in audit queries. The
+  `infra:` prefix on the PolicyID further disambiguates infrastructure errors
+  from "no policy matched" (which has an empty PolicyID).
+
+- **SESSION_STORE_ERROR:** Database failure, timeout, or connectivity issue.
+  Return `Decision{Allowed: false, Effect: EffectDefaultDeny, PolicyID:
+  "infra:session-store-error"}` with the wrapped store error. Fail-closed — a
+  session lookup failure MUST NOT grant access. This represents
+  infrastructure-level failures that operators need to monitor and alert on.
+
+**Character deletion handling:** Character deletion is handled by the world
+model layer, NOT the authorization layer. `WorldService.DeleteCharacter()`
+**MUST** use `ON DELETE CASCADE` constraints to invalidate sessions
+referencing the deleted character. Session resolution encountering a
+deleted character returns `SESSION_INVALID` (normal operation — the session
+is now invalid) rather than treating it as an integrity error.
 
 **Error code constants:** Session resolution error codes **MUST** be defined
 as constants in the `internal/access` package. The following error code
 constants **MUST** be exported:
 
-- `ErrCodeSessionNotFound` — `"infra:session-not-found"`
+- `ErrCodeSessionInvalid` — `"infra:session-invalid"`
 - `ErrCodeSessionStoreError` — `"infra:session-store-error"`
-- `ErrCodeSessionNoCharacter` — `"infra:session-no-character"`
-- `ErrCodeSessionCharacterIntegrity` — `"infra:session-character-integrity"`
 
 These constants ensure consistent error handling and filterable audit queries
 (e.g., `WHERE policy_id LIKE 'infra:%'` returns only infrastructure failures).
@@ -366,12 +358,10 @@ audit queries. `WHERE effect = 'deny'` returns only explicit policy denials.
 matched" cases.
 
 Session resolution errors SHOULD use oops error codes for structured handling:
-`SESSION_NOT_FOUND`, `SESSION_STORE_ERROR`, `SESSION_NO_CHARACTER`,
-`SESSION_CHARACTER_INTEGRITY`. The `SESSION_CHARACTER_INTEGRITY` code
-reflects that this is a world model integrity violation (the character was
-deleted while sessions still referenced it), not a normal session lifecycle
-event. Session cleanup **MUST** invalidate sessions on character deletion
-(see above) to prevent this from occurring.
+`SESSION_INVALID` and `SESSION_STORE_ERROR`. `SESSION_INVALID` covers all
+normal operation cases (expired sessions, missing characters) while
+`SESSION_STORE_ERROR` indicates infrastructure failures requiring operational
+intervention.
 
 ### Decision
 
@@ -1422,8 +1412,8 @@ No errors are retryable within a single `Evaluate()` call.
 | Plugin provider failure   | Deny (conditions fail) | Automatic — plugin attrs missing                          |
 | Policy compilation error  | Deny + return error    | Should not occur (compiled at store time)                 |
 | Corrupted compiled policy | Deny + skip policy     | Log CRITICAL, disable in cache, continue eval (see below) |
-| Session not found         | Deny + return error    | Log, deny, session likely expired                         |
-| Character deleted         | Deny + return error    | Log, deny, invalidate session                             |
+| Session invalid           | Deny + return error    | Log, deny, session expired/missing/no character           |
+| Session store error       | Deny + return error    | Log, deny, infrastructure failure                         |
 | Context cancelled         | Deny + return error    | Request was cancelled upstream                            |
 
 **Corrupted compiled policy** means the `CompiledPolicy` JSONB fails to
@@ -1667,11 +1657,10 @@ expire regardless of what the current provider is doing.
 The ABAC engine uses three distinct circuit breaker designs, each tuned for
 different failure modes:
 
-| Component         | Trigger                                                         | Window | Behavior                    | Metric                                            | Rationale                                                                                                  |
-| ----------------- | --------------------------------------------------------------- | ------ | --------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| General provider  | >80% budget utilization in >50% of calls (min 10 calls)        | 60s    | Skip provider for 60s       | `abac_provider_circuit_breaker_trips_total`       | Higher threshold because some transient slowness is expected; detects systematic performance degradation   |
-| PropertyProvider  | 3 timeout errors                                                | 60s    | Skip queries for 60s        | `abac_property_provider_circuit_breaker_trips_total` | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption    |
-| Session integrity | N/A (logging-only)                                              | N/A    | Log at CRITICAL, no circuit | `abac_session_integrity_errors_total`             | Integrity errors should never happen in correct operation; circuit breaker would create DoS attack surface |
+| Component        | Trigger                                                  | Window | Behavior              | Metric                                                   | Rationale                                                                                                |
+| ---------------- | -------------------------------------------------------- | ------ | --------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`              | Higher threshold because some transient slowness is expected; detects systematic performance degradation |
+| PropertyProvider | 3 timeout errors                                         | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption |
 
 **General provider circuit breaker:** Providers that stay just
 under the timeout but consistently consume >80% of their allocated budget
