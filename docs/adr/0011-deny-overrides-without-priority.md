@@ -128,5 +128,5 @@ when { resource.restricted && principal.level < 5
 ## References
 
 - [Full ABAC Architecture Design — Evaluation Algorithm](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #4: Conflict Resolution](../specs/2026-02-05-full-abac-design-decisions.md)
+- [Design Decision #4: Conflict Resolution](../specs/2026-02-05-full-abac-design-decisions.md#4-conflict-resolution)
 - [Cedar Language Specification — Policy Evaluation](https://docs.cedarpolicy.com/)

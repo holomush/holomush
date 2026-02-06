@@ -10,6 +10,60 @@ rationale for the chosen approach.
 
 ---
 
+## Table of Contents
+
+1. [Policy Engine Approach](#1-policy-engine-approach)
+2. [Policy Definition Format](#2-policy-definition-format)
+3. [Attribute Resolution Strategy](#3-attribute-resolution-strategy)
+4. [Conflict Resolution](#4-conflict-resolution)
+5. ~~[Migration Strategy](#5-migration-strategy)~~ (superseded by #36)
+6. [Plugin Attribute Contributions](#6-plugin-attribute-contributions)
+7. [Audit Logging Destination](#7-audit-logging-destination)
+8. [DSL Expression Language Scope](#8-dsl-expression-language-scope)
+9. [Property Model](#9-property-model)
+10. [Property Visibility Defaults](#10-property-visibility-defaults)
+11. [Cache Invalidation](#11-cache-invalidation)
+12. [Player Access Control Layers](#12-player-access-control-layers)
+13. [Subject Prefix Normalization](#13-subject-prefix-normalization)
+14. [No Database Triggers](#14-no-database-triggers)
+15. [Grammar: `in` Operator Extended to Attribute Expressions](#15-grammar-in-operator-extended-to-attribute-expressions)
+16. [Entity References Explicitly Deferred](#16-entity-references-explicitly-deferred)
+17. [Session Resolution at Engine Entry Point](#17-session-resolution-at-engine-entry-point)
+18. [Property Package Ownership](#18-property-package-ownership)
+19. [Lock Policies Are Not Versioned](#19-lock-policies-are-not-versioned)
+20. ~~[`enter` Action as New ABAC-Only Path](#20-enter-action-as-new-abac-only-path)~~ (superseded by #37)
+21. ~~[Shadow Mode Cutover Criteria](#21-shadow-mode-cutover-criteria)~~ (superseded by #37)
+22. [Flat Prefixed Strings Over Typed Structs](#22-flat-prefixed-strings-over-typed-structs)
+23. [Performance Targets](#23-performance-targets)
+24. [Bootstrap Sequence](#24-bootstrap-sequence)
+25. [Intentional Builder Permission Expansion](#25-intentional-builder-permission-expansion)
+26. [Per-Request Attribute Caching](#26-per-request-attribute-caching)
+27. [Unified `AttributeProvider` Interface](#27-unified-attributeprovider-interface)
+28. [Cedar-Aligned Missing Attribute Semantics](#28-cedar-aligned-missing-attribute-semantics)
+29. [DSL `like` Pattern Validation at Parser Layer](#29-dsl-like-pattern-validation-at-parser-layer)
+30. [PolicyCompiler Component](#30-policycompiler-component)
+31. [Provider Re-Entrance Prohibition](#31-provider-re-entrance-prohibition)
+32. [PropertyProvider Uses SQL JOIN for Parent Location](#32-propertyprovider-uses-sql-join-for-parent-location)
+33. [Plugin Lock Tokens MUST Be Namespaced](#33-plugin-lock-tokens-must-be-namespaced)
+34. [Time-of-Day Attributes for Environment Provider](#34-time-of-day-attributes-for-environment-provider)
+35. [Audit Log Source Column and No Decision Column](#35-audit-log-source-column-and-no-decision-column)
+36. [Direct Replacement (No Adapter)](#36-direct-replacement-no-adapter)
+37. [No Shadow Mode](#37-no-shadow-mode)
+38. [Audit Log Configuration Modes](#38-audit-log-configuration-modes)
+39. [`EffectSystemBypass` as Fourth Effect Variant](#39-effectsystembypass-as-fourth-effect-variant)
+40. [`has` Operator Supports Dotted Attribute Paths](#40-has-operator-supports-dotted-attribute-paths)
+41. [LL(1) Parser Disambiguation for Condition Grammar](#41-ll1-parser-disambiguation-for-condition-grammar)
+42. [Sequential Provider Resolution](#42-sequential-provider-resolution)
+43. [Property Lifecycle: Go-Level CASCADE Cleanup](#43-property-lifecycle-go-level-cascade-cleanup)
+44. [Nested Container Resolution via Recursive CTE](#44-nested-container-resolution-via-recursive-cte)
+45. [Bounded List Sizes for `visible_to` / `excluded_from`](#45-bounded-list-sizes-for-visible_to--excluded_from)
+46. [`policy validate` and `policy reload` Commands](#46-policy-validate-and-policy-reload-commands)
+47. [Fuzz Testing for DSL Parser](#47-fuzz-testing-for-dsl-parser)
+48. [Deterministic Seed Policy Names](#48-deterministic-seed-policy-names)
+49. [Revised Audit Volume Estimate](#49-revised-audit-volume-estimate)
+
+---
+
 ## 1. Policy Engine Approach
 
 **Question:** Should HoloMUSH adopt an existing authorization framework or build
@@ -295,6 +349,11 @@ internally. The `access` package SHOULD define prefix constants
 resources) create confusion in policies and audit logs. Normalizing to
 `character:` aligns subjects with resources and with Cedar conventions where
 the principal type name matches the DSL type name.
+
+_Note: Decision #36 removed the adapter. All call sites switch directly to
+`character:` — the engine **MUST** reject the `char:` prefix with a clear
+error rather than normalizing it. The prefix constants (`SubjectCharacter`,
+`SubjectPlugin`, etc.) remain the recommended approach._
 
 ---
 

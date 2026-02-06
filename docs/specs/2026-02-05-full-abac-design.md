@@ -90,7 +90,7 @@ full set.
 │   │ - CRUD policies  │  │ - Core providers │  │ - Log denials   │   │
 │   │ - Version history│  │ - Plugin provs   │  │ - Optional      │   │
 │   │ - DSL text +     │  │ - Environment    │  │   allow logging │   │
-│   │   compiled form  │  │                  │  │ - Attr snapshot  │   │
+│   │   compiled form  │  │                  │  │ - Attr snapshot │   │
 │   └────────┬────────┘  └──────┬───────────┘  └─────────────────┘   │
 │            │                  │                                      │
 │   ┌────────┴────────┐        │                                      │
@@ -330,8 +330,10 @@ contribute attributes to the bags.
   false, Effect: EffectDefaultDeny, PolicyID:
   "infra:session-character-integrity"}` with error `"session character has
   been deleted: 01ABC"`. This handles the case where a character is deleted
-  while sessions referencing it still exist. Session cleanup SHOULD
-  invalidate sessions on character deletion.
+  while sessions referencing it still exist. Session cleanup **MUST**
+  invalidate sessions on character deletion: `WorldService.DeleteCharacter()`
+  **MUST** query the session store and delete all sessions for the character
+  within the same transaction.
 
 **Audit distinguishability:** Session resolution errors use
 `EffectDefaultDeny` with `infra:*` policy IDs, making them filterable in
@@ -345,8 +347,8 @@ Session resolution errors SHOULD use oops error codes for structured handling:
 `SESSION_CHARACTER_INTEGRITY`. The `SESSION_CHARACTER_INTEGRITY` code
 reflects that this is a world model integrity violation (the character was
 deleted while sessions still referenced it), not a normal session lifecycle
-event. Session cleanup SHOULD invalidate sessions on character deletion to
-prevent this from occurring.
+event. Session cleanup **MUST** invalidate sessions on character deletion
+(see above) to prevent this from occurring.
 
 ### Decision
 
@@ -474,30 +476,35 @@ authorization-gated data MUST use pre-resolved attributes from the bags or
 access repositories directly (bypassing authorization, as `PropertyProvider`
 does).
 
-**Enforcement:** The engine MUST use an `atomic.Bool` field on the
-`AccessPolicyEngine` struct (not a context value) to detect re-entrance.
-`Evaluate()` MUST call `CompareAndSwap(false, true)` at entry and
-`Store(false)` on return. If the swap fails, `Evaluate()` panics with a
-message identifying the re-entrance. Using an engine-scoped atomic instead
-of `context.WithValue` is critical: providers that create new contexts
-(e.g., `context.WithTimeout(context.Background(), ...)` for timeout
-isolation) would lose a context-carried flag, silently bypassing the guard.
-The atomic spans the entire `Evaluate()` execution (set on entry, cleared
-on return), making re-entrance violations fail-fast during development and
-testing rather than producing subtle deadlocks in production.
+**Enforcement:** The engine MUST use a context-value sentinel to detect
+re-entrance on a per-goroutine basis. `Evaluate()` sets a sentinel key in
+the context at entry and checks for its presence at the start of every
+call. If the sentinel is already present, the call is re-entrant and
+`Evaluate()` panics with a message identifying the re-entrance. This
+approach supports concurrent `Evaluate()` calls from different goroutines
+(required for the 120 checks/sec target at 200 users) while still
+detecting true re-entrance (a provider calling back into the engine within
+the same goroutine's call stack).
+
+**Provider context contract:** Providers **MUST** propagate the parent
+context when creating sub-contexts for timeout isolation. Specifically,
+providers **MUST** use `context.WithTimeout(ctx, ...)` (preserving parent
+values) rather than `context.WithTimeout(context.Background(), ...)`
+(which discards parent values and would bypass the re-entrance guard).
+Violating this contract is a provider bug — the re-entrance guard will
+not detect callbacks through a disconnected context, but such callbacks
+also lose cancellation propagation and request-scoped logging, so they
+are incorrect regardless.
 
 ```go
-type engine struct {
-    evaluating atomic.Bool
-    // ...
-}
+type evaluatingKey struct{}
 
 func (e *engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    if !e.evaluating.CompareAndSwap(false, true) {
+    if ctx.Value(evaluatingKey{}) != nil {
         panic("re-entrant Evaluate() call detected — " +
             "an AttributeProvider is calling back into the engine")
     }
-    defer e.evaluating.Store(false)
+    ctx = context.WithValue(ctx, evaluatingKey{}, true)
     // ... proceed with resolution
 }
 ```
@@ -682,7 +689,9 @@ attribute_root = "principal" | "resource" | "action" | "env"
    restricting it to entity references. Expressions like `5 has foo` are
    rejected at parse time. The `attribute_root` non-terminal is defined
    separately from `attribute_ref` because `has` takes a bare root, not
-   a dotted path. *)
+   a dotted path. `has` expressions return a boolean value and participate
+   in `&&`/`||` chains like any other condition. Parenthesized forms are
+   valid: `(principal has faction) && (resource has restricted)`. *)
 
              (* "containsAll" and "containsAny" are reserved words that MUST NOT
                 appear as attribute names. Parser disambiguation: when the parser
@@ -761,12 +770,20 @@ unambiguous.
   restricts `like` to simple `*` and `?` wildcards only. To match a literal `*`
   or `?`, there is no escape mechanism; use `==` for exact matches instead. The `:` separator
   provides natural namespace isolation: `*` does NOT match across `:`
-  boundaries. For example, `"location:*"` matches `"location:01ABC"` but not
-  `"location:sub:01ABC"`. The `:` character is passed as the separator argument
+  boundaries. The `:` character is passed as the separator argument
   to `glob.Compile(pattern, ':')`, which prevents `*` from matching across `:`
   boundaries. This is consistent with the existing `StaticAccessControl`
-  permission matching. The DSL evaluator tests MUST verify this separator
-  behavior explicitly.
+  permission matching. Current resource strings use a single `:` separator
+  (`location:01ABC`, `character:01XYZ`, `object:01DEF`), but the separator
+  semantics support future multi-segment resource names if needed. Examples:
+  - `"location:*"` matches `"location:01ABC"` — single-segment wildcard
+  - `"location:*"` does NOT match `"location:sub:01ABC"` — `*` stops at `:`
+  - `"*:01ABC"` matches `"location:01ABC"` — prefix wildcard
+  - `"*:01ABC"` does NOT match `"character:01ABC"` if the resource string
+    has additional segments (it does match here because there is no second `:`)
+  The DSL evaluator tests **MUST** verify this separator behavior explicitly,
+  including edge cases with current single-segment and potential future
+  multi-segment resource formats.
 - `action` is a valid attribute root in conditions, providing access to the
   `AttributeBags.Action` map (e.g., `action.name`). Action matching in the
   target clause covers most use cases, but conditions MAY reference action
@@ -818,6 +835,29 @@ unambiguous.
   directing admins to use attribute-based group checks
   (`principal.flags.containsAny(["admin"])`) instead. Entity references MAY be
   added in a future phase when group/hierarchy features are implemented.
+
+### Grammar Versioning
+
+The `compiled_ast` JSONB stored in `access_policies` MUST include a
+`grammar_version` field (initially `1`). This enables non-breaking grammar
+evolution:
+
+- **Forward compatibility:** The engine evaluates policies using the grammar
+  version recorded in their AST. During a migration window, the engine
+  supports both version N and N+1 simultaneously.
+- **Migration:** The `policy recompile-all` admin command recompiles every
+  policy's `dsl_text` with the current grammar version, updating the stored
+  AST. Policies that fail recompilation are logged and left at their
+  original version.
+- **Audit preservation:** Because `dsl_text` (source of truth) and
+  `compiled_ast` are both stored, historical audit log entries remain valid
+  — the DSL text is human-readable regardless of grammar version, and the
+  AST records the version used at evaluation time.
+- **Version bump criteria:** A grammar version increment is required when a
+  change alters parsing behavior for existing valid input (new operators,
+  changed precedence, new reserved words). Additive changes that do not
+  affect existing policies (e.g., new built-in functions) do NOT require a
+  version bump.
 
 ### Type System
 
@@ -1172,13 +1212,25 @@ slog.Error("plugin attribute provider failed",
 ```
 
 **Provider health monitoring:** In addition to per-error rate-limited
-logging, the engine SHOULD export Prometheus counter metrics per provider:
+logging, the engine **SHOULD** export Prometheus counter metrics per
+provider:
 `abac_provider_errors_total{namespace="reputation",error_type="timeout"}`.
 This provides aggregate visibility into chronic provider failures that
-individual log entries cannot. Implementation SHOULD consider a circuit
-breaker pattern: after N consecutive failures (default: 10), stop calling a
-provider for M seconds (default: 30), logging at WARN level when the
-circuit opens and closes.
+individual log entries cannot. Implementation **SHOULD** include a circuit
+breaker per provider with the following parameters:
+
+| Parameter          | Default | Description                             |
+| ------------------ | ------- | --------------------------------------- |
+| Failure threshold  | 10      | Consecutive errors to open the circuit  |
+| Open duration      | 30s     | Time to skip provider while circuit open|
+| Half-open attempts | 1       | Single probe request to test recovery   |
+
+When the circuit opens, the engine logs at WARN level with the provider
+namespace and failure count. During the open period, the provider is
+skipped (attributes missing, conditions fail-safe). After the open
+duration, a single "half-open" probe request tests whether the provider
+has recovered. On success, the circuit closes (INFO log); on failure, it
+re-opens for another cycle.
 
 **Error classification:** All errors result in fail-closed (deny) behavior.
 No errors are retryable within a single `Evaluate()` call.
@@ -1198,9 +1250,27 @@ unmarshal into the AST struct, or the unmarshaled AST violates structural
 invariants (e.g., a binary operator node missing a required operand). This
 should not occur in normal operation because policies are compiled at
 `PolicyStore.Create()` time. Corruption indicates data-level issues
-(direct DB edits, storage failures). When detected, the engine logs at
-CRITICAL level, disables the specific policy in the cache, and continues
-evaluating remaining policies.
+(direct DB edits, storage failures). When detected, the engine:
+
+1. Logs at CRITICAL level with the policy name and corruption details
+2. Sets `enabled = false` on the policy row in the database (persisted,
+   not just in-memory) to prevent the corrupted policy from being
+   reloaded on subsequent cache refreshes
+3. Continues evaluating remaining policies
+
+**Recovery:** The `policy repair <name>` admin command (part of the
+policy management CLI) re-compiles the policy from its `dsl_text` column,
+overwrites the `compiled_ast` JSONB, and re-enables the policy. If
+`dsl_text` is also corrupted, the operator must `policy edit <name>` to
+provide corrected DSL text. The `policy test --suite` validation workflow
+**SHOULD** include a corruption detection pass that unmarshals every
+`compiled_ast` and verifies structural invariants.
+
+**Security note:** If a corrupted policy is a security-critical `forbid`
+rule, silently skipping it creates an access control gap. The CRITICAL
+log entry **MUST** include the policy's effect (`permit` or `forbid`) so
+operators can assess the security impact. Operators **SHOULD** configure
+alerting on CRITICAL-level ABAC log entries.
 
 Callers of `AccessPolicyEngine.Evaluate()` can distinguish "denied by
 policy" (`err == nil, Decision.Effect == EffectDeny`) from "system failure"
@@ -1328,27 +1398,34 @@ be introduced — this would require changing the merge semantics from
 "last-registered wins" to a priority-based merge, since goroutine completion
 order is non-deterministic.
 
-The 100ms deadline is the total budget for all providers combined — there is
-no per-provider timeout, only the overall 100ms deadline on `Evaluate()`.
-Because provider resolution is sequential (not concurrent), the deadline
-manifests as context cancellation at provider entry boundaries: if providers
-A and B take 80ms combined, provider C receives an already-cancelled context
-when `ResolveSubject` is called. Provider C detects the cancelled context,
-returns immediately with `ctx.Err()`, and the engine treats it as a plugin
-provider failure (logged, attributes missing, conditions fail-safe). No
-mid-execution cancellation occurs within a provider — only pre-entry
-cancellation between sequential calls. A slow or misbehaving plugin cannot
-block the entire evaluation pipeline because the context deadline expires
-regardless of what the current provider is doing.
+The 100ms deadline is the total budget for all providers combined.
+To prevent priority inversion (where early providers starve later ones),
+the engine **MUST** enforce per-provider timeouts within the total budget.
+Each provider receives a fair-share timeout calculated as
+`remaining_budget / remaining_providers`. For example, with 5 providers
+and a 100ms total budget: provider A gets 20ms; if A completes in 5ms,
+provider B gets `95ms / 4 = ~24ms`; and so on. This ensures that a slow
+provider cannot consume the entire budget and starve subsequent providers.
+
+The engine wraps each provider call with
+`context.WithTimeout(ctx, perProviderTimeout)` before calling
+`ResolveSubject` or `ResolveResource`. If a provider exceeds its
+per-provider timeout, it is cancelled individually and treated as a
+plugin provider failure (logged, attributes missing, conditions
+fail-safe). The overall 100ms deadline on `Evaluate()` still applies as
+a hard backstop. A slow or misbehaving plugin cannot block the entire
+evaluation pipeline because both the per-provider and overall deadlines
+expire regardless of what the current provider is doing.
 
 **Operational limits:**
 
 | Limit                        | Value | Rationale                       |
 | ---------------------------- | ----- | ------------------------------- |
-| Maximum registered providers | 20    | 10 core + 10 plugins            |
+| Maximum registered providers | 20    | 8 core + 12 plugins (headroom)  |
 | Maximum active policies      | 500   | Linear scan acceptable at scale |
 | Maximum condition nesting    | 32    | Prevents stack overflow         |
 | Provider timeout (total)     | 100ms | Hard deadline on `Evaluate()`   |
+| Provider timeout (per)       | fair  | `remaining_budget / remaining`  |
 
 **Measurement strategy:**
 
@@ -1484,7 +1561,8 @@ CREATE TABLE access_policy_versions (
 -- Retrofitting partitioning onto an existing table requires exclusive locks
 -- and full table rewrites — at 10M rows/day in `all` mode, this becomes
 -- impractical within days. Partition-drop purging is also far more efficient
--- than row-by-row DELETE.
+-- than row-by-row DELETE. See "Audit Log Retention" section for partition
+-- management (creation, detachment, and purging).
 CREATE TABLE access_audit_log (
     id            TEXT PRIMARY KEY,         -- ULID
     timestamp     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1551,17 +1629,35 @@ These deletions MUST occur in the same database transaction as the parent
 entity deletion. `PropertyRepository.DeleteByParent(parentType, parentID)`
 performs `DELETE FROM entity_properties WHERE parent_type = $1 AND parent_id = $2`.
 
-**Orphan detection:** Because `entity_properties` uses polymorphic parent
-references without FK constraints, orphaned properties can accumulate if a
-deletion path is added without calling `DeleteByParent()`. Implementation
-SHOULD include a periodic background job (daily) that detects orphaned
-properties — rows where `parent_id` does not match any existing entity of
-the declared `parent_type`. Orphans SHOULD be logged as warnings (not
-auto-deleted) to alert operators. Each entity deletion path MUST have a
-corresponding integration test that verifies child properties are deleted
-in the same transaction.
-This is Go-level cascading — no database triggers or FK constraints are used,
-consistent with the project's "all logic in Go" constraint.
+**Orphan detection and cleanup:** Because `entity_properties` uses
+polymorphic parent references without FK constraints, orphaned properties
+can accumulate if a deletion path is added without calling
+`DeleteByParent()`. Implementation **MUST** include the following
+defense-in-depth measures:
+
+1. **Background cleanup goroutine:** A goroutine running on a configurable
+   timer (default: daily) **MUST** detect orphaned properties — rows where
+   `parent_id` does not match any existing entity of the declared
+   `parent_type`. Detected orphans are logged at WARN level on first
+   discovery. After a grace period (default: 24 hours), orphans that
+   persist across two consecutive runs **MUST** be actively deleted with
+   a batch `DELETE` and logged at INFO level with the count of removed
+   rows. The grace period prevents deleting properties whose parent is
+   being recreated (e.g., during a migration or restore).
+
+2. **Startup integrity check:** On server startup, the engine **MUST**
+   count orphaned properties. If the count exceeds a configurable
+   threshold (default: 100), the server **MUST** log at ERROR level but
+   continue starting (not fail-fast) to avoid blocking recovery. The
+   threshold alerts operators to systematic deletion bugs before
+   orphans accumulate to problematic levels.
+
+3. **Integration test coverage:** Each entity deletion path **MUST** have
+   a corresponding integration test that verifies child properties are
+   deleted in the same transaction.
+
+This is Go-level cascading — no database triggers or FK constraints are
+used, consistent with the project's "all logic in Go" constraint.
 
 ### Cache Invalidation
 
@@ -1692,9 +1788,22 @@ CREATE TABLE access_audit_log_2026_04 PARTITION OF access_audit_log
     FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
 ```
 
-The purge job SHOULD create future partitions (1 month ahead) and drop
-expired partitions (`DROP TABLE access_audit_log_YYYY_MM`) rather than
-issuing `DELETE` statements.
+**Partition management:** A background goroutine **MUST** manage partition
+lifecycle on a configurable schedule (default: daily):
+
+1. **Create future partitions:** Ensure at least 2 months of future
+   partitions exist. If creation fails (e.g., disk full, permissions),
+   log at ERROR level — inserts to a missing partition cause PostgreSQL
+   errors that the audit logger handles gracefully (logged, not fatal).
+2. **Drop expired partitions:** Use `DETACH PARTITION` followed by `DROP
+   TABLE` for partitions older than the retention period. `DETACH` first
+   allows backup before permanent deletion if needed.
+3. **Health check integration:** The health endpoint **SHOULD** report
+   the number of available future partitions. Alert if fewer than 2
+   future partitions exist.
+
+The purge job **MUST** create future partitions and detach/drop expired
+partitions rather than issuing row-by-row `DELETE` statements.
 
 ### Visibility Defaults
 
@@ -1842,7 +1951,11 @@ plugin `reputation` registers `reputation.score`, plugin `crafting` registers
 `reputation.score.detailed`) are valid — only the first segment is checked.
 The engine validates this at registration — plugin tokens without the correct
 prefix or missing a dot separator are rejected with a startup error indicating
-the expected namespace.
+the expected namespace. To shift validation left to development time, plugin
+test suites **SHOULD** include a test that loads the plugin manifest,
+instantiates the `AttributeProvider`, calls `LockTokens()`, and verifies
+that all returned tokens have the correct namespace prefix. This catches
+naming violations in CI rather than at server startup in production.
 The `policy create` command MUST reject names starting with reserved prefixes:
 `seed:` (system seed policies) and `lock:` (lock-generated policies). Both
 prefixes are reserved for system use. See [Naming conventions](#admin-commands)
@@ -2228,13 +2341,23 @@ upgrades. If a server version needs to fix a seed policy bug, it MUST use a
 migration that explicitly updates the affected policy, logged as a version
 change with a `change_note` explaining the upgrade.
 
-**Seed verification command:** Implementation SHOULD include a
-`policy seed verify` admin command that compares installed seed policies
-against the shipped seed text and highlights differences. This enables
-operators to discover when they are running with modified seeds and whether
-a shipped fix applies to their customized version. Seed policy fixes SHOULD
-be shipped as explicit migration files with before/after diffs and a
-human-readable change note.
+**Seed verification:** Implementation **MUST** include two verification
+mechanisms:
+
+1. **CLI flag `--validate-seeds`:** A startup flag that boots the DSL
+   compiler, validates all seed policy DSL text, and exits with a
+   success/failure status without starting the server. This enables
+   pre-deployment verification and CI integration (e.g.,
+   `holomush --validate-seeds` in the build pipeline).
+
+2. **`policy seed verify` admin command:** Compares installed seed
+   policies against the shipped seed text and highlights differences.
+   This enables operators to discover when they are running with
+   modified seeds and whether a shipped fix applies to their customized
+   version.
+
+Seed policy fixes **SHOULD** be shipped as explicit migration files with
+before/after diffs and a human-readable change note.
 
 ### Implementation Sequence
 

@@ -151,5 +151,5 @@ is the primary security guarantee of the type system.
 ## References
 
 - [Full ABAC Architecture Design — Type System](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #28: Cedar-Aligned Missing Attribute Semantics](../specs/2026-02-05-full-abac-design-decisions.md)
+- [Design Decision #28: Cedar-Aligned Missing Attribute Semantics](../specs/2026-02-05-full-abac-design-decisions.md#28-cedar-aligned-missing-attribute-semantics)
 - [Cedar Language Specification — Type System](https://docs.cedarpolicy.com/)

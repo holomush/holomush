@@ -152,6 +152,6 @@ code with no long-term value.
 ## References
 
 - [Full ABAC Architecture Design — Replacing Static Roles](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #36: Direct Replacement](../specs/2026-02-05-full-abac-design-decisions.md)
-- [Design Decision #37: No Shadow Mode](../specs/2026-02-05-full-abac-design-decisions.md)
+- [Design Decision #36: Direct Replacement](../specs/2026-02-05-full-abac-design-decisions.md#36-direct-replacement-no-adapter)
+- [Design Decision #37: No Shadow Mode](../specs/2026-02-05-full-abac-design-decisions.md#37-no-shadow-mode)
 - [ADR 0007: Command Security Model](0007-command-security-model.md) (superseded)

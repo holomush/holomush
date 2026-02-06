@@ -124,6 +124,6 @@ resolve full attribute bags for any entity.
 ## References
 
 - [Full ABAC Architecture Design](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #1: Policy Engine Approach](../specs/2026-02-05-full-abac-design-decisions.md)
-- [Design Decision #2: Policy Definition Format](../specs/2026-02-05-full-abac-design-decisions.md)
+- [Design Decision #1: Policy Engine Approach](../specs/2026-02-05-full-abac-design-decisions.md#1-policy-engine-approach)
+- [Design Decision #2: Policy Definition Format](../specs/2026-02-05-full-abac-design-decisions.md#2-policy-definition-format)
 - [Cedar Language Specification](https://docs.cedarpolicy.com/)

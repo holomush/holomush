@@ -100,7 +100,7 @@ Lock compilation generates a `permit` policy scoped to the specific resource and
 Input:  lock my-chest/read = (faction:rebels | flag:ally) & level:>=3
 Output:
   permit(
-    principal,
+    principal is character,
     action in ["read"],
     resource == "object:01ABC..."
   ) when {
@@ -183,8 +183,8 @@ requirement (core tokens are un-namespaced; plugin tokens require a dot prefix).
 
 - Lock-generated policies use the naming convention `lock:{type}:{id}:{action}` for
   identification and cleanup
-- Token conflicts are logged as WARN at startup (last-registered-wins), not at lock
-  authoring time
+- Duplicate token registrations between plugins cause a startup error identifying both
+  plugins and the conflicting token name
 - The `lock tokens` command reads from the registry at runtime — output changes as
   plugins load and unload
 
@@ -192,7 +192,7 @@ requirement (core tokens are un-namespaced; plugin tokens require a dot prefix).
 
 - [Full ABAC Architecture Design — Access Control Layers](../specs/2026-02-05-full-abac-design.md)
 - [Full ABAC Architecture Design — Lock Token Registry](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #12: Player Access Control Layers](../specs/2026-02-05-full-abac-design-decisions.md)
-- [Design Decision #19: Lock Policies Are Not Versioned](../specs/2026-02-05-full-abac-design-decisions.md)
-- [Design Decision #33: Plugin Lock Tokens MUST Be Namespaced](../specs/2026-02-05-full-abac-design-decisions.md)
+- [Design Decision #12: Player Access Control Layers](../specs/2026-02-05-full-abac-design-decisions.md#12-player-access-control-layers)
+- [Design Decision #19: Lock Policies Are Not Versioned](../specs/2026-02-05-full-abac-design-decisions.md#19-lock-policies-are-not-versioned)
+- [Design Decision #33: Plugin Lock Tokens MUST Be Namespaced](../specs/2026-02-05-full-abac-design-decisions.md#33-plugin-lock-tokens-must-be-namespaced)
 - [ADR 0011: Deny-Overrides Without Priority](0011-deny-overrides-without-priority.md)

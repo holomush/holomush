@@ -170,6 +170,6 @@ without adding anyone to the list.
 ## References
 
 - [Full ABAC Architecture Design — Property Model](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #9: Property Model](../specs/2026-02-05-full-abac-design-decisions.md)
-- [Design Decision #18: Property Package Ownership](../specs/2026-02-05-full-abac-design-decisions.md)
-- [Design Decision #32: PropertyProvider Uses SQL JOIN](../specs/2026-02-05-full-abac-design-decisions.md)
+- [Design Decision #9: Property Model](../specs/2026-02-05-full-abac-design-decisions.md#9-property-model)
+- [Design Decision #18: Property Package Ownership](../specs/2026-02-05-full-abac-design-decisions.md#18-property-package-ownership)
+- [Design Decision #32: PropertyProvider Uses SQL JOIN](../specs/2026-02-05-full-abac-design-decisions.md#32-propertyprovider-uses-sql-join-for-parent-location)
