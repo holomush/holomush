@@ -2061,28 +2061,28 @@ ORDER BY denials DESC
 LIMIT 10;
 
 -- Most frequently matched forbid policies (security hotspots)
-SELECT matched_policies[1] as policy_id, COUNT(*) as matches
+SELECT policy_id, policy_name, COUNT(*) as matches
 FROM access_audit_log
 WHERE timestamp > NOW() - INTERVAL '7 days'
   AND effect = 'deny'
-  AND array_length(matched_policies, 1) > 0
-GROUP BY policy_id
+  AND policy_id IS NOT NULL
+GROUP BY policy_id, policy_name
 ORDER BY matches DESC
 LIMIT 10;
 
--- Evaluation latency outliers (p99 > 10ms)
-SELECT subject, resource, action, latency_ms
+-- Evaluation latency outliers (p99 > 10ms = 10000 microseconds)
+SELECT subject, resource, action, duration_us
 FROM access_audit_log
 WHERE timestamp > NOW() - INTERVAL '1 hour'
-  AND latency_ms > 10
-ORDER BY latency_ms DESC
+  AND duration_us > 10000
+ORDER BY duration_us DESC
 LIMIT 20;
 
 -- Provider timeout rate (attribute resolution failures)
 SELECT subject, resource, COUNT(*) as timeout_count
 FROM access_audit_log
 WHERE timestamp > NOW() - INTERVAL '1 hour'
-  AND reason LIKE '%timeout%'
+  AND error_message LIKE '%timeout%'
 GROUP BY subject, resource
 ORDER BY timeout_count DESC
 LIMIT 10;
