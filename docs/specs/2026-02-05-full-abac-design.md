@@ -1731,6 +1731,7 @@ CREATE TABLE access_policies (
     dsl_text     TEXT NOT NULL,
     compiled_ast JSONB NOT NULL,             -- Pre-parsed AST from PolicyCompiler
     enabled      BOOLEAN NOT NULL DEFAULT true,
+    seed_version INTEGER DEFAULT NULL,       -- NULL for operator-created policies, integer for seed policies (tracks upgrade lineage)
     created_by   TEXT NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
