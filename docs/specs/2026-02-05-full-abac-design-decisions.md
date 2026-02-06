@@ -636,6 +636,16 @@ evaluate to `false`, regardless of operator (including `!=`). This matches
 Cedar's behavior where a missing attribute produces an error value that causes
 the entire condition to be unsatisfied.
 
+**Example:** `principal.faction != "enemy"` with missing `faction` attribute:
+
+1. Comparison evaluates to `false` (missing attribute → all comparisons false)
+2. The `when` condition is unsatisfied
+3. The `permit` policy does NOT match
+4. No other policy matches → default deny
+5. Outcome: Access denied (safe, conservative)
+
+This is the desired behavior — missing attributes always fail-closed.
+
 **Rationale:** The original `!=` semantics created a class of policies that
 silently granted unintended access. Cedar's behavior is proven safe: missing
 attributes are always conservative (deny). The `has` operator provides an
@@ -713,13 +723,15 @@ ULID when resolving `parent_location`. The original design used a
 WorldService` chain that re-introduced the circular dependency the provider
 pattern was designed to avoid.
 
-**Decision:** `PropertyRepository` resolves `parent_location` via a SQL JOIN
-against `objects.location_id` (or `locations.id` for location properties)
-within the same query that fetches properties. No extra Go-level dependency is
-required.
+**Decision:** `PropertyRepository` resolves `parent_location` via a recursive
+CTE that walks the containment chain (see [Decision #44](#44-nested-container-resolution-via-recursive-cte)
+for the full query). For top-level objects and locations, this is equivalent to
+a simple JOIN against `objects.location_id`. For nested containers (objects
+inside objects), the CTE walks upward until finding an ancestor with a non-NULL
+`location_id`. No extra Go-level dependency is required.
 
-**Rationale:** The data is already in PostgreSQL. A single query with a JOIN is
-both simpler and faster than a separate lookup through the world model. This
+**Rationale:** The data is already in PostgreSQL. A single query with a
+recursive CTE handles both top-level and nested container cases correctly. This
 keeps the provider dependency chain flat: `PropertyProvider →
 PropertyRepository → PostgreSQL`.
 
@@ -745,11 +757,20 @@ not just detectable. Requiring namespacing makes collisions structurally
 impossible between plugins (each has a unique ID) while core tokens remain
 un-namespaced.
 
-**Clarification (inter-plugin collisions):** Namespace enforcement prevents
-cross-plugin token collisions (plugin A cannot register `pluginB.score`).
-If two plugins with the same ID are loaded (a deployment error), duplicate
-token registrations MUST cause a startup error — see the main spec's token
-conflict resolution section for the updated policy.
+**Clarification:** These are separate checks:
+
+1. **Namespace enforcement:** Plugin tokens MUST be prefixed with the plugin's
+   own ID. The engine rejects tokens that don't match the registering plugin's
+   ID prefix. This prevents cross-plugin conflicts (plugin A cannot register
+   `pluginB.score`).
+
+2. **Duplicate plugin detection:** If two plugins with identical IDs are
+   loaded, the second plugin's registration MUST fail with a clear error
+   ("plugin ID already registered"). This check happens before token
+   registration and prevents deployment errors.
+
+These are separate checks: namespace enforcement prevents cross-plugin
+conflicts; duplicate plugin ID detection prevents deployment errors.
 
 ---
 
@@ -967,6 +988,12 @@ provider failed is unambiguous), and straightforward debugging
 management, merge synchronization, and non-deterministic log ordering for
 negligible latency benefit. If profiling shows provider resolution exceeding
 the 2ms target, parallelization can be introduced without API changes.
+
+**Note:** This decision assumes each provider completes in <500μs with indexed
+PostgreSQL queries. If profiling during implementation shows attribute
+resolution exceeding the 2ms budget (see [Decision #23](#23-performance-targets)),
+parallel resolution can be added without API changes — the `AttributeResolver`
+interface supports both sequential and parallel strategies.
 
 ---
 

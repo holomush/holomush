@@ -329,8 +329,10 @@ contribute attributes to the bags.
 - **Character deleted after session creation:** Return `Decision{Allowed:
   false, Effect: EffectDefaultDeny, PolicyID:
   "infra:session-character-integrity"}` with error `"session character has
-  been deleted: 01ABC"`. This handles the case where a character is deleted
-  while sessions referencing it still exist. Session cleanup **MUST**
+  been deleted: 01ABC"`. This error **SHOULD** never occur in correct
+  operation — it indicates a defect in the session invalidation logic or data
+  corruption. The server **MUST** log at CRITICAL level and operators
+  **SHOULD** configure alerting on this error. Session cleanup **MUST**
   invalidate sessions on character deletion: `WorldService.DeleteCharacter()`
   **MUST** query the session store and delete all sessions for the character
   within the same transaction.
@@ -425,9 +427,13 @@ before plugin providers (registration order: core first, then plugins in load
 order). Key collision handling depends on the collision type:
 
 - **Core-to-plugin collision** (a plugin overwrites a core attribute like
-  `faction`): MUST be a **fatal startup error**. Core attributes have semantic
-  guarantees the engine depends on. Plugin providers MUST use namespaced keys
-  (e.g., `guilds.faction`, not `faction`) to avoid overwriting core attributes.
+  `faction`): The server MUST reject the plugin's provider registration and
+  continue startup without that plugin. The engine MUST log at ERROR level
+  with the plugin ID and colliding attribute name. The plugin is disabled and
+  operators are notified. The server remains operational with other plugins.
+  Core attributes have semantic guarantees the engine depends on. Plugin
+  providers MUST use namespaced keys (e.g., `guilds.faction`, not `faction`)
+  to avoid overwriting core attributes.
 - **Plugin-to-plugin collision** (two plugins write the same namespaced key):
   The resolver SHOULD warn at startup: `slog.Warn("attribute key collision",
   "key", "guilds.faction", "providers", []string{"guilds-v1", "guilds-v2"})`.
@@ -485,6 +491,12 @@ approach supports concurrent `Evaluate()` calls from different goroutines
 (required for the 120 checks/sec target at 200 users) while still
 detecting true re-entrance (a provider calling back into the engine within
 the same goroutine's call stack).
+
+**Sentinel scope limitation:** The sentinel prevents synchronous re-entrance
+on the same call stack only. Providers MUST NOT spawn goroutines during
+attribute resolution. Spawning goroutines that perform I/O or call other
+engine methods is explicitly prohibited. Cross-goroutine re-entrance is
+prevented by convention and code review, not runtime enforcement.
 
 **Provider context contract:** Providers **MUST** propagate the parent
 context when creating sub-contexts for timeout isolation. Specifically,
@@ -1137,6 +1149,12 @@ The repository determines the resolution strategy based on `parent_type`:
   If cycles are detected or the depth limit is exceeded, `parent_location` is
   nil and location-based visibility policies fail-safe (deny).
 
+  If the recursive CTE encounters a PostgreSQL error (timeout, resource
+  exhaustion), the PropertyProvider **MUST** propagate this as a core provider
+  error (return `(nil, err)`), triggering EffectDefaultDeny with error
+  propagation. Operators **SHOULD** monitor for CTE timeout errors and
+  investigate data model integrity.
+
 ## Attribute Resolution
 
 The engine uses eager resolution: all attributes are collected before any policy
@@ -1406,6 +1424,12 @@ Each provider receives a fair-share timeout calculated as
 and a 100ms total budget: provider A gets 20ms; if A completes in 5ms,
 provider B gets `95ms / 4 = ~24ms`; and so on. This ensures that a slow
 provider cannot consume the entire budget and starve subsequent providers.
+
+If the parent context is cancelled during evaluation (e.g., client
+disconnect), all remaining providers receive the cancelled context
+immediately and the evaluation terminates with `EffectDefaultDeny`.
+Fair-share timeout allocation applies only when the parent context is
+active.
 
 The engine wraps each provider call with
 `context.WithTimeout(ctx, perProviderTimeout)` before calling
@@ -1755,6 +1779,21 @@ unbounded growth.
 **System bypass auditing:** When audit mode is `all`, system subject bypasses
 SHOULD also be logged with `effect = "system_bypass"` to provide a complete
 audit trail. In `denials_only` mode, system bypasses are not logged.
+
+**Async audit writes:** Audit log inserts use async writes via a buffered
+channel. `Evaluate()` enqueues the audit entry to a channel, and a
+background goroutine batch-writes to PostgreSQL. The channel has a
+configurable buffer size (default TBD during implementation). When the
+channel is full, the audit logger MUST increment the counter metric
+`abac_audit_channel_full_total` and drop the entry. Audit logging is
+best-effort and MUST NOT block authorization decisions.
+
+If an audit log insert fails (missing partition, disk full, connection error),
+the audit logger **MUST** log the failure at ERROR level but **MUST NOT**
+propagate the error to the caller. The `Evaluate()` decision is returned
+successfully — audit logging is best-effort and does not block authorization.
+A counter metric `abac_audit_failures_total{reason}` **SHOULD** be incremented
+to alert operators.
 
 ### Audit Log Retention
 
@@ -2323,6 +2362,22 @@ MUST seed policies automatically:
    evaluation algorithm), so no chicken-and-egg problem exists
 4. Subsequent policy changes require `execute` permission on `command:policy*`
    resources via normal ABAC evaluation (granted to admins by the seed policies)
+
+**System context mechanism:** The bootstrap process uses an explicit context
+marker: `ctx := access.WithSystemSubject(context.Background())`. PolicyStore
+CRUD methods (Create, Update, Delete) **MUST** check for this context marker
+and bypass authorization when present. When the system context marker is
+detected, PolicyStore **MUST NOT** call `Evaluate()` for permission checks.
+This pattern is explicit, not implicit — callers must deliberately wrap the
+context to signal system-level operations.
+
+```go
+// Example bootstrap usage
+ctx := access.WithSystemSubject(context.Background())
+err := policyStore.Create(ctx, seedPolicy)
+// PolicyStore.Create checks access.IsSystemContext(ctx)
+// and skips Evaluate() call if true
+```
 
 The seed process is idempotent — policies are inserted with deterministic names
 (e.g., `seed:player-self-access`). The bootstrap checks

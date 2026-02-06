@@ -14,6 +14,12 @@ question is how the engine learns that a policy has changed.
 HoloMUSH has a hard constraint: no database triggers or stored procedures. All logic
 must live in Go application code. PostgreSQL is storage only.
 
+**Critical constraint:** PostgreSQL LISTEN/NOTIFY is fire-and-forget with zero
+buffering. Notifications sent while a listener is disconnected are permanently lost.
+There is no replay mechanism, no delivery guarantee, and no way to recover missed
+notifications. Any cache invalidation strategy using LISTEN/NOTIFY MUST handle
+reconnection by performing a full reload of cached state.
+
 ### Options Considered
 
 **Option A: Polling**
@@ -50,10 +56,8 @@ a dedicated PostgreSQL connection and reloads its cache on notification.
 
 **Option C: PostgreSQL LISTEN/NOTIFY in Go application code.**
 
-**Critical limitation:** PostgreSQL LISTEN/NOTIFY is **fire-and-forget with zero
-buffering**. Notifications are not queued — if the listener is disconnected when a
-notification is sent, that notification is permanently lost. There is no replay
-mechanism, no delivery guarantee, and no way to recover missed notifications. The
+As noted in Context, LISTEN/NOTIFY provides no delivery guarantees — notifications
+are fire-and-forget with zero buffering, permanently lost during disconnection. The
 reconnection protocol below handles this by performing a full reload on reconnect.
 
 The Go policy store sends `pg_notify('policy_changed', policyID)` within the same

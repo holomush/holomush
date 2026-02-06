@@ -99,6 +99,21 @@ Engine → PropertyProvider → PropertyRepository → PostgreSQL
 ```
 
 `PropertyProvider` MUST call `PropertyRepository` directly, bypassing `WorldService`.
+This prevents a circular dependency:
+
+```text
+Engine → PropertyProvider → WorldService → Engine.Evaluate() (for authorization)
+```
+
+WorldService methods typically check authorization before returning data. During attribute
+resolution, the engine is already evaluating authorization — it cannot recursively call
+itself. The correct layering keeps PropertyProvider independent of WorldService:
+
+```text
+Engine → PropertyProvider → PropertyRepository → PostgreSQL
+```
+
+PropertyRepository.GetByID() performs SQL queries directly without authorization checks.
 The engine resolves property attributes unconditionally (no authorization check during
 attribute resolution); authorization happens AFTER attributes are resolved.
 
@@ -159,6 +174,8 @@ without adding anyone to the list.
 - Properties have their own database table, adding schema complexity
 - Access control metadata is coupled into the world model struct (intentional but unusual)
 - `PropertyRepository` must handle parent-type-dependent JOINs
+- Direct repository access means PropertyProvider sees all properties regardless of
+  visibility — this is intentional (attributes must be complete for deny-overrides to work)
 
 **Neutral:**
 
