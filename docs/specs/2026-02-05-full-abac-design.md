@@ -338,21 +338,12 @@ contribute attributes to the bags.
   **MUST** query the session store and delete all sessions for the character
   within the same transaction.
 
-**Session integrity circuit breaker:** To prevent systematic
-`SESSION_CHARACTER_INTEGRITY` errors from generating excessive logs (up to
-7200 CRITICAL logs per minute in worst-case scenarios), the engine **MUST**
-implement a per-session circuit breaker. If a session generates **3 or more**
-`SESSION_CHARACTER_INTEGRITY` errors within a **60-second window**, the
-session **MUST** be automatically invalidated and subsequent evaluation
-requests for that session **MUST** return
-`infra:session-invalidated-by-circuit-breaker` without re-logging the
-integrity error. The first 3 failures are logged at CRITICAL level. The
-circuit breaker trip is logged once at ERROR level with message `"session
-circuit breaker tripped for session 01XYZ after 3 integrity failures —
-session invalidated"`. A Prometheus counter metric
-`abac_session_circuit_breaker_trips_total` **MUST** be incremented when the
-circuit breaker trips. The 60-second window **MUST** be configurable via
-server config for testing and tuning.
+**Session integrity error logging:** Every `SESSION_CHARACTER_INTEGRITY`
+error **MUST** be logged at CRITICAL level. A Prometheus counter metric
+`abac_session_integrity_errors_total` **MUST** be incremented for each
+occurrence to enable monitoring and alerting. The engine **MUST NOT**
+auto-invalidate sessions on repeated integrity errors, as this creates a DoS
+attack surface where stolen tokens could permanently kill sessions.
 
 **Error code constants:** Session resolution error codes **MUST** be defined
 as constants in the `internal/access` package. The following error code
@@ -360,8 +351,6 @@ constants **MUST** be exported:
 
 - `ErrCodeSessionNotFound` — `"infra:session-not-found"`
 - `ErrCodeSessionCharacterIntegrity` — `"infra:session-character-integrity"`
-- `ErrCodeSessionInvalidatedByCircuitBreaker` —
-  `"infra:session-invalidated-by-circuit-breaker"`
 
 These constants ensure consistent error handling and filterable audit queries
 (e.g., `WHERE policy_id LIKE 'infra:%'` returns only infrastructure failures).
