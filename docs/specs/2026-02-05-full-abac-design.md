@@ -2055,45 +2055,38 @@ unbounded growth.
 `off`). This ensures bugs or compromised system contexts are never invisible in
 the audit trail, regardless of the configured audit mode.
 
-**Synchronous denial audits:** Denial events (`deny` and `default_deny`) **MUST**
+**Synchronous denial audits:** Denial events (`deny` and `default_deny`) **SHOULD**
 be written synchronously to PostgreSQL before `Evaluate()` returns. This prevents
 attackers from flooding the system to erase evidence of access violations. Allow
 and system bypass events **MAY** be written asynchronously via a buffered channel
 with batch writes. Synchronous writes add ~1-2ms latency per denial evaluation.
 
-**WAL fallback for sync failures:** If the synchronous database write fails
-(connection unavailable, timeout, constraint violation), the engine **MUST** write
+**Write-Ahead Log fallback:** If the synchronous database write fails (connection
+unavailable, timeout, constraint violation), the audit logger **SHOULD** write
 the denial audit entry to a local Write-Ahead Log (WAL) file at
-`<xdg_data>/holomush/audit-wal.jsonl` for later replay. The WAL replay process
-**SHOULD** run on server startup and periodically (default: every 5 minutes) to
-flush accumulated entries to the database. If the WAL file grows beyond a
-configurable threshold (default: 10MB or 10,000 entries), the engine **SHOULD**
-log a warning but **MUST NOT** drop denial audit entries. The engine **MAY**
-expose a Prometheus gauge `abac_audit_wal_entries` to monitor backlog size.
+`$XDG_STATE_HOME/holomush/audit-wal.jsonl` (or `/var/lib/holomush/audit-wal.jsonl`
+in production) for later replay. Each line is a single JSON-encoded audit entry
+matching the `access_audit_log` table schema. The WAL file is append-only and
+written synchronously (O_APPEND | O_SYNC) to ensure durability.
 
-If an audit log insert fails (missing partition, disk full, connection error),
-the audit logger **MUST** log the failure at ERROR level but **MUST NOT**
-propagate the error to the caller. The `Evaluate()` decision is returned
-successfully — audit logging is best-effort and does not block authorization.
-A counter metric `abac_audit_failures_total{reason}` **SHOULD** be incremented
-to alert operators.
-
-**Write-Ahead Log fallback:** When a batch insert to PostgreSQL fails, the
-audit logger **MUST** write the failed entries to a write-ahead log (WAL) file
-for later replay. The WAL file **MUST** be located at
-`$XDG_STATE_HOME/holomush/audit_wal.jsonl` (or `/var/lib/holomush/audit_wal.jsonl`
-in production). Each line is a single JSON-encoded audit entry matching the
-`access_audit_log` table schema. The WAL file is append-only and written
-synchronously (O_APPEND | O_SYNC) to ensure durability. The audit logger
-**MUST** expose a `ReplayWAL()` method that reads entries from the WAL file,
-batch-inserts them to PostgreSQL, and truncates the file on success. The
-server **SHOULD** call `ReplayWAL()` on startup and **MAY** call it
+The audit logger **MUST** expose a `ReplayWAL()` method that reads entries from
+the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success.
+The server **SHOULD** call `ReplayWAL()` on startup and **MAY** call it
 periodically (e.g., every 5 minutes) to drain the WAL during recovery from
-transient database failures. If WAL write fails (disk full, permissions), the
-audit logger **MUST** increment `abac_audit_wal_failures_total` and drop the
-entry — this is the final fallback. Operators **SHOULD** monitor WAL file size
-and alert if it exceeds a threshold (e.g., 10MB), indicating prolonged database
-unavailability.
+transient database failures.
+
+If both the database write and WAL write fail (catastrophic failure: disk full,
+permissions error, filesystem unavailable), the audit logger **SHOULD** log the
+failure to stderr at ERROR level, increment the counter metric
+`abac_audit_failures_total{reason="wal_failed"}`, and drop the entry. This is
+best-effort auditing during catastrophic failure — the `Evaluate()` decision is
+returned successfully and audit logging does not block authorization.
+
+If the WAL file grows beyond a configurable threshold (default: 10MB or 10,000
+entries), the engine **SHOULD** log a warning. The engine **MAY** expose a
+Prometheus gauge `abac_audit_wal_entries` to monitor backlog size. Operators
+**SHOULD** monitor WAL file size and alert if it exceeds the threshold,
+indicating prolonged database unavailability.
 
 ### Audit Log Retention
 
