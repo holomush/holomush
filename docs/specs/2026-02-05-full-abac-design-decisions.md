@@ -179,14 +179,14 @@ simple: deny always wins, period.
 
 ## 5. Migration Strategy
 
-**Question:** How do we migrate ~29 production call sites from the old
+**Question:** How do we migrate ~30 production call sites from the old
 `AccessControl` interface to the new `AccessPolicyEngine`?
 
 **Options considered:**
 
 | Option | Description                                 | Pros                                                  | Cons                                                                  |
 | ------ | ------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------- |
-| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~29 callers need error handling added at once |
+| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~30 callers need error handling added at once |
 | B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                      |
 
 **Decision:** ~~**Option B — New `AccessPolicyEngine` interface with adapter.**~~
@@ -860,7 +860,7 @@ been released wastes effort and makes the design harder to understand.
   `normalizeResource()`, `shadowModeMetrics`
 - Removes shadow mode cutover criteria, exclusion filtering, disagreement
   tracking
-- All ~29 production call sites update to `AccessPolicyEngine.Evaluate()` in a single
+- All ~30 production call sites update to `AccessPolicyEngine.Evaluate()` in a single
   phase (phase 7.3)
 - The `AccessControl` interface and `StaticAccessControl` struct are deleted
   in phase 7.6

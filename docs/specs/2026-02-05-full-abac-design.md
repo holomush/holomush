@@ -24,7 +24,7 @@ Players control access to their own properties through a simplified lock system.
 - Player-authored locks for owned resources (simplified policy syntax)
 - In-game admin commands for policy CRUD and debugging (`policy` command set)
 - Configurable audit logging with mode control (off, denials-only, all)
-- Direct replacement of `AccessControl` with `AccessPolicyEngine` across all
+- Direct replacement of `AccessControl` with `AccessPolicyEngine` across ~30
   call sites (greenfield deployment — no backward-compatibility adapter)
 - Default-deny posture with deny-overrides conflict resolution
 
@@ -2940,7 +2940,7 @@ before/after diffs and a human-readable change note.
 **Migration testing requirements:** Each seed policy **MUST** have an
 integration test suite with at least three scenarios: allowed operation,
 denied operation, and edge case (e.g., missing attribute, boundary condition).
-Direct replacement of ~29 call sites without shadow mode creates migration
+Direct replacement of ~30 call sites without shadow mode creates migration
 risk — a single seed policy bug can cause platform-wide authorization
 failures. No call site migration **MAY** proceed without passing integration
 tests for all affected seed policies. Coverage target: 100% of seed policies
@@ -3042,6 +3042,7 @@ skips customized seeds and logs the appropriate warning.
 | `internal/world/service`                 | World model operation authorization |
 | `internal/plugin/hostfunc/commands`      | Plugin command execution auth       |
 | `internal/plugin/hostfunc/functions`     | Plugin host function auth           |
+| `internal/access/static.go`              | Static evaluator checks             |
 | `internal/core/broadcaster` (test)       | Test mock injection                 |
 
 This list is derived from the current codebase. Run `grep -r "AccessControl"
