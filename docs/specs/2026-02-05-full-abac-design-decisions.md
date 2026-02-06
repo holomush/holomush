@@ -792,9 +792,259 @@ optional allow logging. There was no way to disable audit logging entirely
 When mode is `all`, system subject bypasses are also logged with
 `effect = "system_bypass"` to provide a complete audit trail.
 
-**Rationale:** At 200 users with ~5 checks/sec, `all` mode produces ~864K
-records/day. `denials_only` mode reduces this to a small fraction (most checks
-result in allows). `off` mode eliminates audit overhead entirely for
-development. The mode is configurable via server settings and can be changed
-at runtime without restart.
+**Rationale:** At 200 users with ~50 checks/sec peak, `all` mode produces
+~10M records/day (~35GB at 7-day retention). `denials_only` mode reduces this
+to a small fraction (most checks result in allows). `off` mode eliminates
+audit overhead entirely for development. The mode is configurable via server
+settings and can be changed at runtime without restart.
+
+---
+
+_The following decisions were captured during the second architecture review
+of PR #65. They record additional refinements made in response to review
+findings._
+
+---
+
+## 39. `EffectSystemBypass` as Fourth Effect Variant
+
+**Review finding (C2):** System subject bypass was handled by early return
+before `Evaluate()` reached conflict resolution. This meant bypass decisions
+were invisible to the type system and audit logging — callers couldn't
+distinguish "no policy matched (default deny)" from "system bypassed all
+policies."
+
+**Decision:** Add `EffectSystemBypass` as a fourth variant in the `Effect`
+enum:
+
+```go
+const (
+    EffectDefaultDeny   Effect = iota // No policy matched
+    EffectAllow
+    EffectDeny
+    EffectSystemBypass                // System subject bypass (audit-only)
+)
+```
+
+**Rationale:** Making bypass explicit in the type system means audit logging,
+metrics, and callers can distinguish all four outcomes. The `all` audit mode
+logs bypass events, providing a complete trail of system-level operations.
+
+---
+
+## 40. `has` Operator Supports Dotted Attribute Paths
+
+**Review finding (C3):** The `has` operator only accepted simple identifiers
+(`principal has faction`), but plugin attributes use dotted namespaces
+(`reputation.score`). Without dotted path support, `has` couldn't check for
+the existence of plugin-contributed attributes.
+
+**Decision:** Extend the grammar to allow dotted paths after `has`:
+
+```text
+| expr "has" identifier { "." identifier }
+```
+
+The parser joins segments with `.` and checks the resulting flat key against
+the attribute bag. `principal has reputation.score` checks whether
+`"reputation.score"` exists in the subject's attribute bag.
+
+**Rationale:** Attribute providers register namespaced keys
+(`reputation.score`, not nested maps). The `has` operator must match the same
+flat-key model. Without this, admins couldn't write defensive patterns like
+`principal has reputation.score && principal.reputation.score >= 50` for
+plugin-contributed attributes.
+
+---
+
+## 41. LL(1) Parser Disambiguation for Condition Grammar
+
+**Review finding (C1):** The condition grammar has an ambiguity when the
+parser sees an identifier after an expression — it could be the start of a
+`has` check or a binary operator. Without a disambiguation rule, the parser
+would need unbounded lookahead.
+
+**Decision:** Use one-token lookahead: after parsing a primary expression, if
+the next token is `has`, parse a `has`-expression; if the next token is a
+comparison or logical operator, parse a binary expression; otherwise, return
+the primary expression.
+
+**Rationale:** LL(1) lookahead is sufficient because `has` is a keyword that
+cannot appear as an attribute name or operator. This keeps the parser simple
+(no backtracking, no GLR) while handling the full grammar.
+
+---
+
+## 42. Sequential Provider Resolution
+
+**Review finding (I1):** The spec didn't justify why attribute providers are
+resolved sequentially rather than in parallel. With 4+ providers, parallel
+resolution could reduce latency.
+
+**Decision:** Keep sequential resolution. Document the rationale explicitly.
+
+**Rationale:** At ~200 concurrent users with providers backed by indexed
+PostgreSQL queries, parallel resolution saves <1ms total. Sequential
+resolution provides deterministic merge order (later providers can't
+silently overwrite earlier attributes), simpler error attribution (which
+provider failed is unambiguous), and straightforward debugging
+(`slog.Debug` after each provider). Parallel resolution adds goroutine
+management, merge synchronization, and non-deterministic log ordering for
+negligible latency benefit. If profiling shows provider resolution exceeding
+the 2ms target, parallelization can be introduced without API changes.
+
+---
+
+## 43. Property Lifecycle: Go-Level CASCADE Cleanup
+
+**Review finding (I5):** The spec defined `entity_properties` with
+`parent_type` and `parent_id` FK columns but didn't address what happens to
+properties when their parent entity is deleted. Orphaned rows would accumulate
+silently.
+
+**Decision:** Go-level CASCADE in `WorldService` deletion methods:
+
+- `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)`
+- `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)`
+- `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)`
+
+Both operations happen within the same database transaction. If either fails,
+the entire transaction rolls back.
+
+**Rationale:** Database-level `ON DELETE CASCADE` would require a polymorphic
+FK (parent_type + parent_id pointing to different tables), which PostgreSQL
+doesn't support natively. Go-level cleanup in `WorldService` is explicit,
+testable, and consistent with the project's "no database triggers" constraint.
+Transactional guarantees prevent orphans without background jobs.
+
+---
+
+## 44. Nested Container Resolution via Recursive CTE
+
+**Review finding (I6):** The spec's `parent_location` resolution for objects
+used a simple JOIN against `objects.location_id`, but the world model supports
+nested containers (objects inside objects). An object in a chest in a room
+would have `location_id = NULL` — the simple JOIN would fail to resolve its
+location.
+
+**Decision:** Use a recursive CTE to walk the containment chain:
+
+```sql
+WITH RECURSIVE chain AS (
+    SELECT id, location_id, contained_in FROM objects WHERE id = $1
+    UNION ALL
+    SELECT o.id, o.location_id, o.contained_in
+    FROM objects o JOIN chain c ON o.id = c.contained_in
+)
+SELECT location_id FROM chain WHERE location_id IS NOT NULL LIMIT 1;
+```
+
+**Rationale:** The existing `object_repo.go` already uses recursive CTEs for
+containment queries. Reusing this pattern in `PropertyRepository` ensures
+`parent_location` resolves correctly regardless of nesting depth. The CTE
+terminates when it finds the first ancestor with a `location_id`.
+
+---
+
+## 45. Bounded List Sizes for `visible_to` / `excluded_from`
+
+**Review finding (S3):** The `visible_to` and `excluded_from` TEXT arrays
+had no size limit. A character could theoretically add thousands of entries,
+degrading `containsAny`/`in` evaluation performance.
+
+**Decision:** Enforce a maximum of 100 entries per list. The property store
+rejects updates that would exceed this limit with a clear error message.
+
+**Rationale:** 100 entries covers any realistic MUSH scenario (a property
+visible to 100 specific characters is already unusually granular). At 100
+entries, `in` evaluation is O(100) per check — negligible. Without a bound,
+adversarial or buggy input could create lists large enough to affect p99
+latency.
+
+---
+
+## 46. `policy validate` and `policy reload` Commands
+
+**Review finding (S1, S2):** The command set had no dry-run validation for
+policies (admins had to create a policy to discover syntax errors) and no way
+to force-refresh the cache when LISTEN/NOTIFY was potentially down.
+
+**Decision:** Add two commands:
+
+1. **`policy validate <dsl-text>`** — Parses and validates DSL without
+   creating a policy. Returns success or detailed error with line/column
+   information. Available to admins and builders (builders can validate
+   hypothetical policies without creating them).
+
+2. **`policy reload`** — Forces an immediate full reload of the in-memory
+   policy cache from PostgreSQL. Admin-only. Intended for emergency use when
+   LISTEN/NOTIFY may be disconnected.
+
+**Rationale:** `policy validate` closes the feedback loop — admins can iterate
+on policy syntax without creating throwaway policies. `policy reload` provides
+a manual override for the automatic cache invalidation system, ensuring admins
+are never stuck waiting for reconnection during an emergency.
+
+---
+
+## 47. Fuzz Testing for DSL Parser
+
+**Review finding:** The DSL parser accepts untrusted admin input. Without fuzz
+testing, edge cases in the parser (malformed Unicode, deeply nested
+expressions, pathological patterns) could cause panics or infinite loops.
+
+**Decision:** Add Go-native fuzz tests (`func FuzzParseDSL`) targeting the
+DSL parser. The fuzzer exercises `parser.Parse()` with random byte sequences
+and validates that it either returns a valid AST or a structured error —
+never panics, never hangs.
+
+**Rationale:** Go 1.18+ includes built-in fuzz testing. The DSL parser is the
+primary attack surface for crafted input. Fuzz testing catches classes of bugs
+(buffer overflows in string handling, stack overflow from recursive descent,
+infinite loops from ambiguous grammar) that unit tests rarely cover. CI runs
+`go test -fuzz=FuzzParseDSL -fuzztime=30s` to catch regressions.
+
+---
+
+## 48. Deterministic Seed Policy Names
+
+**Review finding (I2):** Seed policies used descriptive comments
+(`// player-powers: self access`) but had no stable, deterministic name for
+idempotent seeding. Without deterministic names, server restart could create
+duplicate seeds.
+
+**Decision:** All seed policies use the naming convention `seed:<purpose>`
+where the purpose is a kebab-case description of the policy's intent:
+
+- `seed:player-self-access`
+- `seed:player-location-read`
+- `seed:player-character-colocation`
+- `seed:player-default-commands`
+- `seed:player-movement`
+- `seed:builder-world-management`
+- `seed:builder-advanced-commands`
+- `seed:admin-full-access`
+- `seed:admin-command-access`
+- `seed:builder-policy-test`
+
+**Rationale:** Deterministic names enable idempotent seeding (upsert by name)
+and allow admins to identify seed policies via `policy list`. The `seed:`
+prefix prevents accidental collision with admin-created policies and enables
+`policy list --source=seed` filtering.
+
+---
+
+## 49. Revised Audit Volume Estimate
+
+**Review finding (I7):** The original estimate of ~864K records/day assumed
+~5 checks/sec. Real MUSH workloads (movement, look, inventory, say, property
+reads) produce ~50 checks/sec peak at 200 users.
+
+**Decision:** Revise the estimate: `all` mode produces ~10M records/day (~35GB
+at 7-day retention with uncompressed audit rows). `denials_only` mode remains
+practical at a fraction of this volume.
+
+**Rationale:** The corrected estimate affects operational guidance (disk
+provisioning, retention policy, partition strategy). Admins need accurate
+numbers to make informed decisions about audit mode selection.
 
