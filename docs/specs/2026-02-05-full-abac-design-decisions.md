@@ -340,9 +340,9 @@ Admin `forbid` policies always trump player locks via deny-overrides.
 characters, but resources already use `character:` (e.g., `character:01ABC`).
 Should the ABAC system normalize?
 
-**Decision:** Normalize to `character:` everywhere. The adapter MUST accept
+**Decision:** Normalize to `character:` everywhere. ~~The adapter MUST accept
 both `char:` and `character:` during migration, normalizing to `character:`
-internally. The `access` package SHOULD define prefix constants
+internally.~~ The `access` package SHOULD define prefix constants
 (`SubjectCharacter`, `SubjectPlugin`, etc.) to prevent typos.
 
 **Rationale:** Asymmetric prefixes (`char:` for subjects, `character:` for
