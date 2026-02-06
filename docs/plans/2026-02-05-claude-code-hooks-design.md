@@ -20,8 +20,12 @@ them during the session provides faster feedback and prevents wasted effort.
 
 ## Solution
 
-Five Claude Code hooks configured in `.claude/settings.json`, implemented as
+Four Claude Code hooks configured in `.claude/settings.json`, implemented as
 shell scripts in `.claude/hooks/`. All scripts use `jq` to parse stdin JSON.
+
+Security hooks (protect-main, enforce-task-runner) fail closed — unknown
+state blocks the action. Convenience hooks (auto-format, session-reminder)
+fail open — errors do not block the user.
 
 ### Hook 1: Auto-format after Edit/Write
 
@@ -29,9 +33,9 @@ shell scripts in `.claude/hooks/`. All scripts use `jq` to parse stdin JSON.
 - **Matcher:** `Edit|Write`
 - **Script:** `.claude/hooks/auto-format.sh`
 - **Behavior:** After any successful Edit or Write to a formattable file
-  (`.go`, `.md`, `.yaml`, `.yml`, `.json`, `.toml`), runs `dprint fmt <file>`.
-  For `.go` files, also runs `goimports` if available. Reports what it
-  formatted as `additionalContext`.
+  (`.go`, `.md`, `.yaml`, `.yml`, `.json`, `.toml`), runs `dprint fmt <file>`
+  for markdown/json/toml and `goimports` for Go files. Reports what it
+  formatted as `additionalContext`. Reports errors visibly if formatting fails.
 - **Cannot block:** PostToolUse hooks run after the tool succeeds.
 
 ### Hook 2: Prevent edits on main
@@ -42,29 +46,33 @@ shell scripts in `.claude/hooks/`. All scripts use `jq` to parse stdin JSON.
 - **Behavior:** Before any Edit or Write, checks `git branch --show-current`
   for the file's repository. If on `main`, blocks with exit code 2 and
   message: *"Cannot edit files on main. Create a feature branch first."*
-  Skips files outside a git repo (e.g., `~/.claude/`).
+  Skips files outside a git repo (e.g., temp files in `/tmp/`, user-global
+  files in `~/.claude/`). Within a repo, fails closed — if the current branch
+  cannot be determined, blocks as a precaution.
 
-### Hook 3+5: Enforce task runner and dedicated tools
+### Hook 3: Enforce task runner and dedicated tools
 
 - **Event:** `PreToolUse`
 - **Matcher:** `Bash`
 - **Script:** `.claude/hooks/enforce-task-runner.sh`
 - **Behavior:** Before any Bash command, checks for blocked patterns:
 
-| Pattern | Suggestion |
-|---------|------------|
-| `go test` | Use `task test` |
-| `go build` | Use `task build` |
-| `golangci-lint` | Use `task lint` |
-| `gofmt` / `goimports` | Use `task fmt` |
-| `grep ` / `rg ` (standalone) | Use the Grep tool |
-| `cat ` / `head ` / `tail ` (standalone) | Use the Read tool |
-| `find ` (standalone) | Use the Glob tool |
+| Pattern                                    | Suggestion             |
+| ------------------------------------------ | ---------------------- |
+| `go test`                                  | Use `task test`        |
+| `go build`                                 | Use `task build`       |
+| `golangci-lint`                            | Use `task lint`        |
+| `gofmt` / `goimports`                      | Use `task fmt`         |
+| `grep ` / `rg ` (standalone)              | Use the Grep tool      |
+| `cat ` / `head ` / `tail ` (standalone)   | Use the Read tool      |
+| `find ` (standalone)                       | Use the Glob tool      |
 
-  Allows these patterns when they appear inside pipes or as subcommands
-  (e.g., `git log \| grep`, `git grep`, `cat <<EOF`).
+  Allows these patterns when they appear after pipes (e.g.,
+  `git log \| grep`). Strips shell wrapper prefixes (`env`, `sudo`,
+  `command`, `exec`) before matching. Known limitation: commands inside
+  `$(...)` subshells are not inspected.
 
-### Hook 6: Beads sync reminder
+### Hook 4: Beads sync reminder
 
 - **Event:** `Stop`
 - **Matcher:** *(none — fires on every Stop)*
@@ -75,7 +83,7 @@ shell scripts in `.claude/hooks/`. All scripts use `jq` to parse stdin JSON.
 
 ## File Layout
 
-```
+```text
 .claude/
   hooks/
     auto-format.sh

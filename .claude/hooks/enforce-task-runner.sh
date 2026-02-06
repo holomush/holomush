@@ -5,35 +5,46 @@
 # PreToolUse hook: enforce task runner and dedicated tools
 # Blocks direct go/lint commands and shell search utilities, suggesting
 # the proper task commands or native Claude Code tools.
+# Error strategy: enforcement hook — fails open on jq/parse errors
+# but deterministically blocks known bad commands.
 set -euo pipefail
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-# Nothing to check
 [[ -z "$COMMAND" ]] && exit 0
 
-# Extract the first command word from each chained segment.
-# Splits on && ; || and pipes, then gets the first non-whitespace word.
-# We only care about the FIRST segment (before any pipe) since piped-into
-# usage like "git log | grep" is fine.
+# Strips leading whitespace, env var assignments (FOO=bar), and shell
+# wrapper prefixes (env, sudo, command, exec, nice, nohup), then returns
+# the first real command word.
 first_cmd_word() {
   local segment="$1"
-  # Strip leading whitespace and env var assignments (FOO=bar cmd)
+  # Strip leading whitespace and a single simple env var assignment
+  # (FOO=bar cmd, no spaces in value)
   segment=$(echo "$segment" | sed 's/^[[:space:]]*//' | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
-  # Get first word
-  echo "${segment%% *}"
+  local word="${segment%% *}"
+  # Skip shell wrapper commands and re-extract
+  while [[ "$word" == "env" || "$word" == "command" || "$word" == "exec" || "$word" == "sudo" || "$word" == "nice" || "$word" == "nohup" ]]; do
+    segment="${segment#"$word"}"
+    segment="${segment#"${segment%%[![:space:]]*}"}"
+    # Also strip any KEY=value after env
+    segment=$(echo "$segment" | sed 's/^[A-Za-z_][A-Za-z_0-9]*=[^[:space:]]* *//')
+    word="${segment%% *}"
+  done
+  echo "$word"
 }
 
 # Split command on chain operators (&& ; ||) and check each segment's
 # first word before any pipe. This catches:
 #   "go test ./..."           → blocked (go)
 #   "cd foo && go test"       → blocked (go in second segment)
+#   "env go test ./..."       → blocked (env prefix stripped)
 #   "git log | grep fix"      → allowed (grep is after pipe)
 #   "task test"               → allowed (task)
+#
+# Known limitation: commands inside $(...) or backticks are not inspected.
 
 # Split on && ; || (preserving pipe chains as single segments)
-# Use newline as segment delimiter
 SEGMENTS=$(echo "$COMMAND" | sed 's/ *&& */\n/g; s/ *; */\n/g; s/ *|| */\n/g')
 
 while IFS= read -r segment; do

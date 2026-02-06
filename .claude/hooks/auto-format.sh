@@ -3,23 +3,18 @@
 # Copyright 2026 HoloMUSH Contributors
 #
 # PostToolUse hook: auto-format files after Edit/Write
-# Runs dprint fmt on formattable files to keep formatting consistent.
+# Uses dprint for markdown/json/toml and goimports for Go files.
+# Error strategy: convenience hook — fails open (errors don't block edits).
 set -euo pipefail
 
 INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
-# Nothing to do without a file path
 [[ -z "$FILE_PATH" ]] && exit 0
-
-# Only format files that exist (Write might target a new path that failed)
 [[ -f "$FILE_PATH" ]] || exit 0
 
-# Determine the repo root for this file
 REPO_ROOT=$(git -C "$(dirname "$FILE_PATH")" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
-# Check file extension
 EXT="${FILE_PATH##*.}"
 case "$EXT" in
   go|md|json|toml|yaml|yml)
@@ -29,20 +24,29 @@ case "$EXT" in
     ;;
 esac
 
-# Run dprint if config exists in the repo
+FORMATTED=true
+
+# dprint handles markdown, json, toml (no Go or YAML plugins configured)
 if [[ -f "$REPO_ROOT/dprint.json" ]] || [[ -f "$REPO_ROOT/.dprint.json" ]]; then
   if command -v dprint >/dev/null 2>&1; then
-    dprint fmt "$FILE_PATH" 2>/dev/null || true
+    if ! dprint fmt "$FILE_PATH" 2>&1; then
+      FORMATTED=false
+    fi
   fi
 fi
 
-# For Go files, also run goimports for import organization
+# goimports handles Go import organization and formatting
 if [[ "$EXT" == "go" ]]; then
   if command -v goimports >/dev/null 2>&1; then
-    goimports -w "$FILE_PATH" 2>/dev/null || true
+    if ! goimports -w "$FILE_PATH" 2>&1; then
+      FORMATTED=false
+    fi
   fi
 fi
 
-# Report what we did
 RELATIVE_PATH="${FILE_PATH#"$REPO_ROOT"/}"
-echo "Auto-formatted: $RELATIVE_PATH"
+if [[ "$FORMATTED" == "true" ]]; then
+  echo "Auto-formatted: $RELATIVE_PATH"
+else
+  echo "Auto-format encountered errors: $RELATIVE_PATH"
+fi
