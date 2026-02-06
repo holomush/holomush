@@ -524,9 +524,9 @@ omission was a gap, not a deliberate restriction.
 Without `delete`, builders must ask an admin to remove locations, which is an
 unnecessary bottleneck.
 
-*Note: Shadow mode was removed by [decision #37](#37-no-shadow-mode). The
+_Note: Shadow mode was removed by [decision #37](#37-no-shadow-mode). The
 original rationale about shadow mode exclusions no longer applies, but the
-permission expansion itself is intentional.*
+permission expansion itself is intentional._
 
 ---
 
