@@ -337,6 +337,22 @@ contribute attributes to the bags.
   **MUST** query the session store and delete all sessions for the character
   within the same transaction.
 
+**Session integrity circuit breaker:** To prevent systematic
+`SESSION_CHARACTER_INTEGRITY` errors from generating excessive logs (up to
+7200 CRITICAL logs per minute in worst-case scenarios), the engine **MUST**
+implement a per-session circuit breaker. If a session generates **3 or more**
+`SESSION_CHARACTER_INTEGRITY` errors within a **60-second window**, the
+session **MUST** be automatically invalidated and subsequent evaluation
+requests for that session **MUST** return
+`infra:session-invalidated-by-circuit-breaker` without re-logging the
+integrity error. The first 3 failures are logged at CRITICAL level. The
+circuit breaker trip is logged once at ERROR level with message `"session
+circuit breaker tripped for session 01XYZ after 3 integrity failures —
+session invalidated"`. A Prometheus counter metric
+`abac_session_circuit_breaker_trips_total` **MUST** be incremented when the
+circuit breaker trips. The 60-second window **SHOULD** be configurable via
+server config for testing and tuning.
+
 **Audit distinguishability:** Session resolution errors use
 `EffectDefaultDeny` with `infra:*` policy IDs, making them filterable in
 audit queries. `WHERE effect = 'deny'` returns only explicit policy denials.
@@ -2086,10 +2102,23 @@ Output:
     action in ["read"],
     resource == "object:01ABC..."
   ) when {
-    (principal.faction == "rebels" || "ally" in principal.flags)
+    resource.owner == principal.id
+    && (principal.faction == "rebels" || "ally" in principal.flags)
     && principal.level >= 3
   };
 ```
+
+**Ownership check requirement:** All lock-generated policies **MUST** include
+`resource.owner == principal.id` in the condition block to prevent lock
+policies from surviving ownership transfer. Without this check, a lock set by
+the original owner would grant access to the lock's conditions even after the
+resource is transferred to a new owner, creating a backdoor permit.
+
+**System attribute immutability:** The attributes `level`, `role`, and
+`faction` are **non-writable system attributes** managed by the core engine.
+These cannot be modified by players or builders through attribute commands.
+Plugin-provided attributes (e.g., `reputation.score`, `guilds.primary`) follow
+plugin-specific write rules and **MAY** be mutable depending on plugin design.
 
 **Validation rules:**
 
@@ -2241,6 +2270,58 @@ characters are truncated with `... (truncated)` in text mode.
 
 **Visibility:** Builders see only policies whose target matches their test
 query, not the full policy set. Admins see all matching policies.
+
+**Attribute redaction for builders:** When a builder uses `policy test`,
+attributes for entities the builder does not own **MUST** be redacted to
+prevent information disclosure. Redacted attributes are displayed as
+`<redacted>` in both text and JSON output. Only the entity type and ID are
+shown. Admins see all attributes without redaction.
+
+**Redaction rules:**
+
+- **Subject redaction:** If the subject is a character the builder does not
+  own, all attributes except `type` and `id` are redacted
+- **Resource redaction:** If the resource is an object/location/scene the
+  builder does not own, all attributes except `type` and `id` are redacted
+- **Ownership determination:** The engine resolves `resource.owner` and
+  `principal.id` from the attribute providers to determine ownership
+- **Audit logging:** All `policy test` invocations **MUST** be logged to the
+  audit log with `action=policy.test`, `subject=<invoking-character>`,
+  `resource=<test-target>`, and metadata including `test_subject`,
+  `test_action`, `test_resource`. This enables operators to detect abuse of
+  `policy test` for reconnaissance.
+
+**Redacted output example (builder testing a character they don't own):**
+
+```text
+> policy test character:01ADMIN enter location:01XYZ
+Subject attributes:
+  type=character, id=01ADMIN, <redacted>
+Resource attributes:
+  type=location, id=01XYZ, faction=rebels, restricted=true
+
+Evaluating 2 matching policies:
+  faction-hq-access    permit  CONDITIONS FAILED (unknown)
+  level-gate           forbid  CONDITIONS FAILED (unknown)
+
+Decision: DENIED (default deny — no policies matched)
+```
+
+**Full output example (admin or testing own character):**
+
+```text
+> policy test character:01ABC enter location:01XYZ
+Subject attributes:
+  type=character, id=01ABC, faction=rebels, level=7, role=player
+Resource attributes:
+  type=location, id=01XYZ, faction=rebels, restricted=true
+
+Evaluating 2 matching policies:
+  faction-hq-access    permit  MATCHED
+  level-gate           forbid  CONDITIONS FAILED (principal.level < 5: false, level=7)
+
+Decision: ALLOWED (faction-hq-access)
+```
 
 **Condition failure detail:** When `--verbose` is set, the output shows **all
 failing sub-conditions** for each policy (not just the first failure). This
