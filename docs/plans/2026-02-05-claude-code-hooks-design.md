@@ -26,11 +26,15 @@ Problems 1 and 2 each have a dedicated hook; problem 3 is handled by a
 single hook covering both task runner and tool enforcement.
 
 protect-main fails open outside repos (allows non-repo files) and fails
-closed within repos (unknown branch = block). enforce-task-runner fails open
-on parse errors but deterministically blocks known bad patterns. Convenience
-hooks (auto-format, session-reminder) fail open — errors do not block the
-user. All fail-open hooks use `trap 'exit 0' ERR` to ensure unexpected
-errors produce exit 0 rather than a non-zero-non-2 exit code.
+closed within repos (unknown branch = block). It uses `trap 'exit 2' ERR`
+so unexpected errors block the edit rather than allowing it through.
+enforce-task-runner fails open on parse errors (command proceeds unchecked)
+but reliably blocks known bad patterns when parsing succeeds; the ERR trap
+is scoped to the parse phase only, so enforcement logic errors surface
+rather than silently allowing commands. Convenience hooks (auto-format,
+session-reminder) fail open — errors do not block the user. Fail-open hooks
+use `trap 'exit 0' ERR` to ensure unexpected errors produce exit 0 rather
+than a non-zero-non-2 exit code.
 
 ### Hook 1: Auto-format after Edit/Write
 
@@ -42,7 +46,8 @@ errors produce exit 0 rather than a non-zero-non-2 exit code.
   files. Reports what it formatted in verbose mode output (plain text
   stdout). Only reports if a formatter actually ran — does not claim
   formatting occurred when tools are missing.
-- **Cannot block:** PostToolUse hooks run after the tool succeeds.
+- **Cannot prevent execution:** PostToolUse hooks run after the tool succeeds.
+  The hook can provide feedback to Claude but cannot undo the operation.
 
 ### Hook 2: Prevent edits on main
 
@@ -70,31 +75,34 @@ errors produce exit 0 rather than a non-zero-non-2 exit code.
 | `go build`                                  | Use `task build`  |
 | `golangci-lint`                             | Use `task lint`   |
 | `gofmt` / `goimports`                       | Use `task fmt`    |
-| `grep` / `rg` (first in pipeline)           | Use the Grep tool |
+| `grep` (first in pipeline)                  | Use the Grep tool |
 | `cat` / `head` / `tail` (first in pipeline) | Use the Read tool |
 | `find` (first in pipeline)                  | Use the Glob tool |
 
-`sed`/`awk`/`echo` are intentionally not blocked — they are frequently
+`sed`/`awk`/`echo`/`rg` are intentionally not blocked — they are frequently
 needed for shell operations where native Claude Code tools are insufficient.
+`rg` (ripgrep) in particular is used in pipelines and scripted searches
+where the Grep tool cannot substitute.
 
 Allows blocked patterns when they appear after pipes (e.g.,
 `git log \| grep`). Strips shell wrapper prefixes (`env`, `sudo`,
 `command`, `exec`, `nice`, `nohup`), their flags, and inline env var
 assignments (including quoted values) before matching. Known limitations:
 commands inside `$(...)` subshells are not inspected; quoted strings
-containing `&&`/`;`/`||` are incorrectly split.
+containing `&&`/`;`/`||` are incorrectly split; `||` fallback clauses are
+checked as independent commands, which may produce false positives.
 
 ### Hook 4: Beads sync reminder
 
 - **Event:** `Stop`
-- **Matcher:** _(none — fires on every Stop)_
+- **Matcher:** _(Stop hooks ignore matchers — fires on every Stop)_
 - **Script:** `.claude/hooks/session-reminder.sh`
 - **Behavior:** Checks `bd sync --status`, `git status --porcelain`, and
   `git log '@{upstream}..HEAD'` for unpushed commits. If any show
   unsynced/uncommitted/unpushed changes, outputs a reminder in verbose mode
   output (plain text stdout). Silent when everything is clean.
-- **Caveat:** Does not fire on user interrupts (Ctrl+C) — only on natural
-  response completion.
+- **Caveat:** Does not fire on user interrupts (Ctrl+C) — only when Claude
+  finishes responding.
 
 ## File Layout
 

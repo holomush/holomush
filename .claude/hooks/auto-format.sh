@@ -5,6 +5,7 @@
 # PostToolUse hook: auto-format files after Edit/Write
 # Uses dprint for markdown/json/toml and goimports for Go files.
 # Error strategy: convenience hook — fails open (errors don't block edits).
+# PostToolUse runs after the edit already succeeded, so there is nothing to block.
 set -uo pipefail
 trap 'exit 0' ERR
 
@@ -25,7 +26,6 @@ RAN_FORMATTER=false
 
 case "$EXT" in
   md|json|toml)
-    # dprint handles markdown, json, toml
     if [[ -f "$REPO_ROOT/dprint.json" ]] || [[ -f "$REPO_ROOT/.dprint.json" ]]; then
       if command -v dprint >/dev/null 2>&1; then
         RAN_FORMATTER=true
@@ -37,7 +37,7 @@ case "$EXT" in
     fi
     ;;
   go)
-    # goimports handles Go import organization and formatting
+    # goimports rather than gofmt: also organizes imports
     if command -v goimports >/dev/null 2>&1; then
       RAN_FORMATTER=true
       if ! OUTPUT=$(goimports -w "$FILE_PATH" 2>&1); then
@@ -51,15 +51,11 @@ case "$EXT" in
     ;;
 esac
 
-# Only report if a formatter actually ran — don't claim formatting
-# happened when no tool was available.
-if [[ "$RAN_FORMATTER" == "false" ]]; then
-  exit 0
-fi
-
-RELATIVE_PATH="${FILE_PATH#"$REPO_ROOT"/}"
-if [[ "$FORMATTED" == "true" ]]; then
-  echo "Auto-formatted: $RELATIVE_PATH"
-else
-  echo "Auto-format encountered errors: $RELATIVE_PATH"
+if [[ "$RAN_FORMATTER" == "true" ]]; then
+  RELATIVE_PATH="${FILE_PATH#"$REPO_ROOT"/}"
+  if [[ "$FORMATTED" == "true" ]]; then
+    echo "Auto-formatted: $RELATIVE_PATH"
+  else
+    echo "Auto-format encountered errors: $RELATIVE_PATH"
+  fi
 fi
