@@ -2316,13 +2316,13 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 **Acceptance Criteria:**
 
-- [ ] All 15 seed policies defined as `SeedPolicy` structs (14 permit + 1 forbid catch-all)
+- [ ] All 14 seed policies defined as `SeedPolicy` structs (all permit)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
 - [ ] DSL text matches spec exactly (lines 2935-2999)
-- [ ] Catch-all `seed:catch-all-deny` forbid policy included for explicit deny visibility
+- [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2332,7 +2332,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 **Step 1: Write failing tests**
 
-- All 15 seed policies compile without error via `PolicyCompiler`
+- All 14 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -2352,7 +2352,8 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 15 seed policies (14 permit + 1 forbid).
+// SeedPolicies returns the complete set of 14 seed policies (all permit).
+// Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
         {
@@ -2439,17 +2440,11 @@ func SeedPolicies() []SeedPolicy {
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };`,
             SeedVersion: 1,
         },
-        {
-            Name:        "seed:catch-all-deny",
-            Description: "Explicit catch-all deny for audit visibility (ensures denials show a named policy)",
-            DSLText:     `forbid(principal, action, resource);`,
-            SeedVersion: 1,
-        },
     }
 }
 ```
 
-(Note: 15 seed policies listed above: 14 permit policies from spec (lines 2935-2999) + 1 forbid catch-all for explicit deny visibility in audit logs and policy listings.)
+(Note: 14 seed policies listed above, all permit policies from spec (lines 2935-2999). Default deny behavior is provided by EffectDefaultDeny, not an explicit forbid policy.)
 
 **Step 3: Run tests, commit**
 
@@ -2734,10 +2729,10 @@ git commit -m "feat(access): add lock token registry"
 
 **Acceptance Criteria:**
 
-- [ ] `faction:rebels` → generates `forbid` with faction check
-- [ ] `flag:storyteller` → generates `forbid` with flag membership check
-- [ ] `level>5` → generates `forbid` with level comparison (inverted)
-- [ ] `faction:rebels & flag:storyteller` → compound (multiple forbids)
+- [ ] `faction:rebels` → generates `permit` with faction check
+- [ ] `flag:storyteller` → generates `permit` with flag membership check
+- [ ] `level>5` → generates `permit` with level comparison
+- [ ] `faction:rebels & flag:storyteller` → compound (multiple permits)
 - [ ] `!faction:rebels` → negates faction check
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
@@ -2756,10 +2751,10 @@ git commit -m "feat(access): add lock token registry"
 
 Lock syntax from spec:
 
-- `faction:rebels` → `forbid(principal is character, action, resource == "<target>") when { principal.faction != "rebels" };`
-- `flag:storyteller` → `forbid(principal is character, action, resource == "<target>") when { !("storyteller" in principal.flags) };`
-- `level>5` → `forbid(principal is character, action, resource == "<target>") when { principal.level <= 5 };`
-- `faction:rebels & flag:storyteller` → compound (both conditions as separate forbids or combined)
+- `faction:rebels` → `permit(principal is character, action, resource == "<target>") when { principal.faction == "rebels" };`
+- `flag:storyteller` → `permit(principal is character, action, resource == "<target>") when { "storyteller" in principal.flags };`
+- `level>5` → `permit(principal is character, action, resource == "<target>") when { principal.level > 5 };`
+- `faction:rebels & flag:storyteller` → compound (both conditions as separate permits or combined)
 - `!faction:rebels` → negates faction check
 
 Compiler takes parsed lock expression + target resource string → DSL policy text. Then PolicyCompiler validates the generated DSL.
@@ -3116,7 +3111,7 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Audit logging: denials\_only mode, all mode, off mode
-- [ ] Lock system: apply lock → forbid, remove lock → allow
+- [ ] Lock system: apply lock → permit policy, remove lock → allow
 - [ ] All integration tests pass: `go test -race -v -tags=integration ./test/integration/access/...`
 
 **Files:**
@@ -3163,7 +3158,7 @@ var _ = Describe("Access Policy Engine", func() {
     })
 
     Describe("Lock system", func() {
-        It("applies lock to resource via forbid policy", func() { })
+        It("applies lock to resource via permit policy", func() { })
         It("removes lock via unlock command", func() { })
     })
 })
@@ -3280,13 +3275,13 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Acceptance Criteria:**
 
-- [ ] Track consecutive errors per provider
-- [ ] Trigger: 10 consecutive errors → circuit opens
-- [ ] Circuit open → skip provider for 30s, return empty attributes
-- [ ] Log at WARN level: "Provider {name} circuit breaker opened: {N} consecutive errors"
+- [ ] Track budget utilization per provider over 60-second rolling window
+- [ ] Trigger: >80% budget utilization in >50% of calls (minimum 10 calls) over 60-second rolling window → circuit opens
+- [ ] Circuit open → skip provider for 60s, return empty attributes
+- [ ] Log at WARN level: "Provider {name} circuit breaker opened: budget utilization threshold exceeded"
 - [ ] Prometheus counter `abac_provider_circuit_breaker_trips_total{provider="name"}` incremented on trip
-- [ ] After 30s → half-open state with single probe request
-- [ ] Probe success → close circuit (INFO log); probe failure → re-open for another 30s
+- [ ] After 60s → half-open state with single probe request
+- [ ] Probe success → close circuit (INFO log); probe failure → re-open for another 60s
 - [ ] Circuit-opened providers do NOT consume evaluation time budget (immediate skip, no I/O)
 - [ ] Fair-share timeout calculation excludes circuit-opened providers from remaining provider count
 - [ ] Provider metrics endpoint `/debug/abac/providers` shows: call counts, avg latency, timeout rate, circuit status
@@ -3299,13 +3294,13 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **TDD Test List:**
 
-- 10 consecutive errors → circuit opens
-- Circuit open → provider skipped for 30s, empty attributes returned
-- WARN log on circuit open with provider name and failure count
+- >80% budget utilization in >50% of calls (minimum 10 calls) over 60-second rolling window → circuit opens
+- Circuit open → provider skipped for 60s, empty attributes returned
+- WARN log on circuit open with provider name and budget utilization details
 - Prometheus counter incremented on trip
-- After 30s → half-open probe sent (single request)
+- After 60s → half-open probe sent (single request)
 - Probe success → circuit closes, normal operation resumes (INFO log)
-- Probe failure → circuit re-opens for another 30s
+- Probe failure → circuit re-opens for another 60s
 - Skipping circuit-opened provider does not consume evaluation budget
 - Fair-share timeout excludes circuit-opened providers from denominator
 - Metrics endpoint shows circuit status
