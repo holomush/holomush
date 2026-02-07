@@ -1526,8 +1526,8 @@ objects with schema: `[{"namespace": "string", "error": "string", "timestamp":
 error per minute per `(namespace, error_hash)` tuple to control spam while
 preserving visibility of distinct failure modes. If a provider has two
 different error types (e.g., DB timeout and network error), both are logged
-independently. The rate limiter uses a bounded LRU cache keyed by namespace
-and error message hash.
+independently. The rate limiter uses a bounded LRU cache (capacity: 256 entries,
+per-engine-instance, in-memory) keyed by namespace and error message hash.
 
 ```text
 slog.Error("plugin attribute provider failed",
