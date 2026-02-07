@@ -40,3 +40,6 @@ MD046:
 # Code fence style
 MD048:
   style: backtick
+
+# Table column alignment - disabled (too strict for complex tables)
+MD060: false

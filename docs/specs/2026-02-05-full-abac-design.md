@@ -40,17 +40,17 @@ Players control access to their own properties through a simplified lock system.
 
 ### Glossary
 
-| Term            | Definition                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Subject**     | The entity in `AccessRequest.Subject` — the Go-side identity string (e.g., `"character:01ABC"`)               |
-| **Principal**   | The DSL keyword referring to the subject — `principal is character` matches subjects with `character:` prefix |
-| **Resource**    | The target of the access request — entity string in `AccessRequest.Resource`                                  |
-| **Action**      | The operation being performed — string in `AccessRequest.Action` (e.g., `"read"`, `"execute"`)                |
-| **Environment** | Server-wide context attributes (time, maintenance mode) — the `env` prefix in DSL                             |
-| **Policy**      | A permit or forbid rule with target matching and conditions, stored in `access_policies`                      |
+| Term            | Definition                                                                                                                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Subject**     | The entity in `AccessRequest.Subject` — the Go-side identity string (e.g., `"character:01ABC"`)                                                                                             |
+| **Principal**   | The DSL keyword referring to the subject — `principal is character` matches subjects with `character:` prefix                                                                               |
+| **Resource**    | The target of the access request — entity string in `AccessRequest.Resource`                                                                                                                |
+| **Action**      | The operation being performed — string in `AccessRequest.Action` (e.g., `"read"`, `"execute"`)                                                                                              |
+| **Environment** | Server-wide context attributes (time, maintenance mode) — the `env` prefix in DSL                                                                                                           |
+| **Policy**      | A permit or forbid rule with target matching and conditions, stored in `access_policies`                                                                                                    |
 | **Seed policy** | A system-installed default policy (prefixed `seed:`) created at first startup that defines baseline access (movement, self-access, builder/admin privileges) using the ABAC policy language |
-| **Lock**        | A player-authored simplified policy using token syntax, compiled to a scoped `lock:` policy                   |
-| **Decision**    | The outcome of `Evaluate()` — includes effect, reason, matched policies, and attribute snapshot               |
+| **Lock**        | A player-authored simplified policy using token syntax, compiled to a scoped `lock:` policy                                                                                                 |
+| **Decision**    | The outcome of `Evaluate()` — includes effect, reason, matched policies, and attribute snapshot                                                                                             |
 
 ### Key Design Decisions
 
@@ -92,7 +92,7 @@ All string identifiers in the ABAC system use reserved prefixes for validation a
 |                 | `lock:`      | Lock-generated policies                | `lock:object:01ABC:read`      |
 | Policy IDs      | `infra:`     | Infrastructure error disambiguation    | `infra:attr-resolution-error` |
 
-See [AccessRequest](#accessrequest-interface) for subject/resource format details and [Seed Policies](#seed-policies) for policy name conventions.
+See [AccessRequest](#accessrequest) for subject/resource format details and [Seed Policies](#seed-policies) for policy name conventions.
 
 ## Architecture
 
@@ -808,7 +808,7 @@ boolean        = "true" | "false"
 (* The parser SHOULD enforce a maximum nesting depth of 32 levels for
    conditions, rejecting deeply nested policies with a clear error. This
    prevents stack overflow during evaluation from naive or malicious input. *)
-```
+```text
 
 **Parser disambiguation:** The `condition` production is ambiguous at the `expr`
 alternative — when the parser encounters `principal.faction`, it cannot know
@@ -828,7 +828,7 @@ attribute type evolution silently breaks conditions via fail-safe false.
 
 **Examples:**
 
-```
+```text
 // INVALID - compile error
 permit(principal, action in ["read"], resource)
   when { principal.admin };
@@ -1135,18 +1135,18 @@ This prevents a circular dependency:
 ### Property Attributes
 
 | Attribute       | Type     | Description                                                                   |
-| --------------- | -------- | ----------------------------------------------------------------------------- |
-| `id`            | ULID     | Unique property identifier                                                    |
-| `parent_type`   | string   | Parent entity type: character, location, object                               |
-| `parent_id`     | ULID     | Parent entity ID                                                              |
-| `name`          | string   | Property name (unique per parent)                                             |
-| `value`         | string   | Property value                                                                |
-| `owner`         | string   | Subject who created/set this property                                         |
-| `visibility`    | string   | Access level: public, private, restricted, system, admin                      |
-| `flags`         | []string | Arbitrary flags (JSON array)                                                  |
-| `visible_to`    | []string | Character IDs allowed to read (restricted, max 100)                           |
-| `excluded_from` | []string | Character IDs denied from reading (max 100)                                   |
-| `parent_location` | ULID   | Resolved dynamically from parent entity's current location at evaluation time |
+| ----------------- | -------- | ----------------------------------------------------------------------------- |
+| `id`              | ULID     | Unique property identifier                                                    |
+| `parent_type`     | string   | Parent entity type: character, location, object                               |
+| `parent_id`       | ULID     | Parent entity ID                                                              |
+| `name`            | string   | Property name (unique per parent)                                             |
+| `value`           | string   | Property value                                                                |
+| `owner`           | string   | Subject who created/set this property                                         |
+| `visibility`      | string   | Access level: public, private, restricted, system, admin                      |
+| `flags`           | []string | Arbitrary flags (JSON array)                                                  |
+| `visible_to`      | []string | Character IDs allowed to read (restricted, max 100)                           |
+| `excluded_from`   | []string | Character IDs denied from reading (max 100)                                   |
+| `parent_location` | ULID     | Resolved dynamically from parent entity's current location at evaluation time |
 
 ### Visibility Levels
 
@@ -1446,12 +1446,12 @@ if !schema.IsRegistered(namespace, key) {
 When a plugin is reloaded, the engine MUST compare the new schema against the
 previous schema version and log warnings for breaking changes:
 
-| Schema Change                  | Behavior                                              |
-| ------------------------------ | ----------------------------------------------------- |
-| Attribute added                | Info log, no action required                          |
-| Attribute type changed         | Warn log, existing policies may break                 |
-| Attribute removed              | Warn log, scan policies for references                |
-| Namespace removed              | Error log, scan policies for references, reject reload if policies reference it |
+| Schema Change          | Behavior                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| Attribute added        | Info log, no action required                                                     |
+| Attribute type changed | Warn log, existing policies may break                                            |
+| Attribute removed      | Warn log, scan policies for references                                           |
+| Namespace removed      | Error log, scan policies for references, reject reload if policies reference it  |
 
 **Schema evolution example:**
 
@@ -1826,10 +1826,10 @@ expire regardless of what the current provider is doing.
 The ABAC engine uses three distinct circuit breaker designs, each tuned for
 different failure modes:
 
-| Component        | Trigger                                                  | Window | Behavior              | Metric                                                   | Rationale                                                                                                |
-| ---------------- | -------------------------------------------------------- | ------ | --------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`              | Higher threshold because some transient slowness is expected; detects systematic performance degradation |
-| PropertyProvider | 3 timeout errors                                         | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption |
+| Component        | Trigger                                                  | Window | Behavior              | Metric                                                       | Rationale                                                                                                 |
+| ---------------- | -------------------------------------------------------- | ------ | --------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`                  | Higher threshold because some transient slowness is expected; detects systematic performance degradation  |
+| PropertyProvider | 3 timeout errors                                         | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total`         | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption  |
 
 **General provider circuit breaker:** Providers that stay just
 under the timeout but consistently consume >80% of their allocated budget
