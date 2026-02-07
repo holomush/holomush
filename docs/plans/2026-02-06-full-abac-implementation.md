@@ -2452,6 +2452,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets)
 - [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
+- [ ] `abac_property_provider_circuit_breaker_trips_total` counter (PropertyProvider-specific circuit breaker, distinct from general provider metric — see spec line 1283)
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
 - [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
@@ -3224,7 +3225,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - [ ] `policy test --json` → returns structured JSON output with decision, matched policies, and attribute bags
 - [ ] Builder attribute redaction: subject attributes redacted when testing characters the builder doesn't own
 - [ ] Builder attribute redaction: resource attributes redacted for objects/locations the builder doesn't own
-- [ ] `policy test --suite <file>` → batch testing from YAML scenario file (SHOULD-level)
+- [ ] `policy test --suite <file>` → batch testing from YAML scenario file
 - [ ] YAML scenario file format: list of {subject, action, resource, expected_decision} entries
 - [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2790-2794)
 - [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
@@ -3472,6 +3473,7 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 - [ ] testcontainers for PostgreSQL (pattern from `test/integration/world/`)
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
+- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry detected
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
@@ -3507,6 +3509,11 @@ var _ = Describe("Access Policy Engine", func() {
         It("allows private property read by owner only", func() { })
         It("allows admin property read by admin only", func() { })
         It("handles restricted visibility with visible_to list", func() { })
+    })
+
+    Describe("Re-entrance guard", func() {
+        It("panics when provider calls Evaluate() synchronously", func() { })
+        It("detects goroutine-based re-entry attempts", func() { })
     })
 
     Describe("Cache invalidation", func() {
@@ -3636,7 +3643,9 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 34: General provider circuit breaker
 
-**Spec References:** Provider Circuit Breaker (lines 1540-1568)
+**Spec References:** Provider Circuit Breaker (lines 1540-1568, 1830-1846)
+
+> **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1544-1548: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1830-1846: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1544-1548 are subsumed by the budget-utilization approach.
 
 **Acceptance Criteria:**
 
@@ -3698,12 +3707,23 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Metrics exported correctly on `/metrics` endpoint
 - [ ] Code coverage >80% per package
 
+## Spec Deviations
+
+Intentional deviations from the design spec, tracked here for discoverability and review.
+
+| Deviation                                                        | Spec Reference | Task   | Rationale                                                                                          |
+| ---------------------------------------------------------------- | -------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| Primary key uses composite PK instead of spec's serial PK        | Task 2         | Task 2 | Better partition compatibility                                                                     |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877 | Task 20 | Prevents unbounded cardinality from admin-created policy names                                     |
+| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238 | Task 13 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                  |
+
 ## Deferred Features
 
 The following features are intentionally deferred from this implementation plan. They are noted here for discoverability.
 
-| Feature                           | Spec Reference           | Status   | Notes                                                    |
-| --------------------------------- | ------------------------ | -------- | -------------------------------------------------------- |
-| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
-| `--force-seed-version=N` flag     | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative |
-| Web-based policy editor           | Spec line 3448           | Deferred | Future web UI for policy management                      |
+| Feature                             | Spec Reference           | Status   | Notes                                                                    |
+| ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------------ |
+| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands      |
+| `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative              |
+| Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                      |
+| `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows        |
