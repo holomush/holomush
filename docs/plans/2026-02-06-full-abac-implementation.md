@@ -630,6 +630,7 @@ git commit -m "feat(access): add subject/resource prefix constants and parser"
 
 - [ ] `PolicyStore` interface defines: `Create`, `Get`, `GetByID`, `Update`, `Delete`, `ListEnabled`, `List`
 - [ ] `StoredPolicy` struct includes all `access_policies` table columns
+- [ ] `StoredPolicy` includes CreatedAt and UpdatedAt fields populated from DB
 - [ ] `PolicyEffect` type defined with `PolicyEffectPermit`/`PolicyEffectForbid` constants
 - [ ] `StoredPolicy.Effect` uses `PolicyEffect` (not `policy.Effect`)
 - [ ] `PolicyEffect.String()` serializes to DB TEXT values ("permit"/"forbid")
@@ -696,6 +697,8 @@ type StoredPolicy struct {
     ChangeNote  string // populated on version upgrades; stored in access_policy_versions
     CreatedBy   string
     Version     int
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
 }
 
 // Note: PolicyEffect vs Decision Effect
@@ -1568,19 +1571,17 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 **Acceptance Criteria:**
 
-- [ ] Implements the 9-step evaluation algorithm from the spec exactly
-- [ ] Step 1: Caller invokes `Evaluate(ctx, AccessRequest)`
-- [ ] Step 2: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
-- [ ] Step 3: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
+- [ ] Implements the 7-step evaluation algorithm from the spec exactly
+- [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+- [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
-- [ ] Step 4: Eager attribute resolution (all attributes collected before evaluation)
-- [ ] Step 5: Engine loads matching policies from the in-memory cache
-- [ ] Step 6: Engine evaluates each policy's conditions against the attribute bags
-- [ ] Step 7: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
+- [ ] Step 3: Eager attribute resolution (all attributes collected before evaluation)
+- [ ] Step 4: Engine loads matching policies from the in-memory cache
+- [ ] Step 5: Engine evaluates each policy's conditions against the attribute bags
+- [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
   - [ ] No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
-- [ ] Step 8: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
-- [ ] Step 9: Returns `Decision` with allowed/denied, reason, and matched policy ID
+- [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -1592,7 +1593,7 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 9-step evaluation algorithm (spec lines 148-160):
+Table-driven tests covering the 7-step evaluation algorithm (spec lines 148-160):
 
 1. **System bypass:** Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
@@ -1641,15 +1642,13 @@ type Engine struct {
 func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache, sessions SessionResolver, audit AuditLogger) *Engine
 
 func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    // Step 1: Invocation entry point
-    // Step 2: System bypass
-    // Step 3: Session resolution
-    // Step 4: Resolve attributes (eager)
-    // Step 5: Load applicable policies (from cache snapshot)
-    // Step 6: Evaluate conditions per policy
-    // Step 7: Combine decisions (deny-overrides)
-    // Step 8: Audit
-    // Step 9: Return decision
+    // Step 1: System bypass
+    // Step 2: Session resolution
+    // Step 3: Resolve attributes (eager)
+    // Step 4: Load applicable policies (from cache snapshot)
+    // Step 5: Evaluate conditions per policy
+    // Step 6: Combine decisions (deny-overrides)
+    // Step 7: Audit
 }
 ```
 
