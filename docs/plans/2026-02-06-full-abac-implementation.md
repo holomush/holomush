@@ -328,15 +328,7 @@ CREATE TABLE access_audit_log (
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Create initial partitions (current month + 2 future months, per spec Policy Storage > Audit Log Retention, line 2306)
-CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
-    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
-
-CREATE TABLE access_audit_log_2026_03 PARTITION OF access_audit_log
-    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
-
-CREATE TABLE access_audit_log_2026_04 PARTITION OF access_audit_log
-    FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+-- Partitions created dynamically by Go migration code (see below)
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp)
     WITH (pages_per_range = 128);
@@ -345,7 +337,29 @@ CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
     WHERE effect IN ('deny', 'default_deny');
 ```
 
-> **Note:** Partition dates (2026_02, 2026_03, 2026_04) are illustrative. The actual migration MUST use dates appropriate for the deployment timeframe. Consider using a Go migration that generates partition boundaries dynamically, or document that dates should be updated before deployment.
+```go
+// Dynamic partition creation in Go migration
+// Creates current month + 2 future months
+func createPartitions(tx *sql.Tx) error {
+    now := time.Now()
+    for i := 0; i < 3; i++ {
+        month := now.AddDate(0, i, 0)
+        start := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
+        end := start.AddDate(0, 1, 0)
+        name := fmt.Sprintf("access_audit_log_%d_%02d", start.Year(), start.Month())
+        sql := fmt.Sprintf(
+            "CREATE TABLE %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')",
+            name, start.Format("2006-01-02"), end.Format("2006-01-02"),
+        )
+        if _, err := tx.Exec(sql); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+> **Note:** Partition creation uses dynamic Go migration code that generates boundaries based on deployment date. The SQL above shows the table schema only; actual partition creation happens in Go.
 
 **Step 2: Write the down migration**
 
@@ -707,7 +721,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 ### Task 6: Define subject/resource prefix constants and parser
 
-**Spec References:** Core Interfaces > Session Subject Resolution (lines 326-392)
+**Spec References:** Core Interfaces > AccessRequest (lines 283-325), Session Subject Resolution (lines 326-392)
 
 **Acceptance Criteria:**
 
@@ -3524,7 +3538,7 @@ var _ = Describe("Access Policy Engine", func() {
     Describe("Audit logging", func() {
         It("logs denials in denials_only mode", func() { })
         It("logs everything in all mode", func() { })
-        It("skips allows in off mode", func() { })
+        It("only logs system bypasses in off mode", func() { })
     })
 
     Describe("Lock system", func() {
