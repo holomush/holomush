@@ -1140,7 +1140,9 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 
 ---
 
-## Phase 7.3: Policy Engine & Attribute Providers
+## Phase 7.3: Policy Engine & Attribute Providers, DI Wiring, Call Site Migration
+
+**Note:** This phase now includes Tasks 28-29 (originally in Phase 7.6) per spec requirement that call sites must be updated before developing seed policies and admin commands. The spec (Replacing Static Roles > Implementation Sequence, lines 3175-3236) explicitly states Phase 7.3 includes: "Build AccessPolicyEngine, attribute providers, and audit logger. Replace AccessControl with AccessPolicyEngine in dependency injection. Update all call sites to use Evaluate() directly."
 
 ### Task 12: Attribute provider interface and schema registry
 
@@ -1909,7 +1911,113 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ---
 
+### Task 28: Replace AccessControl with AccessPolicyEngine in dependency injection
+
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
+
+**Acceptance Criteria:**
+
+- [ ] `AccessControl` replaced with `*policy.Engine` in dependency graph
+- [ ] `AttributeResolver` wired with all registered providers
+- [ ] `PolicyCache` wired and `Listen()` called for NOTIFY subscription
+- [ ] `SessionResolver` wired
+- [ ] `AuditLogger` wired
+- [ ] `Bootstrap()` called at startup to seed policies
+- [ ] Build compiles (compilation errors at call sites expected — fixed in Task 29)
+
+**Files:**
+
+- Modify: `cmd/holomush/main.go` (or server bootstrap file)
+- Modify: DI/wiring to provide `Engine` (implements `AccessPolicyEngine`) instead of `AccessControl`
+
+**Step 1: Update DI wiring**
+
+Replace `AccessControl` in the dependency graph with `*policy.Engine`. Wire in all dependencies: `AttributeResolver` (with registered providers), `PolicyCache`, `SessionResolver`, `AuditLogger`.
+
+Add `Bootstrap()` call at startup to seed policies.
+Add `PolicyCache.Listen()` for NOTIFY subscription.
+
+**Step 2: Run build to identify compilation errors**
+
+Run: `task build`
+Expected: Compilation errors at call sites (fixed in Task 29)
+
+**Step 3: Commit**
+
+```bash
+git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection"
+```
+
+---
+
+### Task 29: Update all call sites (iterative)
+
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
+
+**Acceptance Criteria:**
+
+- [ ] ALL ~28 production call sites (plus test files and generated mocks) migrated from `AccessControl.Check()` to `engine.Evaluate()`
+- [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
+- [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
+- [ ] All subject strings use `character:` prefix (not legacy `char:`)
+- [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
+- [ ] Tests pass incrementally after each file/package update
+- [ ] Committed per package (dispatcher, world, plugin)
+- [ ] `task test` passes after all migrations
+
+**Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list:
+
+- `internal/command/dispatcher.go` — Command execution authorization
+- `internal/command/rate_limit_middleware.go` — Rate limit bypass for admins
+- `internal/command/handlers/boot.go` — Boot command permission check
+- `internal/world/service.go` — World model operation authorization
+- `internal/plugin/hostfunc/commands.go` — Plugin command execution auth
+- `internal/plugin/hostfunc/functions.go` — Plugin host function auth
+- `internal/core/broadcaster_test.go` — Test mock injection
+
+For each file:
+
+1. Change `AccessControl` parameter type to `AccessPolicyEngine`
+2. Replace `ac.Check(ctx, subject, action, resource)` with:
+
+   ```go
+   decision, err := engine.Evaluate(ctx, policy.AccessRequest{
+       Subject:  subject,
+       Action:   action,
+       Resource: resource,
+   })
+   if err != nil {
+       slog.Error("access evaluation failed", "error", err)
+       // Fail-closed: deny on error
+   }
+   if !decision.Allowed {
+       // existing denial handling
+   }
+   ```
+
+3. Update tests to mock `AccessPolicyEngine` instead of `AccessControl`
+4. Ensure all subject strings use `character:` prefix (not legacy `char:`)
+
+**Step 1: Update each file or package group**
+
+**Step 2: Run tests after each update**
+
+Run: `task test`
+Expected: PASS incrementally
+
+**Step 3: Commit per package**
+
+```bash
+git commit -m "refactor(command): migrate dispatcher to AccessPolicyEngine"
+git commit -m "refactor(world): migrate WorldService to AccessPolicyEngine"
+git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
+```
+
+---
+
 ## Phase 7.4: Seed Policies & Bootstrap
+
+**Note:** This phase depends on Tasks 28-29 (DI wiring and call site migration) being completed in Phase 7.3. Without the engine wired into the application, integration testing of seed policies would be meaningless.
 
 ### Task 21: Define seed policy constants
 
@@ -2505,111 +2613,9 @@ git commit -m "feat(command): add policy test/validate/reload/attributes/audit c
 
 ---
 
-## Phase 7.6: Call Site Migration & Cleanup
+## Phase 7.6: Legacy Code Cleanup
 
-### Task 28: Replace AccessControl with AccessPolicyEngine in dependency injection
-
-**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
-
-**Acceptance Criteria:**
-
-- [ ] `AccessControl` replaced with `*policy.Engine` in dependency graph
-- [ ] `AttributeResolver` wired with all registered providers
-- [ ] `PolicyCache` wired and `Listen()` called for NOTIFY subscription
-- [ ] `SessionResolver` wired
-- [ ] `AuditLogger` wired
-- [ ] `Bootstrap()` called at startup to seed policies
-- [ ] Build compiles (compilation errors at call sites expected — fixed in Task 29)
-
-**Files:**
-
-- Modify: `cmd/holomush/main.go` (or server bootstrap file)
-- Modify: DI/wiring to provide `Engine` (implements `AccessPolicyEngine`) instead of `AccessControl`
-
-**Step 1: Update DI wiring**
-
-Replace `AccessControl` in the dependency graph with `*policy.Engine`. Wire in all dependencies: `AttributeResolver` (with registered providers), `PolicyCache`, `SessionResolver`, `AuditLogger`.
-
-Add `Bootstrap()` call at startup to seed policies.
-Add `PolicyCache.Listen()` for NOTIFY subscription.
-
-**Step 2: Run build to identify compilation errors**
-
-Run: `task build`
-Expected: Compilation errors at call sites (fixed in Task 29)
-
-**Step 3: Commit**
-
-```bash
-git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection"
-```
-
----
-
-### Task 29: Update all call sites (iterative)
-
-**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
-
-**Acceptance Criteria:**
-
-- [ ] ALL ~28 production call sites (plus test files and generated mocks) migrated from `AccessControl.Check()` to `engine.Evaluate()`
-- [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
-- [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
-- [ ] All subject strings use `character:` prefix (not legacy `char:`)
-- [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
-- [ ] Tests pass incrementally after each file/package update
-- [ ] Committed per package (dispatcher, world, plugin)
-- [ ] `task test` passes after all migrations
-
-**Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list:
-
-- `internal/command/dispatcher.go` — Command execution authorization
-- `internal/command/rate_limit_middleware.go` — Rate limit bypass for admins
-- `internal/command/handlers/boot.go` — Boot command permission check
-- `internal/world/service.go` — World model operation authorization
-- `internal/plugin/hostfunc/commands.go` — Plugin command execution auth
-- `internal/plugin/hostfunc/functions.go` — Plugin host function auth
-- `internal/core/broadcaster_test.go` — Test mock injection
-
-For each file:
-
-1. Change `AccessControl` parameter type to `AccessPolicyEngine`
-2. Replace `ac.Check(ctx, subject, action, resource)` with:
-
-   ```go
-   decision, err := engine.Evaluate(ctx, policy.AccessRequest{
-       Subject:  subject,
-       Action:   action,
-       Resource: resource,
-   })
-   if err != nil {
-       slog.Error("access evaluation failed", "error", err)
-       // Fail-closed: deny on error
-   }
-   if !decision.Allowed {
-       // existing denial handling
-   }
-   ```
-
-3. Update tests to mock `AccessPolicyEngine` instead of `AccessControl`
-4. Ensure all subject strings use `character:` prefix (not legacy `char:`)
-
-**Step 1: Update each file or package group**
-
-**Step 2: Run tests after each update**
-
-Run: `task test`
-Expected: PASS incrementally
-
-**Step 3: Commit per package**
-
-```bash
-git commit -m "refactor(command): migrate dispatcher to AccessPolicyEngine"
-git commit -m "refactor(world): migrate WorldService to AccessPolicyEngine"
-git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
-```
-
----
+**Note:** This phase contains Task 30 (cleanup/deletion of StaticAccessControl and related legacy code). It depends on the completion of Tasks 28-29 in Phase 7.3.
 
 ### Task 30: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
