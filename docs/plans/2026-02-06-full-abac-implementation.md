@@ -1632,7 +1632,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 ### Task 18: Audit logger
 
-**Spec References:** §8.2 (Audit Log Schema), §8.3 (Audit Modes), §8.4 (Async Write Pipeline)
+**Spec References:** Audit Log Serialization (lines 2161-2192), Audit Log Configuration (lines 2193-2269), Audit Log Retention (lines 2271-2310)
 
 **Acceptance Criteria:**
 
@@ -1640,10 +1640,14 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `off`: only system bypasses logged
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
-- [ ] Async write via buffered channel — `Log()` does not block `Evaluate()`
+- [ ] **Sync write for denials:** `deny` and `default_deny` events written synchronously to PostgreSQL before `Evaluate()` returns
+- [ ] **Async write for allows:** `allow` and system bypass events written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
+- [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
+- [ ] **ReplayWAL():** Method reads WAL entries, batch-inserts to PostgreSQL, truncates file on success
+- [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
-- [ ] `audit/postgres.go` batch-inserts into partitioned `access_audit_log` table
+- [ ] `audit/postgres.go` batch-inserts from channel (async) and handles sync writes (denials)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1657,8 +1661,12 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - Mode `off`: only system bypasses logged
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
-- Async write: audit entry submitted via buffered channel, doesn't block `Evaluate()`
+- **Sync write for denials:** `deny` and `default_deny` events written synchronously, `Evaluate()` blocks until write completes
+- **Async write for allows:** `allow` and system bypass events submitted via buffered channel, doesn't block `Evaluate()`
 - Channel full: entry dropped, `abac_audit_channel_full_total` metric incremented
+- **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl`
+- **ReplayWAL():** Reads WAL file, batch-inserts to PostgreSQL, truncates on success
+- Catastrophic failure: DB + WAL fail → stderr log, `abac_audit_failures_total{reason="wal_failed"}` incremented, entry dropped
 - Verify entry contains: subject, action, resource, effect, policy_id, policy_name, attributes snapshot, duration_us
 
 **Step 2: Implement**
@@ -1676,17 +1684,26 @@ const (
     AuditModeAll                           // everything
 )
 
-// Logger writes audit entries asynchronously via a buffered channel.
+// Logger writes audit entries with sync (denials) or async (allows) paths.
+// Denials are written synchronously to prevent evidence erasure.
 type Logger struct {
-    mode    AuditMode
-    entryCh chan Entry
-    writer  Writer
+    mode      AuditMode
+    entryCh   chan Entry         // async channel for allow/system bypass
+    writer    Writer             // PostgreSQL writer
+    walPath   string             // Write-Ahead Log path for denial fallback
+    walFile   *os.File           // WAL file handle (opened with O_APPEND | O_SYNC)
 }
 
 // Writer persists audit entries (PostgreSQL implementation in postgres.go).
 type Writer interface {
-    Write(ctx context.Context, entries []Entry) error
+    Write(ctx context.Context, entries []Entry) error       // batch writes (async)
+    WriteSync(ctx context.Context, entry Entry) error       // single sync write (denials)
 }
+
+// ReplayWAL reads entries from the WAL file, batch-inserts to PostgreSQL,
+// and truncates the file on success. Called on startup and periodically
+// during recovery from transient database failures.
+func (l *Logger) ReplayWAL(ctx context.Context) error
 
 // Entry is a single audit log record.
 type Entry struct {
@@ -1705,7 +1722,12 @@ type Entry struct {
 }
 ```
 
-`audit/postgres.go` batch-inserts from the channel using the partitioned `access_audit_log` table.
+`audit/postgres.go` implements both async batch-inserts from the channel and synchronous single writes for denials. The logger distinguishes between effects:
+
+- **`deny` and `default_deny`:** Call `writer.WriteSync()` synchronously before returning from `Log()`. If the write fails, append the entry to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (opened with `O_APPEND | O_SYNC`). If both DB and WAL fail, log to stderr, increment `abac_audit_failures_total{reason="wal_failed"}`, and drop the entry.
+- **`allow` and system bypass:** Send to `entryCh` buffered channel for async batch writes. If channel is full, drop entry and increment `abac_audit_channel_full_total`.
+
+`ReplayWAL()` reads JSON-encoded entries from the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success. The server calls this on startup and MAY call it periodically (e.g., every 5 minutes) during recovery.
 
 **Step 3: Run tests, commit**
 
