@@ -131,10 +131,12 @@ graph TD
     subgraph "Phase 7.5: Locks & Admin"
         T24[Task 24: Lock token registry]
         T25[Task 25: Lock parser/compiler]
+        T25b[Task 25b: Lock/unlock commands]
         T26a[Task 26a: Admin CRUD commands]
         T26b[Task 26b: Admin state commands]
         T27[Task 27: Admin test/validate/reload]
         T24 --> T25
+        T25 --> T25b
     end
 
     subgraph "Phase 7.6: Call Site Migration"
@@ -1977,12 +1979,12 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 package audit
 
 // AuditMode controls what decisions are logged.
-type AuditMode int
+type AuditMode string
 
 const (
-    AuditModeOff         AuditMode = iota // system bypasses only
-    AuditModeDenialsOnly                   // denials + default deny + system bypass
-    AuditModeAll                           // everything
+    AuditOff         AuditMode = "off"            // system bypasses only
+    AuditDenialsOnly AuditMode = "denials_only"   // denials + default deny + system bypass
+    AuditAll         AuditMode = "all"            // everything
 )
 
 // Logger writes audit entries with sync (denials) or async (allows) paths.
@@ -2048,6 +2050,9 @@ git commit -m "feat(access): add async audit logger with mode control"
 - [ ] `AuditConfig` struct with `RetainDenials` (90 days), `RetainAllows` (7 days), `PurgeInterval` (24h)
 - [ ] Background goroutine for partition lifecycle: create future partitions, detach/drop expired partitions
 - [ ] Partition creation: pre-create next 3 months of partitions
+- [ ] Two-tier retention strategy: partition drops at 90-day threshold (longer retention), row-level DELETE for allow rows older than 7 days within active partitions
+- [ ] Partition drops use 90-day threshold (denial retention period) since monthly partitions contain mixed effects
+- [ ] Row-level DELETE removes allow-effect rows older than 7 days within still-attached partitions
 - [ ] Partition expiration: detach partitions older than retention period, drop after 7-day grace period
 - [ ] Health check endpoint: verify current month's partition exists and is attached
 - [ ] Health check alerts if no valid partition for current timestamp
@@ -2066,9 +2071,12 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 - `AuditConfig` struct with retention periods (denials: 90d, allows: 7d)
 - Background goroutine creates future partitions (next 3 months)
+- Two-tier retention: partition drops at 90-day threshold, row-level DELETE for allow-effect rows older than 7 days
 - Background goroutine detaches expired partitions based on retention period
 - Health check: returns error if current partition missing
 - Purge cycle runs every `PurgeInterval` (default 24h)
+
+**Note:** Monthly partitions contain mixed effects (allows and denials). Partition-level drops use the longer retention period (90 days for denials). Within active partitions, row-level DELETE removes allow-effect rows older than 7 days.
 
 **Step 2: Implement**
 
@@ -2781,6 +2789,65 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ---
 
+### Task 25b: Lock and unlock in-game command handlers
+
+**Spec References:** Lock Expression Syntax > In-Game Lock Commands (lines 2393-2679)
+
+**Acceptance Criteria:**
+
+- [ ] `lock <resource>/<action> = <expression>` → parses expression, validates ownership via `Evaluate()`, compiles to permit policy, stores via `PolicyStore`
+- [ ] `unlock <resource>/<action>` → removes action-specific lock policy for the resource
+- [ ] `unlock <resource>` → removes all lock policies for the resource
+- [ ] Resource target resolution: resolve object/exit by name in current location
+- [ ] Ownership verification: character must own the target resource (checked via `Evaluate()`)
+- [ ] Rate limiting: max 50 lock policies per character → error on create if exceeded
+- [ ] Lock policy naming: `lock:<character_id>:<resource_id>:<action>` format
+- [ ] Commands registered in command registry following existing handler patterns
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/command/handlers/lock.go`
+- Test: `internal/command/handlers/lock_test.go`
+
+**Step 1: Write failing tests**
+
+- `lock <resource>/<action> = <expression>` → parses expression, validates ownership, compiles policy, stores in DB
+- `unlock <resource>/<action>` → removes action-specific lock policy
+- `unlock <resource>` → removes all lock policies for resource
+- Resource target resolution: resolve by name in current location
+- Ownership check: character must own target resource
+- Rate limiting: max 50 lock policies per character
+
+**Step 2: Implement lock and unlock commands**
+
+Lock command workflow:
+1. Parse `lock <resource>/<action> = <expression>` syntax
+2. Resolve resource by name in character's current location
+3. Check ownership via `engine.Evaluate(ctx, AccessRequest{Subject: character, Action: "own", Resource: resource})`
+4. Count existing lock policies for character (from PolicyStore, filter by `name LIKE 'lock:<character_id>:%'`)
+5. If count >= 50, return error "Rate limit exceeded: max 50 lock policies per character"
+6. Parse lock expression via lock parser (from Task 25)
+7. Compile to DSL policy via lock compiler (from Task 25)
+8. Generate policy name: `lock:<character_id>:<resource_id>:<action>`
+9. Store policy via PolicyStore with source="lock"
+
+Unlock command workflow:
+1. Parse `unlock <resource>/<action>` or `unlock <resource>` syntax
+2. Resolve resource by name in character's current location
+3. Check ownership via `Evaluate()`
+4. If action specified: delete policy named `lock:<character_id>:<resource_id>:<action>`
+5. If no action: delete all policies matching `lock:<character_id>:<resource_id>:%`
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/command/handlers/lock.go internal/command/handlers/lock_test.go
+git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock expressions"
+```
+
+---
+
 ### Task 26a: Admin commands — policy CRUD (create/list/show/edit/delete)
 
 **Spec References:** Admin Commands (lines 2695-2914) — CRUD commands
@@ -2879,6 +2946,11 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 - [ ] `policy test <subject> <action> <resource>` → returns decision and matched policies
 - [ ] `policy test --verbose` → shows all candidate policies with match/no-match reasons
+- [ ] `policy test --json` → returns structured JSON output with decision, matched policies, and attribute bags
+- [ ] Builder attribute redaction: subject attributes redacted when testing characters the builder doesn't own
+- [ ] Builder attribute redaction: resource attributes redacted for objects/locations the builder doesn't own
+- [ ] `policy test --suite <file>` → batch testing from YAML scenario file (SHOULD-level)
+- [ ] YAML scenario file format: list of {subject, action, resource, expected_decision} entries
 - [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2790-2794)
 - [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
 - [ ] `policy validate <dsl>` → success or error with line/column
@@ -2904,6 +2976,9 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 - `policy test <subject> <action> <resource>` → returns decision, matched policies
 - `policy test --verbose` → shows all candidate policies with why each did/didn't match
+- `policy test --json` → structured JSON output test
+- `policy test --suite <file>` → batch YAML scenario testing
+- Builder attribute redaction: test with characters/resources the builder doesn't own
 - `policy validate <dsl>` → success or error with line/column
 - `policy reload` → forces cache reload from DB
 - `policy attributes` → lists all registered attribute namespaces and keys
