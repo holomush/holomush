@@ -1356,6 +1356,126 @@ Plugin Attributes:
 Optional filtering: `policy attributes --namespace reputation` shows only
 attributes in the `reputation` namespace.
 
+### Schema Validation and Evolution
+
+#### Registration-Time Validation
+
+Attribute providers MUST register schemas during plugin initialization. The
+schema registry enforces the following validation rules at registration time:
+
+| Validation Rule                | Behavior                                              |
+| ------------------------------ | ----------------------------------------------------- |
+| Missing namespace              | Reject registration, return error to plugin loader    |
+| Empty namespace                | Reject registration, return error to plugin loader    |
+| Duplicate namespace            | Reject registration, return error to plugin loader    |
+| Empty attribute definition     | Reject registration, return error to plugin loader    |
+| Invalid type (not in enum)     | Reject registration, return error to plugin loader    |
+| Duplicate attribute keys       | Reject registration, return error to plugin loader    |
+
+**Registration failure behavior:** If a plugin fails to register a valid schema,
+the plugin loader MUST fail plugin initialization and log the error. The plugin
+MUST NOT be loaded. This prevents runtime surprises where attributes are
+returned without schema definitions.
+
+```go
+// Example registration validation
+if err := schema.RegisterNamespace("reputation", attrs, "reputation-plugin-v2"); err != nil {
+    return oops.Code("SCHEMA_REGISTRATION_FAILED").
+        With("plugin", pluginName).
+        With("namespace", "reputation").
+        Wrap(err)
+}
+```
+
+#### Runtime Behavior for Unregistered Attributes
+
+If an attribute provider returns attributes at runtime that were not registered
+in its schema, the engine MUST handle this gracefully:
+
+1. **Log a warning** for each unregistered attribute key encountered (rate-limited
+   to 1 log per minute per namespace+key combination to prevent spam)
+2. **Include the attribute** in the evaluation context anyway (fail-open for
+   attribute availability to avoid breaking policies)
+3. **Emit a metric** `abac_unregistered_attributes_total{namespace="X",key="Y"}`
+   to track schema drift
+
+This approach balances safety (logging the schema violation) with availability
+(policies continue working even with schema drift).
+
+```go
+// Example runtime handling
+if !schema.IsRegistered(namespace, key) {
+    if rateLimiter.Allow(namespace, key) {
+        slog.Warn("attribute returned without registered schema",
+            "namespace", namespace,
+            "key", key,
+            "provider", provider.Name())
+    }
+    metrics.UnregisteredAttributes.WithLabelValues(namespace, key).Inc()
+}
+// Continue evaluation with the attribute
+```
+
+#### Schema Evolution on Plugin Reload
+
+When a plugin is reloaded, the engine MUST compare the new schema against the
+previous schema version and log warnings for breaking changes:
+
+| Schema Change                  | Behavior                                              |
+| ------------------------------ | ----------------------------------------------------- |
+| Attribute added                | Info log, no action required                          |
+| Attribute type changed         | Warn log, existing policies may break                 |
+| Attribute removed              | Warn log, scan policies for references                |
+| Namespace removed              | Error log, scan policies for references, reject reload if policies reference it |
+
+**Schema evolution example:**
+
+```go
+// Plugin reloaded: reputation-plugin-v2 → reputation-plugin-v3
+oldSchema := schema.GetNamespace("reputation") // v2
+newSchema := incomingRegistration              // v3
+
+// Detect removals
+for _, oldAttr := range oldSchema.Attributes {
+    if !newSchema.HasAttribute(oldAttr.Key) {
+        affectedPolicies := policyIndex.FindPoliciesReferencing("reputation", oldAttr.Key)
+        if len(affectedPolicies) > 0 {
+            slog.Warn("attribute removed from schema, policies may be affected",
+                "namespace", "reputation",
+                "key", oldAttr.Key,
+                "version_old", oldSchema.Version,
+                "version_new", newSchema.Version,
+                "affected_policies", len(affectedPolicies))
+        }
+    }
+}
+
+// Detect type changes
+for _, newAttr := range newSchema.Attributes {
+    if oldAttr, exists := oldSchema.GetAttribute(newAttr.Key); exists {
+        if oldAttr.Type != newAttr.Type {
+            slog.Warn("attribute type changed",
+                "namespace", "reputation",
+                "key", newAttr.Key,
+                "type_old", oldAttr.Type,
+                "type_new", newAttr.Type)
+        }
+    }
+}
+```
+
+**Policy reference scanning:** The engine SHOULD maintain a reverse index
+mapping `(namespace, attribute key) → []PolicyID` to efficiently find policies
+affected by schema changes. This index is updated when policies are compiled and
+removed when policies are deleted.
+
+**Namespace removal:** If a plugin unregisters its namespace entirely (plugin
+unloaded or replaced), the engine MUST scan all active policies for references
+to that namespace. If any policies reference the removed namespace, the reload
+SHOULD be rejected unless the operator provides a `--force` flag. Forced removal
+logs an error and leaves the policies in a broken state (compile errors on next
+evaluation).
+
 ### Error Handling
 
 **Core provider errors:** The engine returns the error alongside a default-deny
