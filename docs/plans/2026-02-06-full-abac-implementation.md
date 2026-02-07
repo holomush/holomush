@@ -1837,6 +1837,9 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
 - [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+  - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
+  - [ ] Engine implementation MUST call audit logger before returning from step 1
+  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
@@ -2562,6 +2565,7 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
 - [ ] `UpdateSeed()` skips with warning if stored DSL differs from old DSL (customized by admins)
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
+- [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2590,7 +2594,7 @@ import (
     "log/slog"
 
     "github.com/holomush/holomush/internal/access"
-    "github.com/holomush/holomush/internal/store"
+    policystore "github.com/holomush/holomush/internal/access/policy/store"
     "github.com/samber/oops"
 )
 
@@ -2603,14 +2607,14 @@ type BootstrapOptions struct {
 // Called at server startup with system subject context (bypasses ABAC).
 // Idempotent: checks each seed policy by name before insertion.
 // Supports seed version upgrades unless opts.SkipSeedMigrations is true.
-func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
+func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
     // Use system subject context to bypass ABAC during bootstrap
     ctx = access.WithSystemSubject(ctx)
 
     for _, seed := range SeedPolicies() {
         // Per-seed idempotency check: query by name
         existing, err := policyStore.Get(ctx, seed.Name)
-        if err != nil && !store.IsNotFound(err) {
+        if err != nil && !policystore.IsNotFound(err) {
             return oops.With("seed", seed.Name).Wrap(err)
         }
 
@@ -2662,7 +2666,7 @@ func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *Pol
         }
         compiledJSON, _ := json.Marshal(compiled)
 
-        err = policyStore.Create(ctx, &store.StoredPolicy{
+        err = policyStore.Create(ctx, &policystore.StoredPolicy{
             Name:        seed.Name,
             Description: seed.Description,
             Effect:      compiled.Effect,
