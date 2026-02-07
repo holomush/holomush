@@ -1198,6 +1198,8 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 - [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Attribute Providers)
 - [ ] All tests pass via `task test`
 
+> **Design note:** Although the schema defines both `AttrTypeInt` and `AttrTypeFloat`, both MUST be returned as `float64` at runtime per spec. The Int/Float distinction exists only for schema introspection and validation (e.g., integer-only attributes reject fractional values at write time).
+
 **Files:**
 
 - Create: `internal/access/policy/attribute/provider.go`
@@ -2126,6 +2128,8 @@ git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
 - [ ] DSL text matches spec exactly (lines 2935-2999)
 - [ ] All tests pass via `task test`
 
+> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (per spec), which is enforced at the property read layer, not via ABAC policies.
+
 **Files:**
 
 - Create: `internal/access/policy/seed.go`
@@ -2544,8 +2548,8 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
 - [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
 - [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
-- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
-- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
+- [ ] Orphan cleanup: configurable timer interval (default 1h), configurable grace period (default 24h), batch DELETE (limit 1000 per cycle)
+- [ ] Startup integrity check: count orphaned properties, log at WARN if count > 0, schedule cleanup within 5 minutes
 - [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
 - [ ] All tests pass via `task test`
 
@@ -2908,8 +2912,8 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Files:**
 
-- Modify: `internal/access/policy/schema_registry.go` (add schema versioning and comparison)
-- Test: `internal/access/policy/schema_registry_test.go`
+- Modify: `internal/access/policy/attribute/schema.go` (add schema versioning and comparison)
+- Test: `internal/access/policy/attribute/schema_test.go`
 
 **TDD Test List:**
 
