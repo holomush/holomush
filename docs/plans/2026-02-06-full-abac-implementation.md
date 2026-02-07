@@ -39,11 +39,11 @@ Applicable ADRs (from spec "Related ADRs" section, lines 3461+):
 
 | ADR      | Title                              | Applies To      |
 | -------- | ---------------------------------- | --------------- |
-| ADR 0011 | Deny-overrides conflict resolution | Tasks 16, 31    |
+| ADR 0011 | Deny-overrides conflict resolution | Tasks 16, 30    |
 | ADR 0012 | Eager attribute resolution         | Tasks 13, 16    |
-| ADR 0013 | Properties as first-class entities | Tasks 3, 15, 25 |
-| ADR 0014 | Direct replacement (no adapter)    | Tasks 28-30     |
-| ADR 0015 | Three-Layer Player Access Control  | Tasks 15, 25    |
+| ADR 0013 | Properties as first-class entities | Tasks 3, 15, 26 |
+| ADR 0014 | Direct replacement (no adapter)    | Tasks 28-29     |
+| ADR 0015 | Three-Layer Player Access Control  | Tasks 15, 26    |
 | ADR 0016 | LISTEN/NOTIFY cache invalidation   | Task 17         |
 
 ### Acceptance Criteria
@@ -1456,11 +1456,15 @@ PropertyProvider's `parent_location` uses recursive CTE:
 WITH RECURSIVE containment AS (
     -- Base case: start from the resource
     SELECT
-        parent_type,
-        parent_id,
+        ep.parent_type,
+        ep.parent_id,
         0 AS depth,
-        ARRAY[id] AS path
-    FROM entity_properties WHERE id = $1
+        ARRAY[ep.id] AS path
+    FROM entity_properties ep
+    LEFT JOIN characters ch ON ep.parent_type = 'character' AND ep.parent_id = ch.id::text
+    LEFT JOIN objects obj ON ep.parent_type = 'object' AND ep.parent_id = obj.id::text
+    LEFT JOIN locations loc ON ep.parent_type = 'location' AND ep.parent_id = loc.id::text
+    WHERE ep.id = $1
 
     UNION ALL
 
@@ -2069,9 +2073,57 @@ git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
 
 ## Phase 7.4: Seed Policies & Bootstrap
 
-**Note:** This phase depends on Tasks 28-29 (DI wiring and call site migration) being completed in Phase 7.3. Without the engine wired into the application, integration testing of seed policies would be meaningless.
+**Dependencies:**
+- This phase depends on Tasks 28-29 (DI wiring and call site migration) being completed in Phase 7.3. Without the engine wired into the application, integration testing of seed policies would be meaningless.
+- Task 21 (@ prefix removal) MUST be completed before Task 22 (seed policy constants), since seed policies reference command names without the `@` prefix (e.g., `"dig"` not `"@dig"`).
 
-### Task 21: Define seed policy constants
+### Task 21: Remove `@` prefix from command names (Pre-requisite)
+
+**Acceptance Criteria:**
+
+- [ ] All command registrations use unprefixed names (`"dig"` not `"@dig"`)
+- [ ] Command lookup logic handles unprefixed names
+- [ ] All command invocations use unprefixed names
+- [ ] No `@`-prefixed command names remain in codebase
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Search: All `.go` files for `"@dig"`, `"@create"`, `"@describe"`, `"@link"`, etc.
+- Modify: Command registry initialization (likely in `internal/command/` or similar)
+- Modify: Command name constants if any exist
+- Update: Any tests that reference `@`-prefixed command names
+
+**Step 1: Find all @ prefix usage**
+
+```bash
+rg '"@\w+"' --type go
+```
+
+**Step 2: Update command registry**
+
+Remove `@` prefix from all command name registrations. Command names should be lowercase, unprefixed identifiers like `"dig"`, `"create"`, `"describe"`, `"link"`.
+
+**Step 3: Update command lookup and invocation**
+
+Ensure command parser and executor use unprefixed names.
+
+**Step 4: Run tests**
+
+```bash
+task test
+```
+
+**Step 5: Commit**
+
+```bash
+git add .
+git commit -m "refactor(commands): remove @ prefix from command names"
+```
+
+---
+
+### Task 22: Define seed policy constants
 
 **Spec References:** Replacing Static Roles > Seed Policies (lines 2929-2999)
 
@@ -2214,7 +2266,7 @@ git commit -m "feat(access): define seed policies"
 
 ---
 
-### Task 22: Bootstrap sequence
+### Task 23: Bootstrap sequence
 
 **Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
 
@@ -2377,7 +2429,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 ## Phase 7.5: Locks & Admin
 
-### Task 23: Lock token registry
+### Task 24: Lock token registry
 
 **Spec References:** Access Control Layers > Layer 2: Object Locks (lines 2393+)
 
@@ -2436,7 +2488,7 @@ git commit -m "feat(access): add lock token registry"
 
 ---
 
-### Task 24: Lock expression parser and compiler
+### Task 25: Lock expression parser and compiler
 
 **Spec References:** Lock Expression Syntax (lines 2432-2466), Lock-to-DSL Compilation (lines 2564-2612), Lock Token Registry — ownership and rate limits (lines 2592-2669)
 
@@ -2483,7 +2535,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ---
 
-### Task 25: Property model (EntityProperty type and repository)
+### Task 26: Property model (EntityProperty type and repository)
 
 **Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
 
@@ -2570,7 +2622,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 ---
 
-### Task 26: Admin commands — policy create/list/show/edit/delete/enable/disable/history/rollback
+### Task 27: Admin commands — policy create/list/show/edit/delete/enable/disable/history/rollback
 
 **Spec References:** Admin Commands (lines 2695-2914)
 
@@ -2621,7 +2673,7 @@ git commit -m "feat(command): add policy CRUD admin commands"
 
 ---
 
-### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed
+### Task 28: Admin commands — policy test/validate/reload/attributes/audit/seed
 
 **Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629)
 
@@ -2667,9 +2719,9 @@ git commit -m "feat(command): add policy test/validate/reload/attributes/audit c
 
 ## Phase 7.6: Legacy Code Cleanup
 
-**Note:** This phase contains Task 30 (cleanup/deletion of StaticAccessControl and related legacy code). It depends on the completion of Tasks 28-29 in Phase 7.3.
+**Note:** This phase contains Task 29 (cleanup/deletion of StaticAccessControl and related legacy code). It depends on the completion of Task 28 in Phase 7.5 and call site migration from Phase 7.3.
 
-### Task 30: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
+### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
 **Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
 
@@ -2682,7 +2734,7 @@ git commit -m "feat(command): add policy test/validate/reload/attributes/audit c
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
 - [ ] Zero `char:` prefix usage (all migrated to `character:`)
-- [ ] Zero `@`-prefixed command names
+- [ ] Zero `@`-prefixed command names (should already be done in Task 21)
 - [ ] `task test` passes
 - [ ] `task lint` passes
 
@@ -2710,10 +2762,10 @@ Keep `ParseSubject()` or migrate it to `policy.ParseEntityRef()`. Keep any utili
 
 Plugin manifests are now handled by seed policies. Remove enforcer and all references.
 
-**Step 4: Remove legacy prefixes**
+**Step 4: Remove legacy `char:` prefix**
 
 - `char:` → `character:` (search all `.go` files)
-- `@dig` → `dig` (command name without `@` prefix)
+- Note: `@` prefix removal should already be done in Task 21
 
 **Step 5: Run tests**
 
@@ -2731,7 +2783,7 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 
 ## Phase 7.7: Integration Tests
 
-### Task 31: Integration tests for full ABAC flow
+### Task 30: Integration tests for full ABAC flow
 
 **Spec References:** Testing Strategy > Integration Tests (lines 3315+), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 
@@ -2810,7 +2862,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 32: Degraded mode implementation
+### Task 31: Degraded mode implementation
 
 **Spec References:** Degraded Mode (lines 1606-1629)
 
@@ -2843,7 +2895,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 33: Schema evolution on plugin reload
+### Task 32: Schema evolution on plugin reload
 
 **Spec References:** Schema Evolution on Plugin Reload (lines 1443-1502)
 
@@ -2874,7 +2926,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 34: Lock tokens discovery command
+### Task 33: Lock tokens discovery command
 
 **Spec References:** Lock Token Discovery (lines 2613-2638)
 
@@ -2901,7 +2953,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 35: General provider circuit breaker
+### Task 34: General provider circuit breaker
 
 **Spec References:** Provider Circuit Breaker (lines 1540-1568)
 
@@ -2939,7 +2991,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 36: CLI flag --validate-seeds
+### Task 35: CLI flag --validate-seeds
 
 **Spec References:** Seed Policy Validation (lines 3076-3122)
 
