@@ -35,16 +35,16 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 > **Note:** Spec line numbers in task references are approximate and based on the spec at time of writing. Verify against the current spec before implementing.
 
-Applicable ADRs (from spec §18):
+Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 
 | ADR      | Title                              | Applies To      |
 | -------- | ---------------------------------- | --------------- |
-| ADR 0011 | Deny-overrides conflict resolution | Tasks 16, 31    |
-| ADR 0012 | Eager attribute resolution         | Tasks 13, 16    |
-| ADR 0013 | Properties as first-class entities | Tasks 3, 15, 25 |
-| ADR 0014 | Direct replacement (no adapter)    | Tasks 28-30     |
-| ADR 0015 | Three-Layer Player Access Control  | Tasks 15, 25    |
-| ADR 0016 | LISTEN/NOTIFY cache invalidation   | Task 17         |
+| ADR 0011 | Deny-overrides conflict resolution | Tasks 17, 30    |
+| ADR 0012 | Eager attribute resolution         | Tasks 14, 17    |
+| ADR 0013 | Properties as first-class entities | Tasks 3, 4, 16  |
+| ADR 0014 | Direct replacement (no adapter)    | Tasks 28-29     |
+| ADR 0015 | Three-Layer Player Access Control  | Tasks 4, 16     |
+| ADR 0016 | LISTEN/NOTIFY cache invalidation   | Task 18         |
 
 ### Acceptance Criteria
 
@@ -63,13 +63,137 @@ A task is complete ONLY when: tests pass, acceptance criteria met, AND review pa
 
 ---
 
+## Phase Dependency Diagram
+
+```mermaid
+graph TD
+    subgraph "Phase 7.1: Policy Schema"
+        T1[Task 1: access_policies migration]
+        T2[Task 2: access_audit_log migration]
+        T3[Task 3: entity_properties migration]
+        T4[Task 4: Property model]
+        T5[Task 5: Core types]
+        T6[Task 6: Subject/resource prefixes]
+        T7[Task 7: Policy store]
+        T1 --> T7
+        T2 --> T7
+        T3 --> T4
+        T4 --> T7
+        T5 --> T7
+        T6 --> T5
+    end
+
+    subgraph "Phase 7.2: DSL & Compiler"
+        T8[Task 8: AST node types]
+        T9[Task 9: DSL parser]
+        T10[Task 10: DSL fuzz tests]
+        T11[Task 11: DSL evaluator]
+        T12[Task 12: PolicyCompiler]
+        T8 --> T9
+        T9 --> T10
+        T9 --> T11
+        T11 --> T12
+    end
+
+    subgraph "Phase 7.3: Policy Engine & Attribute Providers"
+        T13[Task 13: Attribute provider interface]
+        T14[Task 14: Attribute resolver cache]
+        T15[Task 15: Core providers]
+        T16a[Task 16a: Simple providers]
+        T16b[Task 16b: PropertyProvider]
+        T17[Task 17: AccessPolicyEngine]
+        T18[Task 18: Policy cache LISTEN/NOTIFY]
+        T19[Task 19: Audit logger]
+        T19b[Task 19b: Audit retention]
+        T20[Task 20: Prometheus metrics]
+        T21[Task 21: Performance benchmarks]
+        T13 --> T14
+        T14 --> T15
+        T15 --> T16a
+        T16a --> T16b
+        T15 --> T17
+        T16b --> T17
+        T17 --> T18
+        T17 --> T19
+        T19 --> T19b
+        T17 --> T20
+        T17 --> T21
+    end
+
+    subgraph "Phase 7.4: Seed Policies & Bootstrap"
+        T22[Task 22: Seed policy constants]
+        T23[Task 23: Bootstrap sequence]
+        T23b[Task 23b: CLI --validate-seeds]
+        T22 --> T23
+        T23 --> T23b
+    end
+
+    subgraph "Phase 7.5: Locks & Admin"
+        T24[Task 24: Lock token registry]
+        T25[Task 25: Lock parser/compiler]
+        T26a[Task 26a: Admin CRUD commands]
+        T26b[Task 26b: Admin state commands]
+        T27[Task 27: Admin test/validate/reload]
+        T24 --> T25
+    end
+
+    subgraph "Phase 7.6: Call Site Migration"
+        T28[Task 28: Migrate to engine]
+        T29[Task 29: Remove old AccessControl]
+        T28 --> T29
+    end
+
+    subgraph "Phase 7.7: Resilience & Integration"
+        T30[Task 30: Integration tests]
+        T31[Task 31: Degraded mode]
+        T32[Task 32: Schema evolution]
+        T33[Task 33: Lock discovery command]
+        T34[Task 34: Circuit breaker]
+    end
+
+    %% Critical cross-phase dependencies
+    T7 --> T12
+    T7 --> T18
+    T12 --> T17
+    T4 --> T16b
+    T12 --> T22
+    T18 --> T23
+    T23 --> T24
+    T23 --> T26a
+    T23 --> T27
+    T17 --> T28
+    T23b --> T30
+
+    %% Critical path (thick lines conceptually)
+    style T1 fill:#ffcccc
+    style T4 fill:#ffcccc
+    style T7 fill:#ffcccc
+    style T12 fill:#ffcccc
+    style T17 fill:#ffcccc
+    style T18 fill:#ffcccc
+    style T23 fill:#ffcccc
+    style T28 fill:#ffcccc
+    style T29 fill:#ffcccc
+```
+
+**Critical Path (highlighted in red):** Task 1 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+
+**Parallel Work Opportunities:**
+- Phase 7.2 (Tasks 8-12) can start after Task 7 completes
+- Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
+- Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
+- Phase 7.5 (Locks & Admin) can proceed independently after Task 23
+- Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
+
+---
+
 ## Phase 7.1: Policy Schema (Database Tables + Policy Store)
 
 > **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
 
 ### Task 1: Create access\_policies migration
 
-**Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050)
+**Spec References:** Policy Storage > Schema (lines 1973-2114)
 
 **Acceptance Criteria:**
 
@@ -142,7 +266,7 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 
 ### Task 2: Create access\_audit\_log migration
 
-**Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050), §8.2 (Audit Log Schema)
+**Spec References:** Policy Storage > Schema (lines 1973-2114), Policy Storage > Audit Log Serialization (lines 2161-2179)
 
 **Acceptance Criteria:**
 
@@ -184,12 +308,12 @@ CREATE TABLE access_audit_log (
     duration_us     INTEGER,
     -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
     -- tables MUST include the partition key (timestamp) in the primary key.
-    -- Spec §8.2 line 2015 defines "id TEXT PRIMARY KEY" which is technically
+    -- Spec Policy Storage > Audit Log Serialization (line 2167) defines "id TEXT PRIMARY KEY" which is technically
     -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Create initial partitions (current month + 2 future months, per spec §8.2 line 2306)
+-- Create initial partitions (current month + 2 future months, per spec Policy Storage > Audit Log Retention, line 2306)
 CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
     FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
 
@@ -220,13 +344,13 @@ git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
 
-**NOTE:** The spec (§8.2 line 2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+**NOTE:** The spec (Policy Storage > Audit Log Serialization, line 2167) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
 
 ---
 
 ### Task 3: Create entity\_properties migration
 
-**Spec References:** §8.1 (Policy Storage Schema), ADR 0013 (Properties as first-class entities)
+**Spec References:** Policy Storage > Schema (lines 1973-2114), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -291,9 +415,98 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 ---
 
-### Task 4: Define core types (AccessRequest, Decision, Effect, PolicyMatch, AttributeBags)
+### Task 4: Property model (EntityProperty type and repository)
 
-**Spec References:** §3 (Core Interfaces, lines 195-335) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
+> **Note:** This task was originally Task 25 in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository.
+
+**Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
+
+**Acceptance Criteria:**
+
+- [ ] `EntityProperty` struct: ID, ParentType, ParentID, Name, Value, Owner, Visibility, Flags, VisibleTo, ExcludedFrom, timestamps
+- [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`, `DeleteByParent`
+- [ ] CRUD operations round-trip all fields correctly
+- [ ] Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
+- [ ] `visible_to` max 100 entries; `excluded_from` max 100 entries → error if exceeded
+- [ ] No overlap between `visible_to` and `excluded_from` → error
+- [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
+- [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
+- [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
+- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
+- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
+- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
+- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
+- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
+- [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/world/property.go` (EntityProperty type + PropertyRepository interface)
+- Create: `internal/world/postgres/property_repo.go` (PostgreSQL implementation)
+- Test: `internal/world/postgres/property_repo_test.go`
+
+**Step 1: Write failing tests**
+
+- Create property → round-trips all fields
+- Get by ID
+- List by parent (type + ID)
+- Update property (value, visibility, flags)
+- Delete property
+- Delete by parent (type + ID) → deletes all properties for that parent
+- Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
+- Constraints: `visible_to` max 100 entries, `excluded_from` max 100 entries
+- No overlap between `visible_to` and `excluded_from` → error
+- Parent name uniqueness → error on duplicate
+
+**Step 2: Implement**
+
+```go
+// internal/world/property.go
+package world
+
+// EntityProperty is a first-class property attached to a world entity.
+type EntityProperty struct {
+    ID           ulid.ULID
+    ParentType   string // "character", "location", "object"
+    ParentID     string
+    Name         string
+    Value        *string
+    Owner        *string
+    Visibility   string // "public", "private", "restricted", "system", "admin"
+    Flags        []string
+    VisibleTo    []string
+    ExcludedFrom []string
+    CreatedAt    time.Time
+    UpdatedAt    time.Time
+}
+
+// PropertyRepository manages entity properties.
+type PropertyRepository interface {
+    Create(ctx context.Context, p *EntityProperty) error
+    Get(ctx context.Context, id ulid.ULID) (*EntityProperty, error)
+    ListByParent(ctx context.Context, parentType, parentID string) ([]*EntityProperty, error)
+    Update(ctx context.Context, p *EntityProperty) error
+    Delete(ctx context.Context, id ulid.ULID) error
+    DeleteByParent(ctx context.Context, parentType, parentID string) error
+}
+```
+
+Follow existing repository patterns from `internal/world/postgres/location_repo.go`.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/world/property.go internal/world/postgres/property_repo.go
+git add internal/world/postgres/property_repo_test.go
+git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
+```
+
+---
+
+### Task 5: Define core types (AccessRequest, Decision, Effect, PolicyMatch, AttributeBags)
+
+**Spec References:** Core Interfaces (lines 195-512) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
 
 **Acceptance Criteria:**
 
@@ -455,9 +668,9 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 ---
 
-### Task 5: Define subject/resource prefix constants and parser
+### Task 6: Define subject/resource prefix constants and parser
 
-**Spec References:** §3.3 (Subject/Resource Prefix Format, lines 335-392)
+**Spec References:** Core Interfaces > Session Subject Resolution (lines 326-392)
 
 **Acceptance Criteria:**
 
@@ -622,9 +835,9 @@ git commit -m "feat(access): add subject/resource prefix constants and parser"
 
 ---
 
-### Task 6: Policy store interface and PostgreSQL implementation
+### Task 7: Policy store interface and PostgreSQL implementation
 
-**Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050), §6.5 (LISTEN/NOTIFY, lines 1327-1345)
+**Spec References:** Policy Storage > Schema (lines 1973-2114), Policy Storage > Cache Invalidation (lines 2115-2159)
 
 **Acceptance Criteria:**
 
@@ -737,9 +950,9 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 
 ## Phase 7.2: DSL & Compiler
 
-### Task 7: Define AST node types
+### Task 8: Define AST node types
 
-**Spec References:** §4 (DSL Grammar, EBNF lines 735-810), §4.1 (Reserved Words)
+**Spec References:** Policy DSL > Grammar (lines 737-946)
 
 **Acceptance Criteria:**
 
@@ -787,9 +1000,9 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 ---
 
-### Task 8: Build DSL parser
+### Task 9: Build DSL parser
 
-**Spec References:** §4 (DSL Grammar, EBNF lines 735-810), §4.2 (Operator Semantics), §12.1 (Seed Policy DSL text, lines 2935-2999)
+**Spec References:** Policy DSL > Grammar (lines 737-946), Policy DSL > Supported Operators (lines 1019-1036), Replacing Static Roles > Seed Policies (lines 2929-3006)
 
 **Acceptance Criteria:**
 
@@ -852,6 +1065,7 @@ forbid(principal, action, resource);
 - Reserved word as attribute name
 - Nesting depth >32 → error
 - Malformed conditions
+- Entity reference using Type::"value" syntax (spec lines 939-945 requires parser MUST reject this form)
 
 **Step 2: Implement parser using participle**
 
@@ -898,7 +1112,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 ---
 
-### Task 9: Add DSL fuzz tests
+### Task 10: Add DSL fuzz tests
 
 **Spec References:** Testing Strategy — Fuzz Testing (lines 3272-3314), Policy DSL Grammar (lines 737-825)
 
@@ -958,9 +1172,9 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ---
 
-### Task 10: Build DSL condition evaluator
+### Task 11: Build DSL condition evaluator
 
-**Spec References:** §4.2 (Operator Semantics), §6.3 (Fail-Safe Attribute Handling), §6.4 (Nesting Depth Limit)
+**Spec References:** Policy DSL > Supported Operators (lines 1019-1036), Attribute Resolution > Error Handling (lines 1503-1640)
 
 **Acceptance Criteria:**
 
@@ -1045,9 +1259,9 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 
 ---
 
-### Task 11: Build PolicyCompiler
+### Task 12: Build PolicyCompiler
 
-**Spec References:** §5 (Compilation Pipeline, lines 845-930), §5.1 (Validation Warnings), §5.2 (Glob Pre-compilation)
+**Spec References:** Policy DSL > Grammar (lines 737-946) (compilation is part of the grammar section)
 
 **Acceptance Criteria:**
 
@@ -1061,6 +1275,7 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 - [ ] Always-true condition → warning
 - [ ] Glob patterns pre-compiled in `GlobCache`
 - [ ] `compiled_ast` JSONB serialization round-trips correctly
+- [ ] PolicyCompiler MUST be safe for concurrent use (immutable AttributeSchema ensures safety)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1142,9 +1357,9 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 
 ## Phase 7.3: Policy Engine & Attribute Providers
 
-### Task 12: Attribute provider interface and schema registry
+### Task 13: Attribute provider interface and schema registry
 
-**Spec References:** §3.4 (AttributeProvider interface, lines 393-512), §5.3 (Schema Registration)
+**Spec References:** Core Interfaces > Attribute Providers (lines 513-604), Attribute Resolution > Attribute Schema Registry (lines 1339-1382)
 
 **Acceptance Criteria:**
 
@@ -1156,7 +1371,7 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
 - [ ] `AttrType` enum: `String`, `Int`, `Float`, `Bool`, `StringList`
-- [ ] Providers MUST return all numeric attributes as `float64` (per spec §3.4.1)
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Core Attribute Schema, lines 605-731)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1205,7 +1420,7 @@ package attribute
 
 // AttrType identifies the type of an attribute value.
 //
-// NOTE: Per spec §3.4.1, all numeric attributes MUST be returned as float64
+// NOTE: Per spec Core Interfaces > Core Attribute Schema (lines 605-731), all numeric attributes MUST be returned as float64
 // by providers at runtime, regardless of whether they are declared as Int or Float.
 // The Int/Float distinction exists only for schema validation and documentation.
 // All numeric comparisons in the policy engine operate on float64 values.
@@ -1243,9 +1458,9 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 ---
 
-### Task 13: Attribute resolver with per-request caching
+### Task 14: Attribute resolver with per-request caching
 
-**Spec References:** §6.1 (Eager Attribute Resolution), §6.2 (Fair-Share Timeout), §6.6 (Per-Request Caching), ADR 0012 (Eager attribute resolution)
+**Spec References:** Attribute Resolution > Resolution Flow (lines 1301-1327), Evaluation Algorithm > Performance Targets (lines 1715-1822), Evaluation Algorithm > Attribute Caching (lines 1891-1970), ADR 0012 (Eager attribute resolution)
 
 **Acceptance Criteria:**
 
@@ -1342,9 +1557,9 @@ git commit -m "feat(access): add AttributeResolver with fair-share timeouts and 
 
 ---
 
-### Task 14: Core attribute providers (character, location, object)
+### Task 15: Core attribute providers (character, location, object)
 
-**Spec References:** §7.1 (Character Attributes), §7.2 (Location Attributes), §7.3 (Object Attributes)
+**Spec References:** Core Interfaces > Core Attribute Schema (lines 605-731) — character, location, and object attributes are in the table
 
 **Acceptance Criteria:**
 
@@ -1399,21 +1614,15 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 
 ---
 
-### Task 15: Remaining core providers (environment, command, stream, property)
+### Task 16a: Simple providers (environment, command, stream)
 
-**Spec References:** §7.4 (Environment Attributes), §7.5 (Command Attributes), §7.6 (Stream Attributes), §7.7 (Property Attributes), ADR 0013 (Properties as first-class entities)
+**Spec References:** Core Interfaces > Core Attribute Schema (lines 605-731) — environment, command, stream attributes are in the table
 
 **Acceptance Criteria:**
 
 - [ ] EnvironmentProvider implements `EnvironmentProvider` interface; resolves `time`, `hour`, `minute`, `day_of_week`, `maintenance`
 - [ ] CommandProvider resolves `type`, `name` for `command` resources only
 - [ ] StreamProvider resolves `type`, `name`, `location` for `stream` resources only
-- [ ] PropertyProvider resolves all property attributes including `parent_location`
-- [ ] `parent_location` uses recursive CTE with depth limit of 20
-- [ ] `parent_location` resolution timeout: 100ms
-- [ ] Circuit breaker: 3 timeout errors in 60s → skip queries for 60s
-- [ ] Nested containment test: object-in-object-in-room resolves `parent_location` to room
-- [ ] Cycle detection → error before depth limit
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1421,7 +1630,6 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 - Create: `internal/access/policy/attribute/environment.go`
 - Create: `internal/access/policy/attribute/command.go`
 - Create: `internal/access/policy/attribute/stream.go`
-- Create: `internal/access/policy/attribute/property.go`
 - Test files for each
 
 **Step 1: Write failing tests**
@@ -1439,6 +1647,46 @@ StreamProvider:
 
 - `ResolveResource("stream", "location:01XYZ")` → `{"type": "stream", "name": "location:01XYZ", "location": "01XYZ"}`
 
+**Step 2: Implement simple providers**
+
+EnvironmentProvider, CommandProvider, StreamProvider are straightforward mappings with no database queries or complex logic.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/access/policy/attribute/environment.go internal/access/policy/attribute/command.go
+git add internal/access/policy/attribute/stream.go internal/access/policy/attribute/*_test.go
+git commit -m "feat(access): add simple providers (environment, command, stream)"
+```
+
+---
+
+### Task 16b: PropertyProvider with recursive CTE
+
+> **Note:** This task depends on Task 4 (PropertyRepository must exist before PropertyProvider).
+
+**Spec References:** Property Model > Property Attributes (lines 1134-1149), ADR 0013 (Properties as first-class entities)
+
+**Acceptance Criteria:**
+
+- [ ] PropertyProvider resolves all property attributes including `parent_location`
+- [ ] `parent_location` uses recursive CTE covering all three placement scenarios: direct location (location_id), held by character (held_by_character_id), contained in object (contained_in_object_id)
+- [ ] `parent_location` CTE depth limit: 20 levels
+- [ ] `parent_location` resolution timeout: 100ms
+- [ ] Circuit breaker: 3 timeout errors in 60s → skip queries for 60s
+- [ ] Test case: Object at location (location_id non-NULL) → resolves `parent_location`
+- [ ] Test case: Object held by character (held_by_character_id non-NULL) → resolves to character's location
+- [ ] Test case: Object inside object inside room (contained_in_object_id) → resolves `parent_location` to room
+- [ ] Cycle detection → error before depth limit
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/access/policy/attribute/property.go`
+- Test: `internal/access/policy/attribute/property_test.go`
+
+**Step 1: Write failing tests**
+
 PropertyProvider:
 
 - `ResolveResource("property", "01GHI")` → all property attributes including `parent_location`
@@ -1446,19 +1694,32 @@ PropertyProvider:
 - `parent_location` resolution timeout (100ms) → error, circuit breaker trips after 3 timeouts in 60s
 - Cycle detection → error before depth limit (20 levels)
 
-**Step 2: Implement providers**
+**Step 2: Implement PropertyProvider**
 
-PropertyProvider's `parent_location` uses recursive CTE:
+PropertyProvider's `parent_location` uses recursive CTE covering all three placement scenarios:
 
 ```sql
 WITH RECURSIVE containment AS (
     SELECT parent_type, parent_id, 0 AS depth
     FROM entity_properties WHERE id = $1
     UNION ALL
+    -- Path 1: Direct location (location_id non-NULL)
     SELECT 'location', o.location_id, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20
+    WHERE c.depth < 20 AND o.location_id IS NOT NULL
+    UNION ALL
+    -- Path 2: Held by character (held_by_character_id non-NULL)
+    SELECT 'character', o.held_by_character_id, c.depth + 1
+    FROM containment c
+    JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
+    WHERE c.depth < 20 AND o.held_by_character_id IS NOT NULL
+    UNION ALL
+    -- Path 3: Contained in another object (contained_in_object_id non-NULL)
+    SELECT 'object', o.contained_in_object_id, c.depth + 1
+    FROM containment c
+    JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
+    WHERE c.depth < 20 AND o.contained_in_object_id IS NOT NULL
 )
 SELECT parent_id FROM containment
 WHERE parent_type = 'location'
@@ -1470,17 +1731,15 @@ Circuit breaker: 3 timeout errors in 60s → skip queries for 60s.
 **Step 3: Run tests, commit**
 
 ```bash
-git add internal/access/policy/attribute/environment.go internal/access/policy/attribute/command.go
-git add internal/access/policy/attribute/stream.go internal/access/policy/attribute/property.go
-git add internal/access/policy/attribute/*_test.go
-git commit -m "feat(access): add environment, command, stream, and property providers"
+git add internal/access/policy/attribute/property.go internal/access/policy/attribute/property_test.go
+git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_location"
 ```
 
 ---
 
-### Task 16: Build AccessPolicyEngine
+### Task 17: Build AccessPolicyEngine
 
-**Spec References:** §6 (Evaluation Algorithm, 7-step flow, lines 1642-1690), §3.3 (Session Resolution), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
+**Spec References:** Evaluation Algorithm (lines 1642-1690), Core Interfaces > Session Subject Resolution (lines 326-392), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 **Acceptance Criteria:**
 
@@ -1583,7 +1842,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ---
 
-### Task 17: Policy cache with LISTEN/NOTIFY invalidation
+### Task 18: Policy cache with LISTEN/NOTIFY invalidation
 
 **Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
@@ -1591,14 +1850,17 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 - [ ] `Snapshot()` returns read-only copy safe for concurrent use
 - [ ] `Reload()` fetches all enabled policies from store, recompiles, swaps snapshot atomically
-- [ ] `Listen()` subscribes to PostgreSQL `NOTIFY` on `policy_changed` channel
+- [ ] `Listen()` subscribes to PostgreSQL `NOTIFY` on `policy_changed` channel using dedicated (non-pooled) connection
 - [ ] NOTIFY event → cache reloads before next evaluation
 - [ ] Concurrent reads during reload → stale reads tolerable (snapshot semantics)
-- [ ] Connection drop + reconnect → full reload
+- [ ] Connection drop + reconnect → full reload with exponential backoff
+- [ ] Health check for subscription liveness (verify connection is alive and listening)
+- [ ] Staleness detection: if no reload occurs within configurable threshold, system detects stale cache state
 - [ ] Reload latency <50ms (benchmark test)
 - [ ] Cache staleness threshold: configurable limit (default 30s) on time since last successful reload
 - [ ] When staleness threshold exceeded → fail-closed (return `EffectDefaultDeny`) without evaluating policies
 - [ ] Prometheus gauge `policy_cache_last_update` (Unix timestamp) updated on every successful reload
+- [ ] **Graceful shutdown:** LISTEN/NOTIFY goroutine stops via context cancellation; shutdown test verifies goroutine exits cleanly
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1655,7 +1917,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 ---
 
-### Task 18: Audit logger
+### Task 19: Audit logger
 
 **Spec References:** Audit Log Serialization (lines 2161-2192), Audit Log Configuration (lines 2193-2269), Audit Log Retention (lines 2271-2310)
 
@@ -1673,6 +1935,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
 - [ ] `audit/postgres.go` batch-inserts from channel (async) and handles sync writes (denials)
+- [ ] **Graceful shutdown:** Async channel consumer goroutine stops accepting new entries, drains buffered channel, closes WAL file, exits cleanly
+- [ ] **Shutdown order:** Stop accepting new entries → drain channel → flush to DB → close WAL file → stop consumer goroutine
+- [ ] Shutdown test verifies all buffered entries written before goroutine exits
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1763,17 +2028,148 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 ---
 
-### Task 19: Prometheus metrics for ABAC
+### Task 19b: Audit log retention and partition management
 
-**Spec References:** §9 (Observability, lines 1415-1465), §9.1 (Metric Names and Labels)
+**Spec References:** Policy Storage > Audit Log Retention (lines 2271-2368)
+
+**Acceptance Criteria:**
+
+- [ ] `AuditConfig` struct with `RetainDenials` (90 days), `RetainAllows` (7 days), `PurgeInterval` (24h)
+- [ ] Background goroutine for partition lifecycle: create future partitions, detach/drop expired partitions
+- [ ] Partition creation: pre-create next 3 months of partitions
+- [ ] Partition expiration: detach partitions older than retention period, drop after 7-day grace period
+- [ ] Health check endpoint: verify current month's partition exists and is attached
+- [ ] Health check alerts if no valid partition for current timestamp
+- [ ] `PurgeInterval` configurable via flag (default 24h)
+- [ ] Startup: create missing partitions, schedule first purge cycle
+- [ ] Graceful shutdown: stop background goroutine
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/access/policy/audit/retention.go`
+- Modify: `internal/access/policy/audit/postgres.go` (add partition management)
+- Test: `internal/access/policy/audit/retention_test.go`
+
+**Step 1: Write failing tests**
+
+- `AuditConfig` struct with retention periods (denials: 90d, allows: 7d)
+- Background goroutine creates future partitions (next 3 months)
+- Background goroutine detaches expired partitions based on retention period
+- Health check: returns error if current partition missing
+- Purge cycle runs every `PurgeInterval` (default 24h)
+
+**Step 2: Implement**
+
+```go
+// internal/access/policy/audit/retention.go
+package audit
+
+import (
+    "context"
+    "time"
+)
+
+// AuditConfig defines audit log retention and purge settings.
+type AuditConfig struct {
+    RetainDenials time.Duration // Default: 90 days
+    RetainAllows  time.Duration // Default: 7 days
+    PurgeInterval time.Duration // Default: 24 hours
+}
+
+// DefaultAuditConfig returns sensible defaults.
+func DefaultAuditConfig() AuditConfig {
+    return AuditConfig{
+        RetainDenials: 90 * 24 * time.Hour,
+        RetainAllows:  7 * 24 * time.Hour,
+        PurgeInterval: 24 * time.Hour,
+    }
+}
+
+// PartitionManager handles partition lifecycle.
+type PartitionManager struct {
+    db     *pgxpool.Pool
+    config AuditConfig
+    stopCh chan struct{}
+}
+
+// Start begins background partition management.
+func (pm *PartitionManager) Start(ctx context.Context) {
+    // Create missing partitions on startup
+    pm.createFuturePartitions(ctx)
+
+    // Schedule purge cycle
+    ticker := time.NewTicker(pm.config.PurgeInterval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ticker.C:
+            pm.purgeExpiredPartitions(ctx)
+        case <-pm.stopCh:
+            return
+        case <-ctx.Done():
+            return
+        }
+    }
+}
+
+// Stop gracefully shuts down the partition manager.
+func (pm *PartitionManager) Stop() {
+    close(pm.stopCh)
+}
+
+// createFuturePartitions pre-creates partitions for the next 3 months.
+func (pm *PartitionManager) createFuturePartitions(ctx context.Context) {
+    // Create partitions for current month + next 3 months
+    now := time.Now()
+    for i := 0; i < 4; i++ {
+        month := now.AddDate(0, i, 0)
+        pm.ensurePartition(ctx, month)
+    }
+}
+
+// purgeExpiredPartitions detaches and drops partitions older than retention period.
+func (pm *PartitionManager) purgeExpiredPartitions(ctx context.Context) {
+    // Detach partitions older than RetainDenials (90 days)
+    // Drop detached partitions after 7-day grace period
+}
+
+// HealthCheck verifies current partition exists.
+func (pm *PartitionManager) HealthCheck(ctx context.Context) error {
+    // Check if partition for current timestamp exists and is attached
+    // Return error if missing
+}
+```
+
+Partition lifecycle (spec lines 2271-2318):
+1. Pre-create partitions for next 3 months
+2. Detach partitions older than `RetainDenials` (90 days for denials, 7 days for allows)
+3. Drop detached partitions after 7-day grace period
+4. Health check ensures current partition exists
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/access/policy/audit/retention.go internal/access/policy/audit/retention_test.go
+git commit -m "feat(access): add audit log retention and partition management"
+```
+
+---
+
+### Task 20: Prometheus metrics for ABAC
+
+**Spec References:** Evaluation Algorithm > Performance Targets (lines 1715-1822) — observability metrics are part of the performance targets section
 
 **Acceptance Criteria:**
 
 - [ ] `abac_evaluate_duration_seconds` histogram recorded after each `Evaluate()`
-- [ ] `abac_policy_evaluations_total` counter with `name` and `effect` labels
+- [ ] `abac_policy_evaluations_total` counter with `source` (values: seed/lock/admin/plugin) and `effect` labels — avoids unbounded cardinality from admin-created policy names
+- [ ] Cardinality concern documented: `source` label preferred over `name` label to prevent metric explosion from admin policy names
+- [ ] All metrics reviewed for unbounded label values (no `name`, `subject_id`, `resource_id` labels)
 - [ ] `abac_audit_channel_full_total` counter for dropped audit entries
-- [ ] `abac_audit_failures_total` counter with `reason` label (spec §9.1 line 2261)
-- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (spec §7.3 line 1618)
+- [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets)
+- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
@@ -1808,8 +2204,8 @@ var (
     })
     policyEvaluations = prometheus.NewCounterVec(prometheus.CounterOpts{
         Name: "abac_policy_evaluations_total",
-        Help: "Total policy evaluations by name and effect",
-    }, []string{"name", "effect"})
+        Help: "Total policy evaluations by source and effect (source: seed/lock/admin/plugin)",
+    }, []string{"source", "effect"})
     auditChannelFull = prometheus.NewCounter(prometheus.CounterOpts{
         Name: "abac_audit_channel_full_total",
         Help: "Audit entries dropped due to full channel",
@@ -1857,9 +2253,9 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 ---
 
-### Task 20: Performance benchmarks
+### Task 21: Performance benchmarks
 
-**Spec References:** §6.7 (Performance Targets, lines 1715-1741)
+**Spec References:** Evaluation Algorithm > Performance Targets (lines 1715-1822)
 
 **Acceptance Criteria:**
 
@@ -1871,6 +2267,9 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 - [ ] `BenchmarkCacheReload` — <50ms
 - [ ] `BenchmarkWorstCase_NestedIf` — 32-level nesting <5ms
 - [ ] `BenchmarkWorstCase_AllPoliciesMatch` — 50 policies <10ms
+- [ ] **`BenchmarkPropertyProvider_ParentLocation`** — recursive CTE with varying depths (1, 5, 10, 20 levels)
+- [ ] PropertyProvider benchmark validates 100ms timeout appropriateness
+- [ ] PropertyProvider benchmark verifies circuit breaker behavior under load (3 timeouts in 60s)
 - [ ] Setup: 50 active policies, 3 operators per condition avg, 10 attributes per entity
 - [ ] All benchmarks run without errors
 
@@ -1911,18 +2310,19 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ## Phase 7.4: Seed Policies & Bootstrap
 
-### Task 21: Define seed policy constants
+### Task 22: Define seed policy constants
 
-**Spec References:** §12.1 (Seed Policies, lines 2935-2999), §12.2 (Seed Naming Convention)
+**Spec References:** Replacing Static Roles > Seed Policies (lines 2929-3006)
 
 **Acceptance Criteria:**
 
-- [ ] All 14 seed policies defined as `SeedPolicy` structs (verify count against spec)
+- [ ] All 15 seed policies defined as `SeedPolicy` structs (14 permit + 1 forbid catch-all)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
 - [ ] DSL text matches spec exactly (lines 2935-2999)
+- [ ] Catch-all `seed:catch-all-deny` forbid policy included for explicit deny visibility
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1932,7 +2332,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 **Step 1: Write failing tests**
 
-- All 14 seed policies compile without error via `PolicyCompiler`
+- All 15 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -1952,7 +2352,7 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 14 seed policies.
+// SeedPolicies returns the complete set of 15 seed policies (14 permit + 1 forbid).
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
         {
@@ -2039,11 +2439,17 @@ func SeedPolicies() []SeedPolicy {
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };`,
             SeedVersion: 1,
         },
+        {
+            Name:        "seed:catch-all-deny",
+            Description: "Explicit catch-all deny for audit visibility (ensures denials show a named policy)",
+            DSLText:     `forbid(principal, action, resource);`,
+            SeedVersion: 1,
+        },
     }
 }
 ```
 
-(Note: 14 seed policies listed above. The spec shows these 14 distinct named policies across lines 2935-2999. Verify count against spec during implementation.)
+(Note: 15 seed policies listed above: 14 permit policies from spec (lines 2935-2999) + 1 forbid catch-all for explicit deny visibility in audit logs and policy listings.)
 
 **Step 3: Run tests, commit**
 
@@ -2054,7 +2460,7 @@ git commit -m "feat(access): define seed policies"
 
 ---
 
-### Task 22: Bootstrap sequence
+### Task 23: Bootstrap sequence
 
 **Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
 
@@ -2215,11 +2621,57 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 ---
 
+### Task 23b: CLI flag --validate-seeds
+
+> **Note:** This task was moved from Phase 7.7 (Task 35) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
+
+**Spec References:** Seed Policy Validation (lines 3076-3122)
+
+**Acceptance Criteria:**
+
+- [ ] CLI flag `--validate-seeds` added to server startup
+- [ ] Flag behavior: boot DSL compiler, validate all seed policy DSL text, exit with success/failure status
+- [ ] Does NOT start the server (validation-only mode)
+- [ ] Exit code 0 on success, non-zero on failure
+- [ ] Logs validation results: "All N seed policies valid" or "Validation failed: {errors}"
+- [ ] Enables CI integration: `holomush --validate-seeds` in build pipeline
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `cmd/holomush/main.go` (add flag and validation logic)
+- Test: `cmd/holomush/main_test.go`
+
+**TDD Test List:**
+
+- `--validate-seeds` flag present → validation mode activated
+- All valid seeds → exit 0, log success
+- Invalid seed DSL → exit non-zero, log errors with line/column
+- Validation mode → server does NOT start
+- CI integration test: run in build pipeline, verify exit codes
+
+**Step 1: Write failing tests**
+
+Test that `--validate-seeds` flag activates validation-only mode and exits with appropriate status codes.
+
+**Step 2: Implement**
+
+Add flag parsing and validation logic in `cmd/holomush/main.go`. Use the DSL compiler from Task 10 to validate all seed policy DSL text from Task 22.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add cmd/holomush/main.go cmd/holomush/main_test.go
+git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
+```
+
+---
+
 ## Phase 7.5: Locks & Admin
 
-### Task 23: Lock token registry
+### Task 24: Lock token registry
 
-**Spec References:** §10.1 (Lock Tokens), §10.2 (Lock Token Registration)
+**Spec References:** Access Control Layers > Layer 2: Object Locks (lines 2393-2679), Lock Token Registry (lines 2467-2563)
 
 **Acceptance Criteria:**
 
@@ -2276,7 +2728,7 @@ git commit -m "feat(access): add lock token registry"
 
 ---
 
-### Task 24: Lock expression parser and compiler
+### Task 25: Lock expression parser and compiler
 
 **Spec References:** Lock Expression Syntax (lines 2432-2466), Lock-to-DSL Compilation (lines 2564-2612), Lock Token Registry — ownership and rate limits (lines 2592-2669)
 
@@ -2323,96 +2775,9 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ---
 
-### Task 25: Property model (EntityProperty type and repository)
+### Task 26a: Admin commands — policy CRUD (create/list/show/edit/delete)
 
-**Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
-
-**Acceptance Criteria:**
-
-- [ ] `EntityProperty` struct: ID, ParentType, ParentID, Name, Value, Owner, Visibility, Flags, VisibleTo, ExcludedFrom, timestamps
-- [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`, `DeleteByParent`
-- [ ] CRUD operations round-trip all fields correctly
-- [ ] Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
-- [ ] `visible_to` max 100 entries; `excluded_from` max 100 entries → error if exceeded
-- [ ] No overlap between `visible_to` and `excluded_from` → error
-- [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
-- [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
-- [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
-- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
-- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
-- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
-- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
-- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
-- [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
-- [ ] All tests pass via `task test`
-
-**Files:**
-
-- Create: `internal/world/property.go` (EntityProperty type + PropertyRepository interface)
-- Create: `internal/world/postgres/property_repo.go` (PostgreSQL implementation)
-- Test: `internal/world/postgres/property_repo_test.go`
-
-**Step 1: Write failing tests**
-
-- Create property → round-trips all fields
-- Get by ID
-- List by parent (type + ID)
-- Update property (value, visibility, flags)
-- Delete property
-- Delete by parent (type + ID) → deletes all properties for that parent
-- Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
-- Constraints: `visible_to` max 100 entries, `excluded_from` max 100 entries
-- No overlap between `visible_to` and `excluded_from` → error
-- Parent name uniqueness → error on duplicate
-
-**Step 2: Implement**
-
-```go
-// internal/world/property.go
-package world
-
-// EntityProperty is a first-class property attached to a world entity.
-type EntityProperty struct {
-    ID           ulid.ULID
-    ParentType   string // "character", "location", "object"
-    ParentID     string
-    Name         string
-    Value        *string
-    Owner        *string
-    Visibility   string // "public", "private", "restricted", "system", "admin"
-    Flags        []string
-    VisibleTo    []string
-    ExcludedFrom []string
-    CreatedAt    time.Time
-    UpdatedAt    time.Time
-}
-
-// PropertyRepository manages entity properties.
-type PropertyRepository interface {
-    Create(ctx context.Context, p *EntityProperty) error
-    Get(ctx context.Context, id ulid.ULID) (*EntityProperty, error)
-    ListByParent(ctx context.Context, parentType, parentID string) ([]*EntityProperty, error)
-    Update(ctx context.Context, p *EntityProperty) error
-    Delete(ctx context.Context, id ulid.ULID) error
-    DeleteByParent(ctx context.Context, parentType, parentID string) error
-}
-```
-
-Follow existing repository patterns from `internal/world/postgres/location_repo.go`.
-
-**Step 3: Run tests, commit**
-
-```bash
-git add internal/world/property.go internal/world/postgres/property_repo.go
-git add internal/world/postgres/property_repo_test.go
-git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
-```
-
----
-
-### Task 26: Admin commands — policy create/list/show/edit/delete/enable/disable/history/rollback
-
-**Spec References:** Admin Commands (lines 2695-2914)
+**Spec References:** Admin Commands (lines 2695-2914) — CRUD commands
 
 **Acceptance Criteria:**
 
@@ -2421,11 +2786,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - [ ] `policy show <name>` → displays full policy details
 - [ ] `policy edit <name> <new_dsl>` → validates new DSL, increments version
 - [ ] `policy delete <name>` → removes policy; seed policies cannot be deleted → error
-- [ ] `policy enable <name>` → sets `enabled=true`, triggers cache reload
-- [ ] `policy disable <name>` → sets `enabled=false`, triggers cache reload
-- [ ] `policy history <name>` → shows version history from `access_policy_versions` table
-- [ ] `policy rollback <name> <version>` → restores policy to previous version, creates new version entry
-- [ ] Admin-only permission check on create/edit/delete/enable/disable/rollback
+- [ ] Admin-only permission check on create/edit/delete
 - [ ] Invalid DSL input → helpful error message with line/column
 - [ ] Commands registered in command registry following existing handler patterns
 - [ ] All tests pass via `task test`
@@ -2448,7 +2809,7 @@ For each command, test:
 - `policy edit <name> <new_dsl>` → validates new DSL, increments version
 - `policy delete <name>` → removes policy (seed policies cannot be deleted)
 
-**Step 2: Implement**
+**Step 2: Implement CRUD commands**
 
 Register commands in the command registry following existing handler patterns in `internal/command/handlers/`.
 
@@ -2456,19 +2817,64 @@ Register commands in the command registry following existing handler patterns in
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
-git commit -m "feat(command): add policy CRUD admin commands"
+git commit -m "feat(command): add policy CRUD admin commands (create/list/show/edit/delete)"
 ```
 
 ---
 
-### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed
+### Task 26b: Admin commands — policy state management (enable/disable/history/rollback)
 
-**Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629)
+**Spec References:** Admin Commands (lines 2695-2914) — state management commands
+
+**Acceptance Criteria:**
+
+- [ ] `policy enable <name>` → sets `enabled=true`, triggers cache reload
+- [ ] `policy disable <name>` → sets `enabled=false`, triggers cache reload
+- [ ] `policy history <name>` → shows version history from `access_policy_versions` table
+- [ ] `policy rollback <name> <version>` → restores policy to previous version, creates new version entry
+- [ ] Admin-only permission check on enable/disable/rollback
+- [ ] Commands registered in command registry following existing handler patterns
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/command/handlers/policy.go`
+- Test: `internal/command/handlers/policy_test.go`
+
+**Step 1: Write failing tests**
+
+For each command, test:
+
+- Valid invocation produces expected output
+- Permission check (admin-only for enable/disable/rollback)
+- `policy enable <name>` → sets `enabled=true`, triggers cache reload
+- `policy disable <name>` → sets `enabled=false`, triggers cache reload
+- `policy history <name>` → shows version history from `access_policy_versions` table
+- `policy rollback <name> <version>` → restores policy to previous version, creates new version entry
+
+**Step 2: Implement state management commands**
+
+Register commands in the command registry following existing handler patterns in `internal/command/handlers/`.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
+git commit -m "feat(command): add policy state management commands (enable/disable/history/rollback)"
+```
+
+---
+
+### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed/recompile
+
+**Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629), Grammar Versioning (lines 947-976)
 
 **Acceptance Criteria:**
 
 - [ ] `policy test <subject> <action> <resource>` → returns decision and matched policies
 - [ ] `policy test --verbose` → shows all candidate policies with match/no-match reasons
+- [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2790-2794)
+- [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
 - [ ] `policy validate <dsl>` → success or error with line/column
 - [ ] `policy reload` → forces cache reload from DB
 - [ ] `policy attributes` → lists all registered attribute namespaces and keys
@@ -2477,6 +2883,10 @@ git commit -m "feat(command): add policy CRUD admin commands"
 - [ ] `policy seed verify` → compares installed seed policies against shipped seed text, highlights differences
 - [ ] `policy seed status` → shows seed policy versions, customization status
 - [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
+- [ ] `policy recompile-all` → recompiles all policies with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
+- [ ] `policy recompile <name>` → recompiles single policy with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
+- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text (spec line 1596), used to fix policies with invalid compiled_ast
+- [ ] `policy list --old-grammar` → filters to policies with outdated grammar version
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2493,127 +2903,148 @@ git commit -m "feat(command): add policy CRUD admin commands"
 - `policy attributes` → lists all registered attribute namespaces and keys
 - `policy attributes --namespace reputation` → filters to specific namespace
 - `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
+- `policy recompile-all` → recompiles all policies, updates grammar_version field
+- `policy recompile <name>` → recompiles single policy, updates grammar_version
+- `policy repair <name>` → re-compiles corrupted policy from DSL text, fixing invalid compiled_ast
+- `policy list --old-grammar` → shows only policies with outdated grammar_version
 
 **Step 2: Implement**
+
+Policy recompile commands (spec lines 947-976):
+- `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version
+- `policy recompile <name>` — fetches single policy by name, recompiles, updates fields
+- `policy list --old-grammar` — filter to `grammar_version < current_version`
+
+Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 959). Recompile commands update this field to the current grammar version after successful recompilation.
+
+**Failed recompilation handling** (spec lines 958-961): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 
 **Step 3: Run tests, commit**
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
-git commit -m "feat(command): add policy test/validate/reload/attributes/audit commands"
+git commit -m "feat(command): add policy test/validate/reload/attributes/audit/recompile commands"
 ```
 
 ---
 
 ## Phase 7.6: Call Site Migration & Cleanup
 
-### Task 28: Replace AccessControl with AccessPolicyEngine in dependency injection
+### Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
 
-**Spec References:** §14 (Call Site Migration, lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3230), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
+- [ ] Per-package atomic migration: DI wiring + call sites migrated together, each commit compiles and passes `task build`
 - [ ] `AccessControl` replaced with `*policy.Engine` in dependency graph
 - [ ] `AttributeResolver` wired with all registered providers
 - [ ] `PolicyCache` wired and `Listen()` called for NOTIFY subscription
 - [ ] `SessionResolver` wired
 - [ ] `AuditLogger` wired
 - [ ] `Bootstrap()` called at startup to seed policies
-- [ ] Build compiles (compilation errors at call sites expected — fixed in Task 29)
-
-**Files:**
-
-- Modify: `cmd/holomush/main.go` (or server bootstrap file)
-- Modify: DI/wiring to provide `Engine` (implements `AccessPolicyEngine`) instead of `AccessControl`
-
-**Step 1: Update DI wiring**
-
-Replace `AccessControl` in the dependency graph with `*policy.Engine`. Wire in all dependencies: `AttributeResolver` (with registered providers), `PolicyCache`, `SessionResolver`, `AuditLogger`.
-
-Add `Bootstrap()` call at startup to seed policies.
-Add `PolicyCache.Listen()` for NOTIFY subscription.
-
-**Step 2: Run build to identify compilation errors**
-
-Run: `task build`
-Expected: Compilation errors at call sites (fixed in Task 29)
-
-**Step 3: Commit**
-
-```bash
-git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection"
-```
-
----
-
-### Task 29: Update all call sites (iterative)
-
-**Spec References:** §14.1 (Call Site Inventory, lines 3190-3236), ADR 0014 (Direct replacement, no adapter)
-
-**Acceptance Criteria:**
-
 - [ ] ALL ~28 production call sites (plus test files and generated mocks) migrated from `AccessControl.Check()` to `engine.Evaluate()`
 - [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
+- [ ] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names)
+- [ ] Audit logs are immutable: old entries keep `char:` prefix, new entries use `character:` prefix
+- [ ] Tests verify both prefix variants are accepted by EventStore during migration period
 - [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
-- [ ] Tests pass incrementally after each file/package update
+- [ ] Tests pass incrementally after each package migration
 - [ ] Committed per package (dispatcher, world, plugin)
 - [ ] `task test` passes after all migrations
+- [ ] No commits with intentional build breakage
 
-**Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list:
+**Files:**
 
-- `internal/command/dispatcher.go` — Command execution authorization
-- `internal/command/rate_limit_middleware.go` — Rate limit bypass for admins
-- `internal/command/handlers/boot.go` — Boot command permission check
-- `internal/world/service.go` — World model operation authorization
-- `internal/plugin/hostfunc/commands.go` — Plugin command execution auth
-- `internal/plugin/hostfunc/functions.go` — Plugin host function auth
-- `internal/core/broadcaster_test.go` — Test mock injection
+- Modify: `cmd/holomush/main.go` (or server bootstrap file) — DI wiring
+- Modify: `internal/command/dispatcher.go` — Command execution authorization
+- Modify: `internal/command/rate_limit_middleware.go` — Rate limit bypass for admins
+- Modify: `internal/command/handlers/boot.go` — Boot command permission check
+- Modify: `internal/world/service.go` — World model operation authorization
+- Modify: `internal/plugin/hostfunc/commands.go` — Plugin command execution auth
+- Modify: `internal/plugin/hostfunc/functions.go` — Plugin host function auth
+- Modify: `internal/core/broadcaster_test.go` — Test mock injection
 
-For each file:
+**Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list.
 
-1. Change `AccessControl` parameter type to `AccessPolicyEngine`
-2. Replace `ac.Check(ctx, subject, action, resource)` with:
+**Migration strategy:**
 
-   ```go
-   decision, err := engine.Evaluate(ctx, policy.AccessRequest{
-       Subject:  subject,
-       Action:   action,
-       Resource: resource,
-   })
-   if err != nil {
-       slog.Error("access evaluation failed", "error", err)
-       // Fail-closed: deny on error
-   }
-   if !decision.Allowed {
-       // existing denial handling
-   }
-   ```
+Migrate per-package, with each commit including both DI wiring changes and all call site updates for that package. This ensures every commit compiles and passes `task build`.
 
+**Package 1: internal/command**
+
+1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for command package dependencies
+2. Update all call sites in `internal/command/dispatcher.go`, `rate_limit_middleware.go`, and `handlers/boot.go`
 3. Update tests to mock `AccessPolicyEngine` instead of `AccessControl`
-4. Ensure all subject strings use `character:` prefix (not legacy `char:`)
+4. Run `task test` — MUST PASS
+5. Run `task build` — MUST PASS
+6. Commit: `"refactor(command): migrate dispatcher to AccessPolicyEngine"`
 
-**Step 1: Update each file or package group**
+**Package 2: internal/world**
 
-**Step 2: Run tests after each update**
+1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for world package dependencies
+2. Update all call sites in `internal/world/service.go`
+3. Update tests to mock `AccessPolicyEngine`
+4. Run `task test` — MUST PASS
+5. Run `task build` — MUST PASS
+6. Commit: `"refactor(world): migrate WorldService to AccessPolicyEngine"`
 
-Run: `task test`
-Expected: PASS incrementally
+**Package 3: internal/plugin**
 
-**Step 3: Commit per package**
+1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for plugin package dependencies
+2. Update all call sites in `internal/plugin/hostfunc/commands.go` and `functions.go`
+3. Update tests to mock `AccessPolicyEngine`
+4. Run `task test` — MUST PASS
+5. Run `task build` — MUST PASS
+6. Commit: `"refactor(plugin): migrate host functions to AccessPolicyEngine"`
 
-```bash
-git commit -m "refactor(command): migrate dispatcher to AccessPolicyEngine"
-git commit -m "refactor(world): migrate WorldService to AccessPolicyEngine"
-git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
+**Package 4: Final wiring (bootstrap and NOTIFY subscription)**
+
+1. Add `Bootstrap()` call at startup to seed policies
+2. Add `PolicyCache.Listen()` for NOTIFY subscription
+3. Run `task test` — MUST PASS
+4. Run `task build` — MUST PASS
+5. Commit: `"refactor(access): complete AccessPolicyEngine bootstrap and cache subscription"`
+
+**Call site migration pattern:**
+
+For each file, replace:
+
+```go
+// OLD:
+allowed := ac.Check(ctx, subject, action, resource)
+if !allowed {
+    // existing denial handling
+}
 ```
+
+With:
+
+```go
+// NEW:
+decision, err := engine.Evaluate(ctx, policy.AccessRequest{
+    Subject:  subject,
+    Action:   action,
+    Resource: resource,
+})
+if err != nil {
+    slog.Error("access evaluation failed", "error", err)
+    // Fail-closed: deny on error
+}
+if !decision.Allowed {
+    // existing denial handling
+}
+```
+
+Ensure all subject strings use `character:` prefix (not legacy `char:`).
 
 ---
 
-### Task 30: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
+### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
-**Spec References:** §14.2 (Cleanup), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3230), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -2671,11 +3102,11 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 
 ---
 
-## Phase 7.7: Integration Tests
+## Phase 7.7: Resilience, Observability & Integration Tests
 
-### Task 31: Integration tests for full ABAC flow
+### Task 30: Integration tests for full ABAC flow
 
-**Spec References:** §15 (Integration Test Requirements), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
+**Spec References:** Testing Strategy > Integration Tests (lines 3315-3350), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 
 **Acceptance Criteria:**
 
@@ -2752,7 +3183,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 32: Degraded mode implementation
+### Task 31: Degraded mode implementation
 
 **Spec References:** Degraded Mode (lines 1606-1629)
 
@@ -2785,7 +3216,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 33: Schema evolution on plugin reload
+### Task 32: Schema evolution on plugin reload
 
 **Spec References:** Schema Evolution on Plugin Reload (lines 1443-1502)
 
@@ -2816,7 +3247,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 34: Lock tokens discovery command
+### Task 33: Lock tokens discovery command
 
 **Spec References:** Lock Token Discovery (lines 2613-2638)
 
@@ -2843,7 +3274,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 35: General provider circuit breaker
+### Task 34: General provider circuit breaker
 
 **Spec References:** Provider Circuit Breaker (lines 1540-1568)
 
@@ -2881,32 +3312,11 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 36: CLI flag --validate-seeds
+### Task 35: CLI flag --validate-seeds (MOVED to Task 23b)
 
-**Spec References:** Seed Policy Validation (lines 3076-3122)
+> **Note:** This task was moved to Phase 7.4 (Task 23b) to enable CI validation during later phases. See Task 23b for implementation details.
 
-**Acceptance Criteria:**
-
-- [ ] CLI flag `--validate-seeds` added to server startup
-- [ ] Flag behavior: boot DSL compiler, validate all seed policy DSL text, exit with success/failure status
-- [ ] Does NOT start the server (validation-only mode)
-- [ ] Exit code 0 on success, non-zero on failure
-- [ ] Logs validation results: "All N seed policies valid" or "Validation failed: {errors}"
-- [ ] Enables CI integration: `holomush --validate-seeds` in build pipeline
-- [ ] All tests pass via `task test`
-
-**Files:**
-
-- Modify: `cmd/holomush/main.go` (add flag and validation logic)
-- Test: `cmd/holomush/main_test.go`
-
-**TDD Test List:**
-
-- `--validate-seeds` flag present → validation mode activated
-- All valid seeds → exit 0, log success
-- Invalid seed DSL → exit non-zero, log errors with line/column
-- Validation mode → server does NOT start
-- CI integration test: run in build pipeline, verify exit codes
+**Rationale:** `--validate-seeds` only depends on the DSL compiler (Task 10) and seed policy definitions (Task 22), both available after Phase 7.4. Moving it earlier allows CI pipelines to validate seed policies during later phase development, catching compilation errors sooner.
 
 ---
 
