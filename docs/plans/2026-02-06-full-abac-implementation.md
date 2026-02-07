@@ -14,6 +14,8 @@
 
 Every task in this plan MUST follow these requirements:
 
+> All generated .go files MUST include SPDX license headers per CLAUDE.md: `// SPDX-License-Identifier: Apache-2.0` and `// Copyright 2026 HoloMUSH Contributors`
+
 ### TDD (Test-Driven Development)
 
 | Step | Description                                                         |
@@ -834,6 +836,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 - [ ] Unknown effect → descriptive error
 - [ ] Reserved word as attribute name → error
 - [ ] Nesting depth >32 → error
+- [ ] Parser MUST reject Cedar-style Type::"value" syntax with descriptive error (e.g., "Cedar entity references (Type::\"value\") are not supported")
 - [ ] Table-driven tests cover both valid and invalid policies
 - [ ] All tests pass via `task test`
 
@@ -2254,7 +2257,7 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 22: Bootstrap sequence
 
-**Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
+**Spec References:** Bootstrap Sequence (lines 3007-3122), Seed Policy Migrations (lines 3123-3173)
 
 **Acceptance Criteria:**
 
@@ -2490,6 +2493,7 @@ git commit -m "feat(access): add lock token registry"
 - [ ] Invalid lock expression → descriptive error
 - [ ] All lock-generated policies MUST include `resource.owner == principal.id` in condition block (ownership check requirement)
 - [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
+- [ ] Lock-generated policies use naming format lock:{type}:{id}:{action} (e.g., lock:object:01ABC:read)
 - [ ] All tests pass via `task test`
 
 **Files:**
