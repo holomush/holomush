@@ -641,6 +641,7 @@ git commit -m "feat(access): add subject/resource prefix constants and parser"
 - [ ] `ListEnabled()` returns only `enabled = true` rows
 - [ ] `ListOptions` supports filtering by `Source` and `Enabled`
 - [ ] Constructor accepts `*pgxpool.Pool`; errors use `oops` with context
+- [ ] `store.IsNotFound(err)` helper function for detecting not-found errors from repository queries
 - [ ] Integration tests (with `//go:build integration`) cover all CRUD operations
 - [ ] All tests pass via `task test`
 
@@ -1864,6 +1865,8 @@ git commit -m "feat(access): add async audit logger with mode control"
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
 - [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
+- [ ] Prometheus gauge `abac_audit_wal_entries` for WAL backlog monitoring
+- [ ] Configurable WAL size threshold (default 10MB/10k entries) with alert documentation
 - [ ] `RegisterMetrics()` follows existing pattern from `internal/observability/server.go`
 - [ ] All tests pass via `task test`
 
@@ -2268,6 +2271,7 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
 - [ ] `UpdateSeed()` skips with warning if stored DSL differs from old DSL (customized by admins)
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
+- [ ] `store.IsNotFound(err)` utility: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
 
 **Files:**
