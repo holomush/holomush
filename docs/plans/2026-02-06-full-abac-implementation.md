@@ -1757,6 +1757,8 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
 - [ ] `audit/postgres.go` batch-inserts from channel (async) and handles sync writes (denials)
 - [ ] AuditMode is string type with values "off", "denials_only", "all" for YAML config deserialization without custom unmarshaler
+- [ ] Partition management goroutine: creates future partitions (2 months ahead), drops expired partitions (DETACH + DROP), configurable retention period
+- [ ] Health check integration for partition manager
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2670,6 +2672,9 @@ git commit -m "feat(command): add policy CRUD admin commands"
 - [ ] `policy seed verify` → compares installed seed policies against shipped seed text, highlights differences
 - [ ] `policy seed status` → shows seed policy versions, customization status
 - [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
+- [ ] `policy repair <name>` → re-compiles corrupted policies from stored DSL
+- [ ] `policy lint --fix` → automatic bare-boolean condition rewriting
+- [ ] `policy recompile-all` → re-compiles all policies for grammar version migration
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2918,7 +2923,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] `lock tokens` command → lists all registered lock tokens (faction, flag, level, etc.)
 - [ ] `lock tokens --namespace character` → filters to specific namespace
 - [ ] Display format: token name, type, description, example
-- [ ] Discovery sources: schema registry (plugin-provided attributes) + core tokens (faction, flag, level, role)
+- [ ] Discovery sources: schema registry (plugin-provided attributes) + core tokens (faction, flag, level)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2930,7 +2935,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 - `lock tokens` → lists all available lock tokens
 - `lock tokens --namespace character` → filters to character namespace
-- Core tokens (faction, flag, level, role) always present
+- Core tokens (faction, flag, level) always present
 - Plugin-provided attributes appear in token list
 - Display format includes name, type, description, example
 
