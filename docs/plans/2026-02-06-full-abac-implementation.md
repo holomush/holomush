@@ -1757,6 +1757,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
 - [ ] `audit/postgres.go` batch-inserts from channel (async) and handles sync writes (denials)
+- [ ] AuditMode is string type with values "off", "denials_only", "all" for YAML config deserialization without custom unmarshaler
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1785,12 +1786,12 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 package audit
 
 // AuditMode controls what decisions are logged.
-type AuditMode int
+type AuditMode string
 
 const (
-    AuditModeOff         AuditMode = iota // system bypasses only
-    AuditModeDenialsOnly                   // denials + default deny + system bypass
-    AuditModeAll                           // everything
+    AuditOff         AuditMode = "off"           // system bypasses only
+    AuditDenialsOnly AuditMode = "denials_only"  // denials + default deny + system bypass
+    AuditAll         AuditMode = "all"           // everything
 )
 
 // Logger writes audit entries with sync (denials) or async (allows) paths.
