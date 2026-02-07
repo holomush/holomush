@@ -2282,10 +2282,10 @@ git commit -m "feat(access): add lock token registry"
 
 **Acceptance Criteria:**
 
-- [ ] `faction:rebels` → generates `forbid` with faction check
-- [ ] `flag:storyteller` → generates `forbid` with flag membership check
-- [ ] `level>5` → generates `forbid` with level comparison (inverted)
-- [ ] `faction:rebels & flag:storyteller` → compound (multiple forbids)
+- [ ] `faction:rebels` → generates `permit` with positive faction check
+- [ ] `flag:storyteller` → generates `permit` with positive flag membership check
+- [ ] `level>5` → generates `permit` with positive level comparison
+- [ ] `faction:rebels & flag:storyteller` → compound (combined permit with both conditions)
 - [ ] `!faction:rebels` → negates faction check
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
@@ -2304,10 +2304,10 @@ git commit -m "feat(access): add lock token registry"
 
 Lock syntax from spec:
 
-- `faction:rebels` → `forbid(principal is character, action, resource == "<target>") when { principal.faction != "rebels" };`
-- `flag:storyteller` → `forbid(principal is character, action, resource == "<target>") when { !("storyteller" in principal.flags) };`
-- `level>5` → `forbid(principal is character, action, resource == "<target>") when { principal.level <= 5 };`
-- `faction:rebels & flag:storyteller` → compound (both conditions as separate forbids or combined)
+- `faction:rebels` → `permit(principal is character, action, resource == "<target>") when { principal.faction == "rebels" };`
+- `flag:storyteller` → `permit(principal is character, action, resource == "<target>") when { "storyteller" in principal.flags };`
+- `level>5` → `permit(principal is character, action, resource == "<target>") when { principal.level > 5 };`
+- `faction:rebels & flag:storyteller` → `permit(principal is character, action, resource == "<target>") when { principal.faction == "rebels" && "storyteller" in principal.flags };`
 - `!faction:rebels` → negates faction check
 
 Compiler takes parsed lock expression + target resource string → DSL policy text. Then PolicyCompiler validates the generated DSL.
