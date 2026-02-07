@@ -481,10 +481,14 @@ AttributeBags.Action = map[string]any{
 }
 ```
 
-**Note:** The action bag currently contains only `name`. Conditions
-referencing any other `action.*` attribute will evaluate to `false` (missing
-attribute, fail-safe). Future attributes (e.g., `action.type`,
-`action.scope`) MAY be added when use cases emerge.
+**Note:** The action bag currently contains only `name`. The
+`PolicyCompiler` MUST reject policies referencing unregistered `action.*`
+attributes (e.g., `action.type`, `action.scope`) at compile time — the
+attribute schema registry defines the complete set of valid attributes. The
+runtime fail-safe behavior (conditions on missing attributes evaluate to
+`false`) serves as defense-in-depth but is not expected to trigger for
+`action.*` attributes in production. Future attributes MAY be added by
+registering them in the action schema when use cases emerge.
 
 ### Attribute Providers
 
