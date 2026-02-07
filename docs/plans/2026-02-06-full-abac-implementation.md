@@ -2307,12 +2307,13 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 **Acceptance Criteria:**
 
 - [ ] `EntityProperty` struct: ID, ParentType, ParentID, Name, Value, Owner, Visibility, Flags, VisibleTo, ExcludedFrom, timestamps
-- [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`
+- [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`, `DeleteByParent`
 - [ ] CRUD operations round-trip all fields correctly
 - [ ] Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
 - [ ] `visible_to` max 100 entries; `excluded_from` max 100 entries → error if exceeded
 - [ ] No overlap between `visible_to` and `excluded_from` → error
 - [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
+- [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
 - [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
 - [ ] All tests pass via `task test`
 
@@ -2329,6 +2330,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - List by parent (type + ID)
 - Update property (value, visibility, flags)
 - Delete property
+- Delete by parent (type + ID) → deletes all properties for that parent
 - Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
 - Constraints: `visible_to` max 100 entries, `excluded_from` max 100 entries
 - No overlap between `visible_to` and `excluded_from` → error
@@ -2363,6 +2365,7 @@ type PropertyRepository interface {
     ListByParent(ctx context.Context, parentType, parentID string) ([]*EntityProperty, error)
     Update(ctx context.Context, p *EntityProperty) error
     Delete(ctx context.Context, id ulid.ULID) error
+    DeleteByParent(ctx context.Context, parentType, parentID string) error
 }
 ```
 
