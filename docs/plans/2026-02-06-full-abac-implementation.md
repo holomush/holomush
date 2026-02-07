@@ -1470,15 +1470,19 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 **Acceptance Criteria:**
 
-- [ ] Implements the 7-step evaluation algorithm from the spec exactly
-- [ ] Step 1: Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
-- [ ] Step 2: Subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
-- [ ] Step 2b: Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
-- [ ] Step 2c: Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
-- [ ] Step 3: Eager attribute resolution (all attributes collected before evaluation)
-- [ ] Step 4-5: Target filtering → condition evaluation per matching policy
-- [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
-- [ ] Step 7: No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
+- [ ] Implements the 9-step evaluation algorithm from the spec exactly
+- [ ] Step 1: Caller invokes `Evaluate(ctx, AccessRequest)`
+- [ ] Step 2: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+- [ ] Step 3: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
+  - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
+  - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
+- [ ] Step 4: Eager attribute resolution (all attributes collected before evaluation)
+- [ ] Step 5: Engine loads matching policies from the in-memory cache
+- [ ] Step 6: Engine evaluates each policy's conditions against the attribute bags
+- [ ] Step 7: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
+  - [ ] No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
+- [ ] Step 8: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
+- [ ] Step 9: Returns `Decision` with allowed/denied, reason, and matched policy ID
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -1490,18 +1494,20 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 7-step evaluation algorithm (spec lines 1642-1690):
+Table-driven tests covering the 9-step evaluation algorithm (spec lines 148-160):
 
 1. **System bypass:** Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
 3. **Session invalid:** Subject `"session:expired"` → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: "infra:session-invalid"}`
 4. **Session store error:** DB failure → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: "infra:session-store-error"}`
-5. **Policy matching:** Target filtering — principal type, action list, resource type/exact
-6. **Condition evaluation:** Policies with satisfied conditions
-7. **Deny-overrides:** Both permit and forbid match → forbid wins
-8. **Default deny:** No policies match → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: ""}`
-9. **Provider error:** Provider fails → evaluation continues, error recorded in decision
-10. **Cache warmth:** Second call in same request reuses per-request attribute cache
+5. **Eager attribute resolution:** All providers called before evaluation
+6. **Policy matching:** Target filtering — principal type, action list, resource type/exact
+7. **Condition evaluation:** Policies with satisfied conditions
+8. **Deny-overrides:** Both permit and forbid match → forbid wins
+9. **Default deny:** No policies match → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: ""}`
+10. **Audit logging:** Audit entry logged per configured mode
+11. **Provider error:** Provider fails → evaluation continues, error recorded in decision
+12. **Cache warmth:** Second call in same request reuses per-request attribute cache
 
 **Step 2: Implement engine**
 
@@ -1537,13 +1543,15 @@ type Engine struct {
 func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache, sessions SessionResolver, audit AuditLogger) *Engine
 
 func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    // Step 1: System bypass
-    // Step 2: Session resolution
-    // Step 3: Resolve attributes (eager)
-    // Step 4: Find applicable policies (from cache snapshot)
-    // Step 5: Evaluate conditions per policy
-    // Step 6: Combine decisions (deny-overrides)
-    // Step 7: Audit
+    // Step 1: Invocation entry point
+    // Step 2: System bypass
+    // Step 3: Session resolution
+    // Step 4: Resolve attributes (eager)
+    // Step 5: Load applicable policies (from cache snapshot)
+    // Step 6: Evaluate conditions per policy
+    // Step 7: Combine decisions (deny-overrides)
+    // Step 8: Audit
+    // Step 9: Return decision
 }
 ```
 
