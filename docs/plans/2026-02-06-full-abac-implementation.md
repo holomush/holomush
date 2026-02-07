@@ -35,7 +35,7 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 > **Note:** Spec line numbers in task references are approximate and based on the spec at time of writing. Verify against the current spec before implementing.
 
-Applicable ADRs (from spec §18):
+Applicable ADRs (from spec "Related ADRs" section, lines 3461+):
 
 | ADR      | Title                              | Applies To      |
 | -------- | ---------------------------------- | --------------- |
@@ -69,7 +69,7 @@ A task is complete ONLY when: tests pass, acceptance criteria met, AND review pa
 
 ### Task 1: Create access\_policies migration
 
-**Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050)
+**Spec References:** Policy Storage > Schema (lines 1971-2050)
 
 **Acceptance Criteria:**
 
@@ -142,7 +142,7 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 
 ### Task 2: Create access\_audit\_log migration
 
-**Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050), §8.2 (Audit Log Schema)
+**Spec References:** Policy Storage > Schema (lines 1971-2050), Policy Storage > Audit Log Configuration (lines 2193+)
 
 **Acceptance Criteria:**
 
@@ -184,12 +184,12 @@ CREATE TABLE access_audit_log (
     duration_us     INTEGER,
     -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
     -- tables MUST include the partition key (timestamp) in the primary key.
-    -- Spec §8.2 line 2015 defines "id TEXT PRIMARY KEY" which is technically
+    -- Spec "Policy Storage > Schema" line 2015 defines "id TEXT PRIMARY KEY" which is technically
     -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Create initial partitions (current month + 2 future months, per spec §8.2 line 2306)
+-- Create initial partitions (current month + 2 future months, per spec "Policy Storage > Audit Log Retention" line 2306)
 CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
     FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
 
@@ -220,13 +220,13 @@ git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
 
-**NOTE:** The spec (§8.2 line 2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+**NOTE:** The spec ("Policy Storage > Schema" line 2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
 
 ---
 
 ### Task 3: Create entity\_properties migration
 
-**Spec References:** §8.1 (Policy Storage Schema), ADR 0013 (Properties as first-class entities)
+**Spec References:** Policy Storage > Schema (lines 1971-2050), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -293,7 +293,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 ### Task 4: Define core types (AccessRequest, Decision, Effect, PolicyMatch, AttributeBags)
 
-**Spec References:** §3 (Core Interfaces, lines 195-335) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
+**Spec References:** Core Interfaces (lines 195-335) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
 
 **Acceptance Criteria:**
 
@@ -457,7 +457,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 ### Task 5: Define subject/resource prefix constants and parser
 
-**Spec References:** §3.3 (Subject/Resource Prefix Format, lines 335-392)
+**Spec References:** Core Interfaces > Session Subject Resolution (lines 326-392)
 
 **Acceptance Criteria:**
 
@@ -624,7 +624,7 @@ git commit -m "feat(access): add subject/resource prefix constants and parser"
 
 ### Task 6: Policy store interface and PostgreSQL implementation
 
-**Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050), §6.5 (LISTEN/NOTIFY, lines 1327-1345)
+**Spec References:** Policy Storage > Schema (lines 1971-2050), Policy Storage > Cache Invalidation (lines 2115-2140)
 
 **Acceptance Criteria:**
 
@@ -739,7 +739,7 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 
 ### Task 7: Define AST node types
 
-**Spec References:** §4 (DSL Grammar, EBNF lines 735-810), §4.1 (Reserved Words)
+**Spec References:** Policy DSL > Grammar (lines 735-810, EBNF)
 
 **Acceptance Criteria:**
 
@@ -789,7 +789,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 ### Task 8: Build DSL parser
 
-**Spec References:** §4 (DSL Grammar, EBNF lines 735-810), §4.2 (Operator Semantics), §12.1 (Seed Policy DSL text, lines 2935-2999)
+**Spec References:** Policy DSL > Grammar (lines 735-810, EBNF), Policy DSL > Supported Operators (lines 1019+), Replacing Static Roles > Seed Policies (lines 2929-2999)
 
 **Acceptance Criteria:**
 
@@ -960,7 +960,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ### Task 10: Build DSL condition evaluator
 
-**Spec References:** §4.2 (Operator Semantics), §6.3 (Fail-Safe Attribute Handling), §6.4 (Nesting Depth Limit)
+**Spec References:** Policy DSL > Supported Operators (lines 1019+), Attribute Resolution > Error Handling (lines 1503+)
 
 **Acceptance Criteria:**
 
@@ -1047,7 +1047,7 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 
 ### Task 11: Build PolicyCompiler
 
-**Spec References:** §5 (Compilation Pipeline, lines 845-930), §5.1 (Validation Warnings), §5.2 (Glob Pre-compilation)
+**Spec References:** Core Interfaces > PolicyCompiler (lines 206-282)
 
 **Acceptance Criteria:**
 
@@ -1144,7 +1144,7 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 
 ### Task 12: Attribute provider interface and schema registry
 
-**Spec References:** §3.4 (AttributeProvider interface, lines 393-512), §5.3 (Schema Registration)
+**Spec References:** Core Interfaces > Attribute Providers (lines 513-604), Attribute Resolution > Schema Validation and Evolution (lines 1383+)
 
 **Acceptance Criteria:**
 
@@ -1156,7 +1156,7 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
 - [ ] `AttrType` enum: `String`, `Int`, `Float`, `Bool`, `StringList`
-- [ ] Providers MUST return all numeric attributes as `float64` (per spec §3.4.1)
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Attribute Providers)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1205,7 +1205,7 @@ package attribute
 
 // AttrType identifies the type of an attribute value.
 //
-// NOTE: Per spec §3.4.1, all numeric attributes MUST be returned as float64
+// NOTE: Per spec Core Interfaces > Attribute Providers, all numeric attributes MUST be returned as float64
 // by providers at runtime, regardless of whether they are declared as Int or Float.
 // The Int/Float distinction exists only for schema validation and documentation.
 // All numeric comparisons in the policy engine operate on float64 values.
@@ -1245,7 +1245,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 ### Task 13: Attribute resolver with per-request caching
 
-**Spec References:** §6.1 (Eager Attribute Resolution), §6.2 (Fair-Share Timeout), §6.6 (Per-Request Caching), ADR 0012 (Eager attribute resolution)
+**Spec References:** Attribute Resolution > Resolution Flow (lines 1301+), Evaluation Algorithm > Attribute Caching (lines 1891+), ADR 0012 (Eager attribute resolution)
 
 **Acceptance Criteria:**
 
@@ -1344,7 +1344,7 @@ git commit -m "feat(access): add AttributeResolver with fair-share timeouts and 
 
 ### Task 14: Core attribute providers (character, location, object)
 
-**Spec References:** §7.1 (Character Attributes), §7.2 (Location Attributes), §7.3 (Object Attributes)
+**Spec References:** Core Interfaces > Core Attribute Schema (lines 605-731)
 
 **Acceptance Criteria:**
 
@@ -1401,7 +1401,7 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 
 ### Task 15: Remaining core providers (environment, command, stream, property)
 
-**Spec References:** §7.4 (Environment Attributes), §7.5 (Command Attributes), §7.6 (Stream Attributes), §7.7 (Property Attributes), ADR 0013 (Properties as first-class entities)
+**Spec References:** Core Interfaces > Core Attribute Schema (lines 605-731), Property Model (lines 1097+), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -1480,7 +1480,7 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 ### Task 16: Build AccessPolicyEngine
 
-**Spec References:** §6 (Evaluation Algorithm, 7-step flow, lines 1642-1690), §3.3 (Session Resolution), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
+**Spec References:** Evaluation Algorithm (lines 1642-1690, 7-step flow), Core Interfaces > Session Subject Resolution (lines 326-392), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 **Acceptance Criteria:**
 
@@ -1765,15 +1765,15 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 ### Task 19: Prometheus metrics for ABAC
 
-**Spec References:** §9 (Observability, lines 1415-1465), §9.1 (Metric Names and Labels)
+**Spec References:** Evaluation Algorithm > Key Behaviors (lines 1692+), Policy Storage (lines 1971+) for observability requirements
 
 **Acceptance Criteria:**
 
 - [ ] `abac_evaluate_duration_seconds` histogram recorded after each `Evaluate()`
 - [ ] `abac_policy_evaluations_total` counter with `name` and `effect` labels
 - [ ] `abac_audit_channel_full_total` counter for dropped audit entries
-- [ ] `abac_audit_failures_total` counter with `reason` label (spec §9.1 line 2261)
-- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (spec §7.3 line 1618)
+- [ ] `abac_audit_failures_total` counter with `reason` label (spec Policy Storage > Audit Log Configuration line 2261)
+- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (spec Attribute Resolution > Error Handling line 1618)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
@@ -1859,7 +1859,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 ### Task 20: Performance benchmarks
 
-**Spec References:** §6.7 (Performance Targets, lines 1715-1741)
+**Spec References:** Evaluation Algorithm > Performance Targets (lines 1715-1741)
 
 **Acceptance Criteria:**
 
@@ -1913,7 +1913,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ### Task 21: Define seed policy constants
 
-**Spec References:** §12.1 (Seed Policies, lines 2935-2999), §12.2 (Seed Naming Convention)
+**Spec References:** Replacing Static Roles > Seed Policies (lines 2929-2999)
 
 **Acceptance Criteria:**
 
@@ -2219,7 +2219,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 ### Task 23: Lock token registry
 
-**Spec References:** §10.1 (Lock Tokens), §10.2 (Lock Token Registration)
+**Spec References:** Access Control Layers > Layer 2: Object Locks (lines 2393+)
 
 **Acceptance Criteria:**
 
@@ -2509,7 +2509,7 @@ git commit -m "feat(command): add policy test/validate/reload/attributes/audit c
 
 ### Task 28: Replace AccessControl with AccessPolicyEngine in dependency injection
 
-**Spec References:** §14 (Call Site Migration, lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -2548,7 +2548,7 @@ git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection
 
 ### Task 29: Update all call sites (iterative)
 
-**Spec References:** §14.1 (Call Site Inventory, lines 3190-3236), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -2613,7 +2613,7 @@ git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
 
 ### Task 30: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
-**Spec References:** §14.2 (Cleanup), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -2675,7 +2675,7 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 
 ### Task 31: Integration tests for full ABAC flow
 
-**Spec References:** §15 (Integration Test Requirements), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
+**Spec References:** Testing Strategy > Integration Tests (lines 3315+), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 
 **Acceptance Criteria:**
 
