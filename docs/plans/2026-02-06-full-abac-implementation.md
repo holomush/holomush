@@ -334,6 +334,8 @@ CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
     WHERE effect IN ('deny', 'default_deny');
 ```
 
+> **Note:** Partition dates (2026_02, 2026_03, 2026_04) are illustrative. The actual migration MUST use dates appropriate for the deployment timeframe. Consider using a Go migration that generates partition boundaries dynamically, or document that dates should be updated before deployment.
+
 **Step 2: Write the down migration**
 
 ```sql
@@ -428,6 +430,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 **Acceptance Criteria:**
 
 - [ ] `EntityProperty` struct: ID, ParentType, ParentID, Name, Value, Owner, Visibility, Flags, VisibleTo, ExcludedFrom, timestamps
+- [ ] `EntityProperty.ID` uses `ulid.ULID` to match existing world model convention (Location, Character, Object all use ulid.ULID)
 - [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`, `DeleteByParent`
 - [ ] CRUD operations round-trip all fields correctly
 - [ ] Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
@@ -677,12 +680,12 @@ type AttributeSchema struct {
 }
 ```
 
-**Step 4: Run tests to verify they pass**
+**Step 5: Run tests to verify they pass**
 
 Run: `task test`
 Expected: PASS
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```bash
 git add internal/access/policy/
@@ -710,10 +713,62 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 **Files:**
 
+- Create: `internal/access/policy/types/types.go` (shared types to prevent circular imports)
 - Create: `internal/access/policy/prefix.go`
 - Test: `internal/access/policy/prefix_test.go`
 
-**Step 1: Write failing tests for prefix parsing**
+**Step 1: Define shared types (AttributeSchema, AttrType)**
+
+> **Design note:** `AttributeSchema` and `AttrType` are extracted into a separate `types` package to prevent circular dependencies. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `policy.AccessRequest` and `policy.AttributeBags`. By placing schema types in a shared package, both can import from `types` without creating a cycle.
+
+```go
+// internal/access/policy/types/types.go
+package types
+
+// AttrType identifies the type of an attribute value.
+//
+// NOTE: Per spec Core Interfaces > Attribute Providers, all numeric attributes MUST be returned as float64
+// by providers at runtime, regardless of whether they are declared as Int or Float.
+// The Int/Float distinction exists only for schema validation and documentation.
+// All numeric comparisons in the policy engine operate on float64 values.
+type AttrType int
+
+const (
+	AttrTypeString     AttrType = iota
+	AttrTypeInt        // Providers MUST return as float64
+	AttrTypeFloat      // Providers MUST return as float64
+	AttrTypeBool
+	AttrTypeStringList
+)
+
+// NamespaceSchema defines the attributes in a namespace.
+type NamespaceSchema struct {
+	Attributes map[string]AttrType
+}
+
+// AttributeSchema validates attribute references during policy compilation.
+type AttributeSchema struct {
+	namespaces map[string]*NamespaceSchema
+}
+
+func NewAttributeSchema() *AttributeSchema {
+	return &AttributeSchema{
+		namespaces: make(map[string]*NamespaceSchema),
+	}
+}
+
+func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error {
+	// Implementation in Task 12
+	return nil
+}
+
+func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
+	// Implementation in Task 12
+	return false
+}
+```
+
+**Step 2: Write failing tests for prefix parsing**
 
 ```go
 // internal/access/policy/prefix_test.go
@@ -764,12 +819,12 @@ func TestParseEntityRef(t *testing.T) {
 }
 ```
 
-**Step 2: Run tests to verify they fail**
+**Step 3: Run tests to verify they fail**
 
 Run: `task test`
 Expected: FAIL
 
-**Step 3: Implement prefix parsing**
+**Step 4: Implement prefix parsing**
 
 ```go
 // internal/access/policy/prefix.go
@@ -844,16 +899,20 @@ func ParseEntityRef(ref string) (typeName, id string, err error) {
 }
 ```
 
-**Step 4: Run tests to verify they pass**
+**Step 5: Run tests to verify they pass**
 
 Run: `task test`
 Expected: PASS
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```bash
-git add internal/access/policy/prefix.go internal/access/policy/prefix_test.go
-git commit -m "feat(access): add subject/resource prefix constants and parser"
+git add internal/access/policy/types/ internal/access/policy/prefix.go internal/access/policy/prefix_test.go
+git commit -m "feat(access): add shared types package and prefix parser
+
+- Extract AttributeSchema and AttrType to internal/access/policy/types/
+- Prevents circular import between policy and attribute packages
+- Add subject/resource prefix constants and parser"
 ```
 
 ---
@@ -866,6 +925,12 @@ git commit -m "feat(access): add subject/resource prefix constants and parser"
 
 - [ ] `PolicyStore` interface defines: `Create`, `Get`, `GetByID`, `Update`, `Delete`, `ListEnabled`, `List`
 - [ ] `StoredPolicy` struct includes all `access_policies` table columns
+- [ ] `StoredPolicy.ID` uses `string` for ID because policy identifiers may be UUIDs generated by PostgreSQL or other string formats. This differs from the world model's ulid.ULID convention because policies are not world entities.
+- [ ] `StoredPolicy` includes CreatedAt and UpdatedAt fields populated from DB
+- [ ] `PolicyEffect` type defined with `PolicyEffectPermit`/`PolicyEffectForbid` constants
+- [ ] `StoredPolicy.Effect` uses `PolicyEffect` (not `policy.Effect`)
+- [ ] `PolicyEffect.String()` serializes to DB TEXT values ("permit"/"forbid")
+- [ ] Documentation clearly distinguishes `PolicyEffect` (what a policy declares) from `policy.Effect` (what the engine decides)
 - [ ] `Create()` generates ULID, inserts row, and calls `pg_notify('policy_changed', name)`
 - [ ] `Update()` increments version, inserts into `access_policy_versions`, calls `pg_notify`
 - [ ] `Delete()` removes row (CASCADE), calls `pg_notify`
@@ -1168,6 +1233,7 @@ import (
 func FuzzParse(f *testing.F) {
     // Seed corpus with all valid policy forms
     f.Add(`permit(principal is character, action in ["read"], resource is location) when { resource.id == principal.location };`)
+    // Parser-test-only: this is NOT a seed policy. Default deny is handled by EffectDefaultDeny (see Task 21).
     f.Add(`forbid(principal, action, resource);`)
     f.Add(`permit(principal is character, action in ["execute"], resource is command) when { resource.name in ["say", "pose", "look", "go"] };`)
     f.Add(`permit(principal is character, action, resource) when { principal.role == "admin" };`)
@@ -1329,15 +1395,16 @@ package policy
 
 import (
     "github.com/holomush/holomush/internal/access/policy/dsl"
+    "github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // PolicyCompiler parses and validates DSL policy text.
 type PolicyCompiler struct {
-    schema *AttributeSchema
+    schema *types.AttributeSchema
 }
 
 // NewPolicyCompiler creates a PolicyCompiler with the given schema.
-func NewPolicyCompiler(schema *AttributeSchema) *PolicyCompiler
+func NewPolicyCompiler(schema *types.AttributeSchema) *PolicyCompiler
 
 // ValidationWarning is a non-blocking issue found during compilation.
 type ValidationWarning struct {
@@ -1386,6 +1453,8 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 ### Task 13: Attribute provider interface and schema registry
 
 **Spec References:** Core Interfaces > Attribute Providers (lines 513-604), Attribute Resolution > Attribute Schema Registry (lines 1339-1382)
+
+> **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `policy.AccessRequest` and `policy.AttributeBags`. Both import from `types` package.
 
 **Acceptance Criteria:**
 
@@ -1453,29 +1522,32 @@ type LockTokenDef struct {
 // internal/access/policy/attribute/schema.go
 package attribute
 
-import "github.com/holomush/holomush/internal/access/policy"
+import (
+    "github.com/holomush/holomush/internal/access/policy/types"
+    "github.com/samber/oops"
+)
 
-// NOTE: AttrType is defined in Task 5 (internal/access/policy/types.go) and aliased here for convenience.
-// Per spec Core Interfaces > Core Attribute Schema (lines 605-731), all numeric attributes MUST be returned as float64
-// by providers at runtime, regardless of whether they are declared as Int or Float.
-// The Int/Float distinction exists only for schema validation and documentation.
-// All numeric comparisons in the policy engine operate on float64 values.
+// Implementation note: AttributeSchema and AttrType are defined in
+// internal/access/policy/types/ to prevent circular imports.
+// This package provides the actual implementation of schema methods.
 
-// NamespaceSchema defines the attributes in a namespace.
-type NamespaceSchema struct {
-    Attributes map[string]policy.AttrType
+// Register adds a namespace schema. Returns error if namespace is empty,
+// already registered, or contains duplicate keys.
+func (s *types.AttributeSchema) Register(namespace string, schema *types.NamespaceSchema) error {
+    if namespace == "" {
+        return oops.Code("INVALID_NAMESPACE").Errorf("namespace cannot be empty")
+    }
+    // Check for existing namespace
+    // Check for duplicate attribute keys
+    // Add to schema
+    return nil
 }
 
-// AttributeSchema validates attribute references during policy compilation.
-// Type definition is in Task 5 (internal/access/policy/types.go).
-// This task implements the registration and validation logic.
-type AttributeSchema struct {
-    namespaces map[string]*NamespaceSchema
+// IsRegistered checks if a namespace and attribute key are registered.
+func (s *types.AttributeSchema) IsRegistered(namespace, key string) bool {
+    // Implementation
+    return false
 }
-
-func NewAttributeSchema() *AttributeSchema
-func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error
-func (s *AttributeSchema) IsRegistered(namespace, key string) bool
 ```
 
 **Step 3: Run tests, commit**
@@ -1534,6 +1606,7 @@ import (
     "time"
 
     "github.com/holomush/holomush/internal/access/policy"
+    "github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // ProviderError records a provider failure during resolution.
@@ -1547,7 +1620,7 @@ type ProviderError struct {
 type AttributeResolver struct {
     providers    []AttributeProvider
     envProviders []EnvironmentProvider
-    schema       *AttributeSchema
+    schema       *types.AttributeSchema
     totalBudget  time.Duration // default 100ms
 }
 
@@ -1774,6 +1847,9 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
 - [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+  - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
+  - [ ] Engine implementation MUST call audit logger before returning from step 1
+  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
@@ -1794,7 +1870,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 7-step evaluation algorithm (spec lines 148-160):
+Table-driven tests covering the 7-step evaluation algorithm (spec Evaluation Algorithm, lines 1642-1690):
 
 1. **System bypass:** Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
@@ -1863,6 +1939,169 @@ Expected: PASS
 ```bash
 git add internal/access/policy/engine.go internal/access/policy/engine_test.go
 git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluation"
+```
+
+---
+
+### Task 16b: Implement Layer 1 restricted visibility metadata checks
+
+**Spec References:** Visibility Seed Policies (lines 1191-1223), Property Model > Restricted Visibility (lines 1152-1185)
+
+**Acceptance Criteria:**
+
+- [ ] Layer 1 visibility checks execute BEFORE ABAC policy evaluation
+- [ ] `visible_to` check: If property has `visible_to` list, allow only if `principal.id in resource.visible_to`
+- [ ] `excluded_from` check: If property has `excluded_from` list, deny if `principal.id in resource.excluded_from`
+- [ ] System subject bypasses visibility checks (system can access all properties)
+- [ ] Visibility check short-circuits: denied by Layer 1 → skip policy engine, return `Decision{Allowed: false, Effect: DefaultDeny}`
+- [ ] Visibility checks use metadata only (NOT seed policies)
+- [ ] Integration with PropertyProvider: visibility attributes resolved from property metadata
+- [ ] All tests pass via `task test`
+
+**Dependencies:**
+
+- Task 15 (PropertyProvider) — provides property metadata for visibility checks
+
+**Files:**
+
+- Modify: `internal/access/policy/engine.go` (add Layer 1 visibility checks before policy evaluation)
+- Test: `internal/access/policy/visibility_test.go`
+
+**TDD Test List:**
+
+- Restricted property with `visible_to=[char1]`, principal=char1 → Layer 1 allows, continues to policy eval
+- Restricted property with `visible_to=[char1]`, principal=char2 → Layer 1 denies, short-circuits
+- Restricted property with `excluded_from=[char1]`, principal=char1 → Layer 1 denies, short-circuits
+- Restricted property with `excluded_from=[char1]`, principal=char2 → Layer 1 allows, continues to policy eval
+- System subject accessing restricted property → Layer 1 bypasses visibility, continues to policy eval
+- Public property (no `visible_to`/`excluded_from`) → Layer 1 allows, continues to policy eval
+
+**Step 1: Write failing tests**
+
+Test that visibility checks execute before policy evaluation:
+
+```go
+// internal/access/policy/visibility_test.go
+package policy_test
+
+import (
+    "context"
+    "testing"
+    "github.com/holomush/holomush/internal/access/policy"
+)
+
+func TestEngine_RestrictedVisibilityLayer1(t *testing.T) {
+    tests := []struct {
+        name           string
+        principalID    string
+        visibleTo      []string
+        excludedFrom   []string
+        expectAllowed  bool
+        expectEffect   policy.Effect
+    }{
+        {
+            name:          "visible_to match allows",
+            principalID:   "char1",
+            visibleTo:     []string{"char1", "char2"},
+            excludedFrom:  nil,
+            expectAllowed: true, // Layer 1 passes, policy eval continues
+        },
+        {
+            name:          "visible_to mismatch denies",
+            principalID:   "char3",
+            visibleTo:     []string{"char1", "char2"},
+            excludedFrom:  nil,
+            expectAllowed: false,
+            expectEffect:  policy.EffectDefaultDeny,
+        },
+        {
+            name:          "excluded_from match denies",
+            principalID:   "char1",
+            visibleTo:     nil,
+            excludedFrom:  []string{"char1"},
+            expectAllowed: false,
+            expectEffect:  policy.EffectDefaultDeny,
+        },
+        {
+            name:          "excluded_from mismatch allows",
+            principalID:   "char2",
+            visibleTo:     nil,
+            excludedFrom:  []string{"char1"},
+            expectAllowed: true, // Layer 1 passes, policy eval continues
+        },
+        {
+            name:          "system subject bypasses visibility",
+            principalID:   "system",
+            visibleTo:     []string{"char1"},
+            excludedFrom:  nil,
+            expectAllowed: true,
+            expectEffect:  policy.EffectSystemBypass,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Setup: engine with property provider that returns visibility metadata
+            // Execute: Evaluate() with restricted property
+            // Assert: Layer 1 check result matches expectation
+        })
+    }
+}
+```
+
+**Step 2: Implement visibility checks in engine**
+
+In `internal/access/policy/engine.go`, add Layer 1 checks after system bypass but before policy evaluation:
+
+```go
+func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
+    // Step 1: System bypass
+    if req.Subject == "system" {
+        return Decision{Allowed: true, Effect: EffectSystemBypass}, nil
+    }
+
+    // Step 2: Session resolution
+    // ...
+
+    // Step 2b: Layer 1 restricted visibility checks (metadata-based, NOT policies)
+    if req.Resource.Type == "property" {
+        // Resolve property metadata (visible_to, excluded_from)
+        attrs, err := e.resolver.ResolveResource(ctx, req.Resource.Type, req.Resource.ID)
+        if err != nil {
+            return Decision{Allowed: false, Effect: EffectDefaultDeny}, err
+        }
+
+        // Check excluded_from first (explicit deny)
+        if excludedFrom, ok := attrs["excluded_from"].([]string); ok && len(excludedFrom) > 0 {
+            if contains(excludedFrom, req.Subject) {
+                return Decision{Allowed: false, Effect: EffectDefaultDeny, Reason: "Layer 1: excluded_from"}, nil
+            }
+        }
+
+        // Check visible_to (allowlist)
+        if visibleTo, ok := attrs["visible_to"].([]string); ok && len(visibleTo) > 0 {
+            if !contains(visibleTo, req.Subject) {
+                return Decision{Allowed: false, Effect: EffectDefaultDeny, Reason: "Layer 1: not in visible_to"}, nil
+            }
+        }
+    }
+
+    // Step 3: Eager attribute resolution
+    // Step 4-7: Policy evaluation, deny-overrides, audit
+    // ...
+}
+```
+
+**Step 3: Run tests**
+
+Run: `task test`
+Expected: PASS
+
+**Step 4: Commit**
+
+```bash
+git add internal/access/policy/engine.go internal/access/policy/visibility_test.go
+git commit -m "feat(access): add Layer 1 restricted visibility metadata checks"
 ```
 
 ---
@@ -1953,6 +2192,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials:** `deny` and `default_deny` events written synchronously to PostgreSQL before `Evaluate()` returns
+
+> **Note:** Elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
+
 - [ ] **Async write for allows:** `allow` and system bypass events written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
 - [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
@@ -2499,7 +2741,10 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
 - [ ] `UpdateSeed()` skips with warning if stored DSL differs from old DSL (customized by admins)
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
+- [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
+
+> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16b), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16b for Layer 1 restricted visibility checks.
 
 **Files:**
 
@@ -2527,7 +2772,7 @@ import (
     "log/slog"
 
     "github.com/holomush/holomush/internal/access"
-    "github.com/holomush/holomush/internal/store"
+    policystore "github.com/holomush/holomush/internal/access/policy/store"
     "github.com/samber/oops"
 )
 
@@ -2540,14 +2785,14 @@ type BootstrapOptions struct {
 // Called at server startup with system subject context (bypasses ABAC).
 // Idempotent: checks each seed policy by name before insertion.
 // Supports seed version upgrades unless opts.SkipSeedMigrations is true.
-func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
+func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
     // Use system subject context to bypass ABAC during bootstrap
     ctx = access.WithSystemSubject(ctx)
 
     for _, seed := range SeedPolicies() {
         // Per-seed idempotency check: query by name
         existing, err := policyStore.Get(ctx, seed.Name)
-        if err != nil && !store.IsNotFound(err) {
+        if err != nil && !policystore.IsNotFound(err) {
             return oops.With("seed", seed.Name).Wrap(err)
         }
 
@@ -2599,7 +2844,7 @@ func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *Pol
         }
         compiledJSON, _ := json.Marshal(compiled)
 
-        err = policyStore.Create(ctx, &store.StoredPolicy{
+        err = policyStore.Create(ctx, &policystore.StoredPolicy{
             Name:        seed.Name,
             Description: seed.Description,
             Effect:      compiled.Effect,
@@ -2700,6 +2945,8 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 - [ ] Duplicate token → error
 - [ ] `Lookup()` returns definition with DSL expansion info
 - [ ] `All()` returns complete token list
+- [ ] `TokenDef` extends `LockTokenDef` (from Task 12) with additional fields: `Namespace` (required for plugin tokens) and `ValueType` (for type-safe lock value parsing)
+- [ ] Conversion function `FromLockTokenDef(def LockTokenDef, namespace string) TokenDef` provided
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2949,6 +3196,8 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 ### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed/recompile
 
 **Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629), Grammar Versioning (lines 947-976)
+
+> **Design note:** Task 27 is intentionally kept as a single task despite its size (11 admin commands). All commands share the same handler file (`internal/command/handlers/policy.go`) and testing infrastructure. Splitting would create artificial task boundaries within a single file. If implementation proves unwieldy, consider splitting into 27a (diagnostic: test/validate/reload) and 27b (operational: attributes/audit/seed/repair/recompile) at implementation time.
 
 **Acceptance Criteria:**
 
