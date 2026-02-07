@@ -33,6 +33,8 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 **Design spec:** `docs/specs/2026-02-05-full-abac-design.md`
 
+> **Note:** Spec line numbers in task references are approximate and based on the spec at time of writing. Verify against the current spec before implementing.
+
 Applicable ADRs (from spec §18):
 
 | ADR      | Title                              | Applies To      |
