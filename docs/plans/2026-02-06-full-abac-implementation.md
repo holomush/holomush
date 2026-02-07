@@ -899,7 +899,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 ### Task 9: Add DSL fuzz tests
 
-**Spec References:** §16 (Testing Strategy — Fuzz Testing, lines 3272-3314), Policy DSL Grammar (lines 737-825)
+**Spec References:** Testing Strategy — Fuzz Testing (lines 3272-3314), Policy DSL Grammar (lines 737-825)
 
 **Acceptance Criteria:**
 
@@ -1584,7 +1584,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ### Task 17: Policy cache with LISTEN/NOTIFY invalidation
 
-**Spec References:** §6.5 (Cache Invalidation, lines 1327-1345), ADR 0016 (LISTEN/NOTIFY cache invalidation)
+**Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
 **Acceptance Criteria:**
 
@@ -1595,6 +1595,9 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 - [ ] Concurrent reads during reload → stale reads tolerable (snapshot semantics)
 - [ ] Connection drop + reconnect → full reload
 - [ ] Reload latency <50ms (benchmark test)
+- [ ] Cache staleness threshold: configurable limit (default 30s) on time since last successful reload
+- [ ] When staleness threshold exceeded → fail-closed (return `EffectDefaultDeny`) without evaluating policies
+- [ ] Prometheus gauge `policy_cache_last_update` (Unix timestamp) updated on every successful reload
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2052,7 +2055,7 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 22: Bootstrap sequence
 
-**Spec References:** §12.3 (Bootstrap Sequence, lines 3007-3074)
+**Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
 
 **Acceptance Criteria:**
 
@@ -2064,6 +2067,11 @@ git commit -m "feat(access): define seed policies"
 - [ ] Seed version upgrade: if shipped `seed_version > stored.seed_version`, update `dsl_text`, `compiled_ast`, and `seed_version`
 - [ ] Upgrade populates `change_note` with `"Auto-upgraded from seed v{N} to v{N+1} on server upgrade"`
 - [ ] Respects `--skip-seed-migrations` flag to disable automatic upgrades
+- [ ] `PolicyStore.UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` method for migration-delivered seed fixes
+- [ ] `UpdateSeed()` checks if policy exists with `source='seed'`; fails if not
+- [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
+- [ ] `UpdateSeed()` skips with warning if stored DSL differs from old DSL (customized by admins)
+- [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2269,7 +2277,7 @@ git commit -m "feat(access): add lock token registry"
 
 ### Task 24: Lock expression parser and compiler
 
-**Spec References:** §10.3 (Lock Expression Syntax), §10.4 (Lock-to-DSL Compilation)
+**Spec References:** Lock Expression Syntax (lines 2432-2466), Lock-to-DSL Compilation (lines 2564-2612), Lock Token Registry — ownership and rate limits (lines 2592-2669)
 
 **Acceptance Criteria:**
 
@@ -2280,6 +2288,8 @@ git commit -m "feat(access): add lock token registry"
 - [ ] `!faction:rebels` → negates faction check
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
+- [ ] All lock-generated policies MUST include `resource.owner == principal.id` in condition block (ownership check requirement)
+- [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2314,7 +2324,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ### Task 25: Property model (EntityProperty type and repository)
 
-**Spec References:** §11 (Property Model), ADR 0013 (Properties as first-class entities)
+**Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -2326,6 +2336,12 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - [ ] No overlap between `visible_to` and `excluded_from` → error
 - [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
 - [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
+- [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
+- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
+- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
+- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
+- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
+- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
 - [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
 - [ ] All tests pass via `task test`
 
@@ -2393,9 +2409,9 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 ---
 
-### Task 26: Admin commands — policy create/list/show/edit/delete
+### Task 26: Admin commands — policy create/list/show/edit/delete/enable/disable/history/rollback
 
-**Spec References:** §13 (Admin Commands, lines 2060-2130)
+**Spec References:** Admin Commands (lines 2695-2914)
 
 **Acceptance Criteria:**
 
@@ -2404,7 +2420,11 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - [ ] `policy show <name>` → displays full policy details
 - [ ] `policy edit <name> <new_dsl>` → validates new DSL, increments version
 - [ ] `policy delete <name>` → removes policy; seed policies cannot be deleted → error
-- [ ] Admin-only permission check on create/edit/delete
+- [ ] `policy enable <name>` → sets `enabled=true`, triggers cache reload
+- [ ] `policy disable <name>` → sets `enabled=false`, triggers cache reload
+- [ ] `policy history <name>` → shows version history from `access_policy_versions` table
+- [ ] `policy rollback <name> <version>` → restores policy to previous version, creates new version entry
+- [ ] Admin-only permission check on create/edit/delete/enable/disable/rollback
 - [ ] Invalid DSL input → helpful error message with line/column
 - [ ] Commands registered in command registry following existing handler patterns
 - [ ] All tests pass via `task test`
@@ -2440,9 +2460,9 @@ git commit -m "feat(command): add policy CRUD admin commands"
 
 ---
 
-### Task 27: Admin commands — policy test/validate/reload/attributes/audit
+### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed
 
-**Spec References:** §13.1 (policy test), §13.2 (policy validate), §13.3 (policy reload), §13.4 (policy attributes), §13.5 (policy audit)
+**Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629)
 
 **Acceptance Criteria:**
 
@@ -2453,6 +2473,9 @@ git commit -m "feat(command): add policy CRUD admin commands"
 - [ ] `policy attributes` → lists all registered attribute namespaces and keys
 - [ ] `policy attributes --namespace reputation` → filters to specific namespace
 - [ ] `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
+- [ ] `policy seed verify` → compares installed seed policies against shipped seed text, highlights differences
+- [ ] `policy seed status` → shows seed policy versions, customization status
+- [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2725,6 +2748,164 @@ Expected: PASS
 git add test/integration/access/
 git commit -m "test(access): add ABAC integration tests with seed policies and property visibility"
 ```
+
+---
+
+### Task 32: Degraded mode implementation
+
+**Spec References:** Degraded Mode (lines 1606-1629)
+
+**Acceptance Criteria:**
+
+- [ ] Engine MUST enter degraded mode when corrupted forbid/deny policy detected
+- [ ] Degraded mode flag (`abac_degraded_mode` boolean) persists until administratively cleared
+- [ ] In degraded mode: all `Evaluate()` calls return `EffectDefaultDeny` without policy evaluation
+- [ ] In degraded mode: log CRITICAL level message on every evaluation attempt
+- [ ] Corrupted policy detection: unmarshal `compiled_ast` fails or structural invariants violated
+- [ ] Only forbid/deny policies trigger degraded mode (permit policies skipped safely)
+- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation (implemented in Task 27)
+- [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19)
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/engine.go` (add degraded mode state and check)
+- Test: `internal/access/policy/engine_test.go`
+
+**TDD Test List:**
+
+- Engine detects corrupted forbid policy → enters degraded mode
+- Engine detects corrupted deny policy → enters degraded mode
+- Engine skips corrupted permit policy → no degraded mode
+- In degraded mode → all evaluations return default deny
+- In degraded mode → CRITICAL log on every evaluation
+- Clear degraded mode → normal evaluation resumes
+- Degraded mode gauge metric → 0 when normal, 1 when degraded
+
+---
+
+### Task 33: Schema evolution on plugin reload
+
+**Spec References:** Schema Evolution on Plugin Reload (lines 1443-1502)
+
+**Acceptance Criteria:**
+
+- [ ] When plugin reloaded, compare new schema against previous schema version
+- [ ] Attribute added → INFO log, no action required
+- [ ] Attribute type changed → WARN log, note existing policies may break
+- [ ] Attribute removed → WARN log, scan policies for references
+- [ ] Namespace removed → ERROR log, scan policies for references, reject reload if policies reference it
+- [ ] Schema change detection: compare attribute keys, types, namespaces between old and new schemas
+- [ ] Policy reference scan: grep all enabled policies' `dsl_text` for removed namespace or attribute keys
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/schema_registry.go` (add schema versioning and comparison)
+- Test: `internal/access/policy/schema_registry_test.go`
+
+**TDD Test List:**
+
+- Plugin reload with added attribute → INFO log, no error
+- Plugin reload with changed attribute type → WARN log, no error
+- Plugin reload with removed attribute → WARN log, scan policies
+- Plugin reload with removed namespace → ERROR, reject if policies reference it
+- Schema comparison detects all change types correctly
+- Policy scan correctly identifies references to removed attributes
+
+---
+
+### Task 34: Lock tokens discovery command
+
+**Spec References:** Lock Token Discovery (lines 2613-2638)
+
+**Acceptance Criteria:**
+
+- [ ] `lock tokens` command → lists all registered lock tokens (faction, flag, level, etc.)
+- [ ] `lock tokens --namespace character` → filters to specific namespace
+- [ ] Display format: token name, type, description, example
+- [ ] Discovery sources: schema registry (plugin-provided attributes) + core tokens (faction, flag, level, role)
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/command/handlers/lock.go`
+- Test: `internal/command/handlers/lock_test.go`
+
+**TDD Test List:**
+
+- `lock tokens` → lists all available lock tokens
+- `lock tokens --namespace character` → filters to character namespace
+- Core tokens (faction, flag, level, role) always present
+- Plugin-provided attributes appear in token list
+- Display format includes name, type, description, example
+
+---
+
+### Task 35: General provider circuit breaker
+
+**Spec References:** Provider Circuit Breaker (lines 1540-1568)
+
+**Acceptance Criteria:**
+
+- [ ] Track consecutive errors per provider
+- [ ] Trigger: 10 consecutive errors → circuit opens
+- [ ] Circuit open → skip provider for 30s, return empty attributes
+- [ ] Log at WARN level: "Provider {name} circuit breaker opened: {N} consecutive errors"
+- [ ] Prometheus counter `abac_provider_circuit_breaker_trips_total{provider="name"}` incremented on trip
+- [ ] After 30s → half-open state with single probe request
+- [ ] Probe success → close circuit (INFO log); probe failure → re-open for another 30s
+- [ ] Circuit-opened providers do NOT consume evaluation time budget (immediate skip, no I/O)
+- [ ] Fair-share timeout calculation excludes circuit-opened providers from remaining provider count
+- [ ] Provider metrics endpoint `/debug/abac/providers` shows: call counts, avg latency, timeout rate, circuit status
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/resolver.go` (add general circuit breaker logic)
+- Test: `internal/access/policy/resolver_test.go`
+
+**TDD Test List:**
+
+- 10 consecutive errors → circuit opens
+- Circuit open → provider skipped for 30s, empty attributes returned
+- WARN log on circuit open with provider name and failure count
+- Prometheus counter incremented on trip
+- After 30s → half-open probe sent (single request)
+- Probe success → circuit closes, normal operation resumes (INFO log)
+- Probe failure → circuit re-opens for another 30s
+- Skipping circuit-opened provider does not consume evaluation budget
+- Fair-share timeout excludes circuit-opened providers from denominator
+- Metrics endpoint shows circuit status
+
+---
+
+### Task 36: CLI flag --validate-seeds
+
+**Spec References:** Seed Policy Validation (lines 3076-3122)
+
+**Acceptance Criteria:**
+
+- [ ] CLI flag `--validate-seeds` added to server startup
+- [ ] Flag behavior: boot DSL compiler, validate all seed policy DSL text, exit with success/failure status
+- [ ] Does NOT start the server (validation-only mode)
+- [ ] Exit code 0 on success, non-zero on failure
+- [ ] Logs validation results: "All N seed policies valid" or "Validation failed: {errors}"
+- [ ] Enables CI integration: `holomush --validate-seeds` in build pipeline
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `cmd/holomush/main.go` (add flag and validation logic)
+- Test: `cmd/holomush/main_test.go`
+
+**TDD Test List:**
+
+- `--validate-seeds` flag present → validation mode activated
+- All valid seeds → exit 0, log success
+- Invalid seed DSL → exit non-zero, log errors with line/column
+- Validation mode → server does NOT start
+- CI integration test: run in build pipeline, verify exit codes
 
 ---
 
