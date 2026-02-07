@@ -2747,6 +2747,20 @@ Error at line 2, column 27: expected expression after '>='
 
 ### policy test
 
+**Usage:**
+
+```text
+policy test <subject> <action> <resource> [--verbose] [--json]
+```
+
+**Parameters:**
+
+- `<subject>` — Subject entity reference (e.g., `character:01ABC`)
+- `<action>` — Action to test (e.g., `enter`, `read`, `write`)
+- `<resource>` — Resource entity reference (e.g., `location:01XYZ`)
+- `--verbose` — Show detailed condition evaluation for all policies
+- `--json` — Output structured JSON instead of human-readable text
+
 Dry-run evaluation showing resolved attributes, matching policies, and the
 final decision. Available to admins and builders (for debugging builds).
 
