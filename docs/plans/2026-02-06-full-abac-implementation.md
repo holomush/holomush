@@ -208,6 +208,8 @@ CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
     WHERE effect IN ('deny', 'default_deny');
 ```
 
+> **Note:** Partition dates (2026_02, 2026_03, 2026_04) are illustrative. The actual migration MUST use dates appropriate for the deployment timeframe. Consider using a Go migration that generates partition boundaries dynamically, or document that dates should be updated before deployment.
+
 **Step 2: Write the down migration**
 
 ```sql
@@ -1022,6 +1024,7 @@ import (
 func FuzzParse(f *testing.F) {
     // Seed corpus with all valid policy forms
     f.Add(`permit(principal is character, action in ["read"], resource is location) when { resource.id == principal.location };`)
+    // Parser-test-only: this is NOT a seed policy. Default deny is handled by EffectDefaultDeny (see Task 21).
     f.Add(`forbid(principal, action, resource);`)
     f.Add(`permit(principal is character, action in ["execute"], resource is command) when { resource.name in ["say", "pose", "look", "go"] };`)
     f.Add(`permit(principal is character, action, resource) when { principal.role == "admin" };`)
@@ -1979,6 +1982,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials:** `deny` and `default_deny` events written synchronously to PostgreSQL before `Evaluate()` returns
+
+> **Note:** Elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
+
 - [ ] **Async write for allows:** `allow` and system bypass events written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
 - [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
@@ -2505,6 +2511,8 @@ git commit -m "feat(access): define seed policies"
 - [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
 
+> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16b), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16b for Layer 1 restricted visibility checks.
+
 **Files:**
 
 - Create: `internal/access/policy/bootstrap.go`
@@ -2898,6 +2906,8 @@ git commit -m "feat(command): add policy CRUD admin commands"
 ### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed
 
 **Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629)
+
+> **Design note:** Task 27 is intentionally kept as a single task despite its size (11 admin commands). All commands share the same handler file (`internal/command/handlers/policy.go`) and testing infrastructure. Splitting would create artificial task boundaries within a single file. If implementation proves unwieldy, consider splitting into 27a (diagnostic: test/validate/reload) and 27b (operational: attributes/audit/seed/repair/recompile) at implementation time.
 
 **Acceptance Criteria:**
 
