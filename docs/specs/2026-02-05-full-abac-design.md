@@ -2029,7 +2029,10 @@ CREATE TABLE access_audit_log (
 
 -- Essential indexes only. The effect column doubles as the decision indicator:
 -- allow = allowed, deny/default_deny = denied. No separate decision column needed.
-CREATE INDEX idx_audit_log_timestamp ON access_audit_log(timestamp DESC);
+-- BRIN index on timestamp: Audit logs are append-only with natural time ordering,
+-- making BRIN ~1-2% the size of B-tree for time-range scans. Subject and effect
+-- indexes remain B-tree as their values are not correlated with physical row order.
+CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp) WITH (pages_per_range = 128);
 CREATE INDEX idx_audit_log_subject ON access_audit_log(subject, timestamp DESC);
 CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
     WHERE effect IN ('deny', 'default_deny');
