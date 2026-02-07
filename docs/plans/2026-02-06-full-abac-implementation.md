@@ -1758,10 +1758,12 @@ git commit -m "feat(access): add async audit logger with mode control"
 - [ ] `abac_evaluate_duration_seconds` histogram recorded after each `Evaluate()`
 - [ ] `abac_policy_evaluations_total` counter with `name` and `effect` labels
 - [ ] `abac_audit_channel_full_total` counter for dropped audit entries
+- [ ] `abac_audit_failures_total` counter with `reason` label (spec §9.1 line 2261)
+- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (spec §7.3 line 1618)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
-- [ ] `abac_unregistered_attributes_total` counter (schema drift indicator)
+- [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
 - [ ] `RegisterMetrics()` follows existing pattern from `internal/observability/server.go`
 - [ ] All tests pass via `task test`
 
@@ -1798,6 +1800,14 @@ var (
         Name: "abac_audit_channel_full_total",
         Help: "Audit entries dropped due to full channel",
     })
+    auditFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Name: "abac_audit_failures_total",
+        Help: "Failed audit writes by reason",
+    }, []string{"reason"})
+    degradedMode = prometheus.NewGauge(prometheus.GaugeOpts{
+        Name: "abac_degraded_mode",
+        Help: "ABAC engine degraded mode status (0=normal, 1=degraded)",
+    })
     providerCircuitBreakerTrips = prometheus.NewCounterVec(prometheus.CounterOpts{
         Name: "abac_provider_circuit_breaker_trips_total",
         Help: "Circuit breaker trips by provider namespace",
@@ -1819,8 +1829,8 @@ var (
 // RegisterMetrics registers all ABAC metrics with the given registerer.
 func RegisterMetrics(reg prometheus.Registerer) {
     reg.MustRegister(evaluateDuration, policyEvaluations, auditChannelFull,
-        providerCircuitBreakerTrips, providerErrorsTotal,
-        policyCacheLastUpdate, unregisteredAttributes)
+        auditFailures, degradedMode, providerCircuitBreakerTrips,
+        providerErrorsTotal, policyCacheLastUpdate, unregisteredAttributes)
 }
 ```
 
