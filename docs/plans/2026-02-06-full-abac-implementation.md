@@ -43,9 +43,9 @@ Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 | ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics     | Task 11         |
 | ADR 0011 | Deny-overrides conflict resolution         | Tasks 17, 30    |
 | ADR 0012 | Eager attribute resolution                 | Tasks 14, 17    |
-| ADR 0013 | Properties as first-class entities         | Tasks 3, 4, 16  |
+| ADR 0013 | Properties as first-class entities         | Tasks 3, 4, 16b |
 | ADR 0014 | Direct replacement (no adapter)            | Tasks 28-29     |
-| ADR 0015 | Three-Layer Player Access Control          | Tasks 4, 16     |
+| ADR 0015 | Three-Layer Player Access Control          | Tasks 4, 16a-c  |
 | ADR 0016 | LISTEN/NOTIFY cache invalidation           | Task 18         |
 
 ### Acceptance Criteria
@@ -141,6 +141,7 @@ graph TD
         T27[Task 27: Admin test/validate/reload]
         T24 --> T25
         T25 --> T25b
+        T26a --> T26b
     end
 
     subgraph "Phase 7.6: Call Site Migration"
@@ -168,7 +169,14 @@ graph TD
     T23 --> T26a
     T23 --> T27
     T17 --> T28
+    T23 --> T28
     T23b --> T30
+    T7 --> T26b
+    T17 --> T25b
+    T17 --> T31
+    T7 --> T32
+    T24 --> T33
+    T14 --> T34
 
     %% Critical path (thick lines conceptually)
     style T3 fill:#ffcccc
