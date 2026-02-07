@@ -967,7 +967,7 @@ type StoredPolicy struct {
     ID          string
     Name        string
     Description string
-    Effect      policy.Effect
+    Effect      PolicyEffect
     Source      string // "seed", "lock", "admin", "plugin"
     DSLText     string
     CompiledAST []byte // JSONB
@@ -1530,13 +1530,16 @@ import (
     "github.com/samber/oops"
 )
 
-// Implementation note: AttributeSchema and AttrType are defined in
-// internal/access/policy/types/ to prevent circular imports.
-// This package provides the actual implementation of schema methods.
+// SchemaRegistry wraps types.AttributeSchema with registration logic.
+// AttributeSchema and AttrType are defined in internal/access/policy/types/
+// to prevent circular imports. SchemaRegistry provides the actual implementation.
+type SchemaRegistry struct {
+    schema *types.AttributeSchema
+}
 
 // Register adds a namespace schema. Returns error if namespace is empty,
 // already registered, or contains duplicate keys.
-func (s *types.AttributeSchema) Register(namespace string, schema *types.NamespaceSchema) error {
+func (r *SchemaRegistry) Register(namespace string, schema *types.NamespaceSchema) error {
     if namespace == "" {
         return oops.Code("INVALID_NAMESPACE").Errorf("namespace cannot be empty")
     }
@@ -1547,7 +1550,7 @@ func (s *types.AttributeSchema) Register(namespace string, schema *types.Namespa
 }
 
 // IsRegistered checks if a namespace and attribute key are registered.
-func (s *types.AttributeSchema) IsRegistered(namespace, key string) bool {
+func (r *SchemaRegistry) IsRegistered(namespace, key string) bool {
     // Implementation
     return false
 }
