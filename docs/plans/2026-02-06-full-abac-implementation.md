@@ -185,7 +185,7 @@ graph TD
 **Critical Path (highlighted in red):** Task 3 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Parallel Work Opportunities:**
-- Phase 7.2 (Tasks 8-12) can start after Task 7 completes
+- Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
 - Task 16c (visibility checks) depends on Task 16b but can proceed in parallel with Task 16a
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
@@ -532,7 +532,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Files:**
 
-- Create: `internal/access/policy/types.go`
+- Create: `internal/access/policy/types/types.go`
 - Test: `internal/access/policy/types_test.go`
 
 **Step 1: Write failing tests for Effect.String() and Decision invariants**
@@ -594,8 +594,8 @@ Expected: FAIL — package and types don't exist
 **Step 3: Implement types**
 
 ```go
-// internal/access/policy/types.go
-package policy
+// internal/access/policy/types/types.go
+package types
 
 // Effect represents the type of decision.
 type Effect int
@@ -2951,7 +2951,7 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 - [ ] Duplicate token → error
 - [ ] `Lookup()` returns definition with DSL expansion info
 - [ ] `All()` returns complete token list
-- [ ] `TokenDef` extends `LockTokenDef` (from Task 12) with additional fields: `Namespace` (required for plugin tokens) and `ValueType` (for type-safe lock value parsing)
+- [ ] `TokenDef` extends `LockTokenDef` (from Task 13) with additional fields: `Namespace` (required for plugin tokens) and `ValueType` (for type-safe lock value parsing)
 - [ ] Conversion function `FromLockTokenDef(def LockTokenDef, namespace string) TokenDef` provided
 - [ ] All tests pass via `task test`
 
@@ -3061,7 +3061,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - [ ] Resource target resolution: resolve object/exit by name in current location
 - [ ] Ownership verification: character must own the target resource (checked via `Evaluate()`)
 - [ ] Rate limiting: max 50 lock policies per character → error on create if exceeded
-- [ ] Lock policy naming: `lock:<character_id>:<resource_id>:<action>` format
+- [ ] Lock policy naming: `lock:<type>:<resource_id>:<action>` format (per spec: `<type>` is bare resource type like `object`, `property`, `location`)
 - [ ] Commands registered in command registry following existing handler patterns
 - [ ] All tests pass via `task test`
 
@@ -3084,20 +3084,24 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 Lock command workflow:
 1. Parse `lock <resource>/<action> = <expression>` syntax
 2. Resolve resource by name in character's current location
-3. Check ownership via `engine.Evaluate(ctx, AccessRequest{Subject: character, Action: "own", Resource: resource})`
-4. Count existing lock policies for character (from PolicyStore, filter by `name LIKE 'lock:<character_id>:%'`)
-5. If count >= 50, return error "Rate limit exceeded: max 50 lock policies per character"
-6. Parse lock expression via lock parser (from Task 25)
-7. Compile to DSL policy via lock compiler (from Task 25)
-8. Generate policy name: `lock:<character_id>:<resource_id>:<action>`
-9. Store policy via PolicyStore with source="lock"
+3. Determine resource type (object, property, location, etc.) from resolved resource
+4. Check ownership via `engine.Evaluate(ctx, AccessRequest{Subject: character, Action: "own", Resource: resource})`
+5. Count existing lock policies for character (from PolicyStore, filter by `WHERE source = 'lock' AND created_by = <character_id>`)
+6. If count >= 50, return error "Rate limit exceeded: max 50 lock policies per character"
+7. Parse lock expression via lock parser (from Task 25)
+8. Compile to DSL policy via lock compiler (from Task 25)
+9. Generate policy name: `lock:<type>:<resource_id>:<action>` (e.g., `lock:object:01ABC:read`)
+10. Store policy via PolicyStore with source="lock"
+
+> **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per spec (lines 2656-2662). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
 
 Unlock command workflow:
 1. Parse `unlock <resource>/<action>` or `unlock <resource>` syntax
 2. Resolve resource by name in character's current location
-3. Check ownership via `Evaluate()`
-4. If action specified: delete policy named `lock:<character_id>:<resource_id>:<action>`
-5. If no action: delete all policies matching `lock:<character_id>:<resource_id>:%`
+3. Determine resource type from resolved resource
+4. Check ownership via `Evaluate()`
+5. If action specified: delete policy named `lock:<type>:<resource_id>:<action>`
+6. If no action: delete all policies matching pattern `lock:<type>:<resource_id>:%` (using PolicyStore query)
 
 **Step 3: Run tests, commit**
 
@@ -3608,7 +3612,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Files:**
 
-- Create: `internal/command/handlers/lock.go`
+- Modify: `internal/command/handlers/lock.go`
 - Test: `internal/command/handlers/lock_test.go`
 
 **TDD Test List:**
