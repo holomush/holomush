@@ -41,7 +41,7 @@ Applicable ADRs (from spec §18):
 | ADR 0012 | Eager attribute resolution         | Tasks 13, 16    |
 | ADR 0013 | Properties as first-class entities | Tasks 3, 15, 25 |
 | ADR 0014 | Direct replacement (no adapter)    | Tasks 28-30     |
-| ADR 0015 | Fuzz testing for DSL parser        | Task 9          |
+| ADR 0015 | Three-Layer Player Access Control  | Tasks 15, 25    |
 | ADR 0016 | LISTEN/NOTIFY cache invalidation   | Task 17         |
 
 ### Acceptance Criteria
@@ -868,7 +868,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 ### Task 9: Add DSL fuzz tests
 
-**Spec References:** ADR 0015 (Fuzz testing for DSL parser), §4 (DSL Grammar)
+**Spec References:** §16 (Testing Strategy — Fuzz Testing, lines 3272-3314), Policy DSL Grammar (lines 737-825)
 
 **Acceptance Criteria:**
 
