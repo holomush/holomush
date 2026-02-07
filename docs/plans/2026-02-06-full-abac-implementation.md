@@ -103,6 +103,7 @@ graph TD
         T15[Task 15: Core providers]
         T16a[Task 16a: Simple providers]
         T16b[Task 16b: PropertyProvider]
+        T16c[Task 16c: Visibility checks]
         T17[Task 17: AccessPolicyEngine]
         T18[Task 18: Policy cache LISTEN/NOTIFY]
         T19[Task 19: Audit logger]
@@ -114,7 +115,8 @@ graph TD
         T15 --> T16a
         T16a --> T16b
         T15 --> T17
-        T16b --> T17
+        T16b --> T16c
+        T16c --> T17
         T17 --> T18
         T17 --> T19
         T19 --> T19b
@@ -185,6 +187,7 @@ graph TD
 **Parallel Work Opportunities:**
 - Phase 7.2 (Tasks 8-12) can start after Task 7 completes
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
+- Task 16c (visibility checks) depends on Task 16b but can proceed in parallel with Task 16a
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
 - Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
@@ -1943,7 +1946,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ---
 
-### Task 16b: Implement Layer 1 restricted visibility metadata checks
+### Task 16c: Implement Layer 1 restricted visibility metadata checks
 
 **Spec References:** Visibility Seed Policies (lines 1191-1223), Property Model > Restricted Visibility (lines 1152-1185)
 
@@ -1960,7 +1963,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 **Dependencies:**
 
-- Task 15 (PropertyProvider) — provides property metadata for visibility checks
+- Task 16b (PropertyProvider) — provides property metadata for visibility checks
 
 **Files:**
 
@@ -2744,7 +2747,7 @@ git commit -m "feat(access): define seed policies"
 - [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
 
-> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16b), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16b for Layer 1 restricted visibility checks.
+> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16c), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16c for Layer 1 restricted visibility checks.
 
 **Files:**
 
