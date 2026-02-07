@@ -4,7 +4,7 @@
 
 **Goal:** Replace the static role-based `AccessControl` system with a full policy-driven `AccessPolicyEngine` supporting a Cedar-inspired DSL, extensible attribute providers, audit logging, and admin commands.
 
-**Architecture:** Custom Go-native ABAC engine with eager attribute resolution, in-memory policy cache invalidated via PostgreSQL LISTEN/NOTIFY, deny-overrides conflict resolution, and per-request attribute caching. No adapter layer — direct replacement of all ~28 call sites.
+**Architecture:** Custom Go-native ABAC engine with eager attribute resolution, in-memory policy cache invalidated via PostgreSQL LISTEN/NOTIFY, deny-overrides conflict resolution, and per-request attribute caching. No adapter layer — direct replacement of all ~28 production call sites (plus test files and generated mocks).
 
 **Tech Stack:** Go 1.23+, [participle](https://github.com/alecthomas/participle) (struct-tag parser generator), pgx/pgxpool, oops (structured errors), prometheus/client_golang, testify + Ginkgo/Gomega, mockery
 
@@ -33,6 +33,8 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 **Design spec:** `docs/specs/2026-02-05-full-abac-design.md`
 
+> **Note:** Spec line numbers in task references are approximate and based on the spec at time of writing. Verify against the current spec before implementing.
+
 Applicable ADRs (from spec §18):
 
 | ADR      | Title                              | Applies To      |
@@ -41,7 +43,7 @@ Applicable ADRs (from spec §18):
 | ADR 0012 | Eager attribute resolution         | Tasks 13, 16    |
 | ADR 0013 | Properties as first-class entities | Tasks 3, 15, 25 |
 | ADR 0014 | Direct replacement (no adapter)    | Tasks 28-30     |
-| ADR 0015 | Fuzz testing for DSL parser        | Task 9          |
+| ADR 0015 | Three-Layer Player Access Control  | Tasks 15, 25    |
 | ADR 0016 | LISTEN/NOTIFY cache invalidation   | Task 17         |
 
 ### Acceptance Criteria
@@ -62,6 +64,8 @@ A task is complete ONLY when: tests pass, acceptance criteria met, AND review pa
 ---
 
 ## Phase 7.1: Policy Schema (Database Tables + Policy Store)
+
+> **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
 
 ### Task 1: Create access\_policies migration
 
@@ -143,12 +147,16 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 **Acceptance Criteria:**
 
 - [ ] `access_audit_log` table uses `PARTITION BY RANGE (timestamp)` from day one
-- [ ] Initial monthly partition created for current month
+- [ ] Composite PRIMARY KEY (id, timestamp) includes partition key per PostgreSQL requirement
+- [ ] SQL comment documents PK deviation from spec and rationale
+- [ ] At least 3 initial monthly partitions created (current month + 2 future months)
+- [ ] Partition naming follows spec convention: `access_audit_log_YYYY_MM`
 - [ ] BRIN index on `timestamp` with `pages_per_range = 128`
 - [ ] Subject + timestamp DESC index for per-subject queries
 - [ ] Denied-only partial index for denial analysis queries
 - [ ] `effect` CHECK constraint includes: `allow`, `deny`, `default_deny`, `system_bypass`
 - [ ] Up migration applies cleanly; down migration reverses it
+- [ ] Note added flagging spec update needed for PK inconsistency
 
 **Files:**
 
@@ -174,12 +182,22 @@ CREATE TABLE access_audit_log (
     error_message   TEXT,
     provider_errors JSONB,
     duration_us     INTEGER,
+    -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
+    -- tables MUST include the partition key (timestamp) in the primary key.
+    -- Spec §8.2 line 2015 defines "id TEXT PRIMARY KEY" which is technically
+    -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Create initial partition for current month
-CREATE TABLE access_audit_log_y2026m02 PARTITION OF access_audit_log
+-- Create initial partitions (current month + 2 future months, per spec §8.2 line 2306)
+CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
     FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+
+CREATE TABLE access_audit_log_2026_03 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+CREATE TABLE access_audit_log_2026_04 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp)
     WITH (pages_per_range = 128);
@@ -202,6 +220,8 @@ git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
 
+**NOTE:** The spec (§8.2 line 2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+
 ---
 
 ### Task 3: Create entity\_properties migration
@@ -214,6 +234,9 @@ git commit -m "feat(access): add access_audit_log table with monthly range parti
 - [ ] `visibility` CHECK includes all five levels: `public`, `private`, `restricted`, `system`, `admin`
 - [ ] Unique constraint on `(parent_type, parent_id, name)`
 - [ ] Parent index on `(parent_type, parent_id)` for efficient lookups
+- [ ] `visibility_restricted_requires_lists` CHECK constraint ensures restricted visibility has non-NULL visible_to and excluded_from
+- [ ] `visibility_non_restricted_nulls_lists` CHECK constraint ensures non-restricted visibility has NULL lists
+- [ ] `idx_properties_owner` partial index on owner column where owner IS NOT NULL
 - [ ] Up migration applies cleanly; down migration reverses it
 
 **Files:**
@@ -239,10 +262,17 @@ CREATE TABLE entity_properties (
     excluded_from JSONB DEFAULT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name)
+    CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name),
+    CONSTRAINT visibility_restricted_requires_lists
+        CHECK (visibility != 'restricted'
+            OR (visible_to IS NOT NULL AND excluded_from IS NOT NULL)),
+    CONSTRAINT visibility_non_restricted_nulls_lists
+        CHECK (visibility = 'restricted'
+            OR (visible_to IS NULL AND excluded_from IS NULL))
 );
 
 CREATE INDEX idx_entity_properties_parent ON entity_properties(parent_type, parent_id);
+CREATE INDEX idx_properties_owner ON entity_properties(owner) WHERE owner IS NOT NULL;
 ```
 
 **Step 2: Write the down migration**
@@ -438,6 +468,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 - [ ] `stream:location:01XYZ` parses to type `"stream"`, ID `"location:01XYZ"`
 - [ ] Unknown prefix returns `INVALID_ENTITY_REF` error code (oops)
 - [ ] Empty string returns `INVALID_ENTITY_REF` error code
+- [ ] Legacy `char:01ABC` prefix returns `INVALID_ENTITY_REF` error code
 - [ ] Session error code constants defined: `infra:session-invalid`, `infra:session-store-error`
 - [ ] All tests pass via `task test`
 
@@ -637,6 +668,7 @@ type StoredPolicy struct {
     CompiledAST []byte // JSONB
     Enabled     bool
     SeedVersion *int
+    ChangeNote  string // populated on version upgrades; stored in access_policy_versions
     CreatedBy   string
     Version     int
 }
@@ -780,7 +812,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (all 15 seed policies):**
+**Valid policies (14 seed policies plus catch-all forbid test case):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };
@@ -868,7 +900,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 ### Task 9: Add DSL fuzz tests
 
-**Spec References:** ADR 0015 (Fuzz testing for DSL parser), §4 (DSL Grammar)
+**Spec References:** Testing Strategy — Fuzz Testing (lines 3272-3314), Policy DSL Grammar (lines 737-825)
 
 **Acceptance Criteria:**
 
@@ -914,6 +946,8 @@ func FuzzParse(f *testing.F) {
 
 Run: `go test -fuzz=FuzzParse -fuzztime=30s ./internal/access/policy/dsl/`
 Expected: No panics
+
+**Note:** Direct `go test` is intentional here — fuzz testing is not covered by `task test` runner.
 
 **Step 3: Commit**
 
@@ -1122,6 +1156,7 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
 - [ ] `AttrType` enum: `String`, `Int`, `Float`, `Bool`, `StringList`
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec §3.4.1)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1169,12 +1204,17 @@ type LockTokenDef struct {
 package attribute
 
 // AttrType identifies the type of an attribute value.
+//
+// NOTE: Per spec §3.4.1, all numeric attributes MUST be returned as float64
+// by providers at runtime, regardless of whether they are declared as Int or Float.
+// The Int/Float distinction exists only for schema validation and documentation.
+// All numeric comparisons in the policy engine operate on float64 values.
 type AttrType int
 
 const (
     AttrTypeString     AttrType = iota
-    AttrTypeInt
-    AttrTypeFloat
+    AttrTypeInt        // Providers MUST return as float64
+    AttrTypeFloat      // Providers MUST return as float64
     AttrTypeBool
     AttrTypeStringList
 )
@@ -1444,15 +1484,19 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 **Acceptance Criteria:**
 
-- [ ] Implements the 7-step evaluation algorithm from the spec exactly
-- [ ] Step 1: Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
-- [ ] Step 2: Subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
-- [ ] Step 2b: Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
-- [ ] Step 2c: Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
-- [ ] Step 3: Eager attribute resolution (all attributes collected before evaluation)
-- [ ] Step 4-5: Target filtering → condition evaluation per matching policy
-- [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
-- [ ] Step 7: No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
+- [ ] Implements the 9-step evaluation algorithm from the spec exactly
+- [ ] Step 1: Caller invokes `Evaluate(ctx, AccessRequest)`
+- [ ] Step 2: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+- [ ] Step 3: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
+  - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
+  - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
+- [ ] Step 4: Eager attribute resolution (all attributes collected before evaluation)
+- [ ] Step 5: Engine loads matching policies from the in-memory cache
+- [ ] Step 6: Engine evaluates each policy's conditions against the attribute bags
+- [ ] Step 7: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
+  - [ ] No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
+- [ ] Step 8: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
+- [ ] Step 9: Returns `Decision` with allowed/denied, reason, and matched policy ID
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -1464,18 +1508,20 @@ git commit -m "feat(access): add environment, command, stream, and property prov
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 7-step evaluation algorithm (spec lines 1642-1690):
+Table-driven tests covering the 9-step evaluation algorithm (spec lines 148-160):
 
 1. **System bypass:** Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
 3. **Session invalid:** Subject `"session:expired"` → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: "infra:session-invalid"}`
 4. **Session store error:** DB failure → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: "infra:session-store-error"}`
-5. **Policy matching:** Target filtering — principal type, action list, resource type/exact
-6. **Condition evaluation:** Policies with satisfied conditions
-7. **Deny-overrides:** Both permit and forbid match → forbid wins
-8. **Default deny:** No policies match → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: ""}`
-9. **Provider error:** Provider fails → evaluation continues, error recorded in decision
-10. **Cache warmth:** Second call in same request reuses per-request attribute cache
+5. **Eager attribute resolution:** All providers called before evaluation
+6. **Policy matching:** Target filtering — principal type, action list, resource type/exact
+7. **Condition evaluation:** Policies with satisfied conditions
+8. **Deny-overrides:** Both permit and forbid match → forbid wins
+9. **Default deny:** No policies match → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: ""}`
+10. **Audit logging:** Audit entry logged per configured mode
+11. **Provider error:** Provider fails → evaluation continues, error recorded in decision
+12. **Cache warmth:** Second call in same request reuses per-request attribute cache
 
 **Step 2: Implement engine**
 
@@ -1511,13 +1557,15 @@ type Engine struct {
 func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache, sessions SessionResolver, audit AuditLogger) *Engine
 
 func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    // Step 1: System bypass
-    // Step 2: Session resolution
-    // Step 3: Resolve attributes (eager)
-    // Step 4: Find applicable policies (from cache snapshot)
-    // Step 5: Evaluate conditions per policy
-    // Step 6: Combine decisions (deny-overrides)
-    // Step 7: Audit
+    // Step 1: Invocation entry point
+    // Step 2: System bypass
+    // Step 3: Session resolution
+    // Step 4: Resolve attributes (eager)
+    // Step 5: Load applicable policies (from cache snapshot)
+    // Step 6: Evaluate conditions per policy
+    // Step 7: Combine decisions (deny-overrides)
+    // Step 8: Audit
+    // Step 9: Return decision
 }
 ```
 
@@ -1537,7 +1585,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ### Task 17: Policy cache with LISTEN/NOTIFY invalidation
 
-**Spec References:** §6.5 (Cache Invalidation, lines 1327-1345), ADR 0016 (LISTEN/NOTIFY cache invalidation)
+**Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
 **Acceptance Criteria:**
 
@@ -1548,6 +1596,9 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 - [ ] Concurrent reads during reload → stale reads tolerable (snapshot semantics)
 - [ ] Connection drop + reconnect → full reload
 - [ ] Reload latency <50ms (benchmark test)
+- [ ] Cache staleness threshold: configurable limit (default 30s) on time since last successful reload
+- [ ] When staleness threshold exceeded → fail-closed (return `EffectDefaultDeny`) without evaluating policies
+- [ ] Prometheus gauge `policy_cache_last_update` (Unix timestamp) updated on every successful reload
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1606,7 +1657,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 ### Task 18: Audit logger
 
-**Spec References:** §8.2 (Audit Log Schema), §8.3 (Audit Modes), §8.4 (Async Write Pipeline)
+**Spec References:** Audit Log Serialization (lines 2161-2192), Audit Log Configuration (lines 2193-2269), Audit Log Retention (lines 2271-2310)
 
 **Acceptance Criteria:**
 
@@ -1614,10 +1665,14 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `off`: only system bypasses logged
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
-- [ ] Async write via buffered channel — `Log()` does not block `Evaluate()`
+- [ ] **Sync write for denials:** `deny` and `default_deny` events written synchronously to PostgreSQL before `Evaluate()` returns
+- [ ] **Async write for allows:** `allow` and system bypass events written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
+- [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
+- [ ] **ReplayWAL():** Method reads WAL entries, batch-inserts to PostgreSQL, truncates file on success
+- [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
-- [ ] `audit/postgres.go` batch-inserts into partitioned `access_audit_log` table
+- [ ] `audit/postgres.go` batch-inserts from channel (async) and handles sync writes (denials)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1631,8 +1686,12 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - Mode `off`: only system bypasses logged
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
-- Async write: audit entry submitted via buffered channel, doesn't block `Evaluate()`
+- **Sync write for denials:** `deny` and `default_deny` events written synchronously, `Evaluate()` blocks until write completes
+- **Async write for allows:** `allow` and system bypass events submitted via buffered channel, doesn't block `Evaluate()`
 - Channel full: entry dropped, `abac_audit_channel_full_total` metric incremented
+- **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl`
+- **ReplayWAL():** Reads WAL file, batch-inserts to PostgreSQL, truncates on success
+- Catastrophic failure: DB + WAL fail → stderr log, `abac_audit_failures_total{reason="wal_failed"}` incremented, entry dropped
 - Verify entry contains: subject, action, resource, effect, policy_id, policy_name, attributes snapshot, duration_us
 
 **Step 2: Implement**
@@ -1650,17 +1709,26 @@ const (
     AuditModeAll                           // everything
 )
 
-// Logger writes audit entries asynchronously via a buffered channel.
+// Logger writes audit entries with sync (denials) or async (allows) paths.
+// Denials are written synchronously to prevent evidence erasure.
 type Logger struct {
-    mode    AuditMode
-    entryCh chan Entry
-    writer  Writer
+    mode      AuditMode
+    entryCh   chan Entry         // async channel for allow/system bypass
+    writer    Writer             // PostgreSQL writer
+    walPath   string             // Write-Ahead Log path for denial fallback
+    walFile   *os.File           // WAL file handle (opened with O_APPEND | O_SYNC)
 }
 
 // Writer persists audit entries (PostgreSQL implementation in postgres.go).
 type Writer interface {
-    Write(ctx context.Context, entries []Entry) error
+    Write(ctx context.Context, entries []Entry) error       // batch writes (async)
+    WriteSync(ctx context.Context, entry Entry) error       // single sync write (denials)
 }
+
+// ReplayWAL reads entries from the WAL file, batch-inserts to PostgreSQL,
+// and truncates the file on success. Called on startup and periodically
+// during recovery from transient database failures.
+func (l *Logger) ReplayWAL(ctx context.Context) error
 
 // Entry is a single audit log record.
 type Entry struct {
@@ -1679,7 +1747,12 @@ type Entry struct {
 }
 ```
 
-`audit/postgres.go` batch-inserts from the channel using the partitioned `access_audit_log` table.
+`audit/postgres.go` implements both async batch-inserts from the channel and synchronous single writes for denials. The logger distinguishes between effects:
+
+- **`deny` and `default_deny`:** Call `writer.WriteSync()` synchronously before returning from `Log()`. If the write fails, append the entry to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (opened with `O_APPEND | O_SYNC`). If both DB and WAL fail, log to stderr, increment `abac_audit_failures_total{reason="wal_failed"}`, and drop the entry.
+- **`allow` and system bypass:** Send to `entryCh` buffered channel for async batch writes. If channel is full, drop entry and increment `abac_audit_channel_full_total`.
+
+`ReplayWAL()` reads JSON-encoded entries from the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success. The server calls this on startup and MAY call it periodically (e.g., every 5 minutes) during recovery.
 
 **Step 3: Run tests, commit**
 
@@ -1699,10 +1772,12 @@ git commit -m "feat(access): add async audit logger with mode control"
 - [ ] `abac_evaluate_duration_seconds` histogram recorded after each `Evaluate()`
 - [ ] `abac_policy_evaluations_total` counter with `name` and `effect` labels
 - [ ] `abac_audit_channel_full_total` counter for dropped audit entries
+- [ ] `abac_audit_failures_total` counter with `reason` label (spec §9.1 line 2261)
+- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (spec §7.3 line 1618)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
-- [ ] `abac_unregistered_attributes_total` counter (schema drift indicator)
+- [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
 - [ ] `RegisterMetrics()` follows existing pattern from `internal/observability/server.go`
 - [ ] All tests pass via `task test`
 
@@ -1739,6 +1814,14 @@ var (
         Name: "abac_audit_channel_full_total",
         Help: "Audit entries dropped due to full channel",
     })
+    auditFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+        Name: "abac_audit_failures_total",
+        Help: "Failed audit writes by reason",
+    }, []string{"reason"})
+    degradedMode = prometheus.NewGauge(prometheus.GaugeOpts{
+        Name: "abac_degraded_mode",
+        Help: "ABAC engine degraded mode status (0=normal, 1=degraded)",
+    })
     providerCircuitBreakerTrips = prometheus.NewCounterVec(prometheus.CounterOpts{
         Name: "abac_provider_circuit_breaker_trips_total",
         Help: "Circuit breaker trips by provider namespace",
@@ -1760,8 +1843,8 @@ var (
 // RegisterMetrics registers all ABAC metrics with the given registerer.
 func RegisterMetrics(reg prometheus.Registerer) {
     reg.MustRegister(evaluateDuration, policyEvaluations, auditChannelFull,
-        providerCircuitBreakerTrips, providerErrorsTotal,
-        policyCacheLastUpdate, unregisteredAttributes)
+        auditFailures, degradedMode, providerCircuitBreakerTrips,
+        providerErrorsTotal, policyCacheLastUpdate, unregisteredAttributes)
 }
 ```
 
@@ -1815,6 +1898,8 @@ Setup: 50 active policies (25 permit, 25 forbid), 3 operators per condition aver
 Run: `go test -bench=. -benchmem ./internal/access/policy/`
 Expected: All within spec targets
 
+**Note:** Direct `go test` is intentional here — benchmark testing is not covered by `task test` runner.
+
 **Step 3: Commit**
 
 ```bash
@@ -1835,7 +1920,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 - [ ] All 14 seed policies defined as `SeedPolicy` structs (verify count against spec)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
-- [ ] Each seed policy source is `"seed"`
+- [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
 - [ ] DSL text matches spec exactly (lines 2935-2999)
 - [ ] All tests pass via `task test`
@@ -1847,7 +1932,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 **Step 1: Write failing tests**
 
-- All 15 seed policies compile without error via `PolicyCompiler`
+- All 14 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -1864,80 +1949,95 @@ type SeedPolicy struct {
     Name        string
     Description string
     DSLText     string
+    SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 15 seed policies.
+// SeedPolicies returns the complete set of 14 seed policies.
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
         {
             Name:        "seed:player-self-access",
             Description: "Characters can read and write their own character",
             DSLText:     `permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-location-read",
             Description: "Characters can read their current location",
             DSLText:     `permit(principal is character, action in ["read"], resource is location) when { resource.id == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-character-colocation",
             Description: "Characters can read co-located characters",
             DSLText:     `permit(principal is character, action in ["read"], resource is character) when { resource.location == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-object-colocation",
             Description: "Characters can read co-located objects",
             DSLText:     `permit(principal is character, action in ["read"], resource is object) when { resource.location == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-stream-emit",
             Description: "Characters can emit to co-located location streams",
             DSLText:     `permit(principal is character, action in ["emit"], resource is stream) when { resource.name like "location:*" && resource.location == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-movement",
             Description: "Characters can enter any location (restrict via forbid policies)",
             DSLText:     `permit(principal is character, action in ["enter"], resource is location);`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-basic-commands",
             Description: "Characters can execute basic commands",
             DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.name in ["say", "pose", "look", "go"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:builder-location-write",
             Description: "Builders and admins can create/modify/delete locations",
             DSLText:     `permit(principal is character, action in ["write", "delete"], resource is location) when { principal.role in ["builder", "admin"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:builder-object-write",
             Description: "Builders and admins can create/modify/delete objects",
             DSLText:     `permit(principal is character, action in ["write", "delete"], resource is object) when { principal.role in ["builder", "admin"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:builder-commands",
             Description: "Builders and admins can execute builder commands",
             DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { principal.role in ["builder", "admin"] && resource.name in ["dig", "create", "describe", "link"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:admin-full-access",
             Description: "Admins have full access to everything",
             DSLText:     `permit(principal is character, action, resource) when { principal.role == "admin" };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:property-public-read",
             Description: "Public properties readable by co-located characters",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "public" && principal.location == resource.parent_location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:property-private-read",
             Description: "Private properties readable only by owner",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "private" && resource.owner == principal.id };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:property-admin-read",
             Description: "Admin properties readable only by admins",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };`,
+            SeedVersion: 1,
         },
     }
 }
@@ -1956,15 +2056,23 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 22: Bootstrap sequence
 
-**Spec References:** §12.3 (Bootstrap Sequence, lines 3000-3016)
+**Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
 
 **Acceptance Criteria:**
 
-- [ ] Empty `access_policies` table → all seeds created with `source="seed"`, `seed_version=1`
-- [ ] Already populated table → no-op (idempotent)
-- [ ] Individual seed name collision (admin created same name) → skip that seed, log warning
-- [ ] Seed version tracking for future upgrades
-- [ ] Bootstrap called at server startup with system subject context (bypasses ABAC)
+- [ ] Uses `access.WithSystemSubject(context.Background())` to bypass ABAC for seed operations
+- [ ] Per-seed name-based idempotency check via `policyStore.Get(ctx, seed.Name)`
+- [ ] Skips seed if policy exists with same name and `source="seed"` (already seeded)
+- [ ] Logs warning and skips if policy exists with same name but `source!="seed"` (admin collision)
+- [ ] New seeds inserted with `source="seed"`, `seed_version=1`, `created_by="system"`
+- [ ] Seed version upgrade: if shipped `seed_version > stored.seed_version`, update `dsl_text`, `compiled_ast`, and `seed_version`
+- [ ] Upgrade populates `change_note` with `"Auto-upgraded from seed v{N} to v{N+1} on server upgrade"`
+- [ ] Respects `--skip-seed-migrations` flag to disable automatic upgrades
+- [ ] `PolicyStore.UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` method for migration-delivered seed fixes
+- [ ] `UpdateSeed()` checks if policy exists with `source='seed'`; fails if not
+- [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
+- [ ] `UpdateSeed()` skips with warning if stored DSL differs from old DSL (customized by admins)
+- [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1975,9 +2083,10 @@ git commit -m "feat(access): define seed policies"
 **Step 1: Write failing tests**
 
 - Empty `access_policies` table → all seeds created with `source="seed"`, `seed_version=1`
-- Already populated table → no-op (idempotent)
-- Individual seed name collision (admin created policy with same name) → skip that seed, log warning
-- Seed version tracking for future upgrades
+- Existing seed policy (same name, `source="seed"`) → skipped (idempotent)
+- Existing non-seed policy (same name, `source!="seed"`) → skipped, warning logged
+- Seed version upgrade (shipped version > stored version) → policy updated with new DSL and incremented version
+- `--skip-seed-migrations` flag → no version upgrades, only new seed insertions
 
 **Step 2: Implement**
 
@@ -1985,24 +2094,84 @@ git commit -m "feat(access): define seed policies"
 // internal/access/policy/bootstrap.go
 package policy
 
-// Bootstrap seeds the policy table if empty.
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "log/slog"
+
+    "github.com/holomush/holomush/internal/access"
+    "github.com/holomush/holomush/internal/store"
+    "github.com/samber/oops"
+)
+
+// BootstrapOptions controls bootstrap behavior.
+type BootstrapOptions struct {
+    SkipSeedMigrations bool // Disable automatic seed version upgrades
+}
+
+// Bootstrap seeds the policy table with system policies.
 // Called at server startup with system subject context (bypasses ABAC).
-func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *PolicyCompiler) error {
-    existing, err := policyStore.ListEnabled(ctx)
-    if err != nil {
-        return err
-    }
-    if len(existing) > 0 {
-        return nil // Already seeded
-    }
+// Idempotent: checks each seed policy by name before insertion.
+// Supports seed version upgrades unless opts.SkipSeedMigrations is true.
+func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
+    // Use system subject context to bypass ABAC during bootstrap
+    ctx = access.WithSystemSubject(ctx)
 
     for _, seed := range SeedPolicies() {
+        // Per-seed idempotency check: query by name
+        existing, err := policyStore.Get(ctx, seed.Name)
+        if err != nil && !store.IsNotFound(err) {
+            return oops.With("seed", seed.Name).Wrap(err)
+        }
+
+        if existing != nil {
+            // Policy with this name exists
+            if existing.Source != "seed" {
+                // Admin created a policy with a seed: name — log warning, skip
+                logger.Warn("seed name collision with non-seed policy, skipping",
+                    "name", seed.Name,
+                    "source", existing.Source)
+                continue
+            }
+
+            // Existing seed policy — check for version upgrade
+            if !opts.SkipSeedMigrations && existing.SeedVersion != nil && seed.SeedVersion > *existing.SeedVersion {
+                // Capture old version before updating
+                oldVersion := *existing.SeedVersion
+
+                // Upgrade: compile new DSL and update stored policy
+                compiled, _, err := compiler.Compile(seed.DSLText)
+                if err != nil {
+                    return oops.With("seed", seed.Name).With("version", seed.SeedVersion).Wrap(err)
+                }
+                compiledJSON, _ := json.Marshal(compiled)
+
+                existing.DSLText = seed.DSLText
+                existing.CompiledAST = compiledJSON
+                existing.SeedVersion = &seed.SeedVersion
+                existing.ChangeNote = fmt.Sprintf("Auto-upgraded from seed v%d to v%d on server upgrade", oldVersion, seed.SeedVersion)
+
+                if err := policyStore.Update(ctx, existing); err != nil {
+                    return oops.With("seed", seed.Name).With("version", seed.SeedVersion).Wrap(err)
+                }
+
+                logger.Info("upgraded seed policy",
+                    "name", seed.Name,
+                    "from_version", oldVersion,
+                    "to_version", seed.SeedVersion)
+            }
+
+            // Already seeded at current or higher version, skip
+            continue
+        }
+
+        // New seed policy: compile and insert
         compiled, _, err := compiler.Compile(seed.DSLText)
         if err != nil {
             return oops.With("seed", seed.Name).Wrap(err)
         }
         compiledJSON, _ := json.Marshal(compiled)
-        seedVersion := 1
 
         err = policyStore.Create(ctx, &store.StoredPolicy{
             Name:        seed.Name,
@@ -2012,22 +2181,36 @@ func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *Pol
             DSLText:     seed.DSLText,
             CompiledAST: compiledJSON,
             Enabled:     true,
-            SeedVersion: &seedVersion,
+            SeedVersion: &seed.SeedVersion,
             CreatedBy:   "system",
         })
         if err != nil {
             return oops.With("seed", seed.Name).Wrap(err)
         }
+
+        logger.Info("created seed policy", "name", seed.Name, "version", seed.SeedVersion)
     }
+
     return nil
 }
 ```
+
+**Implementation Notes:**
+
+- `SeedPolicies()` must return policies with `SeedVersion` field (default 1)
+- `store.PolicyStore.Get(ctx, name)` retrieves policy by name, returns `IsNotFound` error if absent
+- `access.WithSystemSubject(ctx)` marks context as system-level operation
+- `PolicyStore.Create/Update` checks `access.IsSystemContext(ctx)` and bypasses `Evaluate()` when true
+- Upgrade logic compares shipped `seed.SeedVersion` against stored `existing.SeedVersion`
+- `--skip-seed-migrations` server flag sets `opts.SkipSeedMigrations=true`
+- Legacy policies without `SeedVersion` (nil) will not be upgraded; future enhancement may treat nil as version 0
+- `--force-seed-version=N` flag enables rollback (future enhancement, see spec lines 3066-3074)
 
 **Step 3: Run tests, commit**
 
 ```bash
 git add internal/access/policy/bootstrap.go internal/access/policy/bootstrap_test.go
-git commit -m "feat(access): add seed policy bootstrap sequence"
+git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 ```
 
 ---
@@ -2040,7 +2223,7 @@ git commit -m "feat(access): add seed policy bootstrap sequence"
 
 **Acceptance Criteria:**
 
-- [ ] Core lock tokens registered: `locked`, `faction`, `level`
+- [ ] Core lock tokens registered: `faction`, `flag`, `level`
 - [ ] Plugin lock tokens require namespace prefix (e.g., `myplugin:custom_token`)
 - [ ] Duplicate token → error
 - [ ] `Lookup()` returns definition with DSL expansion info
@@ -2054,7 +2237,7 @@ git commit -m "feat(access): add seed policy bootstrap sequence"
 
 **Step 1: Write failing tests**
 
-- Register core lock tokens (locked, faction, level)
+- Register core lock tokens (faction, flag, level)
 - Register plugin lock tokens (must be namespace-prefixed)
 - Duplicate token → error
 - Lookup token → returns definition with DSL expansion info
@@ -2095,17 +2278,19 @@ git commit -m "feat(access): add lock token registry"
 
 ### Task 24: Lock expression parser and compiler
 
-**Spec References:** §10.3 (Lock Expression Syntax), §10.4 (Lock-to-DSL Compilation)
+**Spec References:** Lock Expression Syntax (lines 2432-2466), Lock-to-DSL Compilation (lines 2564-2612), Lock Token Registry — ownership and rate limits (lines 2592-2669)
 
 **Acceptance Criteria:**
 
-- [ ] `locked` → generates `forbid` policy with owner exception
 - [ ] `faction:rebels` → generates `forbid` with faction check
+- [ ] `flag:storyteller` → generates `forbid` with flag membership check
 - [ ] `level>5` → generates `forbid` with level comparison (inverted)
-- [ ] `locked+faction:rebels` → compound (multiple forbids)
-- [ ] `!locked` → removes the lock-generated forbid policy
+- [ ] `faction:rebels & flag:storyteller` → compound (multiple forbids)
+- [ ] `!faction:rebels` → negates faction check
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
+- [ ] All lock-generated policies MUST include `resource.owner == principal.id` in condition block (ownership check requirement)
+- [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2119,11 +2304,11 @@ git commit -m "feat(access): add lock token registry"
 
 Lock syntax from spec:
 
-- `locked` → `forbid(principal, action, resource == "<target>") when { principal.id != resource.owner };`
 - `faction:rebels` → `forbid(principal is character, action, resource == "<target>") when { principal.faction != "rebels" };`
+- `flag:storyteller` → `forbid(principal is character, action, resource == "<target>") when { !("storyteller" in principal.flags) };`
 - `level>5` → `forbid(principal is character, action, resource == "<target>") when { principal.level <= 5 };`
-- `locked+faction:rebels` → compound (both conditions as separate forbids or combined)
-- `!locked` → remove the lock-generated forbid policy
+- `faction:rebels & flag:storyteller` → compound (both conditions as separate forbids or combined)
+- `!faction:rebels` → negates faction check
 
 Compiler takes parsed lock expression + target resource string → DSL policy text. Then PolicyCompiler validates the generated DSL.
 
@@ -2140,17 +2325,24 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ### Task 25: Property model (EntityProperty type and repository)
 
-**Spec References:** §11 (Property Model), ADR 0013 (Properties as first-class entities)
+**Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
 - [ ] `EntityProperty` struct: ID, ParentType, ParentID, Name, Value, Owner, Visibility, Flags, VisibleTo, ExcludedFrom, timestamps
-- [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`
+- [ ] `PropertyRepository` interface: `Create`, `Get`, `ListByParent`, `Update`, `Delete`, `DeleteByParent`
 - [ ] CRUD operations round-trip all fields correctly
 - [ ] Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
 - [ ] `visible_to` max 100 entries; `excluded_from` max 100 entries → error if exceeded
 - [ ] No overlap between `visible_to` and `excluded_from` → error
 - [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
+- [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
+- [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
+- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
+- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
+- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
+- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
+- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
 - [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
 - [ ] All tests pass via `task test`
 
@@ -2167,6 +2359,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - List by parent (type + ID)
 - Update property (value, visibility, flags)
 - Delete property
+- Delete by parent (type + ID) → deletes all properties for that parent
 - Visibility defaults: `restricted` → auto-set `visible_to=[owner]`, `excluded_from=[]`
 - Constraints: `visible_to` max 100 entries, `excluded_from` max 100 entries
 - No overlap between `visible_to` and `excluded_from` → error
@@ -2201,6 +2394,7 @@ type PropertyRepository interface {
     ListByParent(ctx context.Context, parentType, parentID string) ([]*EntityProperty, error)
     Update(ctx context.Context, p *EntityProperty) error
     Delete(ctx context.Context, id ulid.ULID) error
+    DeleteByParent(ctx context.Context, parentType, parentID string) error
 }
 ```
 
@@ -2216,9 +2410,9 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 ---
 
-### Task 26: Admin commands — policy create/list/show/edit/delete
+### Task 26: Admin commands — policy create/list/show/edit/delete/enable/disable/history/rollback
 
-**Spec References:** §13 (Admin Commands, lines 2060-2130)
+**Spec References:** Admin Commands (lines 2695-2914)
 
 **Acceptance Criteria:**
 
@@ -2227,7 +2421,11 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - [ ] `policy show <name>` → displays full policy details
 - [ ] `policy edit <name> <new_dsl>` → validates new DSL, increments version
 - [ ] `policy delete <name>` → removes policy; seed policies cannot be deleted → error
-- [ ] Admin-only permission check on create/edit/delete
+- [ ] `policy enable <name>` → sets `enabled=true`, triggers cache reload
+- [ ] `policy disable <name>` → sets `enabled=false`, triggers cache reload
+- [ ] `policy history <name>` → shows version history from `access_policy_versions` table
+- [ ] `policy rollback <name> <version>` → restores policy to previous version, creates new version entry
+- [ ] Admin-only permission check on create/edit/delete/enable/disable/rollback
 - [ ] Invalid DSL input → helpful error message with line/column
 - [ ] Commands registered in command registry following existing handler patterns
 - [ ] All tests pass via `task test`
@@ -2263,9 +2461,9 @@ git commit -m "feat(command): add policy CRUD admin commands"
 
 ---
 
-### Task 27: Admin commands — policy test/validate/reload/attributes/audit
+### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed
 
-**Spec References:** §13.1 (policy test), §13.2 (policy validate), §13.3 (policy reload), §13.4 (policy attributes), §13.5 (policy audit)
+**Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629)
 
 **Acceptance Criteria:**
 
@@ -2276,6 +2474,9 @@ git commit -m "feat(command): add policy CRUD admin commands"
 - [ ] `policy attributes` → lists all registered attribute namespaces and keys
 - [ ] `policy attributes --namespace reputation` → filters to specific namespace
 - [ ] `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
+- [ ] `policy seed verify` → compares installed seed policies against shipped seed text, highlights differences
+- [ ] `policy seed status` → shows seed policy versions, customization status
+- [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2351,7 +2552,7 @@ git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection
 
 **Acceptance Criteria:**
 
-- [ ] ALL ~28 call sites migrated from `AccessControl.Check()` to `engine.Evaluate()`
+- [ ] ALL ~28 production call sites (plus test files and generated mocks) migrated from `AccessControl.Check()` to `engine.Evaluate()`
 - [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
@@ -2360,7 +2561,7 @@ git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection
 - [ ] Committed per package (dispatcher, world, plugin)
 - [ ] `task test` passes after all migrations
 
-**Files to modify** (run `grep -r "AccessControl" internal/ --include="*.go" -l` for current list):
+**Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list:
 
 - `internal/command/dispatcher.go` — Command execution authorization
 - `internal/command/rate_limit_middleware.go` — Rate limit bypass for admins
@@ -2433,10 +2634,13 @@ git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
 - Delete: `internal/access/static_test.go`
 - Delete: `internal/access/permissions.go` (if only used by static evaluator)
 - Delete: `internal/access/permissions_test.go`
+- Delete: `internal/world/worldtest/mock_AccessControl.go` (generated mock)
+- Delete: `internal/access/accesstest/mock.go` (generated mock)
 - Modify: `internal/access/access.go` — remove `AccessControl` interface
 - Delete or modify: `internal/plugin/capability/` — remove `Enforcer` (capabilities now seed policies)
 - Search and remove: all `char:` prefix usage (replace with `character:`)
 - Search and remove: all `@`-prefixed command name handling
+- Run: `mockery` to regenerate mocks for new `AccessPolicyEngine` interface
 
 **Step 1: Delete static access control files**
 
@@ -2461,7 +2665,7 @@ Expected: PASS
 **Step 6: Commit**
 
 ```bash
-git add -A
+git add internal/access/ internal/world/worldtest/ internal/plugin/capability/
 git commit -m "refactor(access): remove StaticAccessControl, AccessControl interface, and capability.Enforcer"
 ```
 
@@ -2545,6 +2749,164 @@ Expected: PASS
 git add test/integration/access/
 git commit -m "test(access): add ABAC integration tests with seed policies and property visibility"
 ```
+
+---
+
+### Task 32: Degraded mode implementation
+
+**Spec References:** Degraded Mode (lines 1606-1629)
+
+**Acceptance Criteria:**
+
+- [ ] Engine MUST enter degraded mode when corrupted forbid/deny policy detected
+- [ ] Degraded mode flag (`abac_degraded_mode` boolean) persists until administratively cleared
+- [ ] In degraded mode: all `Evaluate()` calls return `EffectDefaultDeny` without policy evaluation
+- [ ] In degraded mode: log CRITICAL level message on every evaluation attempt
+- [ ] Corrupted policy detection: unmarshal `compiled_ast` fails or structural invariants violated
+- [ ] Only forbid/deny policies trigger degraded mode (permit policies skipped safely)
+- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation (implemented in Task 27)
+- [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19)
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/engine.go` (add degraded mode state and check)
+- Test: `internal/access/policy/engine_test.go`
+
+**TDD Test List:**
+
+- Engine detects corrupted forbid policy → enters degraded mode
+- Engine detects corrupted deny policy → enters degraded mode
+- Engine skips corrupted permit policy → no degraded mode
+- In degraded mode → all evaluations return default deny
+- In degraded mode → CRITICAL log on every evaluation
+- Clear degraded mode → normal evaluation resumes
+- Degraded mode gauge metric → 0 when normal, 1 when degraded
+
+---
+
+### Task 33: Schema evolution on plugin reload
+
+**Spec References:** Schema Evolution on Plugin Reload (lines 1443-1502)
+
+**Acceptance Criteria:**
+
+- [ ] When plugin reloaded, compare new schema against previous schema version
+- [ ] Attribute added → INFO log, no action required
+- [ ] Attribute type changed → WARN log, note existing policies may break
+- [ ] Attribute removed → WARN log, scan policies for references
+- [ ] Namespace removed → ERROR log, scan policies for references, reject reload if policies reference it
+- [ ] Schema change detection: compare attribute keys, types, namespaces between old and new schemas
+- [ ] Policy reference scan: grep all enabled policies' `dsl_text` for removed namespace or attribute keys
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/schema_registry.go` (add schema versioning and comparison)
+- Test: `internal/access/policy/schema_registry_test.go`
+
+**TDD Test List:**
+
+- Plugin reload with added attribute → INFO log, no error
+- Plugin reload with changed attribute type → WARN log, no error
+- Plugin reload with removed attribute → WARN log, scan policies
+- Plugin reload with removed namespace → ERROR, reject if policies reference it
+- Schema comparison detects all change types correctly
+- Policy scan correctly identifies references to removed attributes
+
+---
+
+### Task 34: Lock tokens discovery command
+
+**Spec References:** Lock Token Discovery (lines 2613-2638)
+
+**Acceptance Criteria:**
+
+- [ ] `lock tokens` command → lists all registered lock tokens (faction, flag, level, etc.)
+- [ ] `lock tokens --namespace character` → filters to specific namespace
+- [ ] Display format: token name, type, description, example
+- [ ] Discovery sources: schema registry (plugin-provided attributes) + core tokens (faction, flag, level, role)
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/command/handlers/lock.go`
+- Test: `internal/command/handlers/lock_test.go`
+
+**TDD Test List:**
+
+- `lock tokens` → lists all available lock tokens
+- `lock tokens --namespace character` → filters to character namespace
+- Core tokens (faction, flag, level, role) always present
+- Plugin-provided attributes appear in token list
+- Display format includes name, type, description, example
+
+---
+
+### Task 35: General provider circuit breaker
+
+**Spec References:** Provider Circuit Breaker (lines 1540-1568)
+
+**Acceptance Criteria:**
+
+- [ ] Track consecutive errors per provider
+- [ ] Trigger: 10 consecutive errors → circuit opens
+- [ ] Circuit open → skip provider for 30s, return empty attributes
+- [ ] Log at WARN level: "Provider {name} circuit breaker opened: {N} consecutive errors"
+- [ ] Prometheus counter `abac_provider_circuit_breaker_trips_total{provider="name"}` incremented on trip
+- [ ] After 30s → half-open state with single probe request
+- [ ] Probe success → close circuit (INFO log); probe failure → re-open for another 30s
+- [ ] Circuit-opened providers do NOT consume evaluation time budget (immediate skip, no I/O)
+- [ ] Fair-share timeout calculation excludes circuit-opened providers from remaining provider count
+- [ ] Provider metrics endpoint `/debug/abac/providers` shows: call counts, avg latency, timeout rate, circuit status
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/resolver.go` (add general circuit breaker logic)
+- Test: `internal/access/policy/resolver_test.go`
+
+**TDD Test List:**
+
+- 10 consecutive errors → circuit opens
+- Circuit open → provider skipped for 30s, empty attributes returned
+- WARN log on circuit open with provider name and failure count
+- Prometheus counter incremented on trip
+- After 30s → half-open probe sent (single request)
+- Probe success → circuit closes, normal operation resumes (INFO log)
+- Probe failure → circuit re-opens for another 30s
+- Skipping circuit-opened provider does not consume evaluation budget
+- Fair-share timeout excludes circuit-opened providers from denominator
+- Metrics endpoint shows circuit status
+
+---
+
+### Task 36: CLI flag --validate-seeds
+
+**Spec References:** Seed Policy Validation (lines 3076-3122)
+
+**Acceptance Criteria:**
+
+- [ ] CLI flag `--validate-seeds` added to server startup
+- [ ] Flag behavior: boot DSL compiler, validate all seed policy DSL text, exit with success/failure status
+- [ ] Does NOT start the server (validation-only mode)
+- [ ] Exit code 0 on success, non-zero on failure
+- [ ] Logs validation results: "All N seed policies valid" or "Validation failed: {errors}"
+- [ ] Enables CI integration: `holomush --validate-seeds` in build pipeline
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `cmd/holomush/main.go` (add flag and validation logic)
+- Test: `cmd/holomush/main_test.go`
+
+**TDD Test List:**
+
+- `--validate-seeds` flag present → validation mode activated
+- All valid seeds → exit 0, log success
+- Invalid seed DSL → exit non-zero, log errors with line/column
+- Validation mode → server does NOT start
+- CI integration test: run in build pipeline, verify exit codes
 
 ---
 
