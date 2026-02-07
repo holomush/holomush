@@ -1454,13 +1454,65 @@ PropertyProvider's `parent_location` uses recursive CTE:
 
 ```sql
 WITH RECURSIVE containment AS (
-    SELECT parent_type, parent_id, 0 AS depth
+    -- Base case: start from the resource
+    SELECT
+        parent_type,
+        parent_id,
+        0 AS depth,
+        ARRAY[id] AS path
     FROM entity_properties WHERE id = $1
+
     UNION ALL
-    SELECT 'location', o.location_id, c.depth + 1
+
+    -- Recursive case: resolve parent location
+    SELECT
+        CASE
+            -- If parent is a character, resolve to character's location
+            WHEN c.parent_type = 'character' THEN 'location'
+            -- If parent is already a location, we're done
+            WHEN c.parent_type = 'location' THEN 'location'
+            -- If parent is an object, check its placement
+            WHEN c.parent_type = 'object' THEN
+                CASE
+                    -- Object held by character → resolve character
+                    WHEN o.held_by_character_id IS NOT NULL THEN 'character'
+                    -- Object in location → use location
+                    WHEN o.location_id IS NOT NULL THEN 'location'
+                    -- Object in another object → recurse
+                    WHEN o.contained_in_object_id IS NOT NULL THEN 'object'
+                    -- Orphaned object → NULL
+                    ELSE NULL
+                END
+        END AS parent_type,
+        CASE
+            WHEN c.parent_type = 'character' THEN ch.location_id::text
+            WHEN c.parent_type = 'location' THEN c.parent_id
+            WHEN c.parent_type = 'object' THEN
+                CASE
+                    WHEN o.held_by_character_id IS NOT NULL THEN o.held_by_character_id::text
+                    WHEN o.location_id IS NOT NULL THEN o.location_id::text
+                    WHEN o.contained_in_object_id IS NOT NULL THEN o.contained_in_object_id::text
+                    ELSE NULL
+                END
+        END AS parent_id,
+        c.depth + 1,
+        c.path || CASE
+            WHEN c.parent_type = 'character' THEN ch.id
+            WHEN c.parent_type = 'object' THEN o.id
+            ELSE NULL
+        END AS path
     FROM containment c
-    JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20
+    LEFT JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
+    LEFT JOIN characters ch ON c.parent_type = 'character' AND c.parent_id = ch.id::text
+    WHERE
+        c.depth < 20
+        AND c.parent_type IS NOT NULL
+        -- Cycle detection: reject if we've seen this ID before
+        AND (
+            (c.parent_type = 'object' AND o.id != ALL(c.path))
+            OR (c.parent_type = 'character' AND ch.id != ALL(c.path))
+            OR c.parent_type = 'location'
+        )
 )
 SELECT parent_id FROM containment
 WHERE parent_type = 'location'
