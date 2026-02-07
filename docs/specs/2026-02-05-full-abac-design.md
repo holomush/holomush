@@ -3384,6 +3384,21 @@ location resolution, not strict snapshot consistency. Authorization decisions
 reflect a consistent view within each provider's transaction, but not
 necessarily across all providers involved in a single `Evaluate()` call.
 
+### Attribute Schema Versioning
+
+Plugins that change attribute types (e.g., `reputation.score` from number to
+string) could silently break existing policies. Full schema versioning—where
+policies declare minimum schema versions and the engine enforces
+compatibility—would prevent this.
+
+**Deferred to future iteration.** The existing schema evolution infrastructure
+(registration-time validation, reload-time schema comparison, runtime warnings
+for unregistered attributes) is sufficient for MVP. With few plugins and active
+development, type changes trigger immediate warnings visible to operators.
+Manual policy updates are acceptable at this scale. Policy-level schema version
+pinning adds complexity without proportional benefit until the plugin ecosystem
+grows.
+
 ## Acceptance Criteria
 
 - [ ] ABAC policy data model documented (subjects, resources, actions, conditions)
