@@ -668,6 +668,7 @@ type StoredPolicy struct {
     CompiledAST []byte // JSONB
     Enabled     bool
     SeedVersion *int
+    ChangeNote  string // populated on version upgrades; stored in access_policy_versions
     CreatedBy   string
     Version     int
 }
@@ -2060,7 +2061,7 @@ git commit -m "feat(access): define seed policies"
 **Acceptance Criteria:**
 
 - [ ] Uses `access.WithSystemSubject(context.Background())` to bypass ABAC for seed operations
-- [ ] Per-seed name-based idempotency check via `policyStore.GetByName(ctx, seed.Name)`
+- [ ] Per-seed name-based idempotency check via `policyStore.Get(ctx, seed.Name)`
 - [ ] Skips seed if policy exists with same name and `source="seed"` (already seeded)
 - [ ] Logs warning and skips if policy exists with same name but `source!="seed"` (admin collision)
 - [ ] New seeds inserted with `source="seed"`, `seed_version=1`, `created_by="system"`
@@ -2101,7 +2102,7 @@ import (
 
     "github.com/holomush/holomush/internal/access"
     "github.com/holomush/holomush/internal/store"
-    "github.com/samsarahq/go/oops"
+    "github.com/samber/oops"
 )
 
 // BootstrapOptions controls bootstrap behavior.
@@ -2119,7 +2120,7 @@ func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *Pol
 
     for _, seed := range SeedPolicies() {
         // Per-seed idempotency check: query by name
-        existing, err := policyStore.GetByName(ctx, seed.Name)
+        existing, err := policyStore.Get(ctx, seed.Name)
         if err != nil && !store.IsNotFound(err) {
             return oops.With("seed", seed.Name).Wrap(err)
         }
@@ -2197,7 +2198,7 @@ func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *Pol
 **Implementation Notes:**
 
 - `SeedPolicies()` must return policies with `SeedVersion` field (default 1)
-- `store.PolicyStore.GetByName(ctx, name)` retrieves policy by name, returns `IsNotFound` error if absent
+- `store.PolicyStore.Get(ctx, name)` retrieves policy by name, returns `IsNotFound` error if absent
 - `access.WithSystemSubject(ctx)` marks context as system-level operation
 - `PolicyStore.Create/Update` checks `access.IsSystemContext(ctx)` and bypasses `Evaluate()` when true
 - Upgrade logic compares shipped `seed.SeedVersion` against stored `existing.SeedVersion`
