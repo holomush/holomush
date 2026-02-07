@@ -37,14 +37,16 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 
-| ADR      | Title                              | Applies To      |
-| -------- | ---------------------------------- | --------------- |
-| ADR 0011 | Deny-overrides conflict resolution | Tasks 17, 30    |
-| ADR 0012 | Eager attribute resolution         | Tasks 14, 17    |
-| ADR 0013 | Properties as first-class entities | Tasks 3, 4, 16  |
-| ADR 0014 | Direct replacement (no adapter)    | Tasks 28-29     |
-| ADR 0015 | Three-Layer Player Access Control  | Tasks 4, 16     |
-| ADR 0016 | LISTEN/NOTIFY cache invalidation   | Task 18         |
+| ADR      | Title                                      | Applies To      |
+| -------- | ------------------------------------------ | --------------- |
+| ADR 0009 | Custom Go-Native ABAC Engine               | Task 17         |
+| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics     | Task 11         |
+| ADR 0011 | Deny-overrides conflict resolution         | Tasks 17, 30    |
+| ADR 0012 | Eager attribute resolution                 | Tasks 14, 17    |
+| ADR 0013 | Properties as first-class entities         | Tasks 3, 4, 16  |
+| ADR 0014 | Direct replacement (no adapter)            | Tasks 28-29     |
+| ADR 0015 | Three-Layer Player Access Control          | Tasks 4, 16     |
+| ADR 0016 | LISTEN/NOTIFY cache invalidation           | Task 18         |
 
 ### Acceptance Criteria
 
@@ -160,7 +162,7 @@ graph TD
     T4 --> T16b
     T12 --> T22
     T18 --> T23
-    T23 --> T24
+    T17 --> T24
     T23 --> T26a
     T23 --> T27
     T17 --> T28
@@ -2119,7 +2121,6 @@ func DefaultAuditConfig() AuditConfig {
 type PartitionManager struct {
     db     *pgxpool.Pool
     config AuditConfig
-    stopCh chan struct{}
 }
 
 // Start begins background partition management.
@@ -2135,17 +2136,10 @@ func (pm *PartitionManager) Start(ctx context.Context) {
         select {
         case <-ticker.C:
             pm.purgeExpiredPartitions(ctx)
-        case <-pm.stopCh:
-            return
         case <-ctx.Done():
             return
         }
     }
-}
-
-// Stop gracefully shuts down the partition manager.
-func (pm *PartitionManager) Stop() {
-    close(pm.stopCh)
 }
 
 // createFuturePartitions pre-creates partitions for the next 3 months.
@@ -2680,7 +2674,7 @@ Test that `--validate-seeds` flag activates validation-only mode and exits with 
 
 **Step 2: Implement**
 
-Add flag parsing and validation logic in `cmd/holomush/main.go`. Use the DSL compiler from Task 10 to validate all seed policy DSL text from Task 22.
+Add flag parsing and validation logic in `cmd/holomush/main.go`. Use the DSL compiler from Task 12 to validate all seed policy DSL text from Task 22.
 
 **Step 3: Run tests, commit**
 
@@ -2996,19 +2990,21 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - `policy attributes` → lists all registered attribute namespaces and keys
 - `policy attributes --namespace reputation` → filters to specific namespace
 - `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
-- `policy recompile-all` → recompiles all policies, updates grammar_version field
-- `policy recompile <name>` → recompiles single policy, updates grammar_version
+- `policy recompile-all` → recompiles all policies, updates grammar_version within compiled_ast JSONB
+- `policy recompile <name>` → recompiles single policy, updates grammar_version within compiled_ast JSONB
 - `policy repair <name>` → re-compiles corrupted policy from DSL text, fixing invalid compiled_ast
-- `policy list --old-grammar` → shows only policies with outdated grammar_version
+- `policy list --old-grammar` → shows only policies with outdated grammar_version in compiled_ast JSONB
 
 **Step 2: Implement**
 
 Policy recompile commands (spec lines 947-976):
-- `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version
-- `policy recompile <name>` — fetches single policy by name, recompiles, updates fields
-- `policy list --old-grammar` — filter to `grammar_version < current_version`
+- `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version within compiled_ast JSONB
+- `policy recompile <name>` — fetches single policy by name, recompiles, updates compiled_ast JSONB
+- `policy list --old-grammar` — filter to `compiled_ast->>'grammar_version' < current_version`
 
-Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 959). Recompile commands update this field to the current grammar version after successful recompilation.
+**Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
+
+Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 959). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
 
 **Failed recompilation handling** (spec lines 958-961): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 
@@ -3411,7 +3407,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 > **Note:** This task was moved to Phase 7.4 (Task 23b) to enable CI validation during later phases. See Task 23b for implementation details.
 
-**Rationale:** `--validate-seeds` only depends on the DSL compiler (Task 10) and seed policy definitions (Task 22), both available after Phase 7.4. Moving it earlier allows CI pipelines to validate seed policies during later phase development, catching compilation errors sooner.
+**Rationale:** `--validate-seeds` only depends on the DSL compiler (Task 12) and seed policy definitions (Task 22), both available after Phase 7.4. Moving it earlier allows CI pipelines to validate seed policies during later phase development, catching compilation errors sooner.
 
 ---
 
