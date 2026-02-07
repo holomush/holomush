@@ -443,12 +443,12 @@ type AttributeBags struct {
 }
 ```
 
-**Step 4: Run tests to verify they pass**
+**Step 5: Run tests to verify they pass**
 
 Run: `task test`
 Expected: PASS
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```bash
 git add internal/access/policy/
@@ -476,10 +476,62 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 **Files:**
 
+- Create: `internal/access/policy/types/types.go` (shared types to prevent circular imports)
 - Create: `internal/access/policy/prefix.go`
 - Test: `internal/access/policy/prefix_test.go`
 
-**Step 1: Write failing tests for prefix parsing**
+**Step 1: Define shared types (AttributeSchema, AttrType)**
+
+> **Design note:** `AttributeSchema` and `AttrType` are extracted into a separate `types` package to prevent circular dependencies. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `policy.AccessRequest` and `policy.AttributeBags`. By placing schema types in a shared package, both can import from `types` without creating a cycle.
+
+```go
+// internal/access/policy/types/types.go
+package types
+
+// AttrType identifies the type of an attribute value.
+//
+// NOTE: Per spec Core Interfaces > Attribute Providers, all numeric attributes MUST be returned as float64
+// by providers at runtime, regardless of whether they are declared as Int or Float.
+// The Int/Float distinction exists only for schema validation and documentation.
+// All numeric comparisons in the policy engine operate on float64 values.
+type AttrType int
+
+const (
+	AttrTypeString     AttrType = iota
+	AttrTypeInt        // Providers MUST return as float64
+	AttrTypeFloat      // Providers MUST return as float64
+	AttrTypeBool
+	AttrTypeStringList
+)
+
+// NamespaceSchema defines the attributes in a namespace.
+type NamespaceSchema struct {
+	Attributes map[string]AttrType
+}
+
+// AttributeSchema validates attribute references during policy compilation.
+type AttributeSchema struct {
+	namespaces map[string]*NamespaceSchema
+}
+
+func NewAttributeSchema() *AttributeSchema {
+	return &AttributeSchema{
+		namespaces: make(map[string]*NamespaceSchema),
+	}
+}
+
+func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error {
+	// Implementation in Task 12
+	return nil
+}
+
+func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
+	// Implementation in Task 12
+	return false
+}
+```
+
+**Step 2: Write failing tests for prefix parsing**
 
 ```go
 // internal/access/policy/prefix_test.go
@@ -530,12 +582,12 @@ func TestParseEntityRef(t *testing.T) {
 }
 ```
 
-**Step 2: Run tests to verify they fail**
+**Step 3: Run tests to verify they fail**
 
 Run: `task test`
 Expected: FAIL
 
-**Step 3: Implement prefix parsing**
+**Step 4: Implement prefix parsing**
 
 ```go
 // internal/access/policy/prefix.go
@@ -610,16 +662,20 @@ func ParseEntityRef(ref string) (typeName, id string, err error) {
 }
 ```
 
-**Step 4: Run tests to verify they pass**
+**Step 5: Run tests to verify they pass**
 
 Run: `task test`
 Expected: PASS
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```bash
-git add internal/access/policy/prefix.go internal/access/policy/prefix_test.go
-git commit -m "feat(access): add subject/resource prefix constants and parser"
+git add internal/access/policy/types/ internal/access/policy/prefix.go internal/access/policy/prefix_test.go
+git commit -m "feat(access): add shared types package and prefix parser
+
+- Extract AttributeSchema and AttrType to internal/access/policy/types/
+- Prevents circular import between policy and attribute packages
+- Add subject/resource prefix constants and parser"
 ```
 
 ---
@@ -1125,15 +1181,16 @@ package policy
 
 import (
     "github.com/holomush/holomush/internal/access/policy/dsl"
+    "github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // PolicyCompiler parses and validates DSL policy text.
 type PolicyCompiler struct {
-    schema *AttributeSchema
+    schema *types.AttributeSchema
 }
 
 // NewPolicyCompiler creates a PolicyCompiler with the given schema.
-func NewPolicyCompiler(schema *AttributeSchema) *PolicyCompiler
+func NewPolicyCompiler(schema *types.AttributeSchema) *PolicyCompiler
 
 // ValidationWarning is a non-blocking issue found during compilation.
 type ValidationWarning struct {
@@ -1184,6 +1241,8 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 ### Task 12: Attribute provider interface and schema registry
 
 **Spec References:** Core Interfaces > Attribute Providers (lines 513-604), Attribute Resolution > Schema Validation and Evolution (lines 1383+)
+
+> **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `policy.AccessRequest` and `policy.AttributeBags`. Both import from `types` package.
 
 **Acceptance Criteria:**
 
@@ -1244,35 +1303,32 @@ type LockTokenDef struct {
 // internal/access/policy/attribute/schema.go
 package attribute
 
-// AttrType identifies the type of an attribute value.
-//
-// NOTE: Per spec Core Interfaces > Attribute Providers, all numeric attributes MUST be returned as float64
-// by providers at runtime, regardless of whether they are declared as Int or Float.
-// The Int/Float distinction exists only for schema validation and documentation.
-// All numeric comparisons in the policy engine operate on float64 values.
-type AttrType int
-
-const (
-    AttrTypeString     AttrType = iota
-    AttrTypeInt        // Providers MUST return as float64
-    AttrTypeFloat      // Providers MUST return as float64
-    AttrTypeBool
-    AttrTypeStringList
+import (
+    "github.com/holomush/holomush/internal/access/policy/types"
+    "github.com/samber/oops"
 )
 
-// NamespaceSchema defines the attributes in a namespace.
-type NamespaceSchema struct {
-    Attributes map[string]AttrType
+// Implementation note: AttributeSchema and AttrType are defined in
+// internal/access/policy/types/ to prevent circular imports.
+// This package provides the actual implementation of schema methods.
+
+// Register adds a namespace schema. Returns error if namespace is empty,
+// already registered, or contains duplicate keys.
+func (s *types.AttributeSchema) Register(namespace string, schema *types.NamespaceSchema) error {
+    if namespace == "" {
+        return oops.Code("INVALID_NAMESPACE").Errorf("namespace cannot be empty")
+    }
+    // Check for existing namespace
+    // Check for duplicate attribute keys
+    // Add to schema
+    return nil
 }
 
-// AttributeSchema validates attribute references during policy compilation.
-type AttributeSchema struct {
-    namespaces map[string]*NamespaceSchema
+// IsRegistered checks if a namespace and attribute key are registered.
+func (s *types.AttributeSchema) IsRegistered(namespace, key string) bool {
+    // Implementation
+    return false
 }
-
-func NewAttributeSchema() *AttributeSchema
-func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error
-func (s *AttributeSchema) IsRegistered(namespace, key string) bool
 ```
 
 **Step 3: Run tests, commit**
@@ -1331,6 +1387,7 @@ import (
     "time"
 
     "github.com/holomush/holomush/internal/access/policy"
+    "github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // ProviderError records a provider failure during resolution.
@@ -1344,7 +1401,7 @@ type ProviderError struct {
 type AttributeResolver struct {
     providers    []AttributeProvider
     envProviders []EnvironmentProvider
-    schema       *AttributeSchema
+    schema       *types.AttributeSchema
     totalBudget  time.Duration // default 100ms
 }
 
