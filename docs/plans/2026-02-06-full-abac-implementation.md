@@ -780,7 +780,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (all 15 seed policies):**
+**Valid policies (14 seed policies plus catch-all forbid test case):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };
@@ -1847,7 +1847,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 **Step 1: Write failing tests**
 
-- All 15 seed policies compile without error via `PolicyCompiler`
+- All 14 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -1866,7 +1866,7 @@ type SeedPolicy struct {
     DSLText     string
 }
 
-// SeedPolicies returns the complete set of 15 seed policies.
+// SeedPolicies returns the complete set of 14 seed policies.
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
         {
