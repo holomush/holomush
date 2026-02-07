@@ -466,6 +466,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 - [ ] `stream:location:01XYZ` parses to type `"stream"`, ID `"location:01XYZ"`
 - [ ] Unknown prefix returns `INVALID_ENTITY_REF` error code (oops)
 - [ ] Empty string returns `INVALID_ENTITY_REF` error code
+- [ ] Legacy `char:01ABC` prefix returns `INVALID_ENTITY_REF` error code
 - [ ] Session error code constants defined: `infra:session-invalid`, `infra:session-store-error`
 - [ ] All tests pass via `task test`
 
