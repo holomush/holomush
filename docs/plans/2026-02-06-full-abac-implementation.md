@@ -2939,21 +2939,22 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 35: General provider circuit breaker
 
-**Spec References:** Provider Circuit Breaker (lines 1540-1568)
+**Spec References:** Provider Circuit Breaker (lines 1825-1846)
 
 **Acceptance Criteria:**
 
-- [ ] Track consecutive errors per provider
-- [ ] Trigger: 10 consecutive errors → circuit opens
-- [ ] Circuit open → skip provider for 30s, return empty attributes
-- [ ] Log at WARN level: "Provider {name} circuit breaker opened: {N} consecutive errors"
+- [ ] Track per-provider lifetime budget utilization over 60s rolling window
+- [ ] Trigger: >80% budget utilization in >50% of calls (minimum 10 calls) → circuit trips
+- [ ] Circuit tripped → skip provider for 60s, return empty attributes
+- [ ] Log at ERROR level: "Provider {name} circuit breaker tripped: exceeded 80% budget in {N}% of calls"
 - [ ] Prometheus counter `abac_provider_circuit_breaker_trips_total{provider="name"}` incremented on trip
-- [ ] After 30s → half-open state with single probe request
-- [ ] Probe success → close circuit (INFO log); probe failure → re-open for another 30s
-- [ ] Circuit-opened providers do NOT consume evaluation time budget (immediate skip, no I/O)
-- [ ] Fair-share timeout calculation excludes circuit-opened providers from remaining provider count
+- [ ] After 60s cooldown → provider re-enabled with reset counters (no probe, automatic reset)
+- [ ] Circuit-tripped providers do NOT consume evaluation time budget (immediate skip, no I/O)
+- [ ] Fair-share timeout calculation excludes circuit-tripped providers from remaining provider count
 - [ ] Provider metrics endpoint `/debug/abac/providers` shows: call counts, avg latency, timeout rate, circuit status
 - [ ] All tests pass via `task test`
+
+**Note:** This is the **general provider circuit breaker** (budget-utilization-based). The **PropertyProvider circuit breaker** (Task 42) uses a different trigger: 3 timeout errors in 60s. Both skip for 60s but detect different failure modes.
 
 **Files:**
 
@@ -2962,16 +2963,16 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **TDD Test List:**
 
-- 10 consecutive errors → circuit opens
-- Circuit open → provider skipped for 30s, empty attributes returned
-- WARN log on circuit open with provider name and failure count
+- Track provider budget consumption per call over 60s window
+- >80% budget in >50% of calls (min 10 calls) → circuit trips
+- Circuit tripped → provider skipped for 60s, empty attributes returned
+- ERROR log on trip with provider name and percentage
 - Prometheus counter incremented on trip
-- After 30s → half-open probe sent (single request)
-- Probe success → circuit closes, normal operation resumes (INFO log)
-- Probe failure → circuit re-opens for another 30s
-- Skipping circuit-opened provider does not consume evaluation budget
-- Fair-share timeout excludes circuit-opened providers from denominator
-- Metrics endpoint shows circuit status
+- After 60s cooldown → provider re-enabled, counters reset
+- Skipping circuit-tripped provider does not consume evaluation budget
+- Fair-share timeout excludes circuit-tripped providers from denominator
+- Metrics endpoint shows circuit status and budget utilization stats
+- Budget calculation: actual_time / allocated_time (>80% is degraded)
 
 ---
 
