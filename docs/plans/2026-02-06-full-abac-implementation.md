@@ -143,12 +143,16 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 **Acceptance Criteria:**
 
 - [ ] `access_audit_log` table uses `PARTITION BY RANGE (timestamp)` from day one
-- [ ] Initial monthly partition created for current month
+- [ ] Composite PRIMARY KEY (id, timestamp) includes partition key per PostgreSQL requirement
+- [ ] SQL comment documents PK deviation from spec and rationale
+- [ ] At least 3 initial monthly partitions created (current month + 2 future months)
+- [ ] Partition naming follows spec convention: `access_audit_log_YYYY_MM`
 - [ ] BRIN index on `timestamp` with `pages_per_range = 128`
 - [ ] Subject + timestamp DESC index for per-subject queries
 - [ ] Denied-only partial index for denial analysis queries
 - [ ] `effect` CHECK constraint includes: `allow`, `deny`, `default_deny`, `system_bypass`
 - [ ] Up migration applies cleanly; down migration reverses it
+- [ ] Note added flagging spec update needed for PK inconsistency
 
 **Files:**
 
@@ -174,12 +178,22 @@ CREATE TABLE access_audit_log (
     error_message   TEXT,
     provider_errors JSONB,
     duration_us     INTEGER,
+    -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
+    -- tables MUST include the partition key (timestamp) in the primary key.
+    -- Spec §8.2 line 2015 defines "id TEXT PRIMARY KEY" which is technically
+    -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Create initial partition for current month
-CREATE TABLE access_audit_log_y2026m02 PARTITION OF access_audit_log
+-- Create initial partitions (current month + 2 future months, per spec §8.2 line 2306)
+CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
     FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+
+CREATE TABLE access_audit_log_2026_03 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+CREATE TABLE access_audit_log_2026_04 PARTITION OF access_audit_log
+    FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp)
     WITH (pages_per_range = 128);
@@ -201,6 +215,8 @@ DROP TABLE IF EXISTS access_audit_log;
 git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
+
+**NOTE:** The spec (§8.2 line 2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
 
 ---
 
