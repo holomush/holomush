@@ -63,6 +63,8 @@ A task is complete ONLY when: tests pass, acceptance criteria met, AND review pa
 
 ## Phase 7.1: Policy Schema (Database Tables + Policy Store)
 
+> **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
+
 ### Task 1: Create access\_policies migration
 
 **Spec References:** §8.1 (Policy Storage Schema, lines 1971-2050)
