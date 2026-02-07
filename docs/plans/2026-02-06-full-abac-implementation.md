@@ -214,6 +214,9 @@ git commit -m "feat(access): add access_audit_log table with monthly range parti
 - [ ] `visibility` CHECK includes all five levels: `public`, `private`, `restricted`, `system`, `admin`
 - [ ] Unique constraint on `(parent_type, parent_id, name)`
 - [ ] Parent index on `(parent_type, parent_id)` for efficient lookups
+- [ ] `visibility_restricted_requires_lists` CHECK constraint ensures restricted visibility has non-NULL visible_to and excluded_from
+- [ ] `visibility_non_restricted_nulls_lists` CHECK constraint ensures non-restricted visibility has NULL lists
+- [ ] `idx_properties_owner` partial index on owner column where owner IS NOT NULL
 - [ ] Up migration applies cleanly; down migration reverses it
 
 **Files:**
@@ -239,10 +242,17 @@ CREATE TABLE entity_properties (
     excluded_from JSONB DEFAULT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name)
+    CONSTRAINT entity_properties_parent_name_unique UNIQUE(parent_type, parent_id, name),
+    CONSTRAINT visibility_restricted_requires_lists
+        CHECK (visibility != 'restricted'
+            OR (visible_to IS NOT NULL AND excluded_from IS NOT NULL)),
+    CONSTRAINT visibility_non_restricted_nulls_lists
+        CHECK (visibility = 'restricted'
+            OR (visible_to IS NULL AND excluded_from IS NULL))
 );
 
 CREATE INDEX idx_entity_properties_parent ON entity_properties(parent_type, parent_id);
+CREATE INDEX idx_properties_owner ON entity_properties(owner) WHERE owner IS NOT NULL;
 ```
 
 **Step 2: Write the down migration**
