@@ -2012,6 +2012,7 @@ git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection
 - [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
+- [ ] Remove @ prefix from all command names in command registry (prerequisite for Phase 7.4 seed policies)
 - [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
 - [ ] Tests pass incrementally after each file/package update
 - [ ] Committed per package (dispatcher, world, plugin)
@@ -2070,6 +2071,8 @@ git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
 ## Phase 7.4: Seed Policies & Bootstrap
 
 **Note:** This phase depends on Tasks 28-29 (DI wiring and call site migration) being completed in Phase 7.3. Without the engine wired into the application, integration testing of seed policies would be meaningless.
+
+> **Prerequisite:** Before starting Phase 7.4, the `@` prefix MUST be removed from all command names in the command registry. Seed policies reference commands without the `@` prefix (e.g., "dig" not "@dig"). This was originally planned for Task 30 (Phase 7.6) but MUST happen earlier. Add `@` prefix removal to Task 29's acceptance criteria (call site migration) since it naturally fits with updating how commands are referenced.
 
 ### Task 21: Define seed policy constants
 
@@ -2673,6 +2676,8 @@ git commit -m "feat(command): add policy test/validate/reload/attributes/audit c
 
 **Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3236), ADR 0014 (Direct replacement, no adapter)
 
+**Note:** The `@` prefix removal from command names is now handled in Task 29 (call site migration), as it must occur before Phase 7.4 seed policies are created.
+
 **Acceptance Criteria:**
 
 - [ ] `internal/access/static.go` and `static_test.go` deleted
@@ -2682,7 +2687,7 @@ git commit -m "feat(command): add policy test/validate/reload/attributes/audit c
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
 - [ ] Zero `char:` prefix usage (all migrated to `character:`)
-- [ ] Zero `@`-prefixed command names
+- [ ] Verify zero `@`-prefixed command names (already removed in Task 29)
 - [ ] `task test` passes
 - [ ] `task lint` passes
 
