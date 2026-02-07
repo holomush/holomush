@@ -73,6 +73,27 @@ They define baseline access (movement, self-access, builder/admin privileges)
 using the ABAC policy language. See [Seed Policies](#seed-policies) for the
 full set.
 
+### Reserved Prefixes
+
+All string identifiers in the ABAC system use reserved prefixes for validation and routing:
+
+| Category        | Prefix       | Purpose                                | Example                       |
+| --------------- | ------------ | -------------------------------------- | ----------------------------- |
+| Subject Strings | `character:` | Character entity reference             | `character:01ABC`             |
+|                 | `plugin:`    | Plugin identifier                      | `plugin:echo-bot`             |
+|                 | `system`     | System bypass (no ID, immediate allow) | `system`                      |
+|                 | `session:`   | Session ID (resolved to `character:`)  | `session:01XYZ`               |
+| Resource Strings| `location:`  | Location/room reference                | `location:01XYZ`              |
+|                 | `object:`    | Object entity reference                | `object:01DEF`                |
+|                 | `command:`   | Command name                           | `command:say`                 |
+|                 | `property:`  | Property entity reference              | `property:01GHI`              |
+|                 | `stream:`    | Event stream reference                 | `stream:location:01XYZ`       |
+| Policy Names    | `seed:`      | System seed policies                   | `seed:player-self-access`     |
+|                 | `lock:`      | Lock-generated policies                | `lock:object:01ABC:read`      |
+| Policy IDs      | `infra:`     | Infrastructure error disambiguation    | `infra:attr-resolution-error` |
+
+See [AccessRequest](#accessrequest-interface) for subject/resource format details and [Seed Policies](#seed-policies) for policy name conventions.
+
 ## Architecture
 
 ```text
