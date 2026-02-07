@@ -4,7 +4,7 @@
 
 **Goal:** Replace the static role-based `AccessControl` system with a full policy-driven `AccessPolicyEngine` supporting a Cedar-inspired DSL, extensible attribute providers, audit logging, and admin commands.
 
-**Architecture:** Custom Go-native ABAC engine with eager attribute resolution, in-memory policy cache invalidated via PostgreSQL LISTEN/NOTIFY, deny-overrides conflict resolution, and per-request attribute caching. No adapter layer — direct replacement of all ~28 call sites.
+**Architecture:** Custom Go-native ABAC engine with eager attribute resolution, in-memory policy cache invalidated via PostgreSQL LISTEN/NOTIFY, deny-overrides conflict resolution, and per-request attribute caching. No adapter layer — direct replacement of all ~28 production call sites (plus test files and generated mocks).
 
 **Tech Stack:** Go 1.23+, [participle](https://github.com/alecthomas/participle) (struct-tag parser generator), pgx/pgxpool, oops (structured errors), prometheus/client_golang, testify + Ginkgo/Gomega, mockery
 
@@ -2492,7 +2492,7 @@ git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection
 
 **Acceptance Criteria:**
 
-- [ ] ALL ~28 call sites migrated from `AccessControl.Check()` to `engine.Evaluate()`
+- [ ] ALL ~28 production call sites (plus test files and generated mocks) migrated from `AccessControl.Check()` to `engine.Evaluate()`
 - [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
@@ -2501,7 +2501,7 @@ git commit -m "refactor(access): wire AccessPolicyEngine in dependency injection
 - [ ] Committed per package (dispatcher, world, plugin)
 - [ ] `task test` passes after all migrations
 
-**Files to modify** (run `grep -r "AccessControl" internal/ --include="*.go" -l` for current list):
+**Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list:
 
 - `internal/command/dispatcher.go` — Command execution authorization
 - `internal/command/rate_limit_middleware.go` — Rate limit bypass for admins
