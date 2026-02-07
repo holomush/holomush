@@ -21,24 +21,24 @@ one rather than modifying the original.
 
 ## Index
 
-| ADR                                                                              | Title                                                  | Date       |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------- |
-| [0001](0001-opaque-session-tokens.md)                                            | Use Opaque Session Tokens Instead of Signed JWTs      | 2026-02-02 |
-| [0002](0002-argon2id-password-hashing.md)                                        | Argon2id Password Hashing                              | 2026-02-02 |
-| [0003](0003-player-character-auth-model.md)                                      | Player-Character Authentication Model                  | 2026-02-02 |
-| [0004](0004-timing-attack-resistant-auth.md)                                     | Timing-Attack Resistant Authentication                 | 2026-02-02 |
-| [0005](0005-command-state-management.md)                                         | Command State Management for Multi-Turn Interactions   | 2026-02-04 |
-| [0006](0006-unified-command-registry.md)                                         | Unified Command Registry                               | 2026-02-04 |
-| [0007](0007-command-security-model.md)                                           | Command Security Model                                 | 2026-02-04 |
-| [0008](0008-command-conflict-resolution.md)                                      | Command Conflict Resolution                            | 2026-02-04 |
-| [0009](0009-custom-go-native-abac-engine.md)                                     | Custom Go-Native ABAC Engine                           | 2026-02-05 |
-| [0010](0010-cedar-aligned-fail-safe-type-semantics.md)                           | Cedar-Aligned Fail-Safe Type Semantics                 | 2026-02-05 |
-| [0011](0011-deny-overrides-without-priority.md)                                  | Deny-Overrides Without Priority Ordering               | 2026-02-05 |
-| [0012](0012-eager-attribute-resolution.md)                                       | Eager Attribute Resolution with Per-Request Caching    | 2026-02-05 |
-| [0013](0013-properties-as-first-class-entities.md)                               | Properties as First-Class World Model Entities         | 2026-02-05 |
-| [0014](0014-direct-static-access-control-replacement.md)                         | Direct StaticAccessControl Replacement                 | 2026-02-05 |
-| [0015](0015-three-layer-player-access-control.md)                                | Three-Layer Player Access Control                      | 2026-02-05 |
-| [0016](0016-listen-notify-policy-cache-invalidation.md)                          | PostgreSQL LISTEN/NOTIFY for Policy Cache Invalidation | 2026-02-05 |
+| ADR                                                                              | Title                                                  | Date       | Status            |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------- | ----------------- |
+| [0001](0001-opaque-session-tokens.md)                                            | Use Opaque Session Tokens Instead of Signed JWTs      | 2026-02-02 | Accepted          |
+| [0002](0002-argon2id-password-hashing.md)                                        | Argon2id Password Hashing                              | 2026-02-02 | Accepted          |
+| [0003](0003-player-character-auth-model.md)                                      | Player-Character Authentication Model                  | 2026-02-02 | Accepted          |
+| [0004](0004-timing-attack-resistant-auth.md)                                     | Timing-Attack Resistant Authentication                 | 2026-02-02 | Accepted          |
+| [0005](0005-command-state-management.md)                                         | Command State Management for Multi-Turn Interactions   | 2026-02-04 | Accepted          |
+| [0006](0006-unified-command-registry.md)                                         | Unified Command Registry                               | 2026-02-04 | Accepted          |
+| [0007](0007-command-security-model.md)                                           | Command Security Model                                 | 2026-02-04 | Superseded by 0014|
+| [0008](0008-command-conflict-resolution.md)                                      | Command Conflict Resolution                            | 2026-02-04 | Accepted          |
+| [0009](0009-custom-go-native-abac-engine.md)                                     | Custom Go-Native ABAC Engine                           | 2026-02-05 | Accepted          |
+| [0010](0010-cedar-aligned-fail-safe-type-semantics.md)                           | Cedar-Aligned Fail-Safe Type Semantics                 | 2026-02-05 | Accepted          |
+| [0011](0011-deny-overrides-without-priority.md)                                  | Deny-Overrides Without Priority Ordering               | 2026-02-05 | Accepted          |
+| [0012](0012-eager-attribute-resolution.md)                                       | Eager Attribute Resolution with Per-Request Caching    | 2026-02-05 | Accepted          |
+| [0013](0013-properties-as-first-class-entities.md)                               | Properties as First-Class World Model Entities         | 2026-02-05 | Accepted          |
+| [0014](0014-direct-static-access-control-replacement.md)                         | Direct StaticAccessControl Replacement                 | 2026-02-05 | Accepted          |
+| [0015](0015-three-layer-player-access-control.md)                                | Three-Layer Player Access Control                      | 2026-02-05 | Accepted          |
+| [0016](0016-listen-notify-policy-cache-invalidation.md)                          | PostgreSQL LISTEN/NOTIFY for Policy Cache Invalidation | 2026-02-05 | Accepted          |
 
 ## Format Evolution
 
