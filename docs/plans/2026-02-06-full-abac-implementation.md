@@ -2574,10 +2574,13 @@ git commit -m "refactor(plugin): migrate host functions to AccessPolicyEngine"
 - Delete: `internal/access/static_test.go`
 - Delete: `internal/access/permissions.go` (if only used by static evaluator)
 - Delete: `internal/access/permissions_test.go`
+- Delete: `internal/world/worldtest/mock_AccessControl.go` (generated mock)
+- Delete: `internal/access/accesstest/mock.go` (generated mock)
 - Modify: `internal/access/access.go` — remove `AccessControl` interface
 - Delete or modify: `internal/plugin/capability/` — remove `Enforcer` (capabilities now seed policies)
 - Search and remove: all `char:` prefix usage (replace with `character:`)
 - Search and remove: all `@`-prefixed command name handling
+- Run: `mockery` to regenerate mocks for new `AccessPolicyEngine` interface
 
 **Step 1: Delete static access control files**
 
