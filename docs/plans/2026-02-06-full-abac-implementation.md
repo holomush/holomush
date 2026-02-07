@@ -630,6 +630,10 @@ git commit -m "feat(access): add subject/resource prefix constants and parser"
 
 - [ ] `PolicyStore` interface defines: `Create`, `Get`, `GetByID`, `Update`, `Delete`, `ListEnabled`, `List`
 - [ ] `StoredPolicy` struct includes all `access_policies` table columns
+- [ ] `PolicyEffect` type defined with `PolicyEffectPermit`/`PolicyEffectForbid` constants
+- [ ] `StoredPolicy.Effect` uses `PolicyEffect` (not `policy.Effect`)
+- [ ] `PolicyEffect.String()` serializes to DB TEXT values ("permit"/"forbid")
+- [ ] Documentation clearly distinguishes `PolicyEffect` (what a policy declares) from `policy.Effect` (what the engine decides)
 - [ ] `Create()` generates ULID, inserts row, and calls `pg_notify('policy_changed', name)`
 - [ ] `Update()` increments version, inserts into `access_policy_versions`, calls `pg_notify`
 - [ ] `Delete()` removes row (CASCADE), calls `pg_notify`
@@ -657,13 +661,34 @@ import (
     "github.com/holomush/holomush/internal/access/policy"
 )
 
+// PolicyEffect represents the effect declared by a policy.
+// This is distinct from policy.Effect (the decision outcome).
+type PolicyEffect int
+
+const (
+    PolicyEffectPermit PolicyEffect = iota // "permit" in DB
+    PolicyEffectForbid                     // "forbid" in DB
+)
+
+// String returns the DB representation of the policy effect.
+func (e PolicyEffect) String() string {
+    switch e {
+    case PolicyEffectPermit:
+        return "permit"
+    case PolicyEffectForbid:
+        return "forbid"
+    default:
+        return "unknown"
+    }
+}
+
 // StoredPolicy is the persisted form of a policy.
 type StoredPolicy struct {
     ID          string
     Name        string
     Description string
-    Effect      policy.Effect
-    Source      string // "seed", "lock", "admin", "plugin"
+    Effect      PolicyEffect // What the policy DECLARES ("permit"/"forbid")
+    Source      string       // "seed", "lock", "admin", "plugin"
     DSLText     string
     CompiledAST []byte // JSONB
     Enabled     bool
@@ -672,6 +697,11 @@ type StoredPolicy struct {
     CreatedBy   string
     Version     int
 }
+
+// Note: PolicyEffect vs Decision Effect
+// - PolicyEffect: What a policy declares ("permit" or "forbid")
+// - policy.Effect: What the engine decides ("allow", "deny", "default_deny", "system_bypass")
+// The engine evaluates multiple policies (each with a PolicyEffect) and produces a single Decision.
 
 // PolicyStore handles CRUD operations for access policies.
 type PolicyStore interface {
