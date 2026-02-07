@@ -9,6 +9,7 @@ ignores:
   - ".worktrees"
   - ".beads"
   - ".claude"
+  - ".serena"
   - "dist"
   - "node_modules"
   - "vendor"

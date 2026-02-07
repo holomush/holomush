@@ -66,6 +66,9 @@ dist/
 .worktrees/
 .task/
 
+# MCP server state
+.serena/
+
 # Documentation site
 site/build/
 site/.venv/
