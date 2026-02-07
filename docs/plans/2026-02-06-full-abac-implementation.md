@@ -946,6 +946,8 @@ func FuzzParse(f *testing.F) {
 Run: `go test -fuzz=FuzzParse -fuzztime=30s ./internal/access/policy/dsl/`
 Expected: No panics
 
+**Note:** Direct `go test` is intentional here — fuzz testing is not covered by `task test` runner.
+
 **Step 3: Commit**
 
 ```bash
@@ -1892,6 +1894,8 @@ Setup: 50 active policies (25 permit, 25 forbid), 3 operators per condition aver
 Run: `go test -bench=. -benchmem ./internal/access/policy/`
 Expected: All within spec targets
 
+**Note:** Direct `go test` is intentional here — benchmark testing is not covered by `task test` runner.
+
 **Step 3: Commit**
 
 ```bash
@@ -2637,7 +2641,7 @@ Expected: PASS
 **Step 6: Commit**
 
 ```bash
-git add -A
+git add internal/access/ internal/world/worldtest/ internal/plugin/capability/
 git commit -m "refactor(access): remove StaticAccessControl, AccessControl interface, and capability.Enforcer"
 ```
 
