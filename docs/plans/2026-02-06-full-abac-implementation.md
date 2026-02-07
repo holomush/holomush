@@ -1153,6 +1153,7 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
 - [ ] `AttrType` enum: `String`, `Int`, `Float`, `Bool`, `StringList`
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec §3.4.1)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1200,12 +1201,17 @@ type LockTokenDef struct {
 package attribute
 
 // AttrType identifies the type of an attribute value.
+//
+// NOTE: Per spec §3.4.1, all numeric attributes MUST be returned as float64
+// by providers at runtime, regardless of whether they are declared as Int or Float.
+// The Int/Float distinction exists only for schema validation and documentation.
+// All numeric comparisons in the policy engine operate on float64 values.
 type AttrType int
 
 const (
     AttrTypeString     AttrType = iota
-    AttrTypeInt
-    AttrTypeFloat
+    AttrTypeInt        // Providers MUST return as float64
+    AttrTypeFloat      // Providers MUST return as float64
     AttrTypeBool
     AttrTypeStringList
 )
