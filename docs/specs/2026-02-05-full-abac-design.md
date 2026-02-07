@@ -40,8 +40,8 @@ Players control access to their own properties through a simplified lock system.
 
 ### Glossary
 
-| Term            | Definition                                                                                                                                                                                   |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Term            | Definition                                                                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Subject**     | The entity in `AccessRequest.Subject` — the Go-side identity string (e.g., `"character:01ABC"`)                                                                                             |
 | **Principal**   | The DSL keyword referring to the subject — `principal is character` matches subjects with `character:` prefix                                                                               |
 | **Resource**    | The target of the access request — entity string in `AccessRequest.Resource`                                                                                                                |
@@ -77,20 +77,20 @@ full set.
 
 All string identifiers in the ABAC system use reserved prefixes for validation and routing:
 
-| Category        | Prefix       | Purpose                                | Example                       |
-| --------------- | ------------ | -------------------------------------- | ----------------------------- |
-| Subject Strings | `character:` | Character entity reference             | `character:01ABC`             |
-|                 | `plugin:`    | Plugin identifier                      | `plugin:echo-bot`             |
-|                 | `system`     | System bypass (no ID, immediate allow) | `system`                      |
-|                 | `session:`   | Session ID (resolved to `character:`)  | `session:01XYZ`               |
-| Resource Strings| `location:`  | Location/room reference                | `location:01XYZ`              |
-|                 | `object:`    | Object entity reference                | `object:01DEF`                |
-|                 | `command:`   | Command name                           | `command:say`                 |
-|                 | `property:`  | Property entity reference              | `property:01GHI`              |
-|                 | `stream:`    | Event stream reference                 | `stream:location:01XYZ`       |
-| Policy Names    | `seed:`      | System seed policies                   | `seed:player-self-access`     |
-|                 | `lock:`      | Lock-generated policies                | `lock:object:01ABC:read`      |
-| Policy IDs      | `infra:`     | Infrastructure error disambiguation    | `infra:attr-resolution-error` |
+| Category         | Prefix       | Purpose                                | Example                       |
+| ---------------- | ------------ | -------------------------------------- | ----------------------------- |
+| Subject Strings  | `character:` | Character entity reference             | `character:01ABC`             |
+|                  | `plugin:`    | Plugin identifier                      | `plugin:echo-bot`             |
+|                  | `system`     | System bypass (no ID, immediate allow) | `system`                      |
+|                  | `session:`   | Session ID (resolved to `character:`)  | `session:01XYZ`               |
+| Resource Strings | `location:`  | Location/room reference                | `location:01XYZ`              |
+|                  | `object:`    | Object entity reference                | `object:01DEF`                |
+|                  | `command:`   | Command name                           | `command:say`                 |
+|                  | `property:`  | Property entity reference              | `property:01GHI`              |
+|                  | `stream:`    | Event stream reference                 | `stream:location:01XYZ`       |
+| Policy Names     | `seed:`      | System seed policies                   | `seed:player-self-access`     |
+|                  | `lock:`      | Lock-generated policies                | `lock:object:01ABC:read`      |
+| Policy IDs       | `infra:`     | Infrastructure error disambiguation    | `infra:attr-resolution-error` |
 
 See [AccessRequest](#accessrequest) for subject/resource format details and [Seed Policies](#seed-policies) for policy name conventions.
 
@@ -143,8 +143,7 @@ See [AccessRequest](#accessrequest) for subject/resource format details and [See
 
 ### Request Flow
 
-This section provides a high-level overview. See [Evaluation
-Algorithm](#evaluation-algorithm) for the authoritative step-by-step specification.
+This section provides a high-level overview. See [Evaluation Algorithm](#evaluation-algorithm) for the authoritative step-by-step specification.
 
 1. Caller invokes `Evaluate(ctx, AccessRequest)`
 2. System bypass: if subject is `"system"`, immediately allow with
@@ -251,7 +250,7 @@ type CompiledPolicy struct {
     "principal_type": "character",
     "action_list": ["read", "write"],
     "resource_type": "property",
-    "resource_exact": null  // Target-level pinning: if non-null, policy applies only to this exact resource string
+    "resource_exact": null // Target-level pinning: if non-null, policy applies only to this exact resource string
   },
   "conditions": [
     {
@@ -737,7 +736,7 @@ The DSL is Cedar-inspired with a full expression language. Policies have a
 
 ### Grammar
 
-```text
+````text
 policy     = effect "(" target ")" [ "when" "{" conditions "}" ] ";"
 effect     = "permit" | "forbid"
 target     = principal_clause "," action_clause "," resource_clause
@@ -843,7 +842,7 @@ permit(principal, action in ["read"], resource)
 // VALID - bare literals allowed
 permit(principal, action in ["debug"], resource)
   when { false };  // Policy disabled
-```
+````
 
 **Migration:** Existing policies with bare boolean attributes can be automatically
 fixed using `policy lint --fix`, which rewrites bare attributes as
@@ -1134,7 +1133,7 @@ This prevents a circular dependency:
 
 ### Property Attributes
 
-| Attribute       | Type     | Description                                                                   |
+| Attribute         | Type     | Description                                                                   |
 | ----------------- | -------- | ----------------------------------------------------------------------------- |
 | `id`              | ULID     | Unique property identifier                                                    |
 | `parent_type`     | string   | Parent entity type: character, location, object                               |
@@ -1388,14 +1387,14 @@ attributes in the `reputation` namespace.
 Attribute providers MUST register schemas during plugin initialization. The
 schema registry enforces the following validation rules at registration time:
 
-| Validation Rule                | Behavior                                              |
-| ------------------------------ | ----------------------------------------------------- |
-| Missing namespace              | Reject registration, return error to plugin loader    |
-| Empty namespace                | Reject registration, return error to plugin loader    |
-| Duplicate namespace            | Reject registration, return error to plugin loader    |
-| Empty attribute definition     | Reject registration, return error to plugin loader    |
-| Invalid type (not in enum)     | Reject registration, return error to plugin loader    |
-| Duplicate attribute keys       | Reject registration, return error to plugin loader    |
+| Validation Rule            | Behavior                                           |
+| -------------------------- | -------------------------------------------------- |
+| Missing namespace          | Reject registration, return error to plugin loader |
+| Empty namespace            | Reject registration, return error to plugin loader |
+| Duplicate namespace        | Reject registration, return error to plugin loader |
+| Empty attribute definition | Reject registration, return error to plugin loader |
+| Invalid type (not in enum) | Reject registration, return error to plugin loader |
+| Duplicate attribute keys   | Reject registration, return error to plugin loader |
 
 **Registration failure behavior:** If a plugin fails to register a valid schema,
 the plugin loader MUST fail plugin initialization and log the error. The plugin
@@ -1446,12 +1445,12 @@ if !schema.IsRegistered(namespace, key) {
 When a plugin is reloaded, the engine MUST compare the new schema against the
 previous schema version and log warnings for breaking changes:
 
-| Schema Change          | Behavior                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------- |
-| Attribute added        | Info log, no action required                                                     |
-| Attribute type changed | Warn log, existing policies may break                                            |
-| Attribute removed      | Warn log, scan policies for references                                           |
-| Namespace removed      | Error log, scan policies for references, reject reload if policies reference it  |
+| Schema Change          | Behavior                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| Attribute added        | Info log, no action required                                                    |
+| Attribute type changed | Warn log, existing policies may break                                           |
+| Attribute removed      | Warn log, scan policies for references                                          |
+| Namespace removed      | Error log, scan policies for references, reject reload if policies reference it |
 
 **Schema evolution example:**
 
@@ -1826,10 +1825,10 @@ expire regardless of what the current provider is doing.
 The ABAC engine uses three distinct circuit breaker designs, each tuned for
 different failure modes:
 
-| Component        | Trigger                                                  | Window | Behavior              | Metric                                                       | Rationale                                                                                                 |
-| ---------------- | -------------------------------------------------------- | ------ | --------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`                  | Higher threshold because some transient slowness is expected; detects systematic performance degradation  |
-| PropertyProvider | 3 timeout errors                                         | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total`         | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption  |
+| Component        | Trigger                                                 | Window | Behavior              | Metric                                               | Rationale                                                                                                |
+| ---------------- | ------------------------------------------------------- | ------ | --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`          | Higher threshold because some transient slowness is expected; detects systematic performance degradation |
+| PropertyProvider | 3 timeout errors                                        | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption  |
 
 **General provider circuit breaker:** Providers that stay just
 under the timeout but consistently consume >80% of their allocated budget
