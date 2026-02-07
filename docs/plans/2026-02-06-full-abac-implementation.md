@@ -165,7 +165,7 @@ graph TD
     T23b --> T30
 
     %% Critical path (thick lines conceptually)
-    style T1 fill:#ffcccc
+    style T3 fill:#ffcccc
     style T4 fill:#ffcccc
     style T7 fill:#ffcccc
     style T12 fill:#ffcccc
@@ -176,7 +176,7 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 1 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 3 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Parallel Work Opportunities:**
 - Phase 7.2 (Tasks 8-12) can start after Task 7 completes
@@ -516,6 +516,8 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - [ ] `AccessRequest` has `Subject`, `Action`, `Resource` string fields
 - [ ] `Decision` includes `Allowed`, `Effect`, `Reason`, `PolicyID`, `Policies`, `Attributes`
 - [ ] `AttributeBags` has `Subject`, `Resource`, `Action`, `Environment` maps
+- [ ] `AttributeSchema` type defined for use by compiler and resolver
+- [ ] `AttrType` enum defined: `String`, `Int`, `Float`, `Bool`, `StringList`
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -651,6 +653,23 @@ type AttributeBags struct {
     Resource    map[string]any
     Action      map[string]any
     Environment map[string]any
+}
+
+// AttrType identifies the type of an attribute value.
+type AttrType int
+
+const (
+    AttrTypeString AttrType = iota
+    AttrTypeInt
+    AttrTypeFloat
+    AttrTypeBool
+    AttrTypeStringList
+)
+
+// AttributeSchema registry for validating attribute types.
+// Used by PolicyCompiler (Task 12) and AttributeResolver (Task 14).
+type AttributeSchema struct {
+    // Implementation details in Task 13
 }
 ```
 
@@ -866,6 +885,7 @@ package store
 
 import (
     "context"
+    "time"
 
     "github.com/holomush/holomush/internal/access/policy"
 )
@@ -884,6 +904,8 @@ type StoredPolicy struct {
     ChangeNote  string // populated on version upgrades; stored in access_policy_versions
     CreatedBy   string
     Version     int
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
 }
 
 // PolicyStore handles CRUD operations for access policies.
@@ -1365,12 +1387,11 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 
 - [ ] `AttributeProvider` interface: `Namespace()`, `ResolveSubject()`, `ResolveResource()`, `LockTokens()`
 - [ ] `EnvironmentProvider` interface: `Namespace()`, `Resolve()`
-- [ ] `AttributeSchema` supports: `Register()`, `IsRegistered()`
+- [ ] `AttributeSchema` supports: `Register()`, `IsRegistered()` (uses type definition from Task 5)
 - [ ] Duplicate namespace registration → error
 - [ ] Empty namespace → error
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
-- [ ] `AttrType` enum: `String`, `Int`, `Float`, `Bool`, `StringList`
 - [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Core Attribute Schema, lines 605-731)
 - [ ] All tests pass via `task test`
 
@@ -1418,28 +1439,22 @@ type LockTokenDef struct {
 // internal/access/policy/attribute/schema.go
 package attribute
 
-// AttrType identifies the type of an attribute value.
-//
-// NOTE: Per spec Core Interfaces > Core Attribute Schema (lines 605-731), all numeric attributes MUST be returned as float64
+import "github.com/holomush/holomush/internal/access/policy"
+
+// NOTE: AttrType is defined in Task 5 (internal/access/policy/types.go) and aliased here for convenience.
+// Per spec Core Interfaces > Core Attribute Schema (lines 605-731), all numeric attributes MUST be returned as float64
 // by providers at runtime, regardless of whether they are declared as Int or Float.
 // The Int/Float distinction exists only for schema validation and documentation.
 // All numeric comparisons in the policy engine operate on float64 values.
-type AttrType int
-
-const (
-    AttrTypeString     AttrType = iota
-    AttrTypeInt        // Providers MUST return as float64
-    AttrTypeFloat      // Providers MUST return as float64
-    AttrTypeBool
-    AttrTypeStringList
-)
 
 // NamespaceSchema defines the attributes in a namespace.
 type NamespaceSchema struct {
-    Attributes map[string]AttrType
+    Attributes map[string]policy.AttrType
 }
 
 // AttributeSchema validates attribute references during policy compilation.
+// Type definition is in Task 5 (internal/access/policy/types.go).
+// This task implements the registration and validation logic.
 type AttributeSchema struct {
     namespaces map[string]*NamespaceSchema
 }
@@ -1743,19 +1758,17 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 **Acceptance Criteria:**
 
-- [ ] Implements the 9-step evaluation algorithm from the spec exactly
-- [ ] Step 1: Caller invokes `Evaluate(ctx, AccessRequest)`
-- [ ] Step 2: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
-- [ ] Step 3: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
+- [ ] Implements the 7-step evaluation algorithm from the spec exactly
+- [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+- [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
-- [ ] Step 4: Eager attribute resolution (all attributes collected before evaluation)
-- [ ] Step 5: Engine loads matching policies from the in-memory cache
-- [ ] Step 6: Engine evaluates each policy's conditions against the attribute bags
-- [ ] Step 7: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
+- [ ] Step 3: Eager attribute resolution (all attributes collected before evaluation)
+- [ ] Step 4: Engine loads matching policies from the in-memory cache
+- [ ] Step 5: Engine evaluates each policy's conditions against the attribute bags
+- [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
   - [ ] No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
-- [ ] Step 8: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
-- [ ] Step 9: Returns `Decision` with allowed/denied, reason, and matched policy ID
+- [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -1767,7 +1780,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 9-step evaluation algorithm (spec lines 148-160):
+Table-driven tests covering the 7-step evaluation algorithm (spec lines 148-160):
 
 1. **System bypass:** Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
@@ -1816,15 +1829,13 @@ type Engine struct {
 func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache, sessions SessionResolver, audit AuditLogger) *Engine
 
 func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    // Step 1: Invocation entry point
-    // Step 2: System bypass
-    // Step 3: Session resolution
-    // Step 4: Resolve attributes (eager)
-    // Step 5: Load applicable policies (from cache snapshot)
-    // Step 6: Evaluate conditions per policy
-    // Step 7: Combine decisions (deny-overrides)
-    // Step 8: Audit
-    // Step 9: Return decision
+    // Step 1: System bypass
+    // Step 2: Session resolution
+    // Step 3: Resolve attributes (eager)
+    // Step 4: Load applicable policies (from cache snapshot)
+    // Step 5: Evaluate conditions per policy
+    // Step 6: Combine decisions (deny-overrides)
+    // Step 7: Audit
 }
 ```
 
@@ -3289,8 +3300,8 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Files:**
 
-- Modify: `internal/access/policy/resolver.go` (add general circuit breaker logic)
-- Test: `internal/access/policy/resolver_test.go`
+- Modify: `internal/access/policy/attribute/resolver.go` (add general circuit breaker logic)
+- Test: `internal/access/policy/attribute/resolver_test.go`
 
 **TDD Test List:**
 
