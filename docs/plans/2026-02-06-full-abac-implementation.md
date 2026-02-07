@@ -1429,11 +1429,21 @@ type EnvironmentProvider interface {
     Resolve(ctx context.Context) (map[string]any, error)
 }
 
+// LockTokenType determines how the lock compiler generates DSL conditions.
+type LockTokenType string
+
+const (
+    LockTokenEquality   LockTokenType = "equality"   // e.g., faction:rebels → principal.faction == "rebels"
+    LockTokenMembership LockTokenType = "membership"  // e.g., flag:storyteller → "storyteller" in principal.flags
+    LockTokenNumeric    LockTokenType = "numeric"     // e.g., level>5 → principal.level > 5
+)
+
 // LockTokenDef defines a lock token contributed by a provider.
 type LockTokenDef struct {
-    Token       string
-    Description string
-    AttrPath    string
+    Name          string
+    Description   string
+    AttributePath string
+    Type          LockTokenType
 }
 ```
 
@@ -2720,11 +2730,12 @@ type LockTokenRegistry struct {
 }
 
 type TokenDef struct {
-    Token       string
-    Namespace   string
-    Description string
-    AttrPath    string // attribute path this token maps to
-    ValueType   string // "string", "int", "bool"
+    Name          string
+    Namespace     string
+    Description   string
+    AttributePath string // attribute path this token maps to
+    Type          LockTokenType
+    ValueType     string // "string", "int", "bool"
 }
 
 func NewLockTokenRegistry() *LockTokenRegistry
@@ -2855,6 +2866,7 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 **Acceptance Criteria:**
 
 - [ ] `policy create <name> <dsl>` → validates DSL, stores policy, triggers NOTIFY
+- [ ] `policy create` MUST reject policy names starting with reserved prefixes `seed:` and `lock:` → error message explaining reserved prefix restriction
 - [ ] `policy list` → shows all policies (filterable by `--source`, `--enabled`/`--disabled`)
 - [ ] `policy show <name>` → displays full policy details
 - [ ] `policy edit <name> <new_dsl>` → validates new DSL, increments version
@@ -3336,6 +3348,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 - [ ] `lock tokens` command → lists all registered lock tokens (faction, flag, level, etc.)
 - [ ] `lock tokens --namespace character` → filters to specific namespace
+- [ ] `lock tokens --verbose` → shows underlying DSL attribute path for each token (for debugging)
 - [ ] Display format: token name, type, description, example
 - [ ] Discovery sources: schema registry (plugin-provided attributes) + core tokens (faction, flag, level, role)
 - [ ] All tests pass via `task test`
@@ -3349,6 +3362,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 - `lock tokens` → lists all available lock tokens
 - `lock tokens --namespace character` → filters to character namespace
+- `lock tokens --verbose` → shows DSL attribute path
 - Core tokens (faction, flag, level, role) always present
 - Plugin-provided attributes appear in token list
 - Display format includes name, type, description, example
