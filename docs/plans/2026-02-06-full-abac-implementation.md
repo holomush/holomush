@@ -2050,7 +2050,7 @@ git commit -m "feat(access): add seed policy bootstrap sequence"
 
 **Acceptance Criteria:**
 
-- [ ] Core lock tokens registered: `locked`, `faction`, `level`
+- [ ] Core lock tokens registered: `faction`, `flag`, `level`
 - [ ] Plugin lock tokens require namespace prefix (e.g., `myplugin:custom_token`)
 - [ ] Duplicate token → error
 - [ ] `Lookup()` returns definition with DSL expansion info
@@ -2064,7 +2064,7 @@ git commit -m "feat(access): add seed policy bootstrap sequence"
 
 **Step 1: Write failing tests**
 
-- Register core lock tokens (locked, faction, level)
+- Register core lock tokens (faction, flag, level)
 - Register plugin lock tokens (must be namespace-prefixed)
 - Duplicate token → error
 - Lookup token → returns definition with DSL expansion info
@@ -2109,11 +2109,11 @@ git commit -m "feat(access): add lock token registry"
 
 **Acceptance Criteria:**
 
-- [ ] `locked` → generates `forbid` policy with owner exception
 - [ ] `faction:rebels` → generates `forbid` with faction check
+- [ ] `flag:storyteller` → generates `forbid` with flag membership check
 - [ ] `level>5` → generates `forbid` with level comparison (inverted)
-- [ ] `locked+faction:rebels` → compound (multiple forbids)
-- [ ] `!locked` → removes the lock-generated forbid policy
+- [ ] `faction:rebels & flag:storyteller` → compound (multiple forbids)
+- [ ] `!faction:rebels` → negates faction check
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
 - [ ] All tests pass via `task test`
@@ -2129,11 +2129,11 @@ git commit -m "feat(access): add lock token registry"
 
 Lock syntax from spec:
 
-- `locked` → `forbid(principal, action, resource == "<target>") when { principal.id != resource.owner };`
 - `faction:rebels` → `forbid(principal is character, action, resource == "<target>") when { principal.faction != "rebels" };`
+- `flag:storyteller` → `forbid(principal is character, action, resource == "<target>") when { !("storyteller" in principal.flags) };`
 - `level>5` → `forbid(principal is character, action, resource == "<target>") when { principal.level <= 5 };`
-- `locked+faction:rebels` → compound (both conditions as separate forbids or combined)
-- `!locked` → remove the lock-generated forbid policy
+- `faction:rebels & flag:storyteller` → compound (both conditions as separate forbids or combined)
+- `!faction:rebels` → negates faction check
 
 Compiler takes parsed lock expression + target resource string → DSL policy text. Then PolicyCompiler validates the generated DSL.
 
