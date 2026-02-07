@@ -1883,7 +1883,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 - [ ] All 14 seed policies defined as `SeedPolicy` structs (verify count against spec)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
-- [ ] Each seed policy source is `"seed"`
+- [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
 - [ ] DSL text matches spec exactly (lines 2935-2999)
 - [ ] All tests pass via `task test`
@@ -1912,6 +1912,7 @@ type SeedPolicy struct {
     Name        string
     Description string
     DSLText     string
+    SeedVersion int // Default 1, incremented for upgrades
 }
 
 // SeedPolicies returns the complete set of 14 seed policies.
@@ -1921,71 +1922,85 @@ func SeedPolicies() []SeedPolicy {
             Name:        "seed:player-self-access",
             Description: "Characters can read and write their own character",
             DSLText:     `permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-location-read",
             Description: "Characters can read their current location",
             DSLText:     `permit(principal is character, action in ["read"], resource is location) when { resource.id == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-character-colocation",
             Description: "Characters can read co-located characters",
             DSLText:     `permit(principal is character, action in ["read"], resource is character) when { resource.location == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-object-colocation",
             Description: "Characters can read co-located objects",
             DSLText:     `permit(principal is character, action in ["read"], resource is object) when { resource.location == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-stream-emit",
             Description: "Characters can emit to co-located location streams",
             DSLText:     `permit(principal is character, action in ["emit"], resource is stream) when { resource.name like "location:*" && resource.location == principal.location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-movement",
             Description: "Characters can enter any location (restrict via forbid policies)",
             DSLText:     `permit(principal is character, action in ["enter"], resource is location);`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:player-basic-commands",
             Description: "Characters can execute basic commands",
             DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.name in ["say", "pose", "look", "go"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:builder-location-write",
             Description: "Builders and admins can create/modify/delete locations",
             DSLText:     `permit(principal is character, action in ["write", "delete"], resource is location) when { principal.role in ["builder", "admin"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:builder-object-write",
             Description: "Builders and admins can create/modify/delete objects",
             DSLText:     `permit(principal is character, action in ["write", "delete"], resource is object) when { principal.role in ["builder", "admin"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:builder-commands",
             Description: "Builders and admins can execute builder commands",
             DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { principal.role in ["builder", "admin"] && resource.name in ["dig", "create", "describe", "link"] };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:admin-full-access",
             Description: "Admins have full access to everything",
             DSLText:     `permit(principal is character, action, resource) when { principal.role == "admin" };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:property-public-read",
             Description: "Public properties readable by co-located characters",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "public" && principal.location == resource.parent_location };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:property-private-read",
             Description: "Private properties readable only by owner",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "private" && resource.owner == principal.id };`,
+            SeedVersion: 1,
         },
         {
             Name:        "seed:property-admin-read",
             Description: "Admin properties readable only by admins",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };`,
+            SeedVersion: 1,
         },
     }
 }
@@ -2004,15 +2019,18 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 22: Bootstrap sequence
 
-**Spec References:** §12.3 (Bootstrap Sequence, lines 3000-3016)
+**Spec References:** §12.3 (Bootstrap Sequence, lines 3007-3074)
 
 **Acceptance Criteria:**
 
-- [ ] Empty `access_policies` table → all seeds created with `source="seed"`, `seed_version=1`
-- [ ] Already populated table → no-op (idempotent)
-- [ ] Individual seed name collision (admin created same name) → skip that seed, log warning
-- [ ] Seed version tracking for future upgrades
-- [ ] Bootstrap called at server startup with system subject context (bypasses ABAC)
+- [ ] Uses `access.WithSystemSubject(context.Background())` to bypass ABAC for seed operations
+- [ ] Per-seed name-based idempotency check via `policyStore.GetByName(ctx, seed.Name)`
+- [ ] Skips seed if policy exists with same name and `source="seed"` (already seeded)
+- [ ] Logs warning and skips if policy exists with same name but `source!="seed"` (admin collision)
+- [ ] New seeds inserted with `source="seed"`, `seed_version=1`, `created_by="system"`
+- [ ] Seed version upgrade: if shipped `seed_version > stored.seed_version`, update `dsl_text`, `compiled_ast`, and `seed_version`
+- [ ] Upgrade populates `change_note` with `"Auto-upgraded from seed v{N} to v{N+1} on server upgrade"`
+- [ ] Respects `--skip-seed-migrations` flag to disable automatic upgrades
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2023,9 +2041,10 @@ git commit -m "feat(access): define seed policies"
 **Step 1: Write failing tests**
 
 - Empty `access_policies` table → all seeds created with `source="seed"`, `seed_version=1`
-- Already populated table → no-op (idempotent)
-- Individual seed name collision (admin created policy with same name) → skip that seed, log warning
-- Seed version tracking for future upgrades
+- Existing seed policy (same name, `source="seed"`) → skipped (idempotent)
+- Existing non-seed policy (same name, `source!="seed"`) → skipped, warning logged
+- Seed version upgrade (shipped version > stored version) → policy updated with new DSL and incremented version
+- `--skip-seed-migrations` flag → no version upgrades, only new seed insertions
 
 **Step 2: Implement**
 
@@ -2033,24 +2052,84 @@ git commit -m "feat(access): define seed policies"
 // internal/access/policy/bootstrap.go
 package policy
 
-// Bootstrap seeds the policy table if empty.
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "log/slog"
+
+    "github.com/holomush/holomush/internal/access"
+    "github.com/holomush/holomush/internal/store"
+    "github.com/samsarahq/go/oops"
+)
+
+// BootstrapOptions controls bootstrap behavior.
+type BootstrapOptions struct {
+    SkipSeedMigrations bool // Disable automatic seed version upgrades
+}
+
+// Bootstrap seeds the policy table with system policies.
 // Called at server startup with system subject context (bypasses ABAC).
-func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *PolicyCompiler) error {
-    existing, err := policyStore.ListEnabled(ctx)
-    if err != nil {
-        return err
-    }
-    if len(existing) > 0 {
-        return nil // Already seeded
-    }
+// Idempotent: checks each seed policy by name before insertion.
+// Supports seed version upgrades unless opts.SkipSeedMigrations is true.
+func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
+    // Use system subject context to bypass ABAC during bootstrap
+    ctx = access.WithSystemSubject(ctx)
 
     for _, seed := range SeedPolicies() {
+        // Per-seed idempotency check: query by name
+        existing, err := policyStore.GetByName(ctx, seed.Name)
+        if err != nil && !store.IsNotFound(err) {
+            return oops.With("seed", seed.Name).Wrap(err)
+        }
+
+        if existing != nil {
+            // Policy with this name exists
+            if existing.Source != "seed" {
+                // Admin created a policy with a seed: name — log warning, skip
+                logger.Warn("seed name collision with non-seed policy, skipping",
+                    "name", seed.Name,
+                    "source", existing.Source)
+                continue
+            }
+
+            // Existing seed policy — check for version upgrade
+            if !opts.SkipSeedMigrations && existing.SeedVersion != nil && seed.SeedVersion > *existing.SeedVersion {
+                // Capture old version before updating
+                oldVersion := *existing.SeedVersion
+
+                // Upgrade: compile new DSL and update stored policy
+                compiled, _, err := compiler.Compile(seed.DSLText)
+                if err != nil {
+                    return oops.With("seed", seed.Name).With("version", seed.SeedVersion).Wrap(err)
+                }
+                compiledJSON, _ := json.Marshal(compiled)
+
+                existing.DSLText = seed.DSLText
+                existing.CompiledAST = compiledJSON
+                existing.SeedVersion = &seed.SeedVersion
+                existing.ChangeNote = fmt.Sprintf("Auto-upgraded from seed v%d to v%d on server upgrade", oldVersion, seed.SeedVersion)
+
+                if err := policyStore.Update(ctx, existing); err != nil {
+                    return oops.With("seed", seed.Name).With("version", seed.SeedVersion).Wrap(err)
+                }
+
+                logger.Info("upgraded seed policy",
+                    "name", seed.Name,
+                    "from_version", oldVersion,
+                    "to_version", seed.SeedVersion)
+            }
+
+            // Already seeded at current or higher version, skip
+            continue
+        }
+
+        // New seed policy: compile and insert
         compiled, _, err := compiler.Compile(seed.DSLText)
         if err != nil {
             return oops.With("seed", seed.Name).Wrap(err)
         }
         compiledJSON, _ := json.Marshal(compiled)
-        seedVersion := 1
 
         err = policyStore.Create(ctx, &store.StoredPolicy{
             Name:        seed.Name,
@@ -2060,22 +2139,36 @@ func Bootstrap(ctx context.Context, policyStore store.PolicyStore, compiler *Pol
             DSLText:     seed.DSLText,
             CompiledAST: compiledJSON,
             Enabled:     true,
-            SeedVersion: &seedVersion,
+            SeedVersion: &seed.SeedVersion,
             CreatedBy:   "system",
         })
         if err != nil {
             return oops.With("seed", seed.Name).Wrap(err)
         }
+
+        logger.Info("created seed policy", "name", seed.Name, "version", seed.SeedVersion)
     }
+
     return nil
 }
 ```
+
+**Implementation Notes:**
+
+- `SeedPolicies()` must return policies with `SeedVersion` field (default 1)
+- `store.PolicyStore.GetByName(ctx, name)` retrieves policy by name, returns `IsNotFound` error if absent
+- `access.WithSystemSubject(ctx)` marks context as system-level operation
+- `PolicyStore.Create/Update` checks `access.IsSystemContext(ctx)` and bypasses `Evaluate()` when true
+- Upgrade logic compares shipped `seed.SeedVersion` against stored `existing.SeedVersion`
+- `--skip-seed-migrations` server flag sets `opts.SkipSeedMigrations=true`
+- Legacy policies without `SeedVersion` (nil) will not be upgraded; future enhancement may treat nil as version 0
+- `--force-seed-version=N` flag enables rollback (future enhancement, see spec lines 3066-3074)
 
 **Step 3: Run tests, commit**
 
 ```bash
 git add internal/access/policy/bootstrap.go internal/access/policy/bootstrap_test.go
-git commit -m "feat(access): add seed policy bootstrap sequence"
+git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 ```
 
 ---
