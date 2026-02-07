@@ -2103,6 +2103,7 @@ import (
 
 // AuditConfig defines audit log retention and purge settings.
 type AuditConfig struct {
+    Mode          AuditMode     // Default: AuditDenialsOnly
     RetainDenials time.Duration // Default: 90 days
     RetainAllows  time.Duration // Default: 7 days
     PurgeInterval time.Duration // Default: 24 hours
@@ -2111,6 +2112,7 @@ type AuditConfig struct {
 // DefaultAuditConfig returns sensible defaults.
 func DefaultAuditConfig() AuditConfig {
     return AuditConfig{
+        Mode:          AuditDenialsOnly,
         RetainDenials: 90 * 24 * time.Hour,
         RetainAllows:  7 * 24 * time.Hour,
         PurgeInterval: 24 * time.Hour,
@@ -3428,3 +3430,13 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] `policy test` command matches actual `Evaluate()` results
 - [ ] Metrics exported correctly on `/metrics` endpoint
 - [ ] Code coverage >80% per package
+
+## Deferred Features
+
+The following features are intentionally deferred from this implementation plan. They are noted here for discoverability.
+
+| Feature                           | Spec Reference           | Status   | Notes                                                    |
+| --------------------------------- | ------------------------ | -------- | -------------------------------------------------------- |
+| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
+| `--force-seed-version=N` flag     | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative |
+| Web-based policy editor           | Spec line 3448           | Deferred | Future web UI for policy management                      |
