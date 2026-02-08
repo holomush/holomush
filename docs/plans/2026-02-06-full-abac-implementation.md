@@ -116,7 +116,7 @@ graph TD
         T16a --> T16b
         T15 --> T17
         T16b --> T16c
-        T16c --> T17
+        T17 --> T16c
         T17 --> T18
         T17 --> T19
         T19 --> T19b
@@ -195,7 +195,7 @@ graph TD
 **Parallel Work Opportunities:**
 - Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
-- Task 16c (visibility checks) depends on Task 16b but can proceed in parallel with Task 16a
+- Task 16c (visibility checks) depends on Task 16b and Task 17, but can proceed in parallel with Task 16a
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
 - Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
@@ -2051,6 +2051,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 **Dependencies:**
 
 - Task 16b (PropertyProvider) — provides property metadata for visibility checks
+- Task 17 (AccessPolicyEngine) — engine.go must exist before adding Layer 1 visibility checks to it
 
 **Files:**
 
