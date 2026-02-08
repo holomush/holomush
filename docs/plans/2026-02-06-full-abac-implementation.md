@@ -1493,7 +1493,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (16 seed policies plus catch-all forbid test case):**
+**Valid policies (16 seed policies: 15 permit, 1 forbid):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };
@@ -1510,7 +1510,8 @@ permit(principal is character, action, resource) when { principal.role == "admin
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "public" && principal.location == resource.parent_location };
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "private" && resource.owner == principal.id };
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };
-forbid(principal, action, resource);
+permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };
+forbid(principal is character, action in ["read"], resource is property) when { resource has excluded_from && principal.id in resource.excluded_from };
 ```
 
 **Operator coverage:**
@@ -2341,7 +2342,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ---
 
-### Task 17: Build AccessPolicyEngine
+### Task 18: Policy cache with LISTEN/NOTIFY invalidation
 
 **Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
@@ -2887,7 +2888,7 @@ git commit -m "refactor(commands): remove @ prefix from command names"
 
 **Acceptance Criteria:**
 
-- [ ] All 16 seed policies defined as `SeedPolicy` structs (14 permit, 2 with visibility)
+- [ ] All 16 seed policies defined as `SeedPolicy` structs (15 permit, 1 forbid)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
@@ -2923,7 +2924,7 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 16 seed policies (14 permit, 2 visibility).
+// SeedPolicies returns the complete set of 16 seed policies (15 permit, 1 forbid).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
@@ -3027,7 +3028,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 16 seed policies listed above: 14 permit policies for standard access patterns (lines 2935-2999), plus 2 visibility policies (1 permit for visible_to, 1 forbid for excluded_from per lines 1078-1090). Default deny behavior is provided by EffectDefaultDeny.)
+(Note: 16 seed policies listed above: 15 permit policies for standard access patterns, plus 1 forbid policy for excluded_from visibility (per lines 1078-1090). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 
@@ -3656,6 +3657,10 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 - [ ] Audit logs are immutable: old entries keep `char:` prefix, new entries use `character:` prefix
 - [ ] Tests verify both prefix variants are accepted by EventStore during migration period
 - [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
+- [ ] **Per-package error-path tests:** Each migrated package MUST have tests verifying:
+  1. Correct `AccessRequest` construction (subject, action, resource populated)
+  2. `Decision.Allowed=false` handling (deny path returns error/fails operation)
+  3. `Evaluate()` error handling (error != nil → fail-closed, operation denied, error logged)
 - [ ] Tests pass incrementally after each package migration
 - [ ] Committed per package (dispatcher, world, plugin)
 - [ ] `task test` passes after all migrations
@@ -3757,6 +3762,86 @@ if !decision.Allowed {
 ```
 
 Ensure all subject strings use `character:` prefix (not legacy `char:`).
+
+**Error-path test template:**
+
+Every migrated package MUST include tests verifying fail-closed behavior:
+
+```go
+func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
+    tests := []struct {
+        name       string
+        setupMock  func(*mocks.MockAccessPolicyEngine)
+        expectDeny bool
+        expectLog  bool
+    }{
+        {
+            name: "deny decision prevents operation",
+            setupMock: func(m *mocks.MockAccessPolicyEngine) {
+                m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
+                    policy.Decision{Allowed: false, Effect: policy.EffectForbid},
+                    nil,
+                )
+            },
+            expectDeny: true,
+            expectLog:  false,
+        },
+        {
+            name: "evaluation error fails closed",
+            setupMock: func(m *mocks.MockAccessPolicyEngine) {
+                m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
+                    policy.Decision{},
+                    errors.New("attribute resolution failed"),
+                )
+            },
+            expectDeny: true,
+            expectLog:  true, // Error MUST be logged
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            mockEngine := mocks.NewMockAccessPolicyEngine(t)
+            tt.setupMock(mockEngine)
+
+            // Call the operation under test
+            err := operationUnderTest(ctx, mockEngine)
+
+            if tt.expectDeny {
+                assert.Error(t, err, "operation should be denied")
+            }
+            if tt.expectLog {
+                // Verify error was logged (implementation-specific)
+            }
+        })
+    }
+}
+```
+
+**AccessRequest construction verification:**
+
+Each test MUST verify correct request construction:
+
+```go
+func TestAccessRequest_Construction(t *testing.T) {
+    mockEngine := mocks.NewMockAccessPolicyEngine(t)
+
+    // Capture the AccessRequest passed to Evaluate()
+    var capturedRequest policy.AccessRequest
+    mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req policy.AccessRequest) bool {
+        capturedRequest = req
+        return true
+    })).Return(policy.Decision{Allowed: true}, nil)
+
+    // Perform operation
+    _ = operationUnderTest(ctx, mockEngine)
+
+    // Verify request fields
+    assert.Equal(t, "character:01ABC", capturedRequest.Subject)
+    assert.Equal(t, "read", capturedRequest.Action)
+    assert.Equal(t, "location:01XYZ", capturedRequest.Resource)
+}
+```
 
 **Rollback Strategy:**
 
