@@ -134,6 +134,8 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Fair-share budget: `max(remainingBudget / remainingProviders, 5ms)`
 - [ ] Provider exceeding fair-share timeout → cancelled
 - [ ] Re-entrance detection → provider calling `Evaluate()` on same context → panic
+- [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
+- [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
 - [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per spec lines 1976-2005)
 - [ ] All tests pass via `task test`
 
@@ -150,6 +152,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - Core-to-plugin key collision → reject plugin registration at startup
 - Plugin-to-plugin key collision → warn, last registered wins
 - Provider error → skip provider, continue, record `ProviderError`
+- Panic recovery → plugin provider panics, recovered with error logging, evaluation continues
 - Per-request cache → second `Resolve()` with same entity reuses cached result
 - Timeout enforcement → provider exceeding fair-share timeout is cancelled
 - Fair-share budget: 4 providers with 100ms total → ~25ms each initially
@@ -174,6 +177,7 @@ type ProviderError struct {
     Namespace  string
     Error      string
     DurationUS int
+    Panicked   bool // true if provider panicked (recovered)
 }
 
 // AttributeResolver orchestrates attribute providers with caching and timeouts.
@@ -182,12 +186,31 @@ type AttributeResolver struct {
     envProviders []EnvironmentProvider
     schema       *types.AttributeSchema
     totalBudget  time.Duration // default 100ms
+    logger       Logger         // for panic error logging
 }
 
-func NewAttributeResolver(budget time.Duration) *AttributeResolver
+func NewAttributeResolver(budget time.Duration, logger Logger) *AttributeResolver
 func (r *AttributeResolver) RegisterProvider(p AttributeProvider) error
 func (r *AttributeResolver) RegisterEnvironmentProvider(p EnvironmentProvider)
 func (r *AttributeResolver) Resolve(ctx context.Context, req types.AccessRequest) (*types.AttributeBags, []ProviderError, error)
+
+// Example panic recovery in Resolve():
+// for each provider:
+//   func(provider AttributeProvider) {
+//       defer func() {
+//           if r := recover(); r != nil {
+//               r.logger.Error("provider panicked",
+//                   slog.String("namespace", provider.Namespace()),
+//                   slog.Any("panic", r))
+//               providerErrors = append(providerErrors, ProviderError{
+//                   Namespace: provider.Namespace(),
+//                   Error:     fmt.Sprintf("panic: %v", r),
+//                   Panicked:  true,
+//               })
+//           }
+//       }()
+//       // Call provider methods (ResolveSubject, ResolveResource, etc.)
+//   }(provider)
 ```
 
 Key: fair-share timeout is `max(remainingBudget / remainingProviders, 5ms)`.
