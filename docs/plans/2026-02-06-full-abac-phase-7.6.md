@@ -59,6 +59,17 @@
 
 Migrate per-package, with each commit including both DI wiring changes and all call site updates for that package. This ensures every commit compiles and passes `task build`.
 
+**Compound resource decomposition:**
+
+The codebase uses compound resource strings like `fmt.Sprintf("location:%s:characters", locationID.String())` at `internal/world/service.go:470`. These compound formats break the engine's prefix parser, which splits on the first `:` producing `type=location`, `id=01ABC:characters` — which is incorrect. During migration, decompose compound resources into separate action and resource fields:
+
+- **OLD:** `resource = "location:<id>:characters"`
+- **NEW:** `resource = "location:<id>"`, `action = "list_characters"`
+
+Rationale: The ABAC model separates concerns — the resource identifies *what* is being accessed, the action identifies *how*. "List characters in a location" is naturally `action=list_characters, resource=location:<id>`. This decomposition avoids parser complexity and aligns with the ABAC model.
+
+See ADR #76 (Compound Resource Decomposition During Migration) for full decision rationale.
+
 **Call site counts verified (as of 2026-02-07):**
 
 - Production: 28 call sites (3 in command, 24 in world, 1 in plugin)
@@ -80,6 +91,7 @@ Migrate per-package, with each commit including both DI wiring changes and all c
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for world package dependencies
 2. Update 24 production call sites in `internal/world/service.go`
+   - **NOTE:** `service.go:470` uses compound resource format `location:<id>:characters`. Decompose to `resource=location:<id>` with `action=list_characters` per ADR #76
 3. Update tests to mock `AccessPolicyEngine`
 4. Run `task test` — MUST PASS
 5. Run `task build` — MUST PASS

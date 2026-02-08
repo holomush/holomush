@@ -327,6 +327,12 @@ git add internal/access/policy/bootstrap.go internal/access/policy/bootstrap_tes
 git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 ```
 
+**Spec Deviations:**
+
+| What                              | Deviation                                                                                                                                     | Rationale                                                                                                                                                                 |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UpdateSeed()` signature          | `UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` — 5 params vs spec's 3-param `UpdateSeed(ctx, name, dsl)` signature                      | `oldDSL` enables CAS (compare-and-swap) semantics for safe concurrent updates; `changeNote` provides audit trail context for migration-delivered fixes                    |
+
 ---
 
 ### Task 23b: CLI flag --validate-seeds

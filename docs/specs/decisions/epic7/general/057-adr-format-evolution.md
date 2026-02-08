@@ -5,21 +5,28 @@
 
 > [Back to Decision Index](../README.md)
 
-**Review finding:** New ADRs (0009-0016) use a different section structure than
-existing ADRs (0001-0008). Old format: Context > Options Considered > Decision
-\> Consequences > References. New format: Context > Decision > Rationale >
-Consequences > References (with Options embedded in Context).
+**Review finding:** Epic 7 design decisions use a streamlined format compared to
+traditional ADR structure.
 
-**Decision:** This is intentional evolution. The new format is internally
-consistent across all 8 new ADRs and makes the Rationale more prominent.
-Document the new format in `docs/adr/README.md`. Do not retroactively change
-old ADRs. Additionally, move ADR 0010's unique "Testing Requirements" section
-into the Consequences section or the main spec's testing section to maintain
-ADR structural consistency.
+**Decision:** Epic 7 ADRs use a lightweight "Question > Options > Decision >
+Rationale" format appropriate for design-phase decisions. This format is
+documented in `docs/specs/decisions/epic7/README.md`. Traditional ADRs may use
+more detailed formats with explicit Consequences sections when needed.
 
-**Rationale:** ADR formats naturally evolve as teams learn what information is
-most useful. The new format emphasizes Rationale (why) over Options (what
-else), which is more valuable for future readers. Documenting the evolution
-prevents confusion without requiring retroactive changes.
+**Rationale:** The ADR numbering follows a 3-digit convention (001-083) for Epic
+7 design decisions, stored in `docs/specs/decisions/epic7/` with subdirectories
+per phase. Most Epic 7 ADRs use a concise format optimized for design decisions
+made during architecture exploration. The format emphasizes:
 
-**Cross-reference:** All ADRs in `docs/adr/`; bead `holomush-ly15`.
+- **Question:** What problem or choice needs resolution?
+- **Options Considered:** Table format comparing alternatives
+- **Decision:** The chosen approach
+- **Rationale:** Why this approach was selected
+
+This format differs from traditional ADRs with explicit Consequences sections
+because Epic 7 ADRs primarily document design-time decisions where consequences
+are often implicit in the rationale. Some ADRs (like #10) may include additional
+sections (Testing Requirements, Constraints) when needed for clarity.
+
+**Cross-reference:** ADR index at `docs/specs/decisions/epic7/README.md`; bead
+`holomush-ly15`.

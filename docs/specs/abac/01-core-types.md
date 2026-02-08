@@ -117,7 +117,7 @@ the <5ms p99 latency target for cached requests is achievable.
 // AccessRequest contains all information needed for an access decision.
 type AccessRequest struct {
     Subject  string // "character:01ABC", "plugin:echo-bot", "system"
-    Action   string // Common: "read", "write", "delete", "enter", "execute", "emit". Open set — plugins MAY introduce additional actions.
+    Action   string // Common: "read", "write", "delete", "enter", "execute", "emit", "list_characters". Open set — plugins MAY introduce additional actions.
     Resource string // "location:01XYZ", "command:dig", "property:01DEF"
 }
 ```

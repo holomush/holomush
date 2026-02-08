@@ -133,7 +133,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Per-request cache → second `Resolve()` with same entity reuses cached result
 - [ ] Fair-share budget: `max(remainingBudget / remainingProviders, 5ms)`
 - [ ] Provider exceeding fair-share timeout → cancelled
-- [ ] Re-entrance detection → provider calling `Evaluate()` on same context → panic
+- [ ] **Re-entrance guard:** Provider calling `Evaluate()` during attribute resolution → panic with descriptive error. Implementation: store `inResolution` flag in context at resolver entry, check flag before calling providers, panic if flag is true. Guards against deadlock (Engine → Resolver → Provider → Engine). See ADR #31 (Provider Re-Entrance Prohibition)
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
 - [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), was spec lines 1976-2006)
@@ -214,6 +214,17 @@ func (r *AttributeResolver) Resolve(ctx context.Context, req types.AccessRequest
 ```
 
 Key: fair-share timeout is `max(remainingBudget / remainingProviders, 5ms)`.
+
+**Re-entrance guard implementation:**
+
+1. Define context key for resolution flag: `type resolutionKey struct{}`
+2. At resolver entry (`Resolve()` method start), check context for `resolutionKey`
+3. If flag is true, panic with descriptive error: `"provider re-entrance detected: Evaluate() called during attribute resolution (deadlock prevention)"`
+4. Set flag in context before calling providers: `ctx = context.WithValue(ctx, resolutionKey{}, true)`
+5. Pass flagged context to all provider calls (`ResolveSubject`, `ResolveResource`, `Resolve`)
+6. Providers attempting to call `Evaluate()` with flagged context will trigger panic in step 2 of their own Evaluate() call (when resolver is entered again)
+
+See ADR #31 (Provider Re-Entrance Prohibition) for rationale.
 
 ```go
 // internal/access/policy/attribute/cache.go

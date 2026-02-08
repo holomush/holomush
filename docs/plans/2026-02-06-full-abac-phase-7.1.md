@@ -1179,8 +1179,9 @@ type PolicyStore interface {
 
 // ListOptions controls filtering for policy listing.
 type ListOptions struct {
-    Source  string // filter by source ("seed", "lock", "admin", "plugin", or "" for all)
-    Enabled *bool  // filter by enabled state (nil for all)
+    Source  string              // filter by source ("seed", "lock", "admin", "plugin", or "" for all)
+    Enabled *bool               // filter by enabled state (nil for all)
+    Effect  *types.PolicyEffect // filter by effect ("permit", "forbid", or nil for all)
 }
 ```
 

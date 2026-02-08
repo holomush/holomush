@@ -223,7 +223,9 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 
 - [ ] `policy create <name> <dsl>` → validates DSL, stores policy, triggers NOTIFY
 - [ ] `policy create` MUST reject policy names starting with reserved prefixes `seed:` and `lock:` → error message explaining reserved prefix restriction
-- [ ] `policy list` → shows all policies (filterable by `--source`, `--enabled`/`--disabled`)
+- [ ] `policy list` → shows all policies (filterable by `--source`, `--enabled`/`--disabled`, `--effect=permit|forbid`)
+- [ ] `policy list --effect=permit` → filters to permit policies only
+- [ ] `policy list --effect=forbid` → filters to forbid policies only
 - [ ] `policy show <name>` → displays full policy details
 - [ ] `policy edit <name> <new_dsl>` → validates new DSL, increments version
 - [ ] `policy delete <name>` → removes policy; seed policies cannot be deleted → error
@@ -348,6 +350,12 @@ Implement the `policy test` command with all variants (verbose, JSON, suite mode
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
 git commit -m "feat(command): add policy test command with verbose/JSON/suite modes"
 ```
+
+**Spec Deviations:**
+
+| What                          | Deviation                                                               | Rationale                                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `policy test --suite` support | Elevated from SHOULD to MUST — acceptance criteria requires this feature | Suite testing is essential for correctness verification of the test harness itself; enables batch testing from YAML scenario files    |
 
 ---
 
