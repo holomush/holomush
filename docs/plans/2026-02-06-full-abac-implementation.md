@@ -707,12 +707,12 @@ type AttributeSchema struct {
 }
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 4: Run tests to verify they pass**
 
 Run: `task test`
 Expected: PASS
 
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
 git add internal/access/policy/
