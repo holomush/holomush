@@ -617,7 +617,7 @@ package world
 type EntityProperty struct {
     ID           ulid.ULID
     ParentType   string // "character", "location", "object"
-    ParentID     string
+    ParentID     ulid.ULID
     Name         string
     Value        *string
     Owner        *string
@@ -2144,6 +2144,8 @@ git add internal/access/policy/attribute/stream.go internal/access/policy/attrib
 git commit -m "feat(access): add simple providers (environment, command, stream)"
 ```
 
+> **Known Limitation:** Sequential provider execution allows one slow provider to starve others. This is acceptable for MVP scale (~200 users). Future optimization: parallel provider execution if profiling reveals bottlenecks.
+
 ---
 
 ### Task 16b: PropertyProvider with recursive CTE
@@ -2432,7 +2434,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
-- [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
+- [ ] **WAL fallback:** If sync write fails, denial entry written to WAL path from `internal/xdg` package (append-only, O_SYNC)
 - [ ] **ReplayWAL():** Method reads WAL entries, batch-inserts to PostgreSQL, truncates file on success
 - [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
@@ -2458,7 +2460,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously, `Evaluate()` blocks until write completes
 - **Async write for regular allows:** `allow` events (non-system-bypass) submitted via buffered channel, doesn't block `Evaluate()`
 - Channel full: entry dropped, `abac_audit_channel_full_total` metric incremented
-- **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl`
+- **WAL fallback:** If sync write fails, denial entry written to WAL path from `internal/xdg` package
 - **ReplayWAL():** Reads WAL file, batch-inserts to PostgreSQL, truncates on success
 - Catastrophic failure: DB + WAL fail → stderr log, `abac_audit_failures_total{reason="wal_failed"}` incremented, entry dropped
 - Verify entry contains: subject, action, resource, effect, policy_id, policy_name, attributes snapshot, duration_us
@@ -2841,6 +2843,10 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 - [ ] `task lint` passes
 
 > **Verified (2026-02-07):** @-prefixed command names confirmed in `permissions.go` (4), `permissions_test.go` (1), `static_test.go` (4). Total: 9 occurrences. Command validation rejects `@` as leading character — the `@` exists only in permission string encoding, not in actual command names.
+
+> **Note:** 4 of 9 @-prefixed name occurrences are in `static_test.go` which is deleted by Task 29. Only 5 occurrences in `permissions.go` and `permissions_test.go` need modification in this task.
+
+> **Note:** This task could be submitted as an independent pre-ABAC PR. It only modifies `internal/access/permissions.go` and has no ABAC dependencies.
 
 **Files:**
 
@@ -3939,6 +3945,14 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19)
 - [ ] All tests pass via `task test`
 
+**Degraded Mode Triggers:**
+
+| Trigger                          | Cause                                                   | Recovery                                                     |
+| -------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| Compile-time corruption          | `compiled_ast` unmarshal fails on policy load           | Disable corrupted policy, run `policy clear-degraded-mode`   |
+| Runtime evaluation error         | AST structural invariants violated during evaluation    | Disable corrupted policy, run `policy clear-degraded-mode`   |
+| Transient database error         | PostgreSQL unavailable during policy load               | Fix DB connectivity, restart server or reload policies       |
+
 **Files:**
 
 - Modify: `internal/access/policy/engine.go` (add degraded mode state and check)
@@ -4104,3 +4118,5 @@ The following features are intentionally deferred from this implementation plan.
 | `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative         |
 | Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                 |
 | `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
+| `policy diff <id1> <id2>`           | Spec lines 3429-3447     | Deferred | Compare two policy versions; shows DSL text diff                    |
+| `policy export [--format=json]`     | Spec lines 3429-3447     | Deferred | Export all policies to stdout for backup/migration                  |
