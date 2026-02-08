@@ -110,6 +110,7 @@ graph TD
         T19b[Task 19b: Audit retention]
         T20[Task 20: Prometheus metrics]
         T21[Task 21: Performance benchmarks]
+        T21a[Task 21a: Remove @-prefix from permissions]
         T13 --> T14
         T14 --> T15
         T15 --> T16a
@@ -166,6 +167,7 @@ graph TD
     T12 --> T17
     T4 --> T16b
     T12 --> T22
+    T21a --> T22
     T18 --> T23
     T17 --> T24
     T23 --> T26a
