@@ -2128,8 +2128,10 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
 - [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
   - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
-  - [ ] Engine implementation MUST call audit logger before returning from step 1
-  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry
+  - [ ] System bypass audit writes MUST use sync write path (same as denials) per ADR 66 — guarantees audit trail for privileged operations
+  - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
+  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry (via sync write)
+  - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
@@ -2313,11 +2315,13 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `off`: only system bypasses logged
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
-- [ ] **Sync write for denials:** `deny` and `default_deny` events written synchronously to PostgreSQL before `Evaluate()` returns
+- [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
 
-> **Note:** Elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
+> **Note:** Denials elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 
-- [ ] **Async write for allows:** `allow` and system bypass events written asynchronously via buffered channel
+> **Note:** System bypasses use sync path per ADR 66. Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
+
+- [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
 - [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
 - [ ] **ReplayWAL():** Method reads WAL entries, batch-inserts to PostgreSQL, truncates file on success
@@ -2342,8 +2346,8 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - Mode `off`: only system bypasses logged
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
-- **Sync write for denials:** `deny` and `default_deny` events written synchronously, `Evaluate()` blocks until write completes
-- **Async write for allows:** `allow` and system bypass events submitted via buffered channel, doesn't block `Evaluate()`
+- **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously, `Evaluate()` blocks until write completes
+- **Async write for regular allows:** `allow` events (non-system-bypass) submitted via buffered channel, doesn't block `Evaluate()`
 - Channel full: entry dropped, `abac_audit_channel_full_total` metric incremented
 - **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl`
 - **ReplayWAL():** Reads WAL file, batch-inserts to PostgreSQL, truncates on success
@@ -2365,13 +2369,13 @@ const (
     AuditAll         AuditMode = "all"            // everything
 )
 
-// Logger writes audit entries with sync (denials) or async (allows) paths.
-// Denials are written synchronously to prevent evidence erasure.
+// Logger writes audit entries with sync (denials, system bypasses) or async (regular allows) paths.
+// Denials and system bypasses are written synchronously to prevent evidence erasure.
 type Logger struct {
     mode      AuditMode
-    entryCh   chan Entry         // async channel for allow/system bypass
+    entryCh   chan Entry         // async channel for regular allow events only
     writer    Writer             // PostgreSQL writer
-    walPath   string             // Write-Ahead Log path for denial fallback
+    walPath   string             // Write-Ahead Log path for sync write fallback
     walFile   *os.File           // WAL file handle (opened with O_APPEND | O_SYNC)
 }
 
@@ -2403,10 +2407,19 @@ type Entry struct {
 }
 ```
 
-`audit/postgres.go` implements both async batch-inserts from the channel and synchronous single writes for denials. The logger distinguishes between effects:
+`audit/postgres.go` implements both async batch-inserts from the channel and synchronous single writes for security-significant decisions. The logger distinguishes between effects:
 
-- **`deny` and `default_deny`:** Call `writer.WriteSync()` synchronously before returning from `Log()`. If the write fails, append the entry to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (opened with `O_APPEND | O_SYNC`). If both DB and WAL fail, log to stderr, increment `abac_audit_failures_total{reason="wal_failed"}`, and drop the entry.
-- **`allow` and system bypass:** Send to `entryCh` buffered channel for async batch writes. If channel is full, drop entry and increment `abac_audit_channel_full_total`.
+- **`deny`, `default_deny`, and `system_bypass`:** Call `writer.WriteSync()` synchronously before returning from `Log()`. If the write fails, append the entry to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (opened with `O_APPEND | O_SYNC`). If both DB and WAL fail, log to stderr, increment `abac_audit_failures_total{reason="wal_failed"}`, and drop the entry.
+- **`allow` (regular, non-system-bypass):** Send to `entryCh` buffered channel for async batch writes. If channel is full, drop entry and increment `abac_audit_channel_full_total`.
+
+**Audit Path Summary:**
+
+| Effect           | Write Path | Rationale                                        |
+|------------------|------------|--------------------------------------------------|
+| `deny`           | Sync       | Security forensics — evidence of denials         |
+| `default_deny`   | Sync       | Security forensics — evidence of denials         |
+| `system_bypass`  | Sync       | Privileged operations — guaranteed audit trail   |
+| `allow` (regular)| Async      | Performance — high-volume routine operations     |
 
 `ReplayWAL()` reads JSON-encoded entries from the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success. The server calls this on startup and MAY call it periodically (e.g., every 5 minutes) during recovery.
 
