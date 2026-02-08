@@ -531,10 +531,13 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 - [ ] `Snapshot()` returns read-only copy safe for concurrent use
 - [ ] `Reload()` fetches all enabled policies from store, recompiles, swaps snapshot atomically
+- [ ] `Reload()` uses write lock only for swapping compiled policies; `Evaluate()` uses read lock during reload (no blocking)
+- [ ] `Start()` method spawns LISTEN/NOTIFY goroutine; context cancellation stops goroutine
 - [ ] `Listen()` subscribes to PostgreSQL `NOTIFY` on `policy_changed` channel using dedicated (non-pooled) connection
 - [ ] NOTIFY event → cache reloads before next evaluation
 - [ ] Concurrent reads during reload → stale reads tolerable (snapshot semantics)
-- [ ] Connection drop + reconnect → full reload with exponential backoff
+- [ ] Connection drop + reconnect → full reload with exponential backoff (initial 100ms, max 30s, 2x backoff)
+- [ ] Reconnect backoff resets after successful NOTIFY receipt
 - [ ] Health check for subscription liveness (verify connection is alive and listening)
 - [ ] Staleness detection: if no reload occurs within configurable threshold, system detects stale cache state
 - [ ] Reload latency <50ms (benchmark test)
@@ -554,7 +557,9 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 - Load policies from store → cache snapshot available
 - NOTIFY event on `policy_changed` → cache reloads before next evaluation
 - Concurrent reads during reload → use snapshot semantics (stale reads tolerable)
-- Connection drop + reconnect → full reload
+- Connection drop → exponential backoff reconnect (100ms, 200ms, 400ms, ..., max 30s)
+- Successful NOTIFY receipt → backoff timer resets
+- Context cancellation → goroutine exits cleanly
 - Cache staleness exceeds threshold → `Evaluate()` returns `EffectDefaultDeny` for all requests (fail-closed)
 - Reload latency benchmark: <50ms target
 
@@ -564,7 +569,11 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 // internal/access/policy/cache.go
 package policy
 
-import "sync"
+import (
+    "context"
+    "sync"
+    "time"
+)
 
 // PolicyCache holds compiled policies in memory with LISTEN/NOTIFY refresh.
 type PolicyCache struct {
@@ -572,6 +581,7 @@ type PolicyCache struct {
     policies []*CachedPolicy
     store    store.PolicyStore
     compiler *PolicyCompiler
+    lastUpdate time.Time
 }
 
 type CachedPolicy struct {
@@ -580,15 +590,92 @@ type CachedPolicy struct {
 }
 
 // Snapshot returns a read-only copy of current policies (safe for concurrent use).
-func (c *PolicyCache) Snapshot() []*CachedPolicy
+// Uses read lock to allow concurrent reads during reload.
+func (c *PolicyCache) Snapshot() []*CachedPolicy {
+    c.mu.RLock()
+    defer c.mu.RUnlock()
+    // Return copy
+}
 
 // Reload fetches all enabled policies from store, recompiles, and swaps snapshot.
-func (c *PolicyCache) Reload(ctx context.Context) error
+// Uses write lock only for final swap; compilation happens without lock.
+func (c *PolicyCache) Reload(ctx context.Context) error {
+    // Fetch policies (no lock held)
+    // Compile policies (no lock held)
+    // Swap snapshot (write lock)
+    c.mu.Lock()
+    c.policies = compiled
+    c.lastUpdate = time.Now()
+    c.mu.Unlock()
+}
 
-// Listen subscribes to PostgreSQL NOTIFY on 'policy_changed' channel.
-// On notification, triggers Reload(). On reconnect after drop, triggers full Reload().
-func (c *PolicyCache) Listen(ctx context.Context, pool *pgxpool.Pool) error
+// Start spawns LISTEN/NOTIFY goroutine. Context cancellation stops goroutine.
+func (c *PolicyCache) Start(ctx context.Context, pool *pgxpool.Pool) {
+    go c.listenForNotifications(ctx, pool)
+}
+
+// listenForNotifications subscribes to PostgreSQL NOTIFY on 'policy_changed' channel.
+// Reconnects with exponential backoff on connection loss (100ms initial, 30s max, 2x backoff).
+// Exits cleanly on context cancellation.
+func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.Pool) {
+    backoff := 100 * time.Millisecond
+    const maxBackoff = 30 * time.Second
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        default:
+        }
+
+        conn, err := pool.Acquire(ctx)
+        if err != nil {
+            time.Sleep(backoff)
+            backoff = min(backoff*2, maxBackoff)
+            continue
+        }
+
+        _, err = conn.Exec(ctx, "LISTEN policy_changed")
+        if err != nil {
+            conn.Release()
+            time.Sleep(backoff)
+            backoff = min(backoff*2, maxBackoff)
+            continue
+        }
+
+        // Wait for NOTIFY
+        for {
+            notification, err := conn.Conn().WaitForNotification(ctx)
+            if err != nil {
+                conn.Release()
+                c.Reload(context.Background()) // Full reload on reconnect
+                time.Sleep(backoff)
+                backoff = min(backoff*2, maxBackoff)
+                break
+            }
+
+            // Reset backoff on successful receipt
+            backoff = 100 * time.Millisecond
+
+            // Trigger reload
+            c.Reload(context.Background())
+        }
+    }
+}
 ```
+
+**Goroutine Lifecycle:**
+
+1. **Start:** `PolicyCache.Start(ctx, pool)` spawns the LISTEN/NOTIFY goroutine
+2. **Reconnect:** Exponential backoff on connection loss (initial 100ms, max 30s, 2x backoff)
+3. **Reset:** Backoff timer resets to 100ms after successful NOTIFY receipt
+4. **Shutdown:** Context cancellation causes goroutine to exit cleanly
+
+**Concurrency Pattern:**
+
+- **Read lock:** `Evaluate()` calls acquire read lock during policy evaluation (non-blocking during reload)
+- **Write lock:** `Reload()` acquires write lock only for swapping compiled policies (~50μs)
+- **No lock during compilation:** Fetch from DB and compile policies without holding lock (~50ms)
 
 **Step 3: Run tests, commit**
 
