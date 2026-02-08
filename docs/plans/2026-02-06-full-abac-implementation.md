@@ -547,6 +547,8 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 > **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService to ensure properties are cleaned up when parent entities are deleted.
 
+> **Implementation Note:** `WorldService.DeleteCharacter()`, `DeleteObject()`, and `DeleteLocation()` do not currently exist in `internal/world/service.go`. They MUST be created as part of this task's scope before property cascade deletion can be wired in.
+
 > **Scope:** This task modifies WorldService deletion methods to cascade delete properties, adds an orphan cleanup goroutine, and implements startup integrity checks.
 
 **Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
