@@ -83,6 +83,8 @@ rationale for the chosen approach.
 69. [Direct `types` Package Imports (No Re-Export Aliases)](#69-direct-types-package-imports-no-re-export-aliases)
 70. [pg_notify Payload Uses policyID](#70-pg_notify-payload-uses-policyid)
 71. [Goroutine Re-Entrance Detection Is Convention-Only](#71-goroutine-re-entrance-detection-is-convention-only)
+72. [Shadow Mode Recommendation Dismissed](#72-shadow-mode-recommendation-dismissed)
+73. [Split Performance Targets: Cached vs Cold](#73-split-performance-targets-cached-vs-cold)
 
 ---
 
@@ -1819,3 +1821,69 @@ MUST NOT prohibition in the provider contract is sufficient.
 **Cross-reference:** Decision #31 (Provider Re-Entrance Prohibition); decision
 #58 (Provider Re-Entrance Goroutine Prohibition); main spec lines 559–576;
 bead `holomush-5k1.237`.
+
+---
+
+## 72. Shadow Mode Recommendation Dismissed
+
+**Review finding (PR #69, A1):** Code review recommended splitting Task 28
+into Phase A (shadow mode: run both engines, log mismatches) and Phase B
+(switch to new engine after validation). The concern was that all 28 call
+sites switching simultaneously risks breaking the entire authorization system
+if any seed policy is wrong.
+
+**Decision:** Dismiss. The existing decisions already address this concern
+comprehensively:
+
+- Decision #36 (Direct Replacement, No Adapter): Rejected adapter pattern
+  because HoloMUSH has no production releases or deployed users.
+- Decision #37 (No Shadow Mode): Rejected shadow mode because seed policies
+  intentionally fix known gaps in the static system, making 100% agreement
+  impossible without exclusion filtering.
+- Decision #65 (Git Revert as Rollback): Documents `git revert` of Task 28's
+  commit as the rollback strategy, with comprehensive test coverage providing
+  the safety net.
+
+**Rationale:** Shadow mode adds significant complexity (dual evaluation paths,
+disagreement tracking, cutover criteria, exclusion filtering) for a system
+that has never been released. The combination of comprehensive table-driven
+tests (all 28 call sites) and atomic `git revert` provides adequate risk
+mitigation.
+
+**Cross-reference:** Decision #36; decision #37; decision #65; bead
+`holomush-5k1.252`.
+
+---
+
+## 73. Split Performance Targets: Cached vs Cold
+
+**Review finding (PR #69, A2):** Code review noted that the p99 <5ms target
+(decision #23) may be unrealistic for cold (cache-miss) requests. The
+PropertyProvider recursive CTE for 20-level container hierarchies plus
+sequential provider execution could consume 10–15ms on cache miss.
+
+**Decision:** Split the performance target into two tiers:
+
+| Metric                            | Target |
+| --------------------------------- | ------ |
+| `Evaluate()` p99 latency (cached) | <5ms   |
+| `Evaluate()` p99 latency (cold)   | <10ms  |
+| Attribute resolution              | <2ms   |
+| DSL condition evaluation          | <1ms   |
+| Cache reload                      | <50ms  |
+
+The cached target (<5ms) covers the majority of requests where the policy
+cache and attribute cache are warm. The cold target (<10ms) accounts for
+cache-miss scenarios requiring database roundtrips (recursive CTE for
+container hierarchy, policy store fetch).
+
+**Rationale:** A single <5ms target for all cases was aspirational but did
+not account for the inherent latency of PostgreSQL recursive CTEs on cache
+miss. The cold path involves: (1) policy cache miss → DB fetch, (2) attribute
+cache miss → recursive CTE for container resolution, (3) sequential provider
+execution. Splitting the target acknowledges this reality while keeping the
+warm-path target aggressive. The circuit breaker (originally Task 34) SHOULD
+be considered for Task 16b to protect against cold-path latency spikes.
+
+**Cross-reference:** Decision #23 (Performance Targets); decision #42
+(Sequential Provider Resolution); bead `holomush-5k1.253`.
