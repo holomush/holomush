@@ -416,14 +416,46 @@ intervention.
 
 ```go
 // Decision represents the outcome of a policy evaluation.
-// Invariant: Allowed is true if and only if Effect is EffectAllow or EffectSystemBypass.
+// Invariant: allowed is true if and only if Effect is EffectAllow or EffectSystemBypass.
+// The allowed field is unexported to prevent direct field mutation that would violate the invariant.
+// Use NewDecision() to construct Decision instances with enforced invariants.
+// Use IsAllowed() to access the authorization result.
 type Decision struct {
-    Allowed    bool
+    allowed    bool            // unexported to enforce invariant via constructor
     Effect     Effect          // Allow, Deny, DefaultDeny (no policy matched), or SystemBypass
     Reason     string          // Human-readable explanation
     PolicyID   string          // ID of the determining policy ("" if default deny)
     Policies   []PolicyMatch   // All policies that matched (for debugging)
     Attributes *AttributeBags  // Snapshot of all resolved attributes
+}
+
+// IsAllowed returns whether the request is authorized.
+// This is the only way to access the allowed field from outside the package.
+func (d Decision) IsAllowed() bool {
+    return d.allowed
+}
+
+// NewDecision constructs a Decision with the Allowed/Effect invariant enforced.
+// Allowed is set to true if and only if effect is EffectAllow or EffectSystemBypass.
+func NewDecision(effect Effect, reason string, policyID string) Decision {
+    allowed := effect == EffectAllow || effect == EffectSystemBypass
+    return Decision{
+        allowed:  allowed,
+        Effect:   effect,
+        Reason:   reason,
+        PolicyID: policyID,
+    }
+}
+
+// Validate checks the Decision invariant at the engine return boundary.
+// Returns an error if the Allowed/Effect invariant is violated.
+// The engine MUST call this before returning any Decision.
+func (d Decision) Validate() error {
+    expectedAllowed := d.Effect == EffectAllow || d.Effect == EffectSystemBypass
+    if d.allowed != expectedAllowed {
+        return fmt.Errorf("Decision invariant violated: allowed=%v but effect=%v", d.allowed, d.Effect)
+    }
+    return nil
 }
 
 // Effect represents the type of decision.

@@ -92,7 +92,6 @@ graph TD
         T3 --> T4a
         T4a --> T4b
         T4b --> T4c
-        T4a --> T7
         T5 --> T7
         T5 --> T6
     end
@@ -211,7 +210,7 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 0 (spike, yellow) → Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → (DSL chain: Task 12) + (Provider chain: Task 13 → Task 14 → Task 15) → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 0 (spike, yellow) → Task 3 → Task 4a → Task 4b → Task 4c → Task 16b → (DSL chain: Task 12) + (Provider chain: Task 13 → Task 14 → Task 15) → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Note:** Task 17 depends on BOTH Task 12 (DSL compiler) and Task 15 (core attribute providers). These chains can run in parallel after Task 7 completes, but both must finish before Task 17 can start.
 
@@ -832,9 +831,13 @@ git commit -m "feat(world): add property cascade deletion and orphan cleanup"
 
 - [ ] `Effect` enum has exactly 4 values: `DefaultDeny`, `Allow`, `Deny`, `SystemBypass`
 - [ ] `Effect.String()` returns spec-mandated strings: `default_deny`, `allow`, `deny`, `system_bypass`
+- [ ] `PolicyEffect` type defined with `PolicyEffectPermit`/`PolicyEffectForbid` constants
 - [ ] `NewDecision()` enforces Allowed invariant: `Allow` and `SystemBypass` → true, all others → false
+- [ ] `Decision.allowed` field is unexported to prevent invariant bypass (security: prevents `Decision{Allowed: true, Effect: EffectDeny}`)
+- [ ] `Decision.IsAllowed()` accessor method returns the authorization result
+- [ ] `Decision.Validate()` method checks invariant at engine return boundary
 - [ ] `AccessRequest` has `Subject`, `Action`, `Resource` string fields
-- [ ] `Decision` includes `Allowed`, `Effect`, `Reason`, `PolicyID`, `Policies`, `Attributes`
+- [ ] `Decision` includes `allowed` (unexported), `Effect`, `Reason`, `PolicyID`, `Policies`, `Attributes`
 - [ ] `AttributeBags` has `Subject`, `Resource`, `Action`, `Environment` maps
 - [ ] `AttributeSchema` type defined for use by compiler and resolver
 - [ ] `AttrType` enum defined: `String`, `Int`, `Float`, `Bool`, `StringList`
@@ -889,7 +892,7 @@ func TestDecision_Invariant(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             d := NewDecision(tt.effect, "", "")
-            assert.Equal(t, tt.allowed, d.Allowed)
+            assert.Equal(t, tt.allowed, d.IsAllowed())
         })
     }
 }
@@ -1355,7 +1358,7 @@ import (
     "context"
     "time"
 
-    "github.com/holomush/holomush/internal/access/policy"
+    "github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // StoredPolicy is the persisted form of a policy.
@@ -1363,7 +1366,7 @@ type StoredPolicy struct {
     ID          string
     Name        string
     Description string
-    Effect      PolicyEffect
+    Effect      types.PolicyEffect
     Source      string // "seed", "lock", "admin", "plugin"
     DSLText     string
     CompiledAST []byte // JSONB
@@ -1819,7 +1822,7 @@ type ValidationWarning struct {
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
 type CompiledPolicy struct {
     GrammarVersion int
-    Effect         PolicyEffect
+    Effect         types.PolicyEffect
     Target         CompiledTarget
     Conditions     *dsl.ConditionBlock
     GlobCache      map[string]glob.Glob
@@ -2278,6 +2281,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
   - [ ] No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
 - [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
+- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all (spec lines 1697-1703)
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -2400,6 +2404,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 - NOTIFY event on `policy_changed` → cache reloads before next evaluation
 - Concurrent reads during reload → use snapshot semantics (stale reads tolerable)
 - Connection drop + reconnect → full reload
+- Cache staleness exceeds threshold → `Evaluate()` returns `EffectDefaultDeny` for all requests (fail-closed)
 - Reload latency benchmark: <50ms target
 
 **Step 2: Implement**
@@ -2482,6 +2487,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 **Step 1: Write failing tests**
 
 - Mode `off`: only system bypasses logged
+  - [ ] Test: off mode + system_bypass → written
+  - [ ] Test: off mode + allow → dropped
+  - [ ] Test: off mode + deny → dropped
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
 - **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously, `Evaluate()` blocks until write completes
@@ -3965,7 +3973,7 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 - [ ] testcontainers for PostgreSQL (pattern from `test/integration/world/`)
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
-- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry detected
+- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected (spec lines 559-576, prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
@@ -4005,7 +4013,7 @@ var _ = Describe("Access Policy Engine", func() {
 
     Describe("Re-entrance guard", func() {
         It("panics when provider calls Evaluate() synchronously", func() { })
-        It("detects goroutine-based re-entry attempts", func() { })
+        It("does NOT detect goroutine-based re-entry (spec lines 559-576: prevented by convention, not runtime checks)", func() { })
     })
 
     Describe("Cache invalidation", func() {
@@ -4220,7 +4228,7 @@ Intentional deviations from the design spec, tracked here for discoverability an
 
 | Deviation                                                        | Spec Reference    | Task    | Rationale                                                                                                                                |
 | ---------------------------------------------------------------- | ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015   | Task 2  | Better partition compatibility                                                                                                           |
+| Primary key uses single-column PK instead of spec's composite PK | Spec line ~2015   | Task 2  | Better partition compatibility                                                                                                           |
 | Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877    | Task 20 | Prevents unbounded cardinality from admin-created policy names                                                                           |
 | Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238    | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
 | Lock naming uses `lock:<type>:<id>:<action>` format              | Spec line 2656    | Task 25b | Explicit resource type prefix improves discoverability and query filtering                                                               |
