@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
+# Phase 7.4: Seed Policies & Bootstrap
 
-## Phase 7.4: Seed Policies & Bootstrap
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
 
 ### Task 22: Define seed policy constants
 
@@ -372,9 +372,6 @@ Add flag parsing and validation logic in `cmd/holomush/main.go`. Use the DSL com
 git add cmd/holomush/main.go cmd/holomush/main_test.go
 git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 ```
-
----
-
 
 ---
 

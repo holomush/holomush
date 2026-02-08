@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)** | **[Next: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)**
+# Phase 7.3: Policy Engine & Attribute Providers
 
-## Phase 7.3: Policy Engine & Attribute Providers
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)** | **[Next: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)**
 
 ### Task 13: Attribute provider interface and schema registry
 
@@ -720,9 +720,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
-
+>
 > **Note:** Denials elevated from spec SHOULD (line 2293) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
-
+>
 > **Note:** System bypasses use sync path per ADR 66. Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
 
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
@@ -1111,7 +1111,9 @@ func BenchmarkProviderStarvation(b *testing.B)          // slow first provider ~
 Setup: 50 active policies (25 permit, 25 forbid), 3 operators per condition average, 10 attributes per entity.
 
 **BenchmarkProviderStarvation implementation:**
+
 Simulates a slow first provider consuming ~80ms of the 100ms total budget. Verifies that:
+
 - Subsequent providers receive contexts with `ctx.Err() == context.DeadlineExceeded`
 - Fair-share timeout calculation correctly allocates remaining budget
 - Provider starvation is observable and measurable
@@ -1145,11 +1147,11 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 - [ ] Command lock expressions reference bare command names (e.g., `dig`, `create`, not `@dig`, `@create`)
 - [ ] `task test` passes
 - [ ] `task lint` passes
-
+>
 > **Verified (2026-02-07):** @-prefixed command names confirmed in `permissions.go` (4), `permissions_test.go` (1), `static_test.go` (4). Total: 9 occurrences. Command validation rejects `@` as leading character — the `@` exists only in permission string encoding, not in actual command names.
-
+>
 > **Note:** 4 of 9 @-prefixed name occurrences are in `static_test.go` which is deleted by Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Only 5 occurrences in `permissions.go` and `permissions_test.go` need modification in this task.
-
+>
 > **Note:** This task could be submitted as an independent pre-ABAC PR. It only modifies `internal/access/permissions.go` and has no ABAC dependencies.
 
 **Files:**
@@ -1180,9 +1182,6 @@ task test
 git add internal/access/permissions.go internal/access/permissions_test.go internal/access/static_test.go
 git commit -m "refactor(commands): remove @ prefix from command names"
 ```
-
----
-
 
 ---
 

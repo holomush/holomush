@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)** | **[Next: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)**
+# Phase 7.2: DSL & Compiler
 
-## Phase 7.2: DSL & Compiler
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)** | **[Next: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)**
 
 ### Task 8: Define AST node types
 
@@ -348,23 +348,23 @@ func FuzzEvaluateConditions(f *testing.F) {
 
 ```go
 func randomAttributeBag() map[string]any {
-	bag := make(map[string]any)
-	for i := range rand.Intn(10) + 1 {
-		key := fmt.Sprintf("attr%d", i)
-		switch rand.Intn(5) {
-		case 0:
-			bag[key] = fmt.Sprintf("value%d", rand.Intn(100))
-		case 1:
-			bag[key] = rand.Intn(100)
-		case 2:
-			bag[key] = rand.Float64() * 100
-		case 3:
-			bag[key] = rand.Intn(2) == 1
-		case 4:
-			bag[key] = []string{fmt.Sprintf("item%d", rand.Intn(10))}
-		}
-	}
-	return bag
+    bag := make(map[string]any)
+    for i := range rand.Intn(10) + 1 {
+        key := fmt.Sprintf("attr%d", i)
+        switch rand.Intn(5) {
+        case 0:
+            bag[key] = fmt.Sprintf("value%d", rand.Intn(100))
+        case 1:
+            bag[key] = rand.Intn(100)
+        case 2:
+            bag[key] = rand.Float64() * 100
+        case 3:
+            bag[key] = rand.Intn(2) == 1
+        case 4:
+            bag[key] = []string{fmt.Sprintf("item%d", rand.Intn(10))}
+        }
+    }
+    return bag
 }
 ```
 
@@ -479,9 +479,6 @@ Expected: PASS
 git add internal/access/policy/compiler.go internal/access/policy/compiler_test.go
 git commit -m "feat(access): add PolicyCompiler with validation and glob pre-compilation"
 ```
-
----
-
 
 ---
 

@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)** | **[Next: Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)**
+# Phase 7.5: Locks & Admin
 
-## Phase 7.5: Locks & Admin
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)** | **[Next: Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)**
 
 ### Task 24: Lock token registry
 
@@ -110,9 +110,11 @@ Compiler takes parsed lock expression + target resource string → DSL policy te
 Lock expression compilation converts lock syntax into valid DSL permit policies. The compiled policy MUST include the ownership check requirement: `resource.owner == principal.id`.
 
 **Transactional pg_notify semantics:**
+
 When storing lock-compiled policies to the database, `pg_notify` for cache invalidation MUST be called within the same transaction as the policy write. This prevents race conditions where cache invalidation fires before the transaction commits.
 
 Example pattern:
+
 ```go
 // Acquire transaction
 tx, err := conn.Begin(ctx)
@@ -408,9 +410,6 @@ Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 1013).
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
 git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/recompile commands"
 ```
-
----
-
 
 ---
 

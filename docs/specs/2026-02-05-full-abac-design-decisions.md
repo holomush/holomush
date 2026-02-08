@@ -1668,7 +1668,7 @@ and Task 29 (old code deletion) only proceeds after Task 28 is verified in
 integration tests.
 
 **Cross-reference:** Decision #36 (Direct Replacement, No Adapter); decision
-#37 (No Shadow Mode); bead `holomush-5k1.206`.
+\#37 (No Shadow Mode); bead `holomush-5k1.206`.
 
 ---
 
@@ -1823,7 +1823,7 @@ implementations. Convention enforcement via code review and the explicit
 MUST NOT prohibition in the provider contract is sufficient.
 
 **Cross-reference:** Decision #31 (Provider Re-Entrance Prohibition); decision
-#58 (Provider Re-Entrance Goroutine Prohibition); main spec lines 559–576;
+\#58 (Provider Re-Entrance Goroutine Prohibition); main spec lines 559–576;
 bead `holomush-5k1.237`.
 
 ---

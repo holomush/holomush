@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)** | **[Next: Phase 7.7](./2026-02-06-full-abac-phase-7.7.md)**
+# Phase 7.6: Call Site Migration & Cleanup
 
-## Phase 7.6: Call Site Migration & Cleanup
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)** | **[Next: Phase 7.7](./2026-02-06-full-abac-phase-7.7.md)**
 
 ### Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
 
@@ -300,9 +300,6 @@ Expected: PASS
 git add internal/access/ internal/world/worldtest/ internal/plugin/capability/
 git commit -m "refactor(access): remove StaticAccessControl, AccessControl interface, and capability.Enforcer"
 ```
-
----
-
 
 ---
 
