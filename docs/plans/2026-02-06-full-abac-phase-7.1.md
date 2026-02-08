@@ -235,7 +235,7 @@ CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
 ```go
 // Dynamic partition creation in Go migration
 // Creates current month + 2 future months
-func createPartitions(tx *sql.Tx) error {
+func createPartitions(ctx context.Context, tx pgx.Tx) error {
     now := time.Now()
     for i := 0; i < 3; i++ {
         month := now.AddDate(0, i, 0)
@@ -246,7 +246,7 @@ func createPartitions(tx *sql.Tx) error {
             "CREATE TABLE %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')",
             name, start.Format("2006-01-02"), end.Format("2006-01-02"),
         )
-        if _, err := tx.Exec(sql); err != nil {
+        if _, err := tx.Exec(ctx, sql); err != nil {
             return err
         }
     }
