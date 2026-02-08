@@ -1451,6 +1451,8 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 
 **Spec References:** Policy DSL > Grammar (lines 737-946) (compilation is part of the grammar section)
 
+**Risk Note:** `CompiledPolicy` embeds `*dsl.ConditionBlock` which contains participle-generated AST nodes. These may include unexported fields or types that don't serialize cleanly to JSON. Early validation of AST serialization round-tripping is required (write the serialization test first). If participle ASTs don't serialize cleanly, implement custom `MarshalJSON`/`UnmarshalJSON` methods or store a different representation in `compiled_ast` JSONB.
+
 **Acceptance Criteria:**
 
 - [ ] `Compile()` parses DSL text, validates against schema, returns `CompiledPolicy`
@@ -1462,7 +1464,8 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 - [ ] Unreachable condition (`false && ...`) → warning
 - [ ] Always-true condition → warning
 - [ ] Glob patterns pre-compiled in `GlobCache`
-- [ ] `compiled_ast` JSONB serialization round-trips correctly
+- [ ] `compiled_ast` JSONB serialization round-trips correctly (participle AST nodes serialize/deserialize without data loss)
+- [ ] Serialization test written FIRST to validate participle AST JSON compatibility
 - [ ] PolicyCompiler MUST be safe for concurrent use (immutable AttributeSchema ensures safety)
 - [ ] All tests pass via `task test`
 
