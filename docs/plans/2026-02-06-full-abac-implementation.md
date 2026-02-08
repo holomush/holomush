@@ -138,10 +138,12 @@ graph TD
         T25b[Task 25b: Lock/unlock commands]
         T26a[Task 26a: Admin CRUD commands]
         T26b[Task 26b: Admin state commands]
-        T27[Task 27: Admin test/validate/reload]
+        T27a[Task 27a: policy test command]
+        T27b[Task 27b: remaining admin commands]
         T24 --> T25
         T25 --> T25b
         T26a --> T26b
+        T27a --> T27b
     end
 
     subgraph "Phase 7.6: Call Site Migration"
@@ -3369,11 +3371,11 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 ---
 
-### Task 27: Admin commands — policy test/validate/reload/attributes/audit/seed/recompile
+### Task 27a: Admin command — policy test
 
-**Spec References:** Policy Management Commands (lines 2695-2912) — policy test, policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629), Grammar Versioning (lines 947-976)
+**Spec References:** Policy Management Commands (lines 2695-2912) — policy test command with verbose, JSON, suite modes
 
-> **Design note:** Task 27 is intentionally kept as a single task despite its size (11 admin commands). All commands share the same handler file (`internal/command/handlers/policy.go`) and testing infrastructure. Splitting would create artificial task boundaries within a single file. If implementation proves unwieldy, consider splitting into 27a (diagnostic: test/validate/reload) and 27b (operational: attributes/audit/seed/repair/recompile) at implementation time.
+> **Design note:** Task 27 split into 27a (policy test) and 27b (remaining admin commands) due to complexity. The `policy test` command has significant implementation scope (verbose mode, JSON mode, suite mode, builder redaction, audit logging) that warrants its own task for reviewability.
 
 **Acceptance Criteria:**
 
@@ -3386,6 +3388,42 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - [ ] YAML scenario file format: list of {subject, action, resource, expected_decision} entries
 - [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2790-2794)
 - [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/command/handlers/policy.go`
+- Test: `internal/command/handlers/policy_test.go`
+
+**Step 1: Write failing tests**
+
+- `policy test <subject> <action> <resource>` → returns decision, matched policies
+- `policy test --verbose` → shows all candidate policies with why each did/didn't match
+- `policy test --json` → structured JSON output test
+- `policy test --suite <file>` → batch YAML scenario testing
+- Builder attribute redaction: test with characters/resources the builder doesn't own
+
+**Step 2: Implement**
+
+Implement the `policy test` command with all variants (verbose, JSON, suite mode) and builder attribute redaction. Ensure all invocations are logged to the audit log per spec requirements.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
+git commit -m "feat(command): add policy test command with verbose/JSON/suite modes"
+```
+
+---
+
+### Task 27b: Admin commands — policy validate/reload/attributes/audit/seed/recompile
+
+**Spec References:** Policy Management Commands (lines 2695-2912) — policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629), Grammar Versioning (lines 947-976)
+
+**Dependencies:** Task 27a (policy test command)
+
+**Acceptance Criteria:**
+
 - [ ] `policy validate <dsl>` → success or error with line/column
 - [ ] `policy reload` → forces cache reload from DB
 - [ ] `policy attributes` → lists all registered attribute namespaces and keys
@@ -3407,11 +3445,6 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 **Step 1: Write failing tests**
 
-- `policy test <subject> <action> <resource>` → returns decision, matched policies
-- `policy test --verbose` → shows all candidate policies with why each did/didn't match
-- `policy test --json` → structured JSON output test
-- `policy test --suite <file>` → batch YAML scenario testing
-- Builder attribute redaction: test with characters/resources the builder doesn't own
 - `policy validate <dsl>` → success or error with line/column
 - `policy reload` → forces cache reload from DB
 - `policy attributes` → lists all registered attribute namespaces and keys
@@ -3440,7 +3473,7 @@ Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 959). 
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
-git commit -m "feat(command): add policy test/validate/reload/attributes/audit/recompile commands"
+git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/recompile commands"
 ```
 
 ---
@@ -3715,7 +3748,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] In degraded mode: log CRITICAL level message on every evaluation attempt
 - [ ] Corrupted policy detection: unmarshal `compiled_ast` fails or structural invariants violated
 - [ ] Only forbid/deny policies trigger degraded mode (permit policies skipped safely)
-- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation (implemented in Task 27)
+- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation (implemented in Task 27b)
 - [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19)
 - [ ] All tests pass via `task test`
 
