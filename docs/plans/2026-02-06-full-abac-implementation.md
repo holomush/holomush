@@ -94,7 +94,7 @@ graph TD
         T4b --> T4c
         T4a --> T7
         T5 --> T7
-        T6 --> T5
+        T5 --> T6
     end
 
     subgraph "Phase 7.2: DSL & Compiler"
