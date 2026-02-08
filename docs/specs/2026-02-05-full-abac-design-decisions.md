@@ -76,6 +76,8 @@ rationale for the chosen approach.
 62. [Separate PolicyEffect Type for Stored Policies](#62-separate-policyeffect-type-for-stored-policies)
 63. [Remove Session Circuit Breaker Auto-Invalidation](#63-remove-session-circuit-breaker-auto-invalidation)
 64. [Remove Admin Bypass of Cache Staleness and Degraded Mode](#64-remove-admin-bypass-of-cache-staleness-and-degraded-mode)
+65. [Git Revert as Migration Rollback Strategy](#65-git-revert-as-migration-rollback-strategy)
+66. [System Bypasses Use Sync Audit Path](#66-system-bypasses-use-sync-audit-path)
 
 ---
 
@@ -1620,3 +1622,62 @@ automatic bypass path.
 **Cross-reference:** Main spec, Cache Staleness and Degraded Mode sections;
 decision #46 (`policy validate` and `policy reload` Commands); bead
 `holomush-k5c3`.
+
+---
+
+## 65. Git Revert as Migration Rollback Strategy
+
+**Review finding (PR #69, I3):** Task 28 replaces all 28
+`AccessControl.Check()` call sites in a single migration with no rollback
+path. Task 29 then deletes old code. The reviewer noted the absence of any
+rollback strategy — no adapter, feature flag, or documented recovery procedure.
+
+**Decision:** Document `git revert` of the migration commit as the rollback
+strategy. No feature flag or adapter is needed. This is consistent with
+decision #36 (Direct Replacement, No Adapter) and decision #37 (No Shadow
+Mode), which already rejected adapter and dual-path approaches. The
+comprehensive test coverage required by Task 28's acceptance criteria — all
+28 call sites verified with table-driven tests — provides the safety net
+that makes `git revert` a reliable recovery mechanism.
+
+**Rationale:** A `--legacy-auth` feature flag would reintroduce the adapter
+pattern that decision #36 explicitly rejected. The direct-replacement strategy
+was chosen because the old and new systems have different signatures
+(`bool` vs `Decision, error`), making an adapter complex and error-prone. A
+clean `git revert` of Task 28's commit restores the previous code with zero
+ambiguity. The risk window is bounded: Task 28 is a single atomic commit,
+and Task 29 (old code deletion) only proceeds after Task 28 is verified in
+integration tests.
+
+**Cross-reference:** Decision #36 (Direct Replacement, No Adapter); decision
+#37 (No Shadow Mode); bead `holomush-5k1.206`.
+
+---
+
+## 66. System Bypasses Use Sync Audit Path
+
+**Review finding (PR #69, I5):** The audit logger uses sync writes for
+denials and async writes for allows. System bypasses are technically "allows"
+but represent privileged operations (server startup, admin maintenance) that
+require guaranteed audit trails per Task 17. The async channel could drop
+entries under load, creating gaps in the audit trail for the most privileged
+operations.
+
+**Decision:** System bypasses use the sync audit write path, alongside
+denials. The audit path classification becomes: denials → sync, regular
+allows → async, system bypasses → sync. This creates a two-tier model where
+security-significant events (denials and privilege escalation) are guaranteed
+persistent, while routine allows use best-effort async for performance.
+
+**Rationale:** System bypasses are rare — they occur at server startup
+(bootstrap), during admin maintenance operations, and in degraded mode. The
+performance cost of sync writes for these infrequent events is negligible.
+The security benefit is significant: a missing audit entry for a system
+bypass could mask unauthorized privilege escalation. Decision #53 (Audit WAL
+Best-Effort Semantics) deliberately accepted potential loss for high-volume
+routine allows; system bypasses do not meet the "high-volume" criterion that
+justified that trade-off.
+
+**Cross-reference:** Decision #52 (Async Audit Writes); decision #53 (Audit
+WAL Best-Effort Semantics); decision #56 (Audit Off Mode Includes System
+Bypasses); bead `holomush-5k1.208`.
