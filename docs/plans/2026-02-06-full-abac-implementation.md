@@ -77,14 +77,16 @@ graph TD
         T1[Task 1: access_policies migration]
         T2[Task 2: access_audit_log migration]
         T3[Task 3: entity_properties migration]
-        T4[Task 4: Property model]
+        T4a[Task 4a: EntityProperty + PropertyRepository]
+        T4b[Task 4b: WorldService cascade + property lifecycle]
         T5[Task 5: Core types]
         T6[Task 6: Subject/resource prefixes]
         T7[Task 7: Policy store]
         T1 --> T7
         T2 --> T7
-        T3 --> T4
-        T4 --> T7
+        T3 --> T4a
+        T4a --> T4b
+        T4a --> T7
         T5 --> T7
         T6 --> T5
     end
@@ -169,7 +171,7 @@ graph TD
     T7 --> T12
     T7 --> T18
     T12 --> T17
-    T4 --> T16b
+    T4a --> T16b
     T12 --> T22
     T21a --> T22
     T18 --> T23
@@ -188,7 +190,7 @@ graph TD
 
     %% Critical path (thick lines conceptually)
     style T3 fill:#ffcccc
-    style T4 fill:#ffcccc
+    style T4a fill:#ffcccc
     style T7 fill:#ffcccc
     style T12 fill:#ffcccc
     style T17 fill:#ffcccc
@@ -198,7 +200,7 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 3 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Parallel Work Opportunities:**
 
@@ -455,15 +457,13 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 ---
 
-### Task 4: Property model (EntityProperty type and repository)
+### Task 4a: EntityProperty type and PropertyRepository
 
-> **Note:** This task was originally Task 25 in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository.
+> **Note:** This task was originally Task 25 in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository interface/implementation.
 
-> **Scope Note:** This task covers both creating new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) AND modifying existing services (WorldService cascade deletion, orphan cleanup goroutine, startup integrity check). If implementation proves complex, consider splitting into:
-> - **4a:** EntityProperty type + PropertyRepository interface + PostgreSQL implementation
-> - **4b:** WorldService cascade deletion + orphan cleanup goroutine + startup integrity check
+> **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Task 4b handles integrating property lifecycle with WorldService.
 
-**Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
+**Spec References:** Property Model (lines 1097-1294), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -476,12 +476,6 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 - [ ] No overlap between `visible_to` and `excluded_from` → error
 - [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
 - [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
-- [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
-- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
-- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
-- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
-- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
-- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
 - [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
 - [ ] All tests pass via `task test`
 
@@ -491,7 +485,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 - Create: `internal/world/postgres/property_repo.go` (PostgreSQL implementation)
 - Test: `internal/world/postgres/property_repo_test.go`
 
-**Step 1: Write failing tests**
+**Step 1: Write failing tests (Task 4a)**
 
 - Create property → round-trips all fields
 - Get by ID
@@ -545,6 +539,114 @@ Follow existing repository patterns from `internal/world/postgres/location_repo.
 git add internal/world/property.go internal/world/postgres/property_repo.go
 git add internal/world/postgres/property_repo_test.go
 git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
+```
+
+---
+
+### Task 4b: WorldService cascade deletion and property lifecycle
+
+> **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService to ensure properties are cleaned up when parent entities are deleted.
+
+> **Scope:** This task modifies WorldService deletion methods to cascade delete properties, adds an orphan cleanup goroutine, and implements startup integrity checks.
+
+**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
+
+**Acceptance Criteria:**
+
+- [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
+- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
+- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
+- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
+- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
+- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/world/service.go` (cascade deletion in DeleteCharacter, DeleteObject, DeleteLocation)
+- Create: `internal/world/property_lifecycle.go` (orphan cleanup goroutine, startup integrity check)
+- Test: `internal/world/service_test.go` (cascade deletion tests)
+- Test: `internal/world/property_lifecycle_test.go` (orphan cleanup tests)
+
+**Step 1: Write failing tests (Task 4b)**
+
+- `WorldService.DeleteCharacter()` deletes all properties for that character
+- `WorldService.DeleteObject()` deletes all properties for that object
+- `WorldService.DeleteLocation()` deletes all properties for that location
+- Cascade deletion happens in same transaction (rollback on error)
+- Orphan cleanup goroutine identifies and deletes orphaned properties
+- Startup integrity check logs orphan count at WARN level
+
+**Step 2: Implement cascade deletion**
+
+Modify `internal/world/service.go`:
+
+```go
+func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
+    return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+        // Delete properties first
+        if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
+            return oops.With("operation", "delete_character_properties").Wrap(err)
+        }
+        // Then delete character
+        return s.characterRepo.Delete(ctx, id)
+    })
+}
+```
+
+Repeat for `DeleteObject()` and `DeleteLocation()`.
+
+**Step 3: Implement orphan cleanup**
+
+Create `internal/world/property_lifecycle.go`:
+
+```go
+// StartPropertyLifecycleManager starts background goroutine for orphan cleanup
+func (s *WorldService) StartPropertyLifecycleManager(ctx context.Context, interval time.Duration) {
+    go s.cleanupOrphansLoop(ctx, interval)
+}
+
+func (s *WorldService) cleanupOrphansLoop(ctx context.Context, interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            if err := s.cleanupOrphanedProperties(ctx); err != nil {
+                errutil.LogError(s.logger, "orphan cleanup failed", err)
+            }
+        }
+    }
+}
+
+func (s *WorldService) cleanupOrphanedProperties(ctx context.Context) error {
+    // Query for properties where parent entity no longer exists
+    // Delete orphaned properties
+    // Log count at WARN level if orphans found
+}
+
+func (s *WorldService) StartupIntegrityCheck(ctx context.Context) error {
+    orphanCount, err := s.countOrphanedProperties(ctx)
+    if err != nil {
+        return err
+    }
+    if orphanCount > 0 {
+        s.logger.Warn("orphaned properties detected", "count", orphanCount)
+    }
+    return nil
+}
+```
+
+**Step 4: Run tests, commit**
+
+```bash
+task test
+git add internal/world/service.go internal/world/property_lifecycle.go
+git add internal/world/service_test.go internal/world/property_lifecycle_test.go
+git commit -m "feat(world): add property cascade deletion and orphan cleanup"
 ```
 
 ---
