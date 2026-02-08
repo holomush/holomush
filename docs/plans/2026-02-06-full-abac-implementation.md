@@ -555,8 +555,12 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
 - [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
 - [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
-- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
-- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
+- [ ] Orphan cleanup goroutine: runs on configurable timer (default: daily) to detect orphaned properties (parent entity no longer exists)
+- [ ] Orphan cleanup: detected orphans logged at WARN level on first discovery
+- [ ] Orphan cleanup: configurable grace period (default: 24h, configured via `world.orphan_grace_period` in server YAML)
+- [ ] Orphan cleanup: orphans persisting across two consecutive runs are actively deleted with batch `DELETE` and logged at INFO level with count
+- [ ] Startup integrity check: count orphaned properties on server startup
+- [ ] Startup integrity check: if orphan count exceeds configurable threshold (default: 100), log at ERROR level but continue starting (not fail-fast)
 - [ ] All tests pass via `task test`
 
 **Files:**
