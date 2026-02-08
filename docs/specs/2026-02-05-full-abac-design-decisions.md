@@ -565,6 +565,10 @@ impossible to detect regressions or know when optimization is needed.
 All targets assume 200 concurrent users. Implementation SHOULD add
 `slog.Debug()` timers for profiling.
 
+**Note:** Decision #73 splits the `Evaluate()` p99 latency target into cached
+(<5ms) and cold (<10ms) tiers to account for cache-miss scenarios requiring
+recursive CTE execution.
+
 **Rationale:** Concrete targets enable CI-based performance regression detection
 and give implementers a clear "good enough" threshold. The 5ms target leaves
 headroom for the full request path while keeping authorization invisible to

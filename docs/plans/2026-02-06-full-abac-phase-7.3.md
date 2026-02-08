@@ -962,8 +962,8 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 **Acceptance Criteria:**
 
-- [ ] `BenchmarkEvaluate_ColdCache` — p99 <5ms
-- [ ] `BenchmarkEvaluate_WarmCache` — p99 <3ms
+- [ ] `BenchmarkEvaluate_ColdCache` — p99 <10ms
+- [ ] `BenchmarkEvaluate_WarmCache` — p99 <5ms
 - [ ] `BenchmarkAttributeResolution_Cold` — <2ms
 - [ ] `BenchmarkAttributeResolution_Warm` — <100μs
 - [ ] `BenchmarkConditionEvaluation` — <1ms per policy
@@ -987,8 +987,8 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 **Step 1: Write benchmarks per spec performance targets (lines 1715-1741)**
 
 ```go
-func BenchmarkEvaluate_ColdCache(b *testing.B)         // target: <5ms p99
-func BenchmarkEvaluate_WarmCache(b *testing.B)          // target: <3ms p99
+func BenchmarkEvaluate_ColdCache(b *testing.B)         // target: <10ms p99
+func BenchmarkEvaluate_WarmCache(b *testing.B)          // target: <5ms p99
 func BenchmarkAttributeResolution_Cold(b *testing.B)    // target: <2ms
 func BenchmarkAttributeResolution_Warm(b *testing.B)    // target: <100μs
 func BenchmarkConditionEvaluation(b *testing.B)         // target: <1ms per policy

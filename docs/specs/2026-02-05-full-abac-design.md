@@ -300,7 +300,7 @@ Node types: `attr_ref` (root + path), `literal` (string/number/bool),
 The policy store calls `Compile()` on every `Create` and `Edit` operation,
 rejecting invalid DSL before persisting. The in-memory policy cache holds
 `CompiledPolicy` instances — `Evaluate()` never re-parses DSL text, ensuring
-the <5ms p99 latency target is achievable.
+the <5ms p99 latency target for cached requests is achievable.
 
 ### AccessRequest
 
@@ -1770,8 +1770,8 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 | Metric                              | Target | Notes                             |
 | ----------------------------------- | ------ | --------------------------------- |
-| `Evaluate()` p99 latency (cold)     | <5ms   | First call in request             |
-| `Evaluate()` p99 latency (warm)     | <3ms   | Cached attributes from prior call |
+| `Evaluate()` p99 latency (cached)   | <5ms   | Policy and attribute cache warm   |
+| `Evaluate()` p99 latency (cold)     | <10ms  | Cache miss, DB roundtrip required |
 | Attribute resolution (cold)         | <2ms   | All providers combined            |
 | Attribute resolution (warm, cached) | <100μs | Map lookup only                   |
 | DSL condition evaluation            | <1ms   | Per policy                        |
@@ -1779,10 +1779,11 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 **Benchmark scenario:** Targets assume 50 active policies (25 permit, 25
 forbid), average condition complexity of 3 operators per policy, 10 attributes
-per entity (subject + resource). "Cold" means first `Evaluate()` call in a
-request (no per-request cache). "Warm" means subsequent calls reusing the
-per-request `AttributeCache`. Implementation MUST include both
-`BenchmarkEvaluate_ColdCache` and `BenchmarkEvaluate_WarmCache` tests.
+per entity (subject + resource). "Cached" means policy cache and attribute
+cache are warm (majority of requests). "Cold" means cache miss requiring
+database roundtrip (recursive CTE for container hierarchy, policy store fetch).
+Implementation MUST include both `BenchmarkEvaluate_ColdCache` and
+`BenchmarkEvaluate_WarmCache` tests.
 
 **Worst-case bounds:**
 
@@ -3473,8 +3474,8 @@ grows.
 - [ ] Direct replacement of StaticAccessControl documented (no adapter)
 - [ ] Microbenchmarks (pure evaluator, no I/O): single-policy <10μs,
       50-policy set <100μs, attribute resolution <50μs (via `go test -bench`)
-- [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <5ms cold,
-      <3ms warm, matching the performance targets in the spec
+- [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <5ms cached,
+      <10ms cold, matching the performance targets in the spec
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented
