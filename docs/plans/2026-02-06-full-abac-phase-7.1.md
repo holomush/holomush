@@ -439,7 +439,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Acceptance Criteria:**
 
-- [ ] `WorldService.DeleteCharacter(ctx context.Context, id string) error` method created
+- [ ] `WorldService.DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error` method created
 - [ ] DeleteCharacter uses transaction handling (via `s.tx.WithTransaction`)
 - [ ] DeleteCharacter calls `s.characterRepo.Delete(ctx, id)` to remove the character
 - [ ] DeleteCharacter includes proper error wrapping with oops
@@ -462,10 +462,10 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 Add to `internal/world/service.go`:
 
 ```go
-func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
+func (s *WorldService) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
     return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
         if err := s.characterRepo.Delete(ctx, id); err != nil {
-            return oops.With("operation", "delete_character").With("character_id", id).Wrap(err)
+            return oops.With("operation", "delete_character").With("character_id", id.String()).Wrap(err)
         }
         return nil
     })
@@ -527,15 +527,15 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 Modify `internal/world/service.go`:
 
 ```go
-func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
+func (s *WorldService) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
     return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
         // Delete properties first
-        if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
+        if err := s.propertyRepo.DeleteByParent(ctx, "character", id.String()); err != nil {
             return oops.With("operation", "delete_character_properties").Wrap(err)
         }
         // Then delete character
         if err := s.characterRepo.Delete(ctx, id); err != nil {
-            return oops.With("operation", "delete_character").With("character_id", id).Wrap(err)
+            return oops.With("operation", "delete_character").With("character_id", id.String()).Wrap(err)
         }
         return nil
     })
