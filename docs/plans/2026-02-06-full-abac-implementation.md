@@ -3573,12 +3573,15 @@ Migrate per-package, with each commit including both DI wiring changes and all c
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for plugin package dependencies
 2. Update 1 production call site:
-   - `internal/plugin/hostfunc/commands.go` (1 call)
-   - Note: `functions.go` has capability enforcer calls, not AccessControl
-3. Update tests to mock `AccessPolicyEngine`
-4. Run `task test` — MUST PASS
-5. Run `task build` — MUST PASS
-6. Commit: `"refactor(plugin): migrate host functions to AccessPolicyEngine"`
+   - `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`)
+   - Note: The `AccessControl` field is defined in `functions.go` but used in `commands.go`
+3. Update `internal/plugin/hostfunc/functions.go` to change field type from `AccessControl` to `*policy.Engine`
+4. Update `internal/plugin/hostfunc/commands.go` to change `AccessControl` interface declaration to use `*policy.Engine`
+5. Update `WithAccessControl()` option to accept `*policy.Engine` instead of `AccessControl` interface
+6. Update tests to mock `AccessPolicyEngine`
+7. Run `task test` — MUST PASS
+8. Run `task build` — MUST PASS
+9. Commit: `"refactor(plugin): migrate host functions to AccessPolicyEngine"`
 
 **Package 4: Final wiring (bootstrap and NOTIFY subscription)**
 
@@ -3630,10 +3633,12 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 
 - [ ] `internal/access/static.go` and `static_test.go` deleted
 - [ ] `internal/access/permissions.go` and `permissions_test.go` deleted (if static-only)
-- [ ] `AccessControl` interface removed from `access.go`
-- [ ] `capability.Enforcer` removed (capabilities now seed policies)
+- [ ] `AccessControl` interface removed from `access.go` and `internal/plugin/hostfunc/commands.go`
+- [ ] `capability.Enforcer` and `capability.CapabilityChecker` removed (capabilities now seed policies)
+- [ ] `internal/plugin/hostfunc/functions.go` — Remove `CapabilityChecker` field and `wrap()` capability checks (plugin capabilities now enforced via ABAC policies)
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
+- [ ] Zero references to `CapabilityChecker` or `capability.Enforcer` in codebase
 - [ ] Zero `char:` prefix usage (all migrated to `character:`)
 - [ ] `task test` passes
 - [ ] `task lint` passes
@@ -3648,9 +3653,22 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 - Delete: `internal/access/accesstest/mock.go` (generated mock)
 - Modify: `internal/access/access.go` — remove `AccessControl` interface
 - Delete or modify: `internal/plugin/capability/` — remove `Enforcer` (capabilities now seed policies)
-- Modify: `internal/plugin/hostfunc/functions.go` — uses capability.Enforcer, not AccessControl
+- Modify: `internal/plugin/hostfunc/functions.go` — remove `CapabilityChecker` field and `wrap()` function
+- Modify: `internal/plugin/hostfunc/commands.go` — remove local `AccessControl` interface declaration
 - Search and remove: all `char:` prefix usage (replace with `character:`)
 - Run: `mockery` to regenerate mocks for new `AccessPolicyEngine` interface
+
+**Call Site Verification:**
+
+This task removes OLD interfaces/implementations. Ensure all production call sites were migrated in Task 28:
+
+- `internal/command/dispatcher.go` — migrated in Task 28 Package 1
+- `internal/command/rate_limit_middleware.go` — migrated in Task 28 Package 1
+- `internal/command/handlers/boot.go` — migrated in Task 28 Package 1
+- `internal/world/service.go` (24 calls) — migrated in Task 28 Package 2
+- `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`) — migrated in Task 28 Package 3
+
+The capability enforcer (`f.enforcer.Check()` in `functions.go`) is separate from `AccessControl` and removed here.
 
 **Step 1: Delete static access control files**
 
