@@ -37,16 +37,16 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 
-| ADR      | Title                                      | Applies To      |
-| -------- | ------------------------------------------ | --------------- |
-| ADR 0009 | Custom Go-Native ABAC Engine               | Task 17         |
-| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics     | Task 11         |
-| ADR 0011 | Deny-overrides conflict resolution         | Tasks 17, 30    |
-| ADR 0012 | Eager attribute resolution                 | Tasks 14, 17    |
-| ADR 0013 | Properties as first-class entities         | Tasks 3, 4a, 4b, 16b |
-| ADR 0014 | Direct replacement (no adapter)            | Tasks 28-29     |
-| ADR 0015 | Three-Layer Player Access Control          | Tasks 4a, 4b, 16a-c  |
-| ADR 0016 | LISTEN/NOTIFY cache invalidation           | Task 18         |
+| ADR      | Title                                  | Applies To               |
+| -------- | -------------------------------------- | ------------------------ |
+| ADR 0009 | Custom Go-Native ABAC Engine           | Task 17                  |
+| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics | Task 11                  |
+| ADR 0011 | Deny-overrides conflict resolution     | Tasks 17, 30             |
+| ADR 0012 | Eager attribute resolution             | Tasks 14, 17             |
+| ADR 0013 | Properties as first-class entities     | Tasks 3, 4a, 4b, 4c, 16b |
+| ADR 0014 | Direct replacement (no adapter)        | Tasks 28-29              |
+| ADR 0015 | Three-Layer Player Access Control      | Tasks 4a, 4b, 4c, 16a-b  |
+| ADR 0016 | LISTEN/NOTIFY cache invalidation       | Task 18                  |
 
 ### Acceptance Criteria
 
@@ -73,12 +73,17 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ```mermaid
 graph TD
+    subgraph "Phase 7.0: Validation Spike"
+        T0[Task 0: AST Serialization Spike]
+    end
+
     subgraph "Phase 7.1: Policy Schema"
         T1[Task 1: access_policies migration]
         T2[Task 2: access_audit_log migration]
         T3[Task 3: entity_properties migration]
         T4a[Task 4a: EntityProperty + PropertyRepository]
-        T4b[Task 4b: WorldService cascade + property lifecycle]
+        T4b[Task 4b: WorldService deletion methods]
+        T4c[Task 4c: Property cascade deletion and lifecycle]
         T5[Task 5: Core types]
         T6[Task 6: Subject/resource prefixes]
         T7[Task 7: Policy store]
@@ -86,6 +91,7 @@ graph TD
         T2 --> T7
         T3 --> T4a
         T4a --> T4b
+        T4b --> T4c
         T4a --> T7
         T5 --> T7
         T6 --> T5
@@ -109,7 +115,6 @@ graph TD
         T15[Task 15: Core providers]
         T16a[Task 16a: Simple providers]
         T16b[Task 16b: PropertyProvider]
-        T16c[Task 16c: Visibility checks]
         T17[Task 17: AccessPolicyEngine]
         T18[Task 18: Policy cache LISTEN/NOTIFY]
         T19[Task 19: Audit logger]
@@ -122,8 +127,6 @@ graph TD
         T15 --> T16a
         T16a --> T16b
         T15 --> T17
-        T16b --> T16c
-        T17 --> T16c
         T17 --> T18
         T17 --> T19
         T19 --> T19b
@@ -168,6 +171,8 @@ graph TD
     end
 
     %% Critical cross-phase dependencies
+    T0 --> T7
+    T0 --> T8
     T7 --> T12
     T7 --> T18
     T12 --> T17
@@ -189,10 +194,16 @@ graph TD
     T14 --> T34
 
     %% Critical path (thick lines conceptually)
+    style T0 fill:#ffffcc
     style T3 fill:#ffcccc
     style T4a fill:#ffcccc
+    style T4b fill:#ffcccc
+    style T4c fill:#ffcccc
     style T7 fill:#ffcccc
     style T12 fill:#ffcccc
+    style T13 fill:#ffcccc
+    style T14 fill:#ffcccc
+    style T15 fill:#ffcccc
     style T17 fill:#ffcccc
     style T18 fill:#ffcccc
     style T23 fill:#ffcccc
@@ -200,13 +211,17 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 0 (spike, yellow) → Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → (DSL chain: Task 12) + (Provider chain: Task 13 → Task 14 → Task 15) → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+
+**Note:** Task 17 depends on BOTH Task 12 (DSL compiler) and Task 15 (core attribute providers). These chains can run in parallel after Task 7 completes, but both must finish before Task 17 can start.
 
 **Parallel Work Opportunities:**
 
-- Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
+- After Task 0 (spike) completes, Task 7 and Task 8 can proceed in parallel (Task 0 validates both)
+- After Task 7 completes, two critical chains can run in parallel:
+  - DSL chain: Tasks 8-11 can start independently; only Task 12 (PolicyCompiler) requires Task 7
+  - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
-- Task 16c (visibility checks) requires Task 16b and Task 17 (strictly sequential: 16a → 16b → 16c)
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
 - Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
@@ -216,6 +231,100 @@ graph TD
 ## Phase 7.1: Policy Schema (Database Tables + Policy Store)
 
 > **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
+
+### Task 0: AST Serialization Spike
+
+**Purpose:** Validate that participle-generated AST nodes can survive JSON serialization round-trips BEFORE implementing the policy storage and compiler. This spike prevents discovering storage model failures at Task 12 after 11 tasks are complete.
+
+**Spec References:** Policy DSL > Grammar (lines 737-946), Policy Storage > Schema (lines 1973-2114)
+
+**Acceptance Criteria:**
+
+- [ ] Parse sample policy DSL string into participle AST
+- [ ] Marshal AST to JSON using `json.Marshal`
+- [ ] Unmarshal JSON back to AST using `json.Unmarshal`
+- [ ] Compare original AST to round-tripped AST (deep equality check)
+- [ ] If round-trip fails, document alternative serialization approach (custom MarshalJSON/UnmarshalJSON or switch to protobuf)
+- [ ] Spike findings documented in commit message or inline comments
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/access/policy/dsl/ast_spike_test.go` (temporary spike test file)
+
+**Implementation Steps:**
+
+**Step 1: Write spike test**
+
+```go
+// internal/access/policy/dsl/ast_spike_test.go
+package dsl_test
+
+import (
+    "encoding/json"
+    "testing"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestAST_JSONRoundTrip_Spike(t *testing.T) {
+    // Sample DSL policy
+    dslText := `permit(principal is character, action in ["read"], resource is location) when { resource.id == principal.location };`
+
+    // Step 1: Parse DSL to AST (use parser once Task 8 AST types exist)
+    // For spike: define minimal AST types inline or use placeholder struct
+
+    // Step 2: Marshal to JSON
+    jsonBytes, err := json.Marshal(ast)
+    require.NoError(t, err, "AST marshaling should succeed")
+
+    // Step 3: Unmarshal back to AST
+    var roundTripped PolicyAST
+    err = json.Unmarshal(jsonBytes, &roundTripped)
+    require.NoError(t, err, "AST unmarshaling should succeed")
+
+    // Step 4: Compare
+    assert.Equal(t, ast, roundTripped, "Round-tripped AST must match original")
+}
+```
+
+**Step 2: Define minimal AST types for spike**
+
+Create just enough AST structure to represent a simple policy. Use participle struct tags if available, or plain structs if not. Focus on proving the round-trip works.
+
+**Step 3: Run test and verify**
+
+```bash
+task test
+```
+
+Expected: Test PASSES — AST round-trips correctly through JSON.
+
+If test FAILS: Document the failure mode (unexported fields, interface types, pointer semantics) and propose fix (custom MarshalJSON, protobuf, etc).
+
+**Step 4: Commit spike findings**
+
+```bash
+git add internal/access/policy/dsl/ast_spike_test.go
+git commit -m "spike(access): validate AST JSON serialization round-trip
+
+Confirms participle AST nodes survive json.Marshal/Unmarshal.
+[If failure: describe issue and proposed fix]"
+```
+
+**Step 5: Clean up or keep**
+
+- If spike PASSES: Keep test file as regression test, proceed to Task 1
+- If spike FAILS: Document findings, update Task 7 and Task 8 to use alternative serialization
+
+**Notes:**
+
+- This spike is intentionally minimal — just enough to prove/disprove the storage model
+- If participle ASTs use unexported fields or interface types that break JSON, we discover it NOW instead of at Task 12
+- Alternative serialization approaches: custom `MarshalJSON`/`UnmarshalJSON`, protobuf, gob encoding
+
+---
 
 ### Task 1: Create access\_policies migration
 
@@ -461,7 +570,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 > **Note:** This task was originally Task 25 in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository interface/implementation.
 
-> **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Task 4b handles integrating property lifecycle with WorldService.
+> **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Tasks 4b and 4c handle integrating property lifecycle with WorldService.
 
 **Spec References:** Property Model (lines 1097-1294), ADR 0013 (Properties as first-class entities)
 
@@ -508,7 +617,7 @@ package world
 type EntityProperty struct {
     ID           ulid.ULID
     ParentType   string // "character", "location", "object"
-    ParentID     string
+    ParentID     ulid.ULID
     Name         string
     Value        *string
     Owner        *string
@@ -543,34 +652,93 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 ---
 
-### Task 4b: WorldService cascade deletion and property lifecycle
+### Task 4b: WorldService deletion methods
 
-> **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService to ensure properties are cleaned up when parent entities are deleted.
+> **Note:** This task creates the missing `DeleteCharacter()` method and ensures all three deletion methods exist in WorldService before Task 4c adds property cascade logic to them.
 
-> **Implementation Note:** `WorldService.DeleteCharacter()`, `DeleteObject()`, and `DeleteLocation()` do not currently exist in `internal/world/service.go`. They MUST be created as part of this task's scope before property cascade deletion can be wired in.
+> **Implementation Note:** `WorldService.DeleteCharacter()` does not currently exist in `internal/world/service.go` and MUST be created as part of this task's scope. `DeleteObject()` and `DeleteLocation()` already exist and are not modified in this task.
 
-> **Scope:** This task modifies WorldService deletion methods to cascade delete properties, adds an orphan cleanup goroutine, and implements startup integrity checks.
+> **Scope:** This task creates the missing deletion method with proper transaction handling and tests. Task 4c will add property cascade deletion to all three methods.
+
+**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
+
+**Acceptance Criteria:**
+
+- [ ] `WorldService.DeleteCharacter(ctx context.Context, id string) error` method created
+- [ ] DeleteCharacter uses transaction handling (via `s.tx.WithTransaction`)
+- [ ] DeleteCharacter calls `s.characterRepo.Delete(ctx, id)` to remove the character
+- [ ] DeleteCharacter includes proper error wrapping with oops
+- [ ] Tests cover: successful deletion, transaction rollback on error, character not found error
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/world/service.go` (DeleteCharacter method)
+- Test: `internal/world/service_test.go` (DeleteCharacter tests)
+
+**Step 1: Write failing tests (Task 4b)**
+
+- `WorldService.DeleteCharacter()` deletes a character by ID
+- DeleteCharacter handles character not found error
+- DeleteCharacter uses transaction (rollback on error)
+
+**Step 2: Implement DeleteCharacter**
+
+Add to `internal/world/service.go`:
+
+```go
+func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
+    return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+        if err := s.characterRepo.Delete(ctx, id); err != nil {
+            return oops.With("operation", "delete_character").With("character_id", id).Wrap(err)
+        }
+        return nil
+    })
+}
+```
+
+**Step 3: Run tests, commit**
+
+```bash
+task test
+git add internal/world/service.go internal/world/service_test.go
+git commit -m "feat(world): add DeleteCharacter method to WorldService"
+```
+
+---
+
+### Task 4c: Property cascade deletion and lifecycle
+
+> **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService deletion methods (from Task 4b) to ensure properties are cleaned up when parent entities are deleted.
+
+> **Implementation Note:** This task modifies all three deletion methods (`DeleteCharacter`, `DeleteObject`, `DeleteLocation`) to add property cascade deletion calls via `PropertyRepository.DeleteByParent()`.
+
+> **Scope:** This task adds property cascade deletion to existing deletion methods, adds an orphan cleanup goroutine, and implements startup integrity checks.
 
 **Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
 
 **Acceptance Criteria:**
 
 - [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
-- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
-- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
-- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
-- [ ] Orphan cleanup goroutine: periodic check for orphaned properties (parent entity no longer exists) and delete them
-- [ ] Startup integrity check: scan for orphaned properties, log count at WARN level, schedule cleanup
+- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction (called before character deletion)
+- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction (called before object deletion)
+- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction (called before location deletion)
+- [ ] Orphan cleanup goroutine: runs on configurable timer (default: daily) to detect orphaned properties (parent entity no longer exists)
+- [ ] Orphan cleanup: detected orphans logged at WARN level on first discovery
+- [ ] Orphan cleanup: configurable grace period (default: 24h, configured via `world.orphan_grace_period` in server YAML)
+- [ ] Orphan cleanup: orphans persisting across two consecutive runs are actively deleted with batch `DELETE` and logged at INFO level with count
+- [ ] Startup integrity check: count orphaned properties on server startup
+- [ ] Startup integrity check: if orphan count exceeds configurable threshold (default: 100), log at ERROR level but continue starting (not fail-fast)
 - [ ] All tests pass via `task test`
 
 **Files:**
 
-- Modify: `internal/world/service.go` (cascade deletion in DeleteCharacter, DeleteObject, DeleteLocation)
+- Modify: `internal/world/service.go` (add property cascade deletion to DeleteCharacter, DeleteObject, DeleteLocation)
 - Create: `internal/world/property_lifecycle.go` (orphan cleanup goroutine, startup integrity check)
 - Test: `internal/world/service_test.go` (cascade deletion tests)
 - Test: `internal/world/property_lifecycle_test.go` (orphan cleanup tests)
 
-**Step 1: Write failing tests (Task 4b)**
+**Step 1: Write failing tests (Task 4c)**
 
 - `WorldService.DeleteCharacter()` deletes all properties for that character
 - `WorldService.DeleteObject()` deletes all properties for that object
@@ -579,7 +747,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - Orphan cleanup goroutine identifies and deletes orphaned properties
 - Startup integrity check logs orphan count at WARN level
 
-**Step 2: Implement cascade deletion**
+**Step 2: Add property cascade deletion**
 
 Modify `internal/world/service.go`:
 
@@ -591,12 +759,15 @@ func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
             return oops.With("operation", "delete_character_properties").Wrap(err)
         }
         // Then delete character
-        return s.characterRepo.Delete(ctx, id)
+        if err := s.characterRepo.Delete(ctx, id); err != nil {
+            return oops.With("operation", "delete_character").With("character_id", id).Wrap(err)
+        }
+        return nil
     })
 }
 ```
 
-Repeat for `DeleteObject()` and `DeleteLocation()`.
+Add similar property cascade deletion logic to existing `DeleteObject()` and `DeleteLocation()` methods.
 
 **Step 3: Implement orphan cleanup**
 
@@ -1303,7 +1474,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 **Acceptance Criteria:**
 
-- [ ] All 14 seed policy DSL strings parse successfully
+- [ ] All 16 seed policy DSL strings parse successfully
 - [ ] All operators parse correctly: `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `like`, `has`, `containsAll`, `containsAny`, `!`, `&&`, `||`, `if-then-else`
 - [ ] `resource == "location:01XYZ"` (exact match) parses correctly
 - [ ] Missing semicolon → descriptive error with position info
@@ -1322,7 +1493,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (14 seed policies plus catch-all forbid test case):**
+**Valid policies (16 seed policies plus catch-all forbid test case):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };
@@ -1625,7 +1796,7 @@ type ValidationWarning struct {
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
 type CompiledPolicy struct {
     GrammarVersion int
-    Effect         Effect
+    Effect         PolicyEffect
     Target         CompiledTarget
     Conditions     *dsl.ConditionBlock
     GlobCache      map[string]glob.Glob
@@ -1973,6 +2144,8 @@ git add internal/access/policy/attribute/stream.go internal/access/policy/attrib
 git commit -m "feat(access): add simple providers (environment, command, stream)"
 ```
 
+> **Known Limitation:** Sequential provider execution allows one slow provider to starve others. This is acceptable for MVP scale (~200 users). Future optimization: parallel provider execution if profiling reveals bottlenecks.
+
 ---
 
 ### Task 16b: PropertyProvider with recursive CTE
@@ -2014,26 +2187,32 @@ PropertyProvider's `parent_location` uses recursive CTE covering all three place
 
 ```sql
 WITH RECURSIVE containment AS (
-    SELECT parent_type, parent_id, 0 AS depth
+    SELECT parent_type, parent_id, ARRAY[parent_id] AS path, 0 AS depth
     FROM entity_properties WHERE id = $1
     UNION ALL
     -- Path 1: Direct location (location_id non-NULL)
-    SELECT 'location', o.location_id, c.depth + 1
+    SELECT 'location', o.location_id::text, c.path || o.id::text, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20 AND o.location_id IS NOT NULL
+    WHERE c.depth < 20
+      AND o.location_id IS NOT NULL
+      AND NOT o.id::text = ANY(c.path)
     UNION ALL
     -- Path 2: Held by character (held_by_character_id non-NULL)
-    SELECT 'character', o.held_by_character_id, c.depth + 1
+    SELECT 'character', o.held_by_character_id::text, c.path || o.id::text, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20 AND o.held_by_character_id IS NOT NULL
+    WHERE c.depth < 20
+      AND o.held_by_character_id IS NOT NULL
+      AND NOT o.id::text = ANY(c.path)
     UNION ALL
     -- Path 3: Contained in another object (contained_in_object_id non-NULL)
-    SELECT 'object', o.contained_in_object_id, c.depth + 1
+    SELECT 'object', o.contained_in_object_id::text, c.path || o.id::text, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20 AND o.contained_in_object_id IS NOT NULL
+    WHERE c.depth < 20
+      AND o.contained_in_object_id IS NOT NULL
+      AND NOT o.id::text = ANY(c.path)
 )
 SELECT parent_id FROM containment
 WHERE parent_type = 'location'
@@ -2060,8 +2239,10 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
 - [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
   - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
-  - [ ] Engine implementation MUST call audit logger before returning from step 1
-  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry
+  - [ ] System bypass audit writes MUST use sync write path (same as denials) per ADR 66 — guarantees audit trail for privileged operations
+  - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
+  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry (via sync write)
+  - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
@@ -2160,173 +2341,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ---
 
-### Task 16c: Implement Layer 1 restricted visibility metadata checks
-
-**Spec References:** Visibility Seed Policies (lines 1191-1223), Property Model > Restricted Visibility (lines 1152-1185)
-
-**Acceptance Criteria:**
-
-- [ ] Layer 1 visibility checks execute BEFORE ABAC policy evaluation
-- [ ] `visible_to` check: If property has `visible_to` list, allow only if `principal.id in resource.visible_to`
-- [ ] `excluded_from` check: If property has `excluded_from` list, deny if `principal.id in resource.excluded_from`
-- [ ] System subject bypasses visibility checks (system can access all properties)
-- [ ] Visibility check short-circuits: denied by Layer 1 → skip policy engine, return `Decision{Allowed: false, Effect: DefaultDeny}`
-- [ ] Visibility checks use metadata only (NOT seed policies)
-- [ ] Integration with PropertyProvider: visibility attributes resolved from property metadata
-- [ ] All tests pass via `task test`
-
-**Dependencies:**
-
-- Task 16b (PropertyProvider) — provides property metadata for visibility checks
-- Task 17 (AccessPolicyEngine) — engine.go must exist before adding Layer 1 visibility checks to it
-
-**Files:**
-
-- Modify: `internal/access/policy/engine.go` (add Layer 1 visibility checks before policy evaluation)
-- Test: `internal/access/policy/visibility_test.go`
-
-**TDD Test List:**
-
-- Restricted property with `visible_to=[char1]`, principal=char1 → Layer 1 allows, continues to policy eval
-- Restricted property with `visible_to=[char1]`, principal=char2 → Layer 1 denies, short-circuits
-- Restricted property with `excluded_from=[char1]`, principal=char1 → Layer 1 denies, short-circuits
-- Restricted property with `excluded_from=[char1]`, principal=char2 → Layer 1 allows, continues to policy eval
-- System subject accessing restricted property → Layer 1 bypasses visibility, continues to policy eval
-- Public property (no `visible_to`/`excluded_from`) → Layer 1 allows, continues to policy eval
-
-**Step 1: Write failing tests**
-
-Test that visibility checks execute before policy evaluation:
-
-```go
-// internal/access/policy/visibility_test.go
-package policy_test
-
-import (
-    "context"
-    "testing"
-    "github.com/holomush/holomush/internal/access/policy"
-)
-
-func TestEngine_RestrictedVisibilityLayer1(t *testing.T) {
-    tests := []struct {
-        name           string
-        principalID    string
-        visibleTo      []string
-        excludedFrom   []string
-        expectAllowed  bool
-        expectEffect   policy.Effect
-    }{
-        {
-            name:          "visible_to match allows",
-            principalID:   "char1",
-            visibleTo:     []string{"char1", "char2"},
-            excludedFrom:  nil,
-            expectAllowed: true, // Layer 1 passes, policy eval continues
-        },
-        {
-            name:          "visible_to mismatch denies",
-            principalID:   "char3",
-            visibleTo:     []string{"char1", "char2"},
-            excludedFrom:  nil,
-            expectAllowed: false,
-            expectEffect:  policy.EffectDefaultDeny,
-        },
-        {
-            name:          "excluded_from match denies",
-            principalID:   "char1",
-            visibleTo:     nil,
-            excludedFrom:  []string{"char1"},
-            expectAllowed: false,
-            expectEffect:  policy.EffectDefaultDeny,
-        },
-        {
-            name:          "excluded_from mismatch allows",
-            principalID:   "char2",
-            visibleTo:     nil,
-            excludedFrom:  []string{"char1"},
-            expectAllowed: true, // Layer 1 passes, policy eval continues
-        },
-        {
-            name:          "system subject bypasses visibility",
-            principalID:   "system",
-            visibleTo:     []string{"char1"},
-            excludedFrom:  nil,
-            expectAllowed: true,
-            expectEffect:  policy.EffectSystemBypass,
-        },
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // Setup: engine with property provider that returns visibility metadata
-            // Execute: Evaluate() with restricted property
-            // Assert: Layer 1 check result matches expectation
-        })
-    }
-}
-```
-
-**Step 2: Implement visibility checks in engine**
-
-In `internal/access/policy/engine.go`, add Layer 1 checks after system bypass but before policy evaluation:
-
-```go
-func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    // Step 1: System bypass
-    if req.Subject == "system" {
-        return Decision{Allowed: true, Effect: EffectSystemBypass}, nil
-    }
-
-    // Step 2: Session resolution
-    // ...
-
-    // Step 3: Eager attribute resolution
-    // ...
-
-    // Step 3b: Layer 1 restricted visibility checks (metadata-based, NOT policies)
-    if req.Resource.Type == "property" {
-        // Resolve property metadata (visible_to, excluded_from)
-        attrs, err := e.resolver.ResolveResource(ctx, req.Resource.Type, req.Resource.ID)
-        if err != nil {
-            return Decision{Allowed: false, Effect: EffectDefaultDeny}, err
-        }
-
-        // Check excluded_from first (explicit deny)
-        if excludedFrom, ok := attrs["excluded_from"].([]string); ok && len(excludedFrom) > 0 {
-            if contains(excludedFrom, req.Subject) {
-                return Decision{Allowed: false, Effect: EffectDefaultDeny, Reason: "Layer 1: excluded_from"}, nil
-            }
-        }
-
-        // Check visible_to (allowlist)
-        if visibleTo, ok := attrs["visible_to"].([]string); ok && len(visibleTo) > 0 {
-            if !contains(visibleTo, req.Subject) {
-                return Decision{Allowed: false, Effect: EffectDefaultDeny, Reason: "Layer 1: not in visible_to"}, nil
-            }
-        }
-    }
-
-    // Step 4-7: Policy evaluation, deny-overrides, audit
-    // ...
-}
-```
-
-**Step 3: Run tests**
-
-Run: `task test`
-Expected: PASS
-
-**Step 4: Commit**
-
-```bash
-git add internal/access/policy/engine.go internal/access/policy/visibility_test.go
-git commit -m "feat(access): add Layer 1 restricted visibility metadata checks"
-```
-
----
-
-### Task 18: Policy cache with LISTEN/NOTIFY invalidation
+### Task 17: Build AccessPolicyEngine
 
 **Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
@@ -2411,13 +2426,15 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `off`: only system bypasses logged
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
-- [ ] **Sync write for denials:** `deny` and `default_deny` events written synchronously to PostgreSQL before `Evaluate()` returns
+- [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
 
-> **Note:** Elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
+> **Note:** Denials elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 
-- [ ] **Async write for allows:** `allow` and system bypass events written asynchronously via buffered channel
+> **Note:** System bypasses use sync path per ADR 66. Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
+
+- [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
-- [ ] **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (append-only, O_SYNC)
+- [ ] **WAL fallback:** If sync write fails, denial entry written to WAL path from `internal/xdg` package (append-only, O_SYNC)
 - [ ] **ReplayWAL():** Method reads WAL entries, batch-inserts to PostgreSQL, truncates file on success
 - [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us
@@ -2440,10 +2457,10 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - Mode `off`: only system bypasses logged
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
-- **Sync write for denials:** `deny` and `default_deny` events written synchronously, `Evaluate()` blocks until write completes
-- **Async write for allows:** `allow` and system bypass events submitted via buffered channel, doesn't block `Evaluate()`
+- **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously, `Evaluate()` blocks until write completes
+- **Async write for regular allows:** `allow` events (non-system-bypass) submitted via buffered channel, doesn't block `Evaluate()`
 - Channel full: entry dropped, `abac_audit_channel_full_total` metric incremented
-- **WAL fallback:** If sync write fails, denial entry written to `$XDG_STATE_HOME/holomush/audit-wal.jsonl`
+- **WAL fallback:** If sync write fails, denial entry written to WAL path from `internal/xdg` package
 - **ReplayWAL():** Reads WAL file, batch-inserts to PostgreSQL, truncates on success
 - Catastrophic failure: DB + WAL fail → stderr log, `abac_audit_failures_total{reason="wal_failed"}` incremented, entry dropped
 - Verify entry contains: subject, action, resource, effect, policy_id, policy_name, attributes snapshot, duration_us
@@ -2463,13 +2480,13 @@ const (
     AuditAll         AuditMode = "all"            // everything
 )
 
-// Logger writes audit entries with sync (denials) or async (allows) paths.
-// Denials are written synchronously to prevent evidence erasure.
+// Logger writes audit entries with sync (denials, system bypasses) or async (regular allows) paths.
+// Denials and system bypasses are written synchronously to prevent evidence erasure.
 type Logger struct {
     mode      AuditMode
-    entryCh   chan Entry         // async channel for allow/system bypass
+    entryCh   chan Entry         // async channel for regular allow events only
     writer    Writer             // PostgreSQL writer
-    walPath   string             // Write-Ahead Log path for denial fallback
+    walPath   string             // Write-Ahead Log path for sync write fallback
     walFile   *os.File           // WAL file handle (opened with O_APPEND | O_SYNC)
 }
 
@@ -2501,10 +2518,19 @@ type Entry struct {
 }
 ```
 
-`audit/postgres.go` implements both async batch-inserts from the channel and synchronous single writes for denials. The logger distinguishes between effects:
+`audit/postgres.go` implements both async batch-inserts from the channel and synchronous single writes for security-significant decisions. The logger distinguishes between effects:
 
-- **`deny` and `default_deny`:** Call `writer.WriteSync()` synchronously before returning from `Log()`. If the write fails, append the entry to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (opened with `O_APPEND | O_SYNC`). If both DB and WAL fail, log to stderr, increment `abac_audit_failures_total{reason="wal_failed"}`, and drop the entry.
-- **`allow` and system bypass:** Send to `entryCh` buffered channel for async batch writes. If channel is full, drop entry and increment `abac_audit_channel_full_total`.
+- **`deny`, `default_deny`, and `system_bypass`:** Call `writer.WriteSync()` synchronously before returning from `Log()`. If the write fails, append the entry to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (opened with `O_APPEND | O_SYNC`). If both DB and WAL fail, log to stderr, increment `abac_audit_failures_total{reason="wal_failed"}`, and drop the entry.
+- **`allow` (regular, non-system-bypass):** Send to `entryCh` buffered channel for async batch writes. If channel is full, drop entry and increment `abac_audit_channel_full_total`.
+
+**Audit Path Summary:**
+
+| Effect           | Write Path | Rationale                                        |
+|------------------|------------|--------------------------------------------------|
+| `deny`           | Sync       | Security forensics — evidence of denials         |
+| `default_deny`   | Sync       | Security forensics — evidence of denials         |
+| `system_bypass`  | Sync       | Privileged operations — guaranteed audit trail   |
+| `allow` (regular)| Async      | Performance — high-volume routine operations     |
 
 `ReplayWAL()` reads JSON-encoded entries from the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success. The server calls this on startup and MAY call it periodically (e.g., every 5 minutes) during recovery.
 
@@ -2818,6 +2844,10 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 > **Verified (2026-02-07):** @-prefixed command names confirmed in `permissions.go` (4), `permissions_test.go` (1), `static_test.go` (4). Total: 9 occurrences. Command validation rejects `@` as leading character — the `@` exists only in permission string encoding, not in actual command names.
 
+> **Note:** 4 of 9 @-prefixed name occurrences are in `static_test.go` which is deleted by Task 29. Only 5 occurrences in `permissions.go` and `permissions_test.go` need modification in this task.
+
+> **Note:** This task could be submitted as an independent pre-ABAC PR. It only modifies `internal/access/permissions.go` and has no ABAC dependencies.
+
 **Files:**
 
 - `internal/access/permissions.go` (4 instances)
@@ -2857,7 +2887,7 @@ git commit -m "refactor(commands): remove @ prefix from command names"
 
 **Acceptance Criteria:**
 
-- [ ] All 14 seed policies defined as `SeedPolicy` structs (all permit)
+- [ ] All 16 seed policies defined as `SeedPolicy` structs (14 permit, 2 with visibility)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
@@ -2873,7 +2903,7 @@ git commit -m "refactor(commands): remove @ prefix from command names"
 
 **Step 1: Write failing tests**
 
-- All 14 seed policies compile without error via `PolicyCompiler`
+- All 16 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -2893,7 +2923,7 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 14 seed policies (all permit).
+// SeedPolicies returns the complete set of 16 seed policies (14 permit, 2 visibility).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
@@ -2981,11 +3011,23 @@ func SeedPolicies() []SeedPolicy {
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };`,
             SeedVersion: 1,
         },
+        {
+            Name:        "seed:property-visible-to",
+            Description: "Properties with visible_to lists: only listed characters can read",
+            DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };`,
+            SeedVersion: 1,
+        },
+        {
+            Name:        "seed:property-excluded-from",
+            Description: "Exclude specific characters from seeing a property",
+            DSLText:     `forbid(principal is character, action in ["read"], resource is property) when { resource has excluded_from && principal.id in resource.excluded_from };`,
+            SeedVersion: 1,
+        },
     }
 }
 ```
 
-(Note: 14 seed policies listed above, all permit policies from spec (lines 2935-2999). Default deny behavior is provided by EffectDefaultDeny, not an explicit forbid policy.)
+(Note: 16 seed policies listed above: 14 permit policies for standard access patterns (lines 2935-2999), plus 2 visibility policies (1 permit for visible_to, 1 forbid for excluded_from per lines 1078-1090). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 
@@ -2998,7 +3040,7 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 23: Bootstrap sequence
 
-**Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
+**Spec References:** Bootstrap Sequence (lines 3007-3122), Seed Policy Migrations (lines 3123-3173)
 
 **Acceptance Criteria:**
 
@@ -3017,8 +3059,6 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
 - [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
-
-> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16c), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16c for Layer 1 restricted visibility checks.
 
 **Dependencies:**
 
@@ -3096,19 +3136,8 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
                 }
                 compiledJSON, _ := json.Marshal(compiled)
 
-                // Convert policy.Effect to PolicyEffect
-                var effect policystore.PolicyEffect
-                switch compiled.Effect {
-                case policy.EffectAllow:
-                    effect = policystore.PolicyEffectPermit
-                case policy.EffectDeny:
-                    effect = policystore.PolicyEffectForbid
-                default:
-                    return oops.With("seed", seed.Name).Errorf("invalid effect for seed policy: %v", compiled.Effect)
-                }
-
                 existing.DSLText = seed.DSLText
-                existing.Effect = effect
+                existing.Effect = compiled.Effect
                 existing.CompiledAST = compiledJSON
                 existing.SeedVersion = &seed.SeedVersion
                 existing.ChangeNote = fmt.Sprintf("Auto-upgraded from seed v%d to v%d on server upgrade", oldVersion, seed.SeedVersion)
@@ -3134,21 +3163,10 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
         }
         compiledJSON, _ := json.Marshal(compiled)
 
-        // Convert policy.Effect to PolicyEffect
-        var effect policystore.PolicyEffect
-        switch compiled.Effect {
-        case policy.EffectAllow:
-            effect = policystore.PolicyEffectPermit
-        case policy.EffectDeny:
-            effect = policystore.PolicyEffectForbid
-        default:
-            return oops.With("seed", seed.Name).Errorf("invalid effect for seed policy: %v", compiled.Effect)
-        }
-
         err = policyStore.Create(ctx, &policystore.StoredPolicy{
             Name:        seed.Name,
             Description: seed.Description,
-            Effect:      effect,
+            Effect:      compiled.Effect,
             Source:      "seed",
             DSLText:     seed.DSLText,
             CompiledAST: compiledJSON,
@@ -3642,6 +3660,7 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 - [ ] Committed per package (dispatcher, world, plugin)
 - [ ] `task test` passes after all migrations
 - [ ] No commits with intentional build breakage
+- [ ] Rollback strategy documented (Decision #65): `git revert` of Task 28 commit(s) restores `AccessControl.Check()` call sites
 
 **Files:**
 
@@ -3660,6 +3679,7 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 Migrate per-package, with each commit including both DI wiring changes and all call site updates for that package. This ensures every commit compiles and passes `task build`.
 
 **Call site counts verified (as of 2026-02-07):**
+
 - Production: 28 call sites (3 in command, 24 in world, 1 in plugin)
 - Tests: 57 call sites in `internal/access/static_test.go` + ~20 in `internal/plugin/capability/enforcer_test.go` (Task 29)
 
@@ -3688,12 +3708,15 @@ Migrate per-package, with each commit including both DI wiring changes and all c
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for plugin package dependencies
 2. Update 1 production call site:
-   - `internal/plugin/hostfunc/commands.go` (1 call)
-   - Note: `functions.go` has capability enforcer calls, not AccessControl
-3. Update tests to mock `AccessPolicyEngine`
-4. Run `task test` — MUST PASS
-5. Run `task build` — MUST PASS
-6. Commit: `"refactor(plugin): migrate host functions to AccessPolicyEngine"`
+   - `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`)
+   - Note: The `AccessControl` field is defined in `functions.go` but used in `commands.go`
+3. Update `internal/plugin/hostfunc/functions.go` to change field type from `AccessControl` to `*policy.Engine`
+4. Update `internal/plugin/hostfunc/commands.go` to change `AccessControl` interface declaration to use `*policy.Engine`
+5. Update `WithAccessControl()` option to accept `*policy.Engine` instead of `AccessControl` interface
+6. Update tests to mock `AccessPolicyEngine`
+7. Run `task test` — MUST PASS
+8. Run `task build` — MUST PASS
+9. Commit: `"refactor(plugin): migrate host functions to AccessPolicyEngine"`
 
 **Package 4: Final wiring (bootstrap and NOTIFY subscription)**
 
@@ -3735,6 +3758,15 @@ if !decision.Allowed {
 
 Ensure all subject strings use `character:` prefix (not legacy `char:`).
 
+**Rollback Strategy:**
+
+If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` (documented in Decision #65 of the design decisions document):
+
+1. **Revert Task 28 commit(s)** — This restores all 28 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
+2. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
+
+**Rationale:** No feature flag or adapter layer exists (per Decision #36 and Decision #37 — no adapter, no shadow mode). The migration is a direct replacement with comprehensive test coverage as the safety net. Git revert provides the rollback path (per Decision #65).
+
 ---
 
 ### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
@@ -3745,10 +3777,12 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 
 - [ ] `internal/access/static.go` and `static_test.go` deleted
 - [ ] `internal/access/permissions.go` and `permissions_test.go` deleted (if static-only)
-- [ ] `AccessControl` interface removed from `access.go`
-- [ ] `capability.Enforcer` removed (capabilities now seed policies)
+- [ ] `AccessControl` interface removed from `access.go` and `internal/plugin/hostfunc/commands.go`
+- [ ] `capability.Enforcer` and `capability.CapabilityChecker` removed (capabilities now seed policies)
+- [ ] `internal/plugin/hostfunc/functions.go` — Remove `CapabilityChecker` field and `wrap()` capability checks (plugin capabilities now enforced via ABAC policies)
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
+- [ ] Zero references to `CapabilityChecker` or `capability.Enforcer` in codebase
 - [ ] Zero `char:` prefix usage (all migrated to `character:`)
 - [ ] `task test` passes
 - [ ] `task lint` passes
@@ -3763,9 +3797,22 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 - Delete: `internal/access/accesstest/mock.go` (generated mock)
 - Modify: `internal/access/access.go` — remove `AccessControl` interface
 - Delete or modify: `internal/plugin/capability/` — remove `Enforcer` (capabilities now seed policies)
-- Modify: `internal/plugin/hostfunc/functions.go` — uses capability.Enforcer, not AccessControl
+- Modify: `internal/plugin/hostfunc/functions.go` — remove `CapabilityChecker` field and `wrap()` function
+- Modify: `internal/plugin/hostfunc/commands.go` — remove local `AccessControl` interface declaration
 - Search and remove: all `char:` prefix usage (replace with `character:`)
 - Run: `mockery` to regenerate mocks for new `AccessPolicyEngine` interface
+
+**Call Site Verification:**
+
+This task removes OLD interfaces/implementations. Ensure all production call sites were migrated in Task 28:
+
+- `internal/command/dispatcher.go` — migrated in Task 28 Package 1
+- `internal/command/rate_limit_middleware.go` — migrated in Task 28 Package 1
+- `internal/command/handlers/boot.go` — migrated in Task 28 Package 1
+- `internal/world/service.go` (24 calls) — migrated in Task 28 Package 2
+- `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`) — migrated in Task 28 Package 3
+
+The capability enforcer (`f.enforcer.Check()` in `functions.go`) is separate from `AccessControl` and removed here.
 
 **Step 1: Delete static access control files**
 
@@ -3898,6 +3945,14 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19)
 - [ ] All tests pass via `task test`
 
+**Degraded Mode Triggers:**
+
+| Trigger                          | Cause                                                   | Recovery                                                     |
+| -------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| Compile-time corruption          | `compiled_ast` unmarshal fails on policy load           | Disable corrupted policy, run `policy clear-degraded-mode`   |
+| Runtime evaluation error         | AST structural invariants violated during evaluation    | Disable corrupted policy, run `policy clear-degraded-mode`   |
+| Transient database error         | PostgreSQL unavailable during policy load               | Fix DB connectivity, restart server or reload policies       |
+
 **Files:**
 
 - Modify: `internal/access/policy/engine.go` (add degraded mode state and check)
@@ -4002,7 +4057,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **TDD Test List:**
 
-- >80% budget utilization in >50% of calls (minimum 10 calls) over 60-second rolling window → circuit opens
+- 80% budget utilization in >50% of calls (minimum 10 calls) over 60-second rolling window → circuit opens
 - Circuit open → provider skipped for 60s, empty attributes returned
 - WARN log on circuit open with provider name and budget utilization details
 - Prometheus counter incremented on trip
@@ -4045,19 +4100,23 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 Intentional deviations from the design spec, tracked here for discoverability and review.
 
-| Deviation                                                        | Spec Reference | Task   | Rationale                                                                                          |
-| ---------------------------------------------------------------- | -------------- | ------ | -------------------------------------------------------------------------------------------------- |
-| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015 | Task 2 | Better partition compatibility                                                                     |
-| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877 | Task 20 | Prevents unbounded cardinality from admin-created policy names                                     |
-| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238 | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                  |
+| Deviation                                                        | Spec Reference    | Task    | Rationale                                                                                                                                |
+| ---------------------------------------------------------------- | ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015   | Task 2  | Better partition compatibility                                                                                                           |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877    | Task 20 | Prevents unbounded cardinality from admin-created policy names                                                                           |
+| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238    | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
+| Lock naming uses `lock:<type>:<id>:<action>` format              | Spec line 2656    | Task 26 | Explicit resource type prefix improves discoverability and query filtering                                                               |
+| Policy compilation moved from PolicyStore to caller              | Spec lines 278-281 | Task 7  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
 
 ## Deferred Features
 
 The following features are intentionally deferred from this implementation plan. They are noted here for discoverability.
 
-| Feature                             | Spec Reference           | Status   | Notes                                                                    |
-| ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------------ |
-| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands      |
-| `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative              |
-| Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                      |
-| `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows        |
+| Feature                             | Spec Reference           | Status   | Notes                                                               |
+| ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------- |
+| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
+| `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative         |
+| Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                 |
+| `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
+| `policy diff <id1> <id2>`           | Spec lines 3429-3447     | Deferred | Compare two policy versions; shows DSL text diff                    |
+| `policy export [--format=json]`     | Spec lines 3429-3447     | Deferred | Export all policies to stdout for backup/migration                  |

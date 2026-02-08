@@ -2410,15 +2410,15 @@ Two forms are supported:
 1. **Action-specific unlock:** `unlock <resource>/<action>` removes the lock
    policy for the specified action on the resource. Example:
    `unlock my-chest/read` deletes the policy named
-   `lock:<resource_ulid>:read`.
+   `lock:object:<resource_ulid>:read`.
 
 2. **Resource-wide unlock:** `unlock <resource>` removes **all** lock policies
    for the resource across all actions. Example: `unlock my-chest` deletes all
-   policies matching the pattern `lock:<resource_ulid>:*`. The implementation
-   **MUST** query `PolicyStore` with
-   `WHERE name LIKE 'lock:<resource_ulid>:%'` and delete all matching
-   policies. This ensures bulk unlock for resources with multiple action
-   locks.
+   policies matching the pattern `lock:object:<resource_ulid>:*`. The
+   implementation **MUST** query `PolicyStore` with
+   `WHERE name LIKE 'lock:object:<resource_ulid>:%'` (or equivalent pattern for
+   the resolved resource type) and delete all matching policies. This ensures
+   bulk unlock for resources with multiple action locks.
 
 **Resource target resolution:** The lock command resolves the resource target
 (the part before `/`) using the same name resolution as other world commands:
