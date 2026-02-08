@@ -77,3 +77,6 @@ options considered, and rationale for the chosen approach.
 | 59 | Fair-Share Provider Timeout Scheduling                       | 7.3     | [059](phase-7.3/059-fair-share-provider-timeout-scheduling.md)                                 |
 | 65 | Git Revert as Migration Rollback Strategy                    | 7.6     | [065](phase-7.6/065-git-revert-migration-rollback.md)                                         |
 | 74 | Unified Circuit Breaker via Task 34                          | 7.7     | [074](phase-7.7/074-unified-circuit-breaker-task-34.md)                                        |
+| 75 | Dual-Use Resource Prefixes                                   | General | [075](general/075-dual-use-resource-prefixes.md)                                               |
+| 76 | Compound Resource Decomposition During Migration             | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
+| 77 | Decision Type Mixed Visibility (Value Semantics Safety)      | General | [077](general/077-decision-type-mixed-visibility.md)                                           |
