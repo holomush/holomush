@@ -271,6 +271,8 @@ git commit -m "feat(command): add policy CRUD admin commands (create/list/show/e
 
 **Spec References:** Admin Commands (lines 2750-2971) — state management commands
 
+**Cross-Phase Dependencies:** T7 (Phase 7.1), T17 (Phase 7.3), T18 (Phase 7.3)
+
 **Acceptance Criteria:**
 
 - [ ] `policy enable <name>` → sets `enabled=true`, triggers cache reload
@@ -372,6 +374,8 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 **Spec References:** Policy Management Commands (lines 2750-2971) — policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3132-3165), Degraded Mode (lines 1660-1683), Grammar Versioning (lines 1001-1031)
 
 **Dependencies:** Task 27a (policy test command)
+
+**Cross-Phase Dependencies:** T7 (Phase 7.1), T12 (Phase 7.2), T17 (Phase 7.3), T18 (Phase 7.3)
 
 **Acceptance Criteria:**
 
