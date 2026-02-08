@@ -1944,6 +1944,9 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
   - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
   - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
+  - [ ] PostgreSQL SessionResolver implementation queries session store for character ID
+  - [ ] Character deletion handling: deleted characters return SESSION_INVALID error code
+  - [ ] All SessionResolver error codes tested: SESSION_INVALID, SESSION_STORE_ERROR
 - [ ] Step 3: Eager attribute resolution (all attributes collected before evaluation)
 - [ ] Step 4: Engine loads matching policies from the in-memory cache
 - [ ] Step 5: Engine evaluates each policy's conditions against the attribute bags
@@ -1958,6 +1961,8 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 - Create: `internal/access/policy/engine.go`
 - Test: `internal/access/policy/engine_test.go`
+- Create: `internal/access/policy/session_resolver.go` (PostgreSQL SessionResolver implementation)
+- Test: `internal/access/policy/session_resolver_test.go`
 
 **Step 1: Write failing tests**
 
