@@ -2642,6 +2642,9 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 - [ ] **`BenchmarkPropertyProvider_ParentLocation`** — recursive CTE with varying depths (1, 5, 10, 20 levels)
 - [ ] PropertyProvider benchmark validates 100ms timeout appropriateness
 - [ ] PropertyProvider benchmark verifies circuit breaker behavior under load (3 timeouts in 60s)
+- [ ] Pure/no-IO microbenchmarks: single-policy evaluation <10μs
+- [ ] Pure/no-IO microbenchmarks: 50-policy set evaluation <100μs
+- [ ] Pure/no-IO microbenchmarks: attribute resolution <50μs
 - [ ] Setup: 50 active policies, 3 operators per condition avg, 10 attributes per entity
 - [ ] All benchmarks run without errors
 
