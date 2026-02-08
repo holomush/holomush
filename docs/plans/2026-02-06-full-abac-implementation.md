@@ -700,8 +700,10 @@ const (
 
 // AttributeSchema registry for validating attribute types.
 // Used by PolicyCompiler (Task 12) and AttributeResolver (Task 14).
+// Note: This is a minimal stub. Task 6 will add namespaces field and methods.
+// Task 13 will add full implementation.
 type AttributeSchema struct {
-    // Implementation details in Task 13
+    // Fields added in Task 6
 }
 ```
 
@@ -741,46 +743,28 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 **Files:**
 
-- Create: `internal/access/policy/types/types.go` (shared types to prevent circular imports)
+- Extend: `internal/access/policy/types/types.go` (add NamespaceSchema and extend AttributeSchema implementation)
 - Create: `internal/access/policy/prefix.go`
 - Test: `internal/access/policy/prefix_test.go`
 - Create: `internal/access/context.go` (system context helpers)
 - Test: `internal/access/context_test.go`
 
-**Step 1: Define shared types (AttributeSchema, AttrType)**
+**Dependencies:** Requires Task 5 completion (core types must exist before extending)
 
-> **Design note:** `AttributeSchema` and `AttrType` are extracted into a separate `types` package to prevent circular dependencies. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `policy.AccessRequest` and `policy.AttributeBags`. By placing schema types in a shared package, both can import from `types` without creating a cycle.
+**Step 1: Extend shared types (NamespaceSchema, AttributeSchema methods)**
+
+> **Design note:** Task 5 created the base `AttributeSchema` and `AttrType` types. This task extends those types with `NamespaceSchema` and adds stub methods to `AttributeSchema` for use by the policy compiler (Task 12) and attribute resolver (Task 14).
 
 ```go
 // internal/access/policy/types/types.go
-package types
-
-// AttrType identifies the type of an attribute value.
-//
-// NOTE: Per spec Core Interfaces > Attribute Providers, all numeric attributes MUST be returned as float64
-// by providers at runtime, regardless of whether they are declared as Int or Float.
-// The Int/Float distinction exists only for schema validation and documentation.
-// All numeric comparisons in the policy engine operate on float64 values.
-type AttrType int
-
-const (
-	AttrTypeString     AttrType = iota
-	AttrTypeInt        // Providers MUST return as float64
-	AttrTypeFloat      // Providers MUST return as float64
-	AttrTypeBool
-	AttrTypeStringList
-)
+// ADD to existing file created in Task 5
 
 // NamespaceSchema defines the attributes in a namespace.
 type NamespaceSchema struct {
 	Attributes map[string]AttrType
 }
 
-// AttributeSchema validates attribute references during policy compilation.
-type AttributeSchema struct {
-	namespaces map[string]*NamespaceSchema
-}
-
+// ADD to existing AttributeSchema type:
 func NewAttributeSchema() *AttributeSchema {
 	return &AttributeSchema{
 		namespaces: make(map[string]*NamespaceSchema),
@@ -1012,10 +996,9 @@ Expected: PASS
 
 ```bash
 git add internal/access/policy/types/ internal/access/policy/prefix.go internal/access/policy/prefix_test.go internal/access/context.go internal/access/context_test.go
-git commit -m "feat(access): add shared types package, prefix parser, and system context helpers
+git commit -m "feat(access): extend types package, add prefix parser and system context helpers
 
-- Extract AttributeSchema and AttrType to internal/access/policy/types/
-- Prevents circular import between policy and attribute packages
+- Extend AttributeSchema with NamespaceSchema and stub methods
 - Add subject/resource prefix constants and parser
 - Add WithSystemSubject()/IsSystemContext() for bootstrap operations"
 ```
