@@ -2177,7 +2177,10 @@ func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, err
     // Step 2: Session resolution
     // ...
 
-    // Step 2b: Layer 1 restricted visibility checks (metadata-based, NOT policies)
+    // Step 3: Eager attribute resolution
+    // ...
+
+    // Step 3b: Layer 1 restricted visibility checks (metadata-based, NOT policies)
     if req.Resource.Type == "property" {
         // Resolve property metadata (visible_to, excluded_from)
         attrs, err := e.resolver.ResolveResource(ctx, req.Resource.Type, req.Resource.ID)
@@ -2200,7 +2203,6 @@ func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, err
         }
     }
 
-    // Step 3: Eager attribute resolution
     // Step 4-7: Policy evaluation, deny-overrides, audit
     // ...
 }
