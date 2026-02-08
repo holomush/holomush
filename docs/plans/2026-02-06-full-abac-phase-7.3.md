@@ -414,15 +414,15 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 **Acceptance Criteria:**
 
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
-- [ ] Step 1: System bypass — subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+- [ ] Step 1: System bypass — subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
   - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
   - [ ] System bypass audit writes MUST use sync write path (same as denials) per ADR 66 — guarantees audit trail for privileged operations
   - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
   - [ ] Test case: system bypass subject with audit mode=off still produces audit entry (via sync write)
   - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
-  - [ ] Invalid session → `Decision{Allowed: false, PolicyID: "infra:session-invalid"}`
-  - [ ] Session store error → `Decision{Allowed: false, PolicyID: "infra:session-store-error"}`
+  - [ ] Invalid session → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
+  - [ ] Session store error → `types.NewDecision(DefaultDeny, "session store error", "infra:session-store-error")`
   - [ ] PostgreSQL SessionResolver implementation queries session store for character ID
   - [ ] Character deletion handling: deleted characters return SESSION_INVALID error code
   - [ ] All SessionResolver error codes tested: SESSION_INVALID, SESSION_STORE_ERROR
@@ -430,7 +430,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Step 4: Engine loads matching policies from the in-memory cache
 - [ ] Step 5: Engine evaluates each policy's conditions against the attribute bags
 - [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
-  - [ ] No policies match → `Decision{Allowed: false, Effect: DefaultDeny}`
+  - [ ] No policies match → `types.NewDecision(DefaultDeny, "no policies matched", "")`
 - [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
 - [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all (spec lines 1697-1703)
 - [ ] Provider error → evaluation continues, error recorded in decision
@@ -448,15 +448,15 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 Table-driven tests covering the 7-step evaluation algorithm (spec Evaluation Algorithm, lines 1642-1690):
 
-1. **System bypass:** Subject `"system"` → `Decision{Allowed: true, Effect: SystemBypass}`
+1. **System bypass:** Subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
-3. **Session invalid:** Subject `"session:expired"` → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: "infra:session-invalid"}`
-4. **Session store error:** DB failure → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: "infra:session-store-error"}`
+3. **Session invalid:** Subject `"session:expired"` → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
+4. **Session store error:** DB failure → `types.NewDecision(DefaultDeny, "session store error", "infra:session-store-error")`
 5. **Eager attribute resolution:** All providers called before evaluation
 6. **Policy matching:** Target filtering — principal type, action list, resource type/exact
 7. **Condition evaluation:** Policies with satisfied conditions
 8. **Deny-overrides:** Both permit and forbid match → forbid wins
-9. **Default deny:** No policies match → `Decision{Allowed: false, Effect: DefaultDeny, PolicyID: ""}`
+9. **Default deny:** No policies match → `types.NewDecision(DefaultDeny, "no policies matched", "")`
 10. **Audit logging:** Audit entry logged per configured mode
 11. **Provider error:** Provider fails → evaluation continues, error recorded in decision
 12. **Cache warmth:** Second call in same request reuses per-request attribute cache

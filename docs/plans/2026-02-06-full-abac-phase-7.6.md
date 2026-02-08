@@ -35,7 +35,7 @@
 - [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
 - [ ] **Per-package error-path tests:** Each migrated package MUST have tests verifying:
   1. Correct `AccessRequest` construction (subject, action, resource populated)
-  2. `Decision.Allowed=false` handling (deny path returns error/fails operation)
+  2. `decision.IsAllowed()=false` handling (deny path returns error/fails operation)
   3. `Evaluate()` error handling (error != nil → fail-closed, operation denied, error logged)
 - [ ] Tests pass incrementally after each package migration
 - [ ] Committed per package (dispatcher, world, plugin)
@@ -132,7 +132,7 @@ if err != nil {
     slog.Error("access evaluation failed", "error", err)
     // Fail-closed: deny on error
 }
-if !decision.Allowed {
+if !decision.IsAllowed() {
     // existing denial handling
 }
 ```
@@ -155,7 +155,7 @@ func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
             name: "deny decision prevents operation",
             setupMock: func(m *mocks.MockAccessPolicyEngine) {
                 m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
-                    types.Decision{Allowed: false, Effect: types.EffectForbid},
+                    types.NewDecision(types.EffectForbid, "policy denied", "test-policy-123"),
                     nil,
                 )
             },
@@ -166,7 +166,7 @@ func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
             name: "evaluation error fails closed",
             setupMock: func(m *mocks.MockAccessPolicyEngine) {
                 m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
-                    types.Decision{},
+                    types.NewDecision(types.DefaultDeny, "evaluation error", ""),
                     errors.New("attribute resolution failed"),
                 )
             },
@@ -207,7 +207,7 @@ func TestAccessRequest_Construction(t *testing.T) {
     mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
         capturedRequest = req
         return true
-    })).Return(types.Decision{Allowed: true}, nil)
+    })).Return(types.NewDecision(types.EffectAllow, "test allowed", "test-policy"), nil)
 
     // Perform operation
     _ = operationUnderTest(ctx, mockEngine)

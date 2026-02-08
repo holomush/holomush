@@ -728,9 +728,9 @@ type Decision struct {
 }
 
 // NewDecision creates a Decision with the Allowed invariant enforced.
-func NewDecision(effect Effect, policyID, reason string) Decision {
+func NewDecision(effect Effect, reason, policyID string) Decision {
     return Decision{
-        Allowed:  effect == EffectAllow || effect == EffectSystemBypass,
+        allowed:  effect == EffectAllow || effect == EffectSystemBypass,
         Effect:   effect,
         PolicyID: policyID,
         Reason:   reason,
