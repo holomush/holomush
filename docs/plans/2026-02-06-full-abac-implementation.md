@@ -3185,6 +3185,7 @@ git commit -m "feat(access): add lock token registry"
 - [ ] Invalid lock expression → descriptive error
 - [ ] All lock-generated policies MUST include `resource.owner == principal.id` in condition block (ownership check requirement)
 - [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
+- [ ] Fuzz tests cover lock expression parser edge cases
 - [ ] All tests pass via `task test`
 
 **Files:**
