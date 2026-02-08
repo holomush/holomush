@@ -1019,6 +1019,13 @@ type AttributeSchema struct {
 }
 ```
 
+> **Implementation Note (Bug TD4):** Use typed string constants for enum-like string fields to add compile-time safety at zero cost. Specifically:
+> - `StoredPolicy.Source` → define `type PolicySource string` with constants `PolicySourceSeed`, `PolicySourceLock`, `PolicySourceAdmin`, `PolicySourcePlugin`
+> - `EntityProperty.Visibility` → define `type PropertyVisibility string` with constants `PropertyVisibilityPublic`, `PropertyVisibilityPrivate`, `PropertyVisibilityRestricted`, `PropertyVisibilitySystem`, `PropertyVisibilityAdmin`
+> - `EntityProperty.ParentType` → define `type EntityType string` with constants `EntityTypeCharacter`, `EntityTypeLocation`, `EntityTypeObject`
+>
+> This prevents typos like `"publc"` or `"seed "` (trailing space) from compiling, while maintaining string serialization compatibility with JSON/database fields.
+
 **Step 4: Run tests to verify they pass**
 
 Run: `task test`
@@ -1669,7 +1676,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ### Task 11: Build DSL condition evaluator
 
-**Spec References:** Policy DSL > Supported Operators (lines 1019-1036), Attribute Resolution > Error Handling (lines 1503-1640), Evaluation Algorithm > Key Behaviors (lines 1692-1714)
+**Spec References:** Policy DSL > Supported Operators (lines 1019-1036), Attribute Resolution > Error Handling (lines 1503-1640), Evaluation Algorithm > Key Behaviors (lines 1692-1714), Testing Strategy — Fuzz Testing (lines 3272-3314)
 
 **Acceptance Criteria:**
 
@@ -1680,6 +1687,9 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 - [ ] `like` operator uses glob matching (e.g., `location:*` matches `location:01XYZ`)
 - [ ] `if-then-else` evaluates correctly when `has` condition is true/false
 - [ ] `containsAll` and `containsAny` work with list attributes
+- [ ] `FuzzEvaluateConditions` fuzz test runs for 30s without panics (per spec Testing Strategy)
+- [ ] Fuzz target uses random ASTs against random attribute bags
+- [ ] CI integration: 30s per build, extended nightly runs
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1739,17 +1749,80 @@ Key behaviors:
 - **Missing attribute → `false`** for ALL comparisons (Cedar-aligned fail-safe)
 - **Depth limit:** enforce `MaxDepth` (default 32), return `false` if exceeded
 - **Glob matching:** use `github.com/gobwas/glob` for `like` operator, pre-compiled in `GlobCache`
+- **Type assertions for numeric comparisons (Bug TD3):** `map[string]any` means providers returning `int` instead of `float64` will silently break numeric `>`, `>=`, `<`, `<=` comparisons. Implementation MUST either: (1) perform type coercion in evaluator (e.g., convert `int` → `float64`), or (2) provide a type-checked `SetAttribute` helper that normalizes numeric types at insertion time. Evaluator tests MUST cover mixed numeric types (int/float64) to ensure comparisons work correctly.
 
 **Step 3: Run tests**
 
 Run: `task test`
 Expected: PASS
 
-**Step 4: Commit**
+**Step 4: Add fuzz test for evaluator**
+
+Create `internal/access/policy/dsl/evaluator_fuzz_test.go`:
+
+```go
+func FuzzEvaluateConditions(f *testing.F) {
+    // Seed corpus with valid condition structures
+    f.Add(`principal.role == "admin"`)
+    f.Add(`resource.level > 5 && principal.location == resource.parent`)
+    f.Add(`if principal has faction then principal.faction == resource.faction else true`)
+
+    f.Fuzz(func(t *testing.T, conditionExpr string) {
+        // Parse condition into AST (may fail, that's ok)
+        ast, err := dsl.Parse("permit(principal, action, resource) when { " + conditionExpr + " };")
+        if err != nil {
+            return
+        }
+
+        // Generate random attribute bags
+        bags := &types.AttributeBags{
+            Subject:     randomAttributeBag(),
+            Resource:    randomAttributeBag(),
+            Action:      randomAttributeBag(),
+            Environment: randomAttributeBag(),
+        }
+
+        // Evaluator must not panic on any AST + attribute bag combination
+        ctx := &EvalContext{Bags: bags, MaxDepth: 32}
+        _ = EvaluateConditions(ctx, ast.Conditions)
+    })
+}
+```
+
+**Note:** The fuzz test requires a `randomAttributeBag()` helper in `evaluator_fuzz_test.go`:
+
+```go
+func randomAttributeBag() map[string]any {
+	bag := make(map[string]any)
+	for i := range rand.Intn(10) + 1 {
+		key := fmt.Sprintf("attr%d", i)
+		switch rand.Intn(5) {
+		case 0:
+			bag[key] = fmt.Sprintf("value%d", rand.Intn(100))
+		case 1:
+			bag[key] = rand.Intn(100)
+		case 2:
+			bag[key] = rand.Float64() * 100
+		case 3:
+			bag[key] = rand.Intn(2) == 1
+		case 4:
+			bag[key] = []string{fmt.Sprintf("item%d", rand.Intn(10))}
+		}
+	}
+	return bag
+}
+```
+
+Run: `go test -fuzz=FuzzEvaluateConditions -fuzztime=30s ./internal/access/policy/dsl/`
+Expected: No panics
+
+**Note:** CI runs fuzz tests for 30s per build. Nightly extended runs use `-fuzztime=10m`.
+
+**Step 5: Commit**
 
 ```bash
-git add internal/access/policy/dsl/evaluator.go internal/access/policy/dsl/evaluator_test.go
-git commit -m "feat(access): add DSL condition evaluator with fail-safe semantics"
+git add internal/access/policy/dsl/evaluator.go internal/access/policy/dsl/evaluator_test.go internal/access/policy/dsl/evaluator_fuzz_test.go
+git commit -m "feat(access): add DSL condition evaluator with fail-safe semantics and fuzz tests"
 ```
 
 ---
@@ -1972,6 +2045,8 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 **Spec References:** Attribute Resolution > Resolution Flow (lines 1301-1327), Evaluation Algorithm > Performance Targets (lines 1715-1822), Evaluation Algorithm > Attribute Caching (lines 1891-1970), ADR 0012 (Eager attribute resolution)
 
+> **Note (Bug I10):** Spec lines 1976-2005 explicitly specify LRU eviction with `maxEntries` default of 100 (line 1982). Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
+
 **Acceptance Criteria:**
 
 - [ ] Single provider → correct attribute bags returned
@@ -1983,7 +2058,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Fair-share budget: `max(remainingBudget / remainingProviders, 5ms)`
 - [ ] Provider exceeding fair-share timeout → cancelled
 - [ ] Re-entrance detection → provider calling `Evaluate()` on same context → panic
-- [ ] `AttributeCache` is LRU with max 100 entries, attached to context
+- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per spec lines 1976-2005)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -2822,6 +2897,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 - [ ] **`BenchmarkPropertyProvider_ParentLocation`** — recursive CTE with varying depths (1, 5, 10, 20 levels)
 - [ ] PropertyProvider benchmark validates 100ms timeout appropriateness
 - [ ] PropertyProvider benchmark verifies circuit breaker behavior under load (3 timeouts in 60s)
+- [ ] **`BenchmarkProviderStarvation`** — slow first provider consuming ~80ms of 100ms budget, verifies subsequent providers receive cancelled contexts (per spec fair-share timeout requirement)
 - [ ] Pure/no-IO microbenchmarks: single-policy evaluation <10μs
 - [ ] Pure/no-IO microbenchmarks: 50-policy set evaluation <100μs
 - [ ] Pure/no-IO microbenchmarks: attribute resolution <50μs
@@ -2843,9 +2919,16 @@ func BenchmarkConditionEvaluation(b *testing.B)         // target: <1ms per poli
 func BenchmarkCacheReload(b *testing.B)                 // target: <50ms
 func BenchmarkWorstCase_NestedIf(b *testing.B)          // 32-level nesting <5ms
 func BenchmarkWorstCase_AllPoliciesMatch(b *testing.B)  // 50 policies <10ms
+func BenchmarkProviderStarvation(b *testing.B)          // slow first provider ~80ms, subsequent providers get cancelled contexts
 ```
 
 Setup: 50 active policies (25 permit, 25 forbid), 3 operators per condition average, 10 attributes per entity.
+
+**BenchmarkProviderStarvation implementation:**
+Simulates a slow first provider consuming ~80ms of the 100ms total budget. Verifies that:
+- Subsequent providers receive contexts with `ctx.Err() == context.DeadlineExceeded`
+- Fair-share timeout calculation correctly allocates remaining budget
+- Provider starvation is observable and measurable
 
 **Step 2: Run benchmarks**
 
