@@ -393,7 +393,7 @@ WITH RECURSIVE containment AS (
 )
 SELECT parent_id FROM containment
 WHERE parent_type = 'location'
-ORDER BY depth DESC LIMIT 1;
+ORDER BY depth ASC LIMIT 1;
 ```
 
 Circuit breaker: 3 timeout errors in 60s → skip queries for 60s.
