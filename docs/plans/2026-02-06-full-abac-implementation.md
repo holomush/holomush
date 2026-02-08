@@ -43,9 +43,9 @@ Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 | ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics     | Task 11         |
 | ADR 0011 | Deny-overrides conflict resolution         | Tasks 17, 30    |
 | ADR 0012 | Eager attribute resolution                 | Tasks 14, 17    |
-| ADR 0013 | Properties as first-class entities         | Tasks 3, 4, 16b |
+| ADR 0013 | Properties as first-class entities         | Tasks 3, 4a, 4b, 16b |
 | ADR 0014 | Direct replacement (no adapter)            | Tasks 28-29     |
-| ADR 0015 | Three-Layer Player Access Control          | Tasks 4, 16a-c  |
+| ADR 0015 | Three-Layer Player Access Control          | Tasks 4a, 4b, 16a-c  |
 | ADR 0016 | LISTEN/NOTIFY cache invalidation           | Task 18         |
 
 ### Acceptance Criteria
@@ -1977,7 +1977,7 @@ git commit -m "feat(access): add simple providers (environment, command, stream)
 
 ### Task 16b: PropertyProvider with recursive CTE
 
-> **Note:** This task depends on Task 4 (PropertyRepository must exist before PropertyProvider).
+> **Note:** This task depends on Task 4a (PropertyRepository must exist before PropertyProvider).
 
 **Spec References:** Property Model > Property Attributes (lines 1134-1149), ADR 0013 (Properties as first-class entities)
 
