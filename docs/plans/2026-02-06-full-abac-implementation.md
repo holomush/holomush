@@ -194,6 +194,9 @@ graph TD
     style T4c fill:#ffcccc
     style T7 fill:#ffcccc
     style T12 fill:#ffcccc
+    style T13 fill:#ffcccc
+    style T14 fill:#ffcccc
+    style T15 fill:#ffcccc
     style T17 fill:#ffcccc
     style T18 fill:#ffcccc
     style T23 fill:#ffcccc
@@ -201,11 +204,15 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → (DSL chain: Task 12) + (Provider chain: Task 13 → Task 14 → Task 15) → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+
+**Note:** Task 17 depends on BOTH Task 12 (DSL compiler) and Task 15 (core attribute providers). These chains can run in parallel after Task 7 completes, but both must finish before Task 17 can start.
 
 **Parallel Work Opportunities:**
 
-- Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
+- After Task 7 completes, two critical chains can run in parallel:
+  - DSL chain: Tasks 8-11 can start independently; only Task 12 (PolicyCompiler) requires Task 7
+  - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
