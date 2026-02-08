@@ -1030,6 +1030,8 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 - [ ] Integration tests (with `//go:build integration`) cover all CRUD operations
 - [ ] All tests pass via `task test`
 
+**Design Note:** `Create()` and `Update()` accept pre-compiled AST bytes in `StoredPolicy.CompiledAST`. Compilation happens in the caller (typically the engine or a higher-level service that uses `PolicyCompiler` from Task 12). This approach avoids a circular dependency between Task 7 (PolicyStore) and Task 12 (PolicyCompiler), and differs from the spec wording which suggests the store calls `Compile()` internally.
+
 **Files:**
 
 - Create: `internal/access/policy/store/store.go` (interface)
