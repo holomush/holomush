@@ -453,6 +453,10 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 > **Note:** This task was originally Task 25 in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository.
 
+> **Scope Note:** This task covers both creating new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) AND modifying existing services (WorldService cascade deletion, orphan cleanup goroutine, startup integrity check). If implementation proves complex, consider splitting into:
+> - **4a:** EntityProperty type + PropertyRepository interface + PostgreSQL implementation
+> - **4b:** WorldService cascade deletion + orphan cleanup goroutine + startup integrity check
+
 **Spec References:** Property Model (lines 1097-1294), Entity Properties — lifecycle on parent deletion (lines 2070-2113), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
