@@ -231,7 +231,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ### Task 11: Build DSL condition evaluator
 
-**Spec References:** Policy DSL > Supported Operators (lines 1073-1090), Attribute Resolution > Error Handling (lines 1557-1695), Evaluation Algorithm > Key Behaviors (lines 1746-1768), Testing Strategy — Fuzz Testing (lines 3327-3369)
+**Spec References:** Policy DSL > Supported Operators (lines 1073-1090), Attribute Resolution > Error Handling (lines 1557-1695), Evaluation Algorithm > Key Behaviors (lines 1746-1768), Testing Strategy — Fuzz Testing (lines 3327-3369), ADR 0010 (Cedar-Aligned Fail-Safe Type Semantics)
 
 **Acceptance Criteria:**
 

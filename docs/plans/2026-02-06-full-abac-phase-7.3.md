@@ -121,7 +121,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 **Spec References:** Attribute Resolution > Resolution Flow (lines 1355-1381), Evaluation Algorithm > Performance Targets (lines 1769-1945), Evaluation Algorithm > Attribute Caching (lines 1946-2025), ADR 0012 (Eager attribute resolution)
 
-> **Note (Bug I10):** Spec lines 2031-2060 explicitly specify LRU eviction with `maxEntries` default of 100 (line 2037). Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
+> **Note (Bug I10):** Spec lines 1976-2006 explicitly specify LRU eviction with `maxEntries` default of 100 (line 1983). Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
 
 **Acceptance Criteria:**
 
@@ -378,7 +378,7 @@ PropertyProvider:
 
 - `ResolveResource("property", "01GHI")` → all property attributes including `parent_location`
 - Nested containment: object in object in room → resolves `parent_location` to room
-- `parent_location` resolution timeout (100ms) → error, circuit breaker trips after 3 timeouts in 60s
+- `parent_location` resolution timeout (100ms) → error returned (circuit breaker behavior deferred to Task 34, [Phase 7.7](./2026-02-06-full-abac-phase-7.7.md) — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
 - Cycle detection → error before depth limit (20 levels)
 
 **Step 2: Implement PropertyProvider**
@@ -432,7 +432,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 ### Task 17: Build AccessPolicyEngine
 
-**Spec References:** Evaluation Algorithm (lines 1696-1745), Core Interfaces > Session Subject Resolution (lines 348-414), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
+**Spec References:** Evaluation Algorithm (lines 1696-1745), Core Interfaces > Session Subject Resolution (lines 348-414), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 **Acceptance Criteria:**
 
@@ -982,8 +982,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_audit_channel_full_total` counter for dropped audit entries
 - [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets)
 - [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
-- [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
-- [ ] `abac_property_provider_circuit_breaker_trips_total` counter (PropertyProvider-specific circuit breaker, distinct from general provider metric — see spec line 1283)
+- [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label (registered here, tripped by Task 34's general circuit breaker — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
 - [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
@@ -1082,7 +1081,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 - [ ] `BenchmarkWorstCase_AllPoliciesMatch` — 50 policies <10ms
 - [ ] **`BenchmarkPropertyProvider_ParentLocation`** — recursive CTE with varying depths (1, 5, 10, 20 levels)
 - [ ] PropertyProvider benchmark validates 100ms timeout appropriateness
-- [ ] PropertyProvider benchmark verifies circuit breaker behavior under load (3 timeouts in 60s)
+- [ ] PropertyProvider benchmark verifies timeout behavior under load (circuit breaker logic tested in Task 34)
 - [ ] **`BenchmarkProviderStarvation`** — slow first provider consuming ~80ms of 100ms budget, verifies subsequent providers receive cancelled contexts (per spec fair-share timeout requirement)
 - [ ] Pure/no-IO microbenchmarks: single-policy evaluation <10μs
 - [ ] Pure/no-IO microbenchmarks: 50-policy set evaluation <100μs

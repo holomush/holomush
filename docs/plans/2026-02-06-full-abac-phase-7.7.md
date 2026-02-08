@@ -202,6 +202,9 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Spec References:** Provider Circuit Breaker (lines 1594-1622, 1884-1900)
 
+> **Note:** This task's circuit breaker also covers PropertyProvider (formerly a
+> separate circuit breaker in Task 16b). See [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md).
+
 > **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1598-1602: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1884-1900: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1598-1602 are subsumed by the budget-utilization approach.
 
 **Acceptance Criteria:**
@@ -216,6 +219,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Circuit-opened providers do NOT consume evaluation time budget (immediate skip, no I/O)
 - [ ] Fair-share timeout calculation excludes circuit-opened providers from remaining provider count
 - [ ] Provider metrics endpoint `/debug/abac/providers` shows: call counts, avg latency, timeout rate, circuit status
+- [ ] PropertyProvider circuit breaker behavior covered (replaces Task 16b's deferred circuit breaker)
 - [ ] All tests pass via `task test`
 
 **Files:**

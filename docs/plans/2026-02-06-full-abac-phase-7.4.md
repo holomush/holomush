@@ -31,7 +31,7 @@
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
-- DSL text matches spec exactly (lines 2935-2999)
+- DSL text matches spec exactly (lines 2990-3054)
 
 **Step 2: Implement**
 

@@ -41,7 +41,7 @@
 - [ ] Committed per package (dispatcher, world, plugin)
 - [ ] `task test` passes after all migrations
 - [ ] No commits with intentional build breakage
-- [ ] Rollback strategy documented (Decision #65): `git revert` of Task 28 commit(s) restores `AccessControl.Check()` call sites
+- [ ] Rollback strategy documented ([Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)): `git revert` of Task 28 commit(s) restores `AccessControl.Check()` call sites
 
 **Files:**
 
@@ -155,7 +155,7 @@ func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
             name: "deny decision prevents operation",
             setupMock: func(m *mocks.MockAccessPolicyEngine) {
                 m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
-                    types.NewDecision(types.EffectForbid, "policy denied", "test-policy-123"),
+                    types.NewDecision(types.EffectDeny, "policy denied", "test-policy-123"),
                     nil,
                 )
             },
@@ -166,7 +166,7 @@ func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
             name: "evaluation error fails closed",
             setupMock: func(m *mocks.MockAccessPolicyEngine) {
                 m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
-                    types.NewDecision(types.DefaultDeny, "evaluation error", ""),
+                    types.NewDecision(types.EffectDefaultDeny, "evaluation error", ""),
                     errors.New("attribute resolution failed"),
                 )
             },
@@ -221,12 +221,12 @@ func TestAccessRequest_Construction(t *testing.T) {
 
 **Rollback Strategy:**
 
-If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` (documented in Decision #65 of the design decisions document):
+If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` (documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md) of the design decisions document):
 
 1. **Revert Task 28 commit(s)** — This restores all 28 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
 2. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
 
-**Rationale:** No feature flag or adapter layer exists (per Decision #36 and Decision #37 — no adapter, no shadow mode). The migration is a direct replacement with comprehensive test coverage as the safety net. Git revert provides the rollback path (per Decision #65).
+**Rationale:** No feature flag or adapter layer exists (per Decision #36 and Decision #37 — no adapter, no shadow mode). The migration is a direct replacement with comprehensive test coverage as the safety net. Git revert provides the rollback path (per [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)).
 
 ---
 

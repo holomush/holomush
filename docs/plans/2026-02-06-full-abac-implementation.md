@@ -38,7 +38,7 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 > **Note:** Spec line numbers in task references are approximate and based on the spec at time of writing. Verify against the current spec before implementing.
 
-Applicable ADRs (from spec References > Related ADRs, lines 3461+):
+Applicable ADRs (from spec References > Related ADRs, lines 3518-3525):
 
 | ADR      | Title                                  | Applies To               |
 | -------- | -------------------------------------- | ------------------------ |
@@ -195,12 +195,8 @@ graph TD
     T24 --> T33
     T14 --> T34
 
-    %% Critical path (thick lines conceptually)
+    %% Critical path (red); spike (yellow); PropertyProvider parallel chain (orange)
     style T0 fill:#ffffcc
-    style T3 fill:#ffcccc
-    style T4a fill:#ffcccc
-    style T4b fill:#ffcccc
-    style T4c fill:#ffcccc
     style T7 fill:#ffcccc
     style T12 fill:#ffcccc
     style T13 fill:#ffcccc
@@ -211,9 +207,13 @@ graph TD
     style T23 fill:#ffcccc
     style T28 fill:#ffcccc
     style T29 fill:#ffcccc
+    style T4a fill:#ffddaa
+    style T16b fill:#ffddaa
 ```
 
-**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 3 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 4b ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 4c ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → (DSL chain: Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
+**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → (DSL chain: Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
+
+**Parallel PropertyProvider chain (highlighted in orange):** Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)). Tasks 3, 4b, 4c are a side chain (property cascade) off Task 3/4a and do not gate downstream work.
 
 **Note:** Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) depends on BOTH Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) and Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (core attribute providers). These chains can run in parallel after Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, but both must finish before Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) can start.
 
@@ -269,7 +269,7 @@ Intentional deviations from the design spec, tracked here for discoverability an
 | Deviation                                                        | Spec Reference    | Task    | Rationale                                                                                                                                |
 | ---------------------------------------------------------------- | ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Primary key uses composite PK (id, timestamp) instead of spec single-column PK (id) | Spec line 2070   | Task 2 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | PostgreSQL partitioned tables MUST include partition key in PK |
-| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1833    | Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Prevents unbounded cardinality from admin-created policy names                                                                           |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1932    | Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Prevents unbounded cardinality from admin-created policy names                                                                           |
 | Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2293    | Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
 | Lock naming uses `lock:<type>:<id>:<action>` format              | Spec lines 2462-2477 | Task 25b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) | Explicit resource type prefix improves discoverability and query filtering                                                               |
 | Policy compilation moved from PolicyStore to caller              | Spec lines 206-304 | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
@@ -280,9 +280,9 @@ The following features are intentionally deferred from this implementation plan.
 
 | Feature                             | Spec Reference           | Status   | Notes                                                               |
 | ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------- |
-| `policy lint` / `policy lint --fix` | Spec line 848, line 3496 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
+| `policy lint` / `policy lint --fix` | Spec line 902, line 3497 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
 | `--force-seed-version=N` flag       | Spec lines 3121-3129     | Deferred | MAY-level; emergency recovery SQL documented as alternative         |
-| Web-based policy editor             | Spec line 3502           | Deferred | Future web UI for policy management                                 |
+| Web-based policy editor             | Spec line 38             | Deferred | Future web UI for policy management                                 |
 | `policy import <file>`              | Spec line 3492           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
 | `policy diff <id1> <id2>`           | Spec lines 3484-3502     | Deferred | Compare two policy versions; shows DSL text diff                    |
 | `policy export [--format=json]`     | Spec lines 3484-3502     | Deferred | Export all policies to stdout for backup/migration                  |

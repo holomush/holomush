@@ -124,13 +124,13 @@ if err != nil {
 defer tx.Rollback(ctx)
 
 // Write policy
-_, err = tx.Exec(ctx, "INSERT INTO access_policy (...) VALUES (...)")
+_, err = tx.Exec(ctx, "INSERT INTO access_policies (...) VALUES (...)")
 if err != nil {
     return err
 }
 
 // Call pg_notify WITHIN the transaction
-_, err = tx.Exec(ctx, "SELECT pg_notify('access_policy_changed', ?)", policyID)
+_, err = tx.Exec(ctx, "SELECT pg_notify('policy_changed', ?)", policyID)
 if err != nil {
     return err
 }
@@ -400,7 +400,7 @@ Policy recompile commands (spec lines 1001-1031):
 
 **Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
 
-Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 1013). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
+Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec lines 1003-1004). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
 
 **Failed recompilation handling** (spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 

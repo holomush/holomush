@@ -347,7 +347,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 >
 > **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Tasks 4b and 4c handle integrating property lifecycle with WorldService.
 
-**Spec References:** Property Model (lines 1151-1348), ADR 0013 (Properties as first-class entities)
+**Spec References:** Property Model (lines 1151-1348), ADR 0013 (Properties as first-class entities), ADR 0015 (Three-Layer Player Access Control)
 
 **Acceptance Criteria:**
 
@@ -719,7 +719,7 @@ type AccessRequest struct {
 
 // Decision represents the outcome of a policy evaluation.
 type Decision struct {
-    Allowed    bool
+    allowed    bool            // unexported — use IsAllowed(); enforced via NewDecision()
     Effect     Effect
     Reason     string
     PolicyID   string
@@ -727,7 +727,10 @@ type Decision struct {
     Attributes *AttributeBags
 }
 
-// NewDecision creates a Decision with the Allowed invariant enforced.
+// IsAllowed returns the authorization result.
+func (d Decision) IsAllowed() bool { return d.allowed }
+
+// NewDecision creates a Decision with the allowed invariant enforced.
 func NewDecision(effect Effect, reason, policyID string) Decision {
     return Decision{
         allowed:  effect == EffectAllow || effect == EffectSystemBypass,

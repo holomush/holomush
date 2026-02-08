@@ -1218,7 +1218,7 @@ their public properties changes accordingly. The `parent_location` attribute
 is **resolved dynamically at policy evaluation time** from the parent entity's
 current location state in the database, NOT frozen at property creation time.
 The `PropertyProvider` queries the parent entity's current `location_id` via
-SQL JOIN (see [decision #32](2026-02-05-full-abac-design-decisions.md#32-propertyprovider-uses-sql-join-for-parent-location))
+SQL JOIN (see [decision #32](decisions/epic7/phase-7.3/032-property-provider-sql-join.md))
 to populate the `parent_location` attribute in the resource bag. If the
 parent entity has no valid location (e.g., a character in the lobby before
 entering a room), `parent_location` is nil and location-based visibility
@@ -2977,8 +2977,8 @@ There is no backward-compatibility adapter, no shadow mode, and no incremental
 migration. All call sites switch to `Evaluate()` directly. This simplifies the
 design and eliminates an entire class of complexity (normalization helpers,
 migration adapters, shadow mode metrics, cutover criteria). See
-[decision #36](2026-02-05-full-abac-design-decisions.md#36-direct-replacement-no-adapter)
-and [decision #37](2026-02-05-full-abac-design-decisions.md#37-no-shadow-mode)
+[decision #36](decisions/epic7/phase-7.6/036-direct-replacement-no-adapter.md)
+and [decision #37](decisions/epic7/phase-7.6/037-no-shadow-mode.md)
 in the decisions log.
 
 ### Seed Policies
@@ -3503,7 +3503,7 @@ policy management system:
 
 ## References
 
-- [Design Decision Log](2026-02-05-full-abac-design-decisions.md) — Rationale
+- [Design Decision Log](decisions/epic7/README.md) — Rationale
   for key design choices made during review
 - [Core Access Control Design](2026-01-21-access-control-design.md) — Current
   static role implementation (Epic 3)
@@ -3515,11 +3515,11 @@ policy management system:
 
 ### Related ADRs
 
-- [ADR 0009: Custom Go-Native ABAC Engine](../adr/0009-custom-go-native-abac-engine.md)
-- [ADR 0010: Cedar-Aligned Fail-Safe Type Semantics](../adr/0010-cedar-aligned-fail-safe-type-semantics.md)
-- [ADR 0011: Deny-Overrides Without Priority](../adr/0011-deny-overrides-without-priority.md)
-- [ADR 0012: Eager Attribute Resolution](../adr/0012-eager-attribute-resolution.md)
-- [ADR 0013: Properties as First-Class Entities](../adr/0013-properties-as-first-class-entities.md)
-- [ADR 0014: Direct Static Access Control Replacement](../adr/0014-direct-static-access-control-replacement.md)
-- [ADR 0015: Three-Layer Player Access Control](../adr/0015-three-layer-player-access-control.md)
-- [ADR 0016: LISTEN/NOTIFY Policy Cache Invalidation](../adr/0016-listen-notify-policy-cache-invalidation.md)
+- [ADR 0009: Custom Go-Native ABAC Engine](decisions/epic7/general/001-policy-engine-approach.md)
+- [ADR 0010: Cedar-Aligned Fail-Safe Type Semantics](decisions/epic7/phase-7.3/028-cedar-aligned-missing-attribute-semantics.md)
+- [ADR 0011: Deny-Overrides Without Priority](decisions/epic7/general/004-conflict-resolution.md)
+- [ADR 0012: Eager Attribute Resolution](decisions/epic7/general/003-attribute-resolution-strategy.md)
+- [ADR 0013: Properties as First-Class Entities](decisions/epic7/phase-7.1/009-property-model.md)
+- [ADR 0014: Direct Static Access Control Replacement](decisions/epic7/phase-7.6/036-direct-replacement-no-adapter.md)
+- [ADR 0015: Three-Layer Player Access Control](decisions/epic7/phase-7.1/012-player-access-control-layers.md)
+- [ADR 0016: LISTEN/NOTIFY Policy Cache Invalidation](decisions/epic7/phase-7.3/011-cache-invalidation.md)
