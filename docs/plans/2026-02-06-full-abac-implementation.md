@@ -334,7 +334,7 @@ CREATE TABLE access_audit_log (
     duration_us     INTEGER,
     -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
     -- tables MUST include the partition key (timestamp) in the primary key.
-    -- Spec Policy Storage > Audit Log Serialization (line 2167) defines "id TEXT PRIMARY KEY" which is technically
+    -- Spec Policy Storage > Audit Log Serialization (line ~2015) defines "id TEXT PRIMARY KEY" which is technically
     -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
@@ -386,7 +386,7 @@ git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
 
-**NOTE:** The spec (Policy Storage > Audit Log Serialization, line 2167) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+**NOTE:** The spec (Policy Storage > Audit Log Serialization, line ~2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
 
 ---
 
