@@ -43,9 +43,9 @@ Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 | ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics     | Task 11         |
 | ADR 0011 | Deny-overrides conflict resolution         | Tasks 17, 30    |
 | ADR 0012 | Eager attribute resolution                 | Tasks 14, 17    |
-| ADR 0013 | Properties as first-class entities         | Tasks 3, 4, 16  |
+| ADR 0013 | Properties as first-class entities         | Tasks 3, 4, 16b |
 | ADR 0014 | Direct replacement (no adapter)            | Tasks 28-29     |
-| ADR 0015 | Three-Layer Player Access Control          | Tasks 4, 16     |
+| ADR 0015 | Three-Layer Player Access Control          | Tasks 4, 16a-c  |
 | ADR 0016 | LISTEN/NOTIFY cache invalidation           | Task 18         |
 
 ### Acceptance Criteria
@@ -103,6 +103,7 @@ graph TD
         T15[Task 15: Core providers]
         T16a[Task 16a: Simple providers]
         T16b[Task 16b: PropertyProvider]
+        T16c[Task 16c: Visibility checks]
         T17[Task 17: AccessPolicyEngine]
         T18[Task 18: Policy cache LISTEN/NOTIFY]
         T19[Task 19: Audit logger]
@@ -114,7 +115,8 @@ graph TD
         T15 --> T16a
         T16a --> T16b
         T15 --> T17
-        T16b --> T17
+        T16b --> T16c
+        T16c --> T17
         T17 --> T18
         T17 --> T19
         T19 --> T19b
@@ -139,6 +141,7 @@ graph TD
         T27[Task 27: Admin test/validate/reload]
         T24 --> T25
         T25 --> T25b
+        T26a --> T26b
     end
 
     subgraph "Phase 7.6: Call Site Migration"
@@ -166,7 +169,14 @@ graph TD
     T23 --> T26a
     T23 --> T27
     T17 --> T28
+    T23 --> T28
     T23b --> T30
+    T7 --> T26b
+    T17 --> T25b
+    T17 --> T31
+    T7 --> T32
+    T24 --> T33
+    T14 --> T34
 
     %% Critical path (thick lines conceptually)
     style T3 fill:#ffcccc
@@ -183,8 +193,9 @@ graph TD
 **Critical Path (highlighted in red):** Task 3 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Parallel Work Opportunities:**
-- Phase 7.2 (Tasks 8-12) can start after Task 7 completes
+- Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
+- Task 16c (visibility checks) depends on Task 16b but can proceed in parallel with Task 16a
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
 - Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
@@ -317,15 +328,7 @@ CREATE TABLE access_audit_log (
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Create initial partitions (current month + 2 future months, per spec Policy Storage > Audit Log Retention, line 2306)
-CREATE TABLE access_audit_log_2026_02 PARTITION OF access_audit_log
-    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
-
-CREATE TABLE access_audit_log_2026_03 PARTITION OF access_audit_log
-    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
-
-CREATE TABLE access_audit_log_2026_04 PARTITION OF access_audit_log
-    FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+-- Partitions created dynamically by Go migration code (see below)
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp)
     WITH (pages_per_range = 128);
@@ -334,7 +337,29 @@ CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
     WHERE effect IN ('deny', 'default_deny');
 ```
 
-> **Note:** Partition dates (2026_02, 2026_03, 2026_04) are illustrative. The actual migration MUST use dates appropriate for the deployment timeframe. Consider using a Go migration that generates partition boundaries dynamically, or document that dates should be updated before deployment.
+```go
+// Dynamic partition creation in Go migration
+// Creates current month + 2 future months
+func createPartitions(tx *sql.Tx) error {
+    now := time.Now()
+    for i := 0; i < 3; i++ {
+        month := now.AddDate(0, i, 0)
+        start := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
+        end := start.AddDate(0, 1, 0)
+        name := fmt.Sprintf("access_audit_log_%d_%02d", start.Year(), start.Month())
+        sql := fmt.Sprintf(
+            "CREATE TABLE %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')",
+            name, start.Format("2006-01-02"), end.Format("2006-01-02"),
+        )
+        if _, err := tx.Exec(sql); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+> **Note:** Partition creation uses dynamic Go migration code that generates boundaries based on deployment date. The SQL above shows the table schema only; actual partition creation happens in Go.
 
 **Step 2: Write the down migration**
 
@@ -529,7 +554,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Files:**
 
-- Create: `internal/access/policy/types.go`
+- Create: `internal/access/policy/types/types.go`
 - Test: `internal/access/policy/types_test.go`
 
 **Step 1: Write failing tests for Effect.String() and Decision invariants**
@@ -591,8 +616,8 @@ Expected: FAIL — package and types don't exist
 **Step 3: Implement types**
 
 ```go
-// internal/access/policy/types.go
-package policy
+// internal/access/policy/types/types.go
+package types
 
 // Effect represents the type of decision.
 type Effect int
@@ -696,7 +721,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 ### Task 6: Define subject/resource prefix constants and parser
 
-**Spec References:** Core Interfaces > Session Subject Resolution (lines 326-392)
+**Spec References:** Core Interfaces > AccessRequest (lines 283-325), Session Subject Resolution (lines 326-392)
 
 **Acceptance Criteria:**
 
@@ -964,7 +989,7 @@ type StoredPolicy struct {
     ID          string
     Name        string
     Description string
-    Effect      policy.Effect
+    Effect      PolicyEffect
     Source      string // "seed", "lock", "admin", "plugin"
     DSLText     string
     CompiledAST []byte // JSONB
@@ -1527,13 +1552,16 @@ import (
     "github.com/samber/oops"
 )
 
-// Implementation note: AttributeSchema and AttrType are defined in
-// internal/access/policy/types/ to prevent circular imports.
-// This package provides the actual implementation of schema methods.
+// SchemaRegistry wraps types.AttributeSchema with registration logic.
+// AttributeSchema and AttrType are defined in internal/access/policy/types/
+// to prevent circular imports. SchemaRegistry provides the actual implementation.
+type SchemaRegistry struct {
+    schema *types.AttributeSchema
+}
 
 // Register adds a namespace schema. Returns error if namespace is empty,
 // already registered, or contains duplicate keys.
-func (s *types.AttributeSchema) Register(namespace string, schema *types.NamespaceSchema) error {
+func (r *SchemaRegistry) Register(namespace string, schema *types.NamespaceSchema) error {
     if namespace == "" {
         return oops.Code("INVALID_NAMESPACE").Errorf("namespace cannot be empty")
     }
@@ -1544,7 +1572,7 @@ func (s *types.AttributeSchema) Register(namespace string, schema *types.Namespa
 }
 
 // IsRegistered checks if a namespace and attribute key are registered.
-func (s *types.AttributeSchema) IsRegistered(namespace, key string) bool {
+func (r *SchemaRegistry) IsRegistered(namespace, key string) bool {
     // Implementation
     return false
 }
@@ -1943,7 +1971,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ---
 
-### Task 16b: Implement Layer 1 restricted visibility metadata checks
+### Task 16c: Implement Layer 1 restricted visibility metadata checks
 
 **Spec References:** Visibility Seed Policies (lines 1191-1223), Property Model > Restricted Visibility (lines 1152-1185)
 
@@ -1960,7 +1988,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 **Dependencies:**
 
-- Task 15 (PropertyProvider) — provides property metadata for visibility checks
+- Task 16b (PropertyProvider) — provides property metadata for visibility checks
 
 **Files:**
 
@@ -2438,6 +2466,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets)
 - [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label
+- [ ] `abac_property_provider_circuit_breaker_trips_total` counter (PropertyProvider-specific circuit breaker, distinct from general provider metric — see spec line 1283)
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
 - [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
@@ -2744,7 +2773,7 @@ git commit -m "feat(access): define seed policies"
 - [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
 
-> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16b), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16b for Layer 1 restricted visibility checks.
+> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16c), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16c for Layer 1 restricted visibility checks.
 
 **Files:**
 
@@ -2945,7 +2974,7 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 - [ ] Duplicate token → error
 - [ ] `Lookup()` returns definition with DSL expansion info
 - [ ] `All()` returns complete token list
-- [ ] `TokenDef` extends `LockTokenDef` (from Task 12) with additional fields: `Namespace` (required for plugin tokens) and `ValueType` (for type-safe lock value parsing)
+- [ ] `TokenDef` extends `LockTokenDef` (from Task 13) with additional fields: `Namespace` (required for plugin tokens) and `ValueType` (for type-safe lock value parsing)
 - [ ] Conversion function `FromLockTokenDef(def LockTokenDef, namespace string) TokenDef` provided
 - [ ] All tests pass via `task test`
 
@@ -3055,7 +3084,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - [ ] Resource target resolution: resolve object/exit by name in current location
 - [ ] Ownership verification: character must own the target resource (checked via `Evaluate()`)
 - [ ] Rate limiting: max 50 lock policies per character → error on create if exceeded
-- [ ] Lock policy naming: `lock:<character_id>:<resource_id>:<action>` format
+- [ ] Lock policy naming: `lock:<type>:<resource_id>:<action>` format (per spec: `<type>` is bare resource type like `object`, `property`, `location`)
 - [ ] Commands registered in command registry following existing handler patterns
 - [ ] All tests pass via `task test`
 
@@ -3078,20 +3107,24 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 Lock command workflow:
 1. Parse `lock <resource>/<action> = <expression>` syntax
 2. Resolve resource by name in character's current location
-3. Check ownership via `engine.Evaluate(ctx, AccessRequest{Subject: character, Action: "own", Resource: resource})`
-4. Count existing lock policies for character (from PolicyStore, filter by `name LIKE 'lock:<character_id>:%'`)
-5. If count >= 50, return error "Rate limit exceeded: max 50 lock policies per character"
-6. Parse lock expression via lock parser (from Task 25)
-7. Compile to DSL policy via lock compiler (from Task 25)
-8. Generate policy name: `lock:<character_id>:<resource_id>:<action>`
-9. Store policy via PolicyStore with source="lock"
+3. Determine resource type (object, property, location, etc.) from resolved resource
+4. Check ownership via `engine.Evaluate(ctx, AccessRequest{Subject: character, Action: "own", Resource: resource})`
+5. Count existing lock policies for character (from PolicyStore, filter by `WHERE source = 'lock' AND created_by = <character_id>`)
+6. If count >= 50, return error "Rate limit exceeded: max 50 lock policies per character"
+7. Parse lock expression via lock parser (from Task 25)
+8. Compile to DSL policy via lock compiler (from Task 25)
+9. Generate policy name: `lock:<type>:<resource_id>:<action>` (e.g., `lock:object:01ABC:read`)
+10. Store policy via PolicyStore with source="lock"
+
+> **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per spec (lines 2656-2662). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
 
 Unlock command workflow:
 1. Parse `unlock <resource>/<action>` or `unlock <resource>` syntax
 2. Resolve resource by name in character's current location
-3. Check ownership via `Evaluate()`
-4. If action specified: delete policy named `lock:<character_id>:<resource_id>:<action>`
-5. If no action: delete all policies matching `lock:<character_id>:<resource_id>:%`
+3. Determine resource type from resolved resource
+4. Check ownership via `Evaluate()`
+5. If action specified: delete policy named `lock:<type>:<resource_id>:<action>`
+6. If no action: delete all policies matching pattern `lock:<type>:<resource_id>:%` (using PolicyStore query)
 
 **Step 3: Run tests, commit**
 
@@ -3206,7 +3239,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - [ ] `policy test --json` → returns structured JSON output with decision, matched policies, and attribute bags
 - [ ] Builder attribute redaction: subject attributes redacted when testing characters the builder doesn't own
 - [ ] Builder attribute redaction: resource attributes redacted for objects/locations the builder doesn't own
-- [ ] `policy test --suite <file>` → batch testing from YAML scenario file (SHOULD-level)
+- [ ] `policy test --suite <file>` → batch testing from YAML scenario file
 - [ ] YAML scenario file format: list of {subject, action, resource, expected_decision} entries
 - [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2790-2794)
 - [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
@@ -3454,6 +3487,7 @@ git commit -m "refactor(access): remove StaticAccessControl, AccessControl inter
 - [ ] testcontainers for PostgreSQL (pattern from `test/integration/world/`)
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
+- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry detected
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
@@ -3491,6 +3525,11 @@ var _ = Describe("Access Policy Engine", func() {
         It("handles restricted visibility with visible_to list", func() { })
     })
 
+    Describe("Re-entrance guard", func() {
+        It("panics when provider calls Evaluate() synchronously", func() { })
+        It("detects goroutine-based re-entry attempts", func() { })
+    })
+
     Describe("Cache invalidation", func() {
         It("reloads policies when NOTIFY fires after create", func() { })
         It("reloads policies when NOTIFY fires after delete", func() { })
@@ -3499,7 +3538,7 @@ var _ = Describe("Access Policy Engine", func() {
     Describe("Audit logging", func() {
         It("logs denials in denials_only mode", func() { })
         It("logs everything in all mode", func() { })
-        It("skips allows in off mode", func() { })
+        It("only logs system bypasses in off mode", func() { })
     })
 
     Describe("Lock system", func() {
@@ -3602,7 +3641,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Files:**
 
-- Create: `internal/command/handlers/lock.go`
+- Modify: `internal/command/handlers/lock.go`
 - Test: `internal/command/handlers/lock_test.go`
 
 **TDD Test List:**
@@ -3618,7 +3657,9 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 34: General provider circuit breaker
 
-**Spec References:** Provider Circuit Breaker (lines 1540-1568)
+**Spec References:** Provider Circuit Breaker (lines 1540-1568, 1830-1846)
+
+> **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1544-1548: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1830-1846: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1544-1548 are subsumed by the budget-utilization approach.
 
 **Acceptance Criteria:**
 
@@ -3680,12 +3721,23 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Metrics exported correctly on `/metrics` endpoint
 - [ ] Code coverage >80% per package
 
+## Spec Deviations
+
+Intentional deviations from the design spec, tracked here for discoverability and review.
+
+| Deviation                                                        | Spec Reference | Task   | Rationale                                                                                          |
+| ---------------------------------------------------------------- | -------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| Primary key uses composite PK instead of spec's serial PK        | Task 2         | Task 2 | Better partition compatibility                                                                     |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877 | Task 20 | Prevents unbounded cardinality from admin-created policy names                                     |
+| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238 | Task 13 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                  |
+
 ## Deferred Features
 
 The following features are intentionally deferred from this implementation plan. They are noted here for discoverability.
 
-| Feature                           | Spec Reference           | Status   | Notes                                                    |
-| --------------------------------- | ------------------------ | -------- | -------------------------------------------------------- |
-| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
-| `--force-seed-version=N` flag     | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative |
-| Web-based policy editor           | Spec line 3448           | Deferred | Future web UI for policy management                      |
+| Feature                             | Spec Reference           | Status   | Notes                                                                    |
+| ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------------ |
+| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands      |
+| `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative              |
+| Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                      |
+| `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows        |
