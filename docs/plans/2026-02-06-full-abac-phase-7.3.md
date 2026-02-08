@@ -1177,7 +1177,7 @@ task test
 **Step 4: Commit**
 
 ```bash
-git add .
+git add internal/access/permissions.go internal/access/permissions_test.go internal/access/static_test.go
 git commit -m "refactor(commands): remove @ prefix from command names"
 ```
 
