@@ -2692,6 +2692,8 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ### Task 21a: Remove @-prefix from command names
 
+> **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
+
 **Spec References:** Replacing Static Roles > Seed Policies (lines 2929-3006) — seed policies reference command names without @ prefix
 
 **Acceptance Criteria:**
@@ -2702,15 +2704,18 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 - [ ] `task test` passes
 - [ ] `task lint` passes
 
+> **Verified (2026-02-07):** @-prefixed command names confirmed in `permissions.go` (4), `permissions_test.go` (1), `static_test.go` (4). Total: 9 occurrences. Command validation rejects `@` as leading character — the `@` exists only in permission string encoding, not in actual command names.
+
 **Files:**
 
-- Search and modify: all files referencing `@`-prefixed command names
-- Likely files: `internal/plugin/capability/`, lock expression parsing, command registration
+- `internal/access/permissions.go` (4 instances)
+- `internal/access/permissions_test.go` (1 instance)
+- `internal/access/static_test.go` (4 instances)
 
 **Step 1: Search for @-prefixed command usage**
 
 ```bash
-rg '@(dig|create|describe|link|say|pose|look|go)' --type go
+rg 'command:@' --type go internal/access/
 ```
 
 **Step 2: Remove @ prefix from all command name handling**
