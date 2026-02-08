@@ -204,7 +204,7 @@ graph TD
 
 - Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
-- Task 16c (visibility checks) depends on Task 16b and Task 17, but can proceed in parallel with Task 16a
+- Task 16c (visibility checks) requires Task 16b and Task 17 (strictly sequential: 16a → 16b → 16c)
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
 - Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
