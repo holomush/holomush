@@ -178,7 +178,8 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - markdownlint-cli2
+      - rumdl check .
+      - rumdl check site/
 
   lint:yaml:
     desc: Check YAML formatting
@@ -196,7 +197,14 @@ tasks:
     cmds:
       - task: fmt:go
       - task: fmt:yaml
+      - task: fmt:markdown
       - task: fmt:dprint
+
+  fmt:markdown:
+    desc: Format Markdown files
+    cmds:
+      - rumdl fmt .
+      - rumdl fmt site/
 
   fmt:go:
     desc: Format Go code
@@ -217,6 +225,8 @@ tasks:
     desc: Check formatting without modifying
     cmds:
       - dprint check
+      - rumdl fmt --check .
+      - rumdl fmt --check site/
 
   # Dependencies
   deps:
@@ -295,7 +305,7 @@ tasks:
   tools:
     desc: Install development tools
     cmds:
-      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto markdownlint-cli yamlfmt binaryen
+      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen
       - brew install steveyegge/beads/bd
       - curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
       - 'echo "Tools installed. Run lefthook install to set up git hooks."'

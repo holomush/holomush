@@ -21,7 +21,7 @@ Examples:
 
 ## Markdown Standards
 
-All markdown files MUST pass `markdownlint-cli2` validation. The project uses `.markdownlint.yaml` for configuration.
+All markdown files MUST pass `rumdl` validation. The project uses `.rumdl.toml` for configuration (with a separate `site/.rumdl.toml` for documentation site files).
 
 ### Code Fences
 
@@ -65,7 +65,7 @@ func example() error {
 | **MUST** align columns          | All pipes in a column must vertically align      |
 | **MUST** have header separators | Include separator row with dashes after headers  |
 | **MUST** have consistent style  | Use "aligned" style with spaces around cell text |
-| **SHOULD** run `task fmt`       | dprint auto-formats tables to correct alignment  |
+| **SHOULD** run `task fmt`       | rumdl auto-formats tables to correct alignment   |
 
 Example of properly aligned table:
 
@@ -81,7 +81,7 @@ Common table errors:
 - **MD060**: Table column style - pipes not aligned or missing spaces
 - **MD056**: Table column count - mismatched column counts between rows
 
-Fix table alignment issues by running `task fmt` which uses dprint to auto-format.
+Fix table alignment issues by running `task fmt` which uses rumdl to auto-format.
 
 ## Document Structure
 
@@ -151,5 +151,5 @@ task lint:markdown
 To check a single file:
 
 ```bash
-markdownlint-cli2 path/to/file.md
+rumdl check path/to/file.md
 ```

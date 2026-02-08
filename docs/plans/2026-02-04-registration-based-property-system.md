@@ -69,7 +69,7 @@ import (
     "github.com/oklog/ulid/v2"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
-    
+
     "github.com/holomush/holomush/internal/world"
 )
 
@@ -142,7 +142,7 @@ func TestPropertyDefinition_AppliesTo(t *testing.T) {
         name:        "test",
         entityTypes: []string{"location", "object"},
     }
-    
+
     assert.True(t, def.AppliesTo("location"))
     assert.True(t, def.AppliesTo("object"))
     assert.False(t, def.AppliesTo("character"))
@@ -250,16 +250,16 @@ func TestPropertyRegistry_New(t *testing.T) {
 
 func TestPropertyRegistry_RegisterAndGet(t *testing.T) {
     r := NewPropertyDefinitionRegistry()
-    
+
     def := &mockPropertyDef{
         name:        "test-prop",
         entityTypes: []string{"location"},
     }
-    
+
     // Register should succeed
     err := r.Register(def)
     require.NoError(t, err)
-    
+
     // Get should return the definition
     got, ok := r.Get("test-prop")
     assert.True(t, ok)
@@ -268,13 +268,13 @@ func TestPropertyRegistry_RegisterAndGet(t *testing.T) {
 
 func TestPropertyRegistry_RegisterDuplicate(t *testing.T) {
     r := NewPropertyDefinitionRegistry()
-    
+
     def1 := &mockPropertyDef{name: "test", entityTypes: []string{"location"}}
     def2 := &mockPropertyDef{name: "test", entityTypes: []string{"object"}}
-    
+
     err := r.Register(def1)
     require.NoError(t, err)
-    
+
     err = r.Register(def2)
     assert.Error(t, err)
     assert.Contains(t, err.Error(), "already registered")
@@ -282,7 +282,7 @@ func TestPropertyRegistry_RegisterDuplicate(t *testing.T) {
 
 func TestPropertyRegistry_Get_NotFound(t *testing.T) {
     r := NewPropertyDefinitionRegistry()
-    
+
     got, ok := r.Get("nonexistent")
     assert.False(t, ok)
     assert.Nil(t, got)
@@ -290,19 +290,19 @@ func TestPropertyRegistry_Get_NotFound(t *testing.T) {
 
 func TestPropertyRegistry_ValidFor(t *testing.T) {
     r := NewPropertyDefinitionRegistry()
-    
+
     // Register a property for locations only
     r.Register(&mockPropertyDef{
         name:        "location-only",
         entityTypes: []string{"location"},
     })
-    
+
     // Register a property for multiple types
     r.Register(&mockPropertyDef{
         name:        "universal",
         entityTypes: []string{"location", "object", "character"},
     })
-    
+
     tests := []struct {
         name       string
         entityType string
@@ -315,7 +315,7 @@ func TestPropertyRegistry_ValidFor(t *testing.T) {
         {"universal on object", "object", "universal", true},
         {"nonexistent property", "location", "missing", false},
     }
-    
+
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             got := r.ValidFor(tt.entityType, tt.property)
@@ -326,13 +326,13 @@ func TestPropertyRegistry_ValidFor(t *testing.T) {
 
 func TestPropertyRegistry_GetAll(t *testing.T) {
     r := NewPropertyDefinitionRegistry()
-    
+
     def1 := &mockPropertyDef{name: "prop1", entityTypes: []string{"location"}}
     def2 := &mockPropertyDef{name: "prop2", entityTypes: []string{"object"}}
-    
+
     r.Register(def1)
     r.Register(def2)
-    
+
     all := r.GetAll()
     assert.Len(t, all, 2)
     assert.Contains(t, all, def1)
@@ -382,12 +382,12 @@ func NewPropertyDefinitionRegistry() *PropertyDefinitionRegistry {
 func (r *PropertyDefinitionRegistry) Register(def PropertyDefinition) error {
     r.mu.Lock()
     defer r.mu.Unlock()
-    
+
     name := def.Name()
     if _, exists := r.definitions[name]; exists {
         return fmt.Errorf("property %q already registered", name)
     }
-    
+
     r.definitions[name] = def
     return nil
 }
@@ -397,7 +397,7 @@ func (r *PropertyDefinitionRegistry) Register(def PropertyDefinition) error {
 func (r *PropertyDefinitionRegistry) Get(name string) (PropertyDefinition, bool) {
     r.mu.RLock()
     defer r.mu.RUnlock()
-    
+
     def, ok := r.definitions[name]
     return def, ok
 }
@@ -407,12 +407,12 @@ func (r *PropertyDefinitionRegistry) Get(name string) (PropertyDefinition, bool)
 func (r *PropertyDefinitionRegistry) ValidFor(entityType, propertyName string) bool {
     r.mu.RLock()
     defer r.mu.RUnlock()
-    
+
     def, ok := r.definitions[propertyName]
     if !ok {
         return false
     }
-    
+
     return def.AppliesTo(entityType)
 }
 
@@ -421,7 +421,7 @@ func (r *PropertyDefinitionRegistry) ValidFor(entityType, propertyName string) b
 func (r *PropertyDefinitionRegistry) GetAll() []PropertyDefinition {
     r.mu.RLock()
     defer r.mu.RUnlock()
-    
+
     result := make([]PropertyDefinition, 0, len(r.definitions))
     for _, def := range r.definitions {
         result = append(result, def)
@@ -485,7 +485,7 @@ import (
     "github.com/oklog/ulid/v2"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
-    
+
     "github.com/holomush/holomush/internal/world"
 )
 
@@ -498,30 +498,30 @@ func TestNameProperty_Name(t *testing.T) {
 
 func TestNameProperty_AppliesTo(t *testing.T) {
     p := &nameProperty{}
-    
+
     // Should apply to location, object, exit
     assert.True(t, p.AppliesTo("location"))
     assert.True(t, p.AppliesTo("object"))
     assert.True(t, p.AppliesTo("exit"))
-    
+
     // Should NOT apply to character (per existing behavior in DefaultRegistry)
     assert.False(t, p.AppliesTo("character"))
-    
+
     // Should not apply to unknown types
     assert.False(t, p.AppliesTo("unknown"))
 }
 
 func TestNameProperty_Validate(t *testing.T) {
     p := &nameProperty{}
-    
+
     // Valid names
     assert.NoError(t, p.Validate("Test Room"))
     assert.NoError(t, p.Validate("Sword"))
     assert.NoError(t, p.Validate("A"))
-    
+
     // Empty name should be invalid
     assert.Error(t, p.Validate(""))
-    
+
     // Whitespace-only should be invalid
     assert.Error(t, p.Validate("   "))
     assert.Error(t, p.Validate("\t\n"))
@@ -533,10 +533,10 @@ func TestNameProperty_Get_Location(t *testing.T) {
         ID:   locID,
         Name: "Test Room",
     }
-    
+
     adapter := &mockPropertyAdapter{location: loc}
     p := &nameProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "location", locID)
     require.NoError(t, err)
     assert.Equal(t, "Test Room", value)
@@ -547,10 +547,10 @@ func TestNameProperty_Get_Object(t *testing.T) {
     locID := ulid.Make()
     obj, err := world.NewObjectWithID(objID, "Magic Sword", world.InLocation(locID))
     require.NoError(t, err)
-    
+
     adapter := &mockPropertyAdapter{object: obj}
     p := &nameProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "object", objID)
     require.NoError(t, err)
     assert.Equal(t, "Magic Sword", value)
@@ -560,7 +560,7 @@ func TestNameProperty_Get_UnsupportedEntity(t *testing.T) {
     p := &nameProperty{}
     adapter := &mockPropertyAdapter{}
     id := ulid.Make()
-    
+
     _, err := p.Get(context.Background(), adapter, "character", id)
     assert.Error(t, err)
     assert.Contains(t, err.Error(), "unsupported entity type")
@@ -653,7 +653,7 @@ func (p *nameProperty) Set(ctx context.Context, adapter WorldQuerier, mutator Wo
     if err := p.Validate(value); err != nil {
         return err
     }
-    
+
     switch entityType {
     case "location":
         loc, err := adapter.GetLocation(ctx, entityID)
@@ -726,23 +726,23 @@ func TestDescriptionProperty_Name(t *testing.T) {
 
 func TestDescriptionProperty_AppliesTo(t *testing.T) {
     p := &descriptionProperty{}
-    
+
     // Should apply to location, object, character, exit (per DefaultRegistry)
     assert.True(t, p.AppliesTo("location"))
     assert.True(t, p.AppliesTo("object"))
     assert.True(t, p.AppliesTo("character"))
     assert.True(t, p.AppliesTo("exit"))
-    
+
     // Should not apply to unknown types
     assert.False(t, p.AppliesTo("unknown"))
 }
 
 func TestDescriptionProperty_Validate(t *testing.T) {
     p := &descriptionProperty{}
-    
+
     // Description can be empty
     assert.NoError(t, p.Validate(""))
-    
+
     // Description can have content
     assert.NoError(t, p.Validate("A test description"))
     assert.NoError(t, p.Validate("Multi\nline\ndescription"))
@@ -755,10 +755,10 @@ func TestDescriptionProperty_Get_Location(t *testing.T) {
         Name:        "Test Room",
         Description: "A cozy room with a fireplace",
     }
-    
+
     adapter := &mockPropertyAdapter{location: loc}
     p := &descriptionProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "location", locID)
     require.NoError(t, err)
     assert.Equal(t, "A cozy room with a fireplace", value)
@@ -770,10 +770,10 @@ func TestDescriptionProperty_Get_Object(t *testing.T) {
     obj, err := world.NewObjectWithID(objID, "Magic Sword", world.InLocation(locID))
     require.NoError(t, err)
     obj.Description = "A gleaming blade"
-    
+
     adapter := &mockPropertyAdapter{object: obj}
     p := &descriptionProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "object", objID)
     require.NoError(t, err)
     assert.Equal(t, "A gleaming blade", value)
@@ -784,10 +784,10 @@ func TestDescriptionProperty_Get_Character(t *testing.T) {
     locID := ulid.Make()
     char := world.NewCharacter(charID, "TestCharacter", locID)
     char.Description = "A brave adventurer"
-    
+
     adapter := &mockPropertyAdapter{character: char}
     p := &descriptionProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "character", charID)
     require.NoError(t, err)
     assert.Equal(t, "A brave adventurer", value)
@@ -799,10 +799,10 @@ func TestDescriptionProperty_Get_Exit(t *testing.T) {
     toID := ulid.Make()
     exit := world.NewExit(exitID, "north", fromID, toID)
     exit.Description = "A winding path north"
-    
+
     adapter := &mockPropertyAdapter{exit: exit}
     p := &descriptionProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "exit", exitID)
     require.NoError(t, err)
     assert.Equal(t, "A winding path north", value)
@@ -815,10 +815,10 @@ func TestDescriptionProperty_Get_EmptyDescription(t *testing.T) {
         Name:        "Test Room",
         Description: "", // Empty is valid
     }
-    
+
     adapter := &mockPropertyAdapter{location: loc}
     p := &descriptionProperty{}
-    
+
     value, err := p.Get(context.Background(), adapter, "location", locID)
     require.NoError(t, err)
     assert.Equal(t, "", value)
@@ -995,7 +995,7 @@ func TestDefaultPropertyRegistry_ValidFor(t *testing.T) {
     assert.True(t, DefaultPropertyRegistry.ValidFor("object", "name"))
     assert.True(t, DefaultPropertyRegistry.ValidFor("exit", "name"))
     assert.False(t, DefaultPropertyRegistry.ValidFor("character", "name"))
-    
+
     // description property applies to all four entity types
     assert.True(t, DefaultPropertyRegistry.ValidFor("location", "description"))
     assert.True(t, DefaultPropertyRegistry.ValidFor("object", "description"))
@@ -1007,7 +1007,7 @@ func TestDefaultPropertyRegistry_InvalidProperties(t *testing.T) {
     // Unknown properties
     assert.False(t, DefaultPropertyRegistry.ValidFor("location", "unknown"))
     assert.False(t, DefaultPropertyRegistry.ValidFor("object", "invalid"))
-    
+
     // Invalid entity types
     assert.False(t, DefaultPropertyRegistry.ValidFor("unknown", "name"))
     assert.False(t, DefaultPropertyRegistry.ValidFor("", "description"))
@@ -1114,7 +1114,7 @@ func getEntityProperty(ctx context.Context, adapter *WorldQuerierAdapter, opts *
     if !ok {
         return "", fmt.Errorf("unknown property: %s", opts.property)
     }
-    
+
     // Delegate to the property definition's Get method
     return def.Get(ctx, adapter, opts.entityType, opts.entityID)
 }

@@ -8,7 +8,7 @@ Instructions for working with the HoloMUSH documentation site (zensical).
 | ------------------------- | ---------------------------- |
 | `site/docs/`              | Documentation content        |
 | `site/zensical.toml`      | Site configuration           |
-| `site/.markdownlint.yaml` | Markdown lint rules for site |
+| `site/.rumdl.toml`        | Markdown lint rules for site |
 
 ## Audience Directories
 
