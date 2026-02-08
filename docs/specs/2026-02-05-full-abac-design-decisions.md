@@ -73,6 +73,9 @@ rationale for the chosen approach.
 59. [Fair-Share Provider Timeout Scheduling](#59-fair-share-provider-timeout-scheduling)
 60. [Restricted Visibility via Seed Policies Only](#60-restricted-visibility-via-seed-policies-only)
 61. [Lock Policy Naming Includes Resource Type](#61-lock-policy-naming-includes-resource-type)
+62. [Separate PolicyEffect Type for Stored Policies](#62-separate-policyeffect-type-for-stored-policies)
+63. [Remove Session Circuit Breaker Auto-Invalidation](#63-remove-session-circuit-breaker-auto-invalidation)
+64. [Remove Admin Bypass of Cache Staleness and Degraded Mode](#64-remove-admin-bypass-of-cache-staleness-and-degraded-mode)
 
 ---
 
@@ -1539,3 +1542,81 @@ only used for lookup and display, not hot-path evaluation.
 
 **Cross-reference:** Main spec, Lock Commands section (lines 2412-2417);
 decision #19 (Lock Policies Are Not Versioned); bead `holomush-5k1.193`.
+
+---
+
+## 62. Separate PolicyEffect Type for Stored Policies
+
+**Review finding (PR #69, I3):** The implementation plan's Task 6 reused the
+decision `Effect` enum (`EffectDefaultDeny`, `EffectAllow`, `EffectDeny`,
+`EffectSystemBypass`) for `StoredPolicy.Effect`. But the database stores policy
+effect as `TEXT CHECK ('permit', 'forbid')` — a fundamentally different concept.
+Policy effect declares what a policy *intends* (permit or forbid); decision
+effect records what the engine *decided* (allow, deny, default_deny, or
+system_bypass). Conflating them creates type confusion and invalid states
+(e.g., a stored policy with `EffectSystemBypass`).
+
+**Decision:** Define a separate `PolicyEffect` type with two constants:
+`PolicyEffectPermit` and `PolicyEffectForbid`. This type is used exclusively
+for `StoredPolicy.Effect` and `CompiledPolicy.Effect`. The existing `Effect`
+enum remains for evaluation decisions only.
+
+**Rationale:** The two enums represent different domains — authoring intent vs.
+runtime outcome. Separating them makes invalid states unrepresentable at the
+type level. A stored policy can only be `permit` or `forbid`; the
+`system_bypass` and `default_deny` variants only exist in evaluation results.
+
+**Cross-reference:** Main spec, Policy Data Model section; bead
+`holomush-5k1.53`.
+
+---
+
+## 63. Remove Session Circuit Breaker Auto-Invalidation
+
+**Review finding (PR #65, C6):** The spec's session circuit breaker
+auto-invalidated sessions after 3 consecutive errors in 60 seconds. This
+created a DoS attack surface: an attacker with a stolen session token could
+trigger 3 deliberate errors to permanently kill the legitimate user's session.
+The auto-invalidation was also over-engineered for a condition that should
+never occur in normal operation (session-character integrity errors).
+
+**Decision:** Remove auto-invalidation entirely. Session integrity errors are
+logged at CRITICAL level and a Prometheus counter is incremented, but the
+session is NOT killed. The session circuit breaker becomes logging-only.
+Providers MUST NOT auto-invalidate sessions based on error counts.
+
+**Rationale:** Session integrity errors indicate bugs (decision #51), not
+conditions that should trigger automatic remediation. Auto-invalidation
+converts a rare bug into a user-facing DoS vector. Logging at CRITICAL with
+alerting gives operators visibility without harming legitimate users. If a
+session is truly corrupted, operators can invalidate it manually.
+
+**Cross-reference:** Main spec, Session Subject Resolution section; decision
+\#51 (Session Integrity Error Classification); bead `holomush-3kdz`.
+
+---
+
+## 64. Remove Admin Bypass of Cache Staleness and Degraded Mode
+
+**Review finding (PR #65, C5):** The spec allowed admin subjects to bypass
+cache staleness thresholds (line 1875) and degraded mode checks (lines
+1387-1392). This meant a compromised admin account would operate with zero
+constraints during infrastructure failures — exactly when strict access control
+is most critical. It also created an asymmetric window where admins used newly
+updated policies while non-admins used stale cached policies, potentially
+leading to inconsistent authorization state.
+
+**Decision:** Remove admin bypass entirely. All subjects — including admins —
+fail-closed during cache staleness and degraded mode. Admins use the
+`policy reload` command (decision #46) for manual cache refresh when needed.
+
+**Rationale:** The principle of least privilege applies during degraded mode
+more than at any other time. A compromised admin during an infrastructure
+outage is a worst-case scenario that should not be made worse by bypassing
+access control. The `policy reload` command provides an explicit, auditable
+mechanism for admins to refresh their view of policies without creating an
+automatic bypass path.
+
+**Cross-reference:** Main spec, Cache Staleness and Degraded Mode sections;
+decision #46 (`policy validate` and `policy reload` Commands); bead
+`holomush-k5c3`.
