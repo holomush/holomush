@@ -230,10 +230,32 @@ type PolicyCompiler struct {
 // - Bare boolean attribute references (use explicit `== true` instead)
 func (c *PolicyCompiler) Compile(dslText string) (*CompiledPolicy, []ValidationWarning, error)
 
+// PolicyEffect represents the declared intent of a policy (permit or forbid).
+// This is distinct from Effect, which represents the engine's evaluation decision.
+type PolicyEffect string
+
+const (
+    PolicyEffectPermit PolicyEffect = "permit" // Policy grants access
+    PolicyEffectForbid PolicyEffect = "forbid" // Policy denies access
+)
+
+// ToEffect converts a PolicyEffect to an Effect for evaluation.
+// Permit → EffectAllow, Forbid → EffectDeny.
+func (pe PolicyEffect) ToEffect() Effect {
+    switch pe {
+    case PolicyEffectPermit:
+        return EffectAllow
+    case PolicyEffectForbid:
+        return EffectDeny
+    default:
+        return EffectDefaultDeny
+    }
+}
+
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
 // The engine evaluates CompiledPolicy instances, never raw DSL text.
 type CompiledPolicy struct {
-    Effect     Effect
+    Effect     PolicyEffect
     Target     CompiledTarget     // Parsed principal/action/resource clauses
     Conditions []CompiledCondition // Pre-parsed AST nodes
     GlobCache  map[string]glob.Glob // Pre-compiled globs for `like` expressions

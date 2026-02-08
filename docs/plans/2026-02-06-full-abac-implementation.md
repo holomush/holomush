@@ -673,7 +673,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Files:**
 
-- Create: `internal/world/service.go` (DeleteCharacter method)
+- Modify: `internal/world/service.go` (DeleteCharacter method)
 - Test: `internal/world/service_test.go` (DeleteCharacter tests)
 
 **Step 1: Write failing tests (Task 4b)**
@@ -984,6 +984,28 @@ const (
     AttrTypeBool
     AttrTypeStringList
 )
+
+// PolicyEffect represents the declared intent of a policy (permit or forbid).
+// This is distinct from Effect, which represents the engine's evaluation decision.
+type PolicyEffect string
+
+const (
+    PolicyEffectPermit PolicyEffect = "permit" // Policy grants access
+    PolicyEffectForbid PolicyEffect = "forbid" // Policy denies access
+)
+
+// ToEffect converts a PolicyEffect to an Effect for evaluation.
+// Permit → EffectAllow, Forbid → EffectDeny.
+func (pe PolicyEffect) ToEffect() Effect {
+    switch pe {
+    case PolicyEffectPermit:
+        return EffectAllow
+    case PolicyEffectForbid:
+        return EffectDeny
+    default:
+        return EffectDefaultDeny
+    }
+}
 
 // AttributeSchema registry for validating attribute types.
 // Used by PolicyCompiler (Task 12) and AttributeResolver (Task 14).
@@ -1306,7 +1328,7 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 - [ ] `StoredPolicy.Effect` uses `PolicyEffect` (not `policy.Effect`)
 - [ ] `PolicyEffect.String()` serializes to DB TEXT values ("permit"/"forbid")
 - [ ] Documentation clearly distinguishes `PolicyEffect` (what a policy declares) from `policy.Effect` (what the engine decides)
-- [ ] `Create()` generates ULID, inserts row, and calls `pg_notify('policy_changed', name)`
+- [ ] `Create()` generates ULID, inserts row, and calls `pg_notify('policy_changed', policyID)`
 - [ ] `Update()` increments version, inserts into `access_policy_versions`, calls `pg_notify`
 - [ ] `Delete()` removes row (CASCADE), calls `pg_notify`
 - [ ] `ListEnabled()` returns only `enabled = true` rows
@@ -1391,7 +1413,7 @@ Use `//go:build integration` tag and testcontainers pattern from existing integr
 
 Key behaviors:
 
-- `Create()`: generates ULID, inserts row, calls `pg_notify('policy_changed', name)`
+- `Create()`: generates ULID, inserts row, calls `pg_notify('policy_changed', policyID)`
 - `Update()`: increments version, inserts into `access_policy_versions`, calls `pg_notify`
 - `Delete()`: deletes row (CASCADE removes versions), calls `pg_notify`
 - `ListEnabled()`: returns all rows where `enabled = true`
@@ -1644,7 +1666,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ### Task 11: Build DSL condition evaluator
 
-**Spec References:** Policy DSL > Supported Operators (lines 1019-1036), Attribute Resolution > Error Handling (lines 1503-1640)
+**Spec References:** Policy DSL > Supported Operators (lines 1019-1036), Attribute Resolution > Error Handling (lines 1503-1640), Evaluation Algorithm > Key Behaviors (lines 1692-1714)
 
 **Acceptance Criteria:**
 
@@ -1694,11 +1716,11 @@ Operators to cover:
 // internal/access/policy/dsl/evaluator.go
 package dsl
 
-import "github.com/holomush/holomush/internal/access/policy"
+import "github.com/holomush/holomush/internal/access/policy/types"
 
 // EvalContext provides attribute bags and configuration for evaluation.
 type EvalContext struct {
-    Bags     *policy.AttributeBags
+    Bags     *types.AttributeBags
     MaxDepth int // default 32
 }
 
@@ -1835,7 +1857,7 @@ git commit -m "feat(access): add PolicyCompiler with validation and glob pre-com
 
 **Spec References:** Core Interfaces > Attribute Providers (lines 513-604), Attribute Resolution > Attribute Schema Registry (lines 1339-1382)
 
-> **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `policy.AccessRequest` and `policy.AttributeBags`. Both import from `types` package.
+> **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `types.AccessRequest` and `types.AttributeBags`. Both import from `types` package.
 
 **Acceptance Criteria:**
 
@@ -2011,7 +2033,7 @@ type AttributeResolver struct {
 func NewAttributeResolver(budget time.Duration) *AttributeResolver
 func (r *AttributeResolver) RegisterProvider(p AttributeProvider) error
 func (r *AttributeResolver) RegisterEnvironmentProvider(p EnvironmentProvider)
-func (r *AttributeResolver) Resolve(ctx context.Context, req policy.AccessRequest) (*policy.AttributeBags, []ProviderError, error)
+func (r *AttributeResolver) Resolve(ctx context.Context, req types.AccessRequest) (*types.AttributeBags, []ProviderError, error)
 ```
 
 Key: fair-share timeout is `max(remainingBudget / remainingProviders, 5ms)`.
@@ -2290,11 +2312,15 @@ Table-driven tests covering the 7-step evaluation algorithm (spec Evaluation Alg
 // internal/access/policy/engine.go
 package policy
 
-import "context"
+import (
+    "context"
+
+    "github.com/holomush/holomush/internal/access/policy/types"
+)
 
 // AccessPolicyEngine is the main entry point for policy-based authorization.
 type AccessPolicyEngine interface {
-    Evaluate(ctx context.Context, request AccessRequest) (Decision, error)
+    Evaluate(ctx context.Context, request types.AccessRequest) (types.Decision, error)
 }
 
 // SessionResolver resolves session: subjects to character: subjects.
@@ -2317,7 +2343,7 @@ type Engine struct {
 
 func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache, sessions SessionResolver, audit AuditLogger) *Engine
 
-func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
+func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
     // Step 1: System bypass
     // Step 2: Session resolution
     // Step 3: Resolve attributes (eager)
@@ -2512,7 +2538,7 @@ type Entry struct {
     Effect         string
     PolicyID       string
     PolicyName     string
-    Attributes     *policy.AttributeBags
+    Attributes     *types.AttributeBags
     ErrorMessage   string
     ProviderErrors []attribute.ProviderError
     DurationUS     int
@@ -3650,7 +3676,7 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
   - [ ] 1 call site in `internal/plugin/hostfunc/commands.go`
 - [ ] ALL **57 test call sites** in `internal/access/static_test.go` migrated to new engine
 - [ ] Generated mocks regenerated with mockery
-- [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
+- [ ] Each call site uses `types.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
 - [ ] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names)
@@ -3747,7 +3773,7 @@ With:
 
 ```go
 // NEW:
-decision, err := engine.Evaluate(ctx, policy.AccessRequest{
+decision, err := engine.Evaluate(ctx, types.AccessRequest{
     Subject:  subject,
     Action:   action,
     Resource: resource,
@@ -3779,7 +3805,7 @@ func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
             name: "deny decision prevents operation",
             setupMock: func(m *mocks.MockAccessPolicyEngine) {
                 m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
-                    policy.Decision{Allowed: false, Effect: policy.EffectForbid},
+                    types.Decision{Allowed: false, Effect: types.EffectForbid},
                     nil,
                 )
             },
@@ -3790,7 +3816,7 @@ func TestAccessPolicyEngine_ErrorHandling(t *testing.T) {
             name: "evaluation error fails closed",
             setupMock: func(m *mocks.MockAccessPolicyEngine) {
                 m.EXPECT().Evaluate(mock.Anything, mock.Anything).Return(
-                    policy.Decision{},
+                    types.Decision{},
                     errors.New("attribute resolution failed"),
                 )
             },
@@ -3827,11 +3853,11 @@ func TestAccessRequest_Construction(t *testing.T) {
     mockEngine := mocks.NewMockAccessPolicyEngine(t)
 
     // Capture the AccessRequest passed to Evaluate()
-    var capturedRequest policy.AccessRequest
-    mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req policy.AccessRequest) bool {
+    var capturedRequest types.AccessRequest
+    mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
         capturedRequest = req
         return true
-    })).Return(policy.Decision{Allowed: true}, nil)
+    })).Return(types.Decision{Allowed: true}, nil)
 
     // Perform operation
     _ = operationUnderTest(ctx, mockEngine)
@@ -3997,6 +4023,12 @@ var _ = Describe("Access Policy Engine", func() {
         It("applies lock to resource via permit policy", func() { })
         It("removes lock via unlock command", func() { })
     })
+
+    Describe("Session resolution", func() {
+        It("denies access when session is expired", func() { })
+        It("denies access when character is deleted", func() { })
+        It("denies access when database fails during session lookup", func() { })
+    })
 })
 ```
 
@@ -4050,6 +4082,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - Engine skips corrupted permit policy → no degraded mode
 - In degraded mode → all evaluations return default deny
 - In degraded mode → CRITICAL log on every evaluation
+- In degraded mode → audit entry written with reason='degraded_mode' and effect default_deny
 - Clear degraded mode → normal evaluation resumes
 - Degraded mode gauge metric → 0 when normal, 1 when degraded
 
@@ -4190,7 +4223,7 @@ Intentional deviations from the design spec, tracked here for discoverability an
 | Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015   | Task 2  | Better partition compatibility                                                                                                           |
 | Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877    | Task 20 | Prevents unbounded cardinality from admin-created policy names                                                                           |
 | Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238    | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
-| Lock naming uses `lock:<type>:<id>:<action>` format              | Spec line 2656    | Task 26 | Explicit resource type prefix improves discoverability and query filtering                                                               |
+| Lock naming uses `lock:<type>:<id>:<action>` format              | Spec line 2656    | Task 25b | Explicit resource type prefix improves discoverability and query filtering                                                               |
 | Policy compilation moved from PolicyStore to caller              | Spec lines 278-281 | Task 7  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
 
 ## Deferred Features
