@@ -734,6 +734,9 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 - [ ] Empty string returns `INVALID_ENTITY_REF` error code
 - [ ] Legacy `char:01ABC` prefix returns `INVALID_ENTITY_REF` error code
 - [ ] Session error code constants defined: `infra:session-invalid`, `infra:session-store-error`
+- [ ] `access.WithSystemSubject(ctx)` stores system subject marker in context
+- [ ] `access.IsSystemContext(ctx)` retrieves system subject marker from context
+- [ ] System context helpers tested with table-driven tests
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -741,6 +744,8 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 - Create: `internal/access/policy/types/types.go` (shared types to prevent circular imports)
 - Create: `internal/access/policy/prefix.go`
 - Test: `internal/access/policy/prefix_test.go`
+- Create: `internal/access/context.go` (system context helpers)
+- Test: `internal/access/context_test.go`
 
 **Step 1: Define shared types (AttributeSchema, AttrType)**
 
@@ -924,20 +929,95 @@ func ParseEntityRef(ref string) (typeName, id string, err error) {
 }
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 5: Add system context helpers**
+
+These helpers allow bootstrap and system operations to bypass ABAC by marking context as system-level.
+
+```go
+// internal/access/context.go
+package access
+
+import "context"
+
+// systemSubjectKey is the context key for system subject marker.
+type systemSubjectKey struct{}
+
+// WithSystemSubject returns a new context marked as system-level operation.
+// Operations with system context bypass ABAC policy evaluation.
+// Used during bootstrap, migrations, and internal system tasks.
+func WithSystemSubject(ctx context.Context) context.Context {
+    return context.WithValue(ctx, systemSubjectKey{}, true)
+}
+
+// IsSystemContext returns true if the context is marked as system-level.
+// PolicyStore and other ABAC components use this to bypass policy checks.
+func IsSystemContext(ctx context.Context) bool {
+    v, ok := ctx.Value(systemSubjectKey{}).(bool)
+    return ok && v
+}
+```
+
+**Step 6: Write tests for system context helpers**
+
+```go
+// internal/access/context_test.go
+package access_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/holomush/holomush/internal/access"
+    "github.com/stretchr/testify/assert"
+)
+
+func TestSystemContext(t *testing.T) {
+    tests := []struct {
+        name     string
+        ctx      context.Context
+        expected bool
+    }{
+        {
+            name:     "regular context returns false",
+            ctx:      context.Background(),
+            expected: false,
+        },
+        {
+            name:     "system context returns true",
+            ctx:      access.WithSystemSubject(context.Background()),
+            expected: true,
+        },
+        {
+            name:     "nested system context returns true",
+            ctx:      access.WithSystemSubject(access.WithSystemSubject(context.Background())),
+            expected: true,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got := access.IsSystemContext(tt.ctx)
+            assert.Equal(t, tt.expected, got)
+        })
+    }
+}
+```
+
+**Step 7: Run tests to verify they pass**
 
 Run: `task test`
 Expected: PASS
 
-**Step 6: Commit**
+**Step 8: Commit**
 
 ```bash
-git add internal/access/policy/types/ internal/access/policy/prefix.go internal/access/policy/prefix_test.go
-git commit -m "feat(access): add shared types package and prefix parser
+git add internal/access/policy/types/ internal/access/policy/prefix.go internal/access/policy/prefix_test.go internal/access/context.go internal/access/context_test.go
+git commit -m "feat(access): add shared types package, prefix parser, and system context helpers
 
 - Extract AttributeSchema and AttrType to internal/access/policy/types/
 - Prevents circular import between policy and attribute packages
-- Add subject/resource prefix constants and parser"
+- Add subject/resource prefix constants and parser
+- Add WithSystemSubject()/IsSystemContext() for bootstrap operations"
 ```
 
 ---
@@ -2774,6 +2854,10 @@ git commit -m "feat(access): define seed policies"
 - [ ] All tests pass via `task test`
 
 > **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16c), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16c for Layer 1 restricted visibility checks.
+
+**Dependencies:**
+
+- Task 6 (prefix constants and access control types) — provides `access.WithSystemSubject()` and `access.IsSystemContext()` helpers
 
 **Files:**
 
