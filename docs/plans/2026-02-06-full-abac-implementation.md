@@ -193,6 +193,7 @@ graph TD
 **Critical Path (highlighted in red):** Task 3 → Task 4 → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Parallel Work Opportunities:**
+
 - Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
 - Task 16c (visibility checks) depends on Task 16b and Task 17, but can proceed in parallel with Task 16a
@@ -760,24 +761,24 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 // NamespaceSchema defines the attributes in a namespace.
 type NamespaceSchema struct {
-	Attributes map[string]AttrType
+    Attributes map[string]AttrType
 }
 
 // ADD to existing AttributeSchema type:
 func NewAttributeSchema() *AttributeSchema {
-	return &AttributeSchema{
-		namespaces: make(map[string]*NamespaceSchema),
-	}
+    return &AttributeSchema{
+        namespaces: make(map[string]*NamespaceSchema),
+    }
 }
 
 func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error {
-	// Implementation in Task 12
-	return nil
+    // Implementation in Task 12
+    return nil
 }
 
 func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
-	// Implementation in Task 12
-	return false
+    // Implementation in Task 12
+    return false
 }
 ```
 
@@ -2503,6 +2504,7 @@ func (pm *PartitionManager) HealthCheck(ctx context.Context) error {
 ```
 
 Partition lifecycle (spec lines 2271-2318):
+
 1. Pre-create partitions for next 3 months
 2. Detach partitions older than `RetainDenials` (90 days for denials, 7 days for allows)
 3. Drop detached partitions after 7-day grace period
@@ -3239,6 +3241,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 **Step 2: Implement lock and unlock commands**
 
 Lock command workflow:
+
 1. Parse `lock <resource>/<action> = <expression>` syntax
 2. Resolve resource by name in character's current location
 3. Determine resource type (object, property, location, etc.) from resolved resource
@@ -3253,6 +3256,7 @@ Lock command workflow:
 > **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per spec (lines 2656-2662). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
 
 Unlock command workflow:
+
 1. Parse `unlock <resource>/<action>` or `unlock <resource>` syntax
 2. Resolve resource by name in character's current location
 3. Determine resource type from resolved resource
@@ -3416,6 +3420,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 **Step 2: Implement**
 
 Policy recompile commands (spec lines 947-976):
+
 - `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version within compiled_ast JSONB
 - `policy recompile <name>` — fetches single policy by name, recompiles, updates compiled_ast JSONB
 - `policy list --old-grammar` — filter to `compiled_ast->>'grammar_version' < current_version`
