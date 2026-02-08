@@ -71,6 +71,8 @@ rationale for the chosen approach.
 57. [ADR Format Evolution](#57-adr-format-evolution)
 58. [Provider Re-Entrance Goroutine Prohibition](#58-provider-re-entrance-goroutine-prohibition)
 59. [Fair-Share Provider Timeout Scheduling](#59-fair-share-provider-timeout-scheduling)
+60. [Restricted Visibility via Seed Policies Only](#60-restricted-visibility-via-seed-policies-only)
+61. [Lock Policy Naming Includes Resource Type](#61-lock-policy-naming-includes-resource-type)
 
 ---
 
@@ -1464,3 +1466,76 @@ with this approach.
 
 **Cross-reference:** Main spec, Attribute Providers section (lines 1768-1807);
 decision #58 (Provider Re-Entrance Goroutine Prohibition).
+
+---
+
+_The following decisions were captured during the implementation plan review
+(PR #69). They record decisions made in response to review findings._
+
+---
+
+## 60. Restricted Visibility via Seed Policies Only
+
+**Review finding (PR #69, Critical #2):** The implementation plan's Task 16c
+implemented restricted property visibility as pre-engine Go code that
+short-circuits before policy evaluation. The spec (lines 1191-1217, 2380-2384)
+describes restricted visibility as seed policies evaluated through normal ABAC
+evaluation — "the character configures data that existing system-level policies
+evaluate." Task 16c created dual enforcement paths and undermined the
+"everything is a policy" design principle. Additionally, the pseudocode accessed
+`req.Resource.Type` but `AccessRequest.Resource` is a `string`, not a struct.
+
+**Decision:** Remove Task 16c entirely. Handle restricted property visibility
+purely through seed policies in Task 22. The `visible_to` permit and
+`excluded_from` forbid policies (spec lines 1078-1090) become the sole
+enforcement mechanism for restricted visibility.
+
+**Rationale:** A single enforcement path (all visibility decisions flow through
+ABAC policy evaluation) is easier to audit, reason about, and debug than dual
+paths where some checks bypass the engine. The spec explicitly designed
+restricted visibility as policy-evaluated — pre-engine filtering was an
+implementation shortcut that violated the architecture. Seed policies also
+benefit from the existing `policy test` debugging command and audit logging,
+which pre-engine code would not.
+
+**Impact:**
+
+- Task 16c removed from implementation plan
+- Task 22 gains two additional seed policies (bringing count to 16):
+  `seed:property-visible-to` and `seed:property-excluded-from`
+- Dependency graph updated (16c node and edges removed)
+
+**Cross-reference:** Main spec, Property Visibility section (lines 1191-1217);
+decision #10 (Property Visibility Defaults); beads `holomush-5k1.191`,
+`holomush-5k1.192`.
+
+---
+
+## 61. Lock Policy Naming Includes Resource Type
+
+**Review finding (PR #69, Critical #4):** The implementation plan's Task 25b
+uses `lock:<type>:<resource_id>:<action>` (e.g., `lock:object:01ABC:read`).
+The spec (lines 2412-2417) uses `lock:<resource_ulid>:<action>` without the
+`<type>` segment.
+
+**Decision:** Keep the plan's extended format:
+`lock:<type>:<resource_id>:<action>`. This is an intentional deviation from
+the spec.
+
+**Rationale:** The extra `<type>` segment makes lock policy names
+self-describing for debugging and admin operations. Without it, an admin
+seeing `lock:01JKQW3X...:read` must look up the ULID to determine whether
+it controls an object, location, or character. With the type segment,
+`lock:object:01JKQW3X...:read` is immediately comprehensible. The cost is
+slightly longer policy names, which has no performance impact since names are
+only used for lookup and display, not hot-path evaluation.
+
+**Impact:**
+
+- Implementation plan's Task 25b format is canonical
+- Spec Deviations table in the implementation plan MUST include this entry
+- `PolicyStore.DeleteByName()` queries use the extended format
+- Lock commands construct names with the type segment
+
+**Cross-reference:** Main spec, Lock Commands section (lines 2412-2417);
+decision #19 (Lock Policies Are Not Versioned); bead `holomush-5k1.193`.
