@@ -321,7 +321,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - [ ] Builder attribute redaction: resource attributes redacted for objects/locations the builder doesn't own
 - [ ] `policy test --suite <file>` → batch testing from YAML scenario file
 - [ ] YAML scenario file format: list of {subject, action, resource, expected_decision} entries
-- [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2845-2849)
+- [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker ([06-layers-commands.md#policy-test](../specs/abac/06-layers-commands.md#policy-test), was spec lines 2845-2849)
 - [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
 - [ ] All tests pass via `task test`
 
@@ -369,7 +369,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 - [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
 - [ ] `policy recompile-all` → recompiles all policies with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
 - [ ] `policy recompile <name>` → recompiles single policy with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
-- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text (spec line 1650), used to fix policies with invalid compiled_ast
+- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text ([04-resolution-evaluation.md#error-handling](../specs/abac/04-resolution-evaluation.md#error-handling), was spec line 1650), used to fix policies with invalid compiled_ast
 - [ ] `policy list --old-grammar` → filters to policies with outdated grammar version
 - [ ] All tests pass via `task test`
 
@@ -392,7 +392,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 **Step 2: Implement**
 
-Policy recompile commands (spec lines 1001-1031):
+Policy recompile commands ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1001-1031):
 
 - `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version within compiled_ast JSONB
 - `policy recompile <name>` — fetches single policy by name, recompiles, updates compiled_ast JSONB
@@ -400,9 +400,9 @@ Policy recompile commands (spec lines 1001-1031):
 
 **Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
 
-Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec lines 1003-1004). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
+Each policy's `CompiledPolicy` includes `GrammarVersion` field ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1003-1004). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
 
-**Failed recompilation handling** (spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
+**Failed recompilation handling** ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 
 **Step 3: Run tests, commit**
 

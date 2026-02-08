@@ -121,7 +121,7 @@ forbid(principal is character, action in ["read"], resource is property) when { 
 - Reserved word as attribute name
 - Nesting depth >32 → error
 - Malformed conditions
-- Entity reference using Type::"value" syntax (spec lines 993-999 requires parser MUST reject this form)
+- Entity reference using Type::"value" syntax ([02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), was spec lines 993-999, requires parser MUST reject this form)
 
 **Step 2: Implement parser using participle**
 

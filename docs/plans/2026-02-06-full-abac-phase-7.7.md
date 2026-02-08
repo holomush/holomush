@@ -15,7 +15,7 @@
 - [ ] testcontainers for PostgreSQL (pattern from `test/integration/world/`)
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
-- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected (spec lines 612-620, prevented by convention)
+- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected ([01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), was spec lines 612-620, prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
@@ -55,7 +55,7 @@ var _ = Describe("Access Policy Engine", func() {
 
     Describe("Re-entrance guard", func() {
         It("panics when provider calls Evaluate() synchronously", func() { })
-        It("does NOT detect goroutine-based re-entry (spec lines 612-620: prevented by convention, not runtime checks)", func() { })
+        It("does NOT detect goroutine-based re-entry (01-core-types.md#attribute-providers, was spec lines 612-620: prevented by convention, not runtime checks)", func() { })
     })
 
     Describe("Cache invalidation", func() {

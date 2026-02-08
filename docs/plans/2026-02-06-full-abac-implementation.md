@@ -34,11 +34,11 @@ SQL migration tasks (Tasks 1-3) are exempt from red-green-refactor but MUST have
 
 Each task MUST denote which spec sections and ADRs it implements. This is tracked via the **Spec References** field on each task. The implementer MUST verify their work aligns with the referenced spec sections before requesting review.
 
-**Design spec:** `docs/specs/2026-02-05-full-abac-design.md`
+**Design spec:** `docs/specs/2026-02-05-full-abac-design.md` (index file linking to section files in `docs/specs/abac/`)
 
-> **Note:** Spec line numbers in task references are approximate and based on the spec at time of writing. Verify against the current spec before implementing.
+> **Note:** Spec references use section file names and anchors (e.g., `01-core-types.md#policycompiler`). Legacy line numbers from the monolithic spec are preserved in parentheses for traceability.
 
-Applicable ADRs (from spec References > Related ADRs, lines 3518-3525):
+Applicable ADRs (from [References > Related ADRs](../specs/abac/08-testing-appendices.md#related-adrs)):
 
 | ADR      | Title                                  | Applies To               |
 | -------- | -------------------------------------- | ------------------------ |
@@ -268,11 +268,11 @@ Intentional deviations from the design spec, tracked here for discoverability an
 
 | Deviation                                                        | Spec Reference    | Task    | Rationale                                                                                                                                |
 | ---------------------------------------------------------------- | ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Primary key uses composite PK (id, timestamp) instead of spec single-column PK (id) | Spec line 2070   | Task 2 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | PostgreSQL partitioned tables MUST include partition key in PK |
-| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1932    | Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Prevents unbounded cardinality from admin-created policy names                                                                           |
-| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2293    | Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
-| Lock naming uses `lock:<type>:<id>:<action>` format              | Spec lines 2462-2477 | Task 25b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) | Explicit resource type prefix improves discoverability and query filtering                                                               |
-| Policy compilation moved from PolicyStore to caller              | Spec lines 206-304 | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
+| Primary key uses composite PK (id, timestamp) instead of spec single-column PK (id) | [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) (was line 2070)   | Task 2 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | PostgreSQL partitioned tables MUST include partition key in PK |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) (was line 1932)    | Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Prevents unbounded cardinality from admin-created policy names                                                                           |
+| Denial audit sync writes elevated from SHOULD to MUST            | [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration) (was line 2293)    | Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
+| Lock naming uses `lock:<type>:<id>:<action>` format              | [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners) (was lines 2462-2477) | Task 25b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) | Explicit resource type prefix improves discoverability and query filtering                                                               |
+| Policy compilation moved from PolicyStore to caller              | [01-core-types.md#policycompiler](../specs/abac/01-core-types.md#policycompiler) (was lines 206-304) | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
 
 ## Deferred Features
 
@@ -280,9 +280,9 @@ The following features are intentionally deferred from this implementation plan.
 
 | Feature                             | Spec Reference           | Status   | Notes                                                               |
 | ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------- |
-| `policy lint` / `policy lint --fix` | Spec line 902, line 3497 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
-| `--force-seed-version=N` flag       | Spec lines 3121-3129     | Deferred | MAY-level; emergency recovery SQL documented as alternative         |
-| Web-based policy editor             | Spec line 38             | Deferred | Future web UI for policy management                                 |
-| `policy import <file>`              | Spec line 3492           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
-| `policy diff <id1> <id2>`           | Spec lines 3484-3502     | Deferred | Compare two policy versions; shows DSL text diff                    |
-| `policy export [--format=json]`     | Spec lines 3484-3502     | Deferred | Export all policies to stdout for backup/migration                  |
+| `policy lint` / `policy lint --fix` | [02-policy-dsl.md](../specs/abac/02-policy-dsl.md) (was line 902), [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3497) | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
+| `--force-seed-version=N` flag       | [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3121-3129)     | Deferred | MAY-level; emergency recovery SQL documented as alternative         |
+| Web-based policy editor             | [00-overview.md#non-goals](../specs/abac/00-overview.md#non-goals) (was line 38)             | Deferred | Future web UI for policy management                                 |
+| `policy import <file>`              | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3492)           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
+| `policy diff <id1> <id2>`           | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)     | Deferred | Compare two policy versions; shows DSL text diff                    |
+| `policy export [--format=json]`     | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)     | Deferred | Export all policies to stdout for backup/migration                  |

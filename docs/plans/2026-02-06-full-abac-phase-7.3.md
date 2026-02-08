@@ -119,9 +119,9 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 ### Task 14: Attribute resolver with per-request caching
 
-**Spec References:** Attribute Resolution > Resolution Flow (lines 1355-1381), Evaluation Algorithm > Performance Targets (lines 1769-1945), Evaluation Algorithm > Attribute Caching (lines 1946-2025), ADR 0012 (Eager attribute resolution)
+**Spec References:** [04-resolution-evaluation.md#resolution-flow](../specs/abac/04-resolution-evaluation.md#resolution-flow) (was lines 1355-1381), [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) (was lines 1769-1945), [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1946-2025), ADR 0012 (Eager attribute resolution)
 
-> **Note (Bug I10):** Spec lines 1976-2006 explicitly specify LRU eviction with `maxEntries` default of 100 (line 1983). Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
+> **Note (Bug I10):** [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was spec lines 1976-2006) explicitly specifies LRU eviction with `maxEntries` default of 100. Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
 
 **Acceptance Criteria:**
 
@@ -136,7 +136,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Re-entrance detection → provider calling `Evaluate()` on same context → panic
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
-- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per spec lines 1976-2006)
+- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), was spec lines 1976-2006)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -455,7 +455,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
   - [ ] No policies match → `types.NewDecision(DefaultDeny, "no policies matched", "")`
 - [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
-- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all (spec lines 1751-1757)
+- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all ([04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), was spec lines 1751-1757)
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -953,7 +953,7 @@ func (pm *PartitionManager) HealthCheck(ctx context.Context) error {
 }
 ```
 
-Partition lifecycle (spec lines 2326-2373):
+Partition lifecycle ([05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention), was spec lines 2326-2373):
 
 1. Pre-create partitions for next 3 months
 2. Detach partitions older than `RetainDenials` (90 days for denials, 7 days for allows)

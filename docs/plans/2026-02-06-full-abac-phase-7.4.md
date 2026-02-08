@@ -318,7 +318,7 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
 - Upgrade logic compares shipped `seed.SeedVersion` against stored `existing.SeedVersion`
 - `--skip-seed-migrations` server flag sets `opts.SkipSeedMigrations=true`
 - Legacy policies without `SeedVersion` (nil) will not be upgraded; future enhancement may treat nil as version 0
-- `--force-seed-version=N` flag enables rollback (future enhancement, see spec lines 3121-3129)
+- `--force-seed-version=N` flag enables rollback (future enhancement, see [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence), was spec lines 3121-3129)
 
 **Step 3: Run tests, commit**
 
