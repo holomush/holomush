@@ -11,7 +11,7 @@
 
 **Purpose:** Validate that participle-generated AST nodes can survive JSON serialization round-trips BEFORE implementing the policy storage and compiler. This spike prevents discovering storage model failures at Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) after 11 tasks are complete.
 
-**Spec References:** Policy DSL > Grammar (lines 737-946), Policy Storage > Schema (lines 1973-2114)
+**Spec References:** Policy DSL > Grammar (lines 791-1000), Policy Storage > Schema (lines 2028-2169)
 
 **Acceptance Criteria:**
 
@@ -103,7 +103,7 @@ Confirms participle AST nodes survive json.Marshal/Unmarshal.
 
 ### Task 1: Create access\_policies migration
 
-**Spec References:** Policy Storage > Schema (lines 1973-2114)
+**Spec References:** Policy Storage > Schema (lines 2028-2169)
 
 **Acceptance Criteria:**
 
@@ -176,7 +176,7 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 
 ### Task 2: Create access\_audit\_log migration
 
-**Spec References:** Policy Storage > Schema (lines 1973-2114), Policy Storage > Audit Log Serialization (lines 2161-2179)
+**Spec References:** Policy Storage > Schema (lines 2028-2169), Policy Storage > Audit Log Serialization (lines 2216-2234)
 
 **Acceptance Criteria:**
 
@@ -218,7 +218,7 @@ CREATE TABLE access_audit_log (
     duration_us     INTEGER,
     -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
     -- tables MUST include the partition key (timestamp) in the primary key.
-    -- Spec Policy Storage > Audit Log Serialization (line ~2015) defines "id TEXT PRIMARY KEY" which is technically
+    -- Spec Policy Storage > Audit Log Serialization (line 2070) defines "id TEXT PRIMARY KEY" which is technically
     -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
@@ -270,13 +270,13 @@ git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
 
-**NOTE:** The spec (Policy Storage > Audit Log Serialization, line ~2015) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+**NOTE:** The spec (Policy Storage > Audit Log Serialization, line 2070) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
 
 ---
 
 ### Task 3: Create entity\_properties migration
 
-**Spec References:** Policy Storage > Schema (lines 1973-2114), ADR 0013 (Properties as first-class entities)
+**Spec References:** Policy Storage > Schema (lines 2028-2169), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -347,7 +347,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 > **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Tasks 4b and 4c handle integrating property lifecycle with WorldService.
 
-**Spec References:** Property Model (lines 1097-1294), ADR 0013 (Properties as first-class entities)
+**Spec References:** Property Model (lines 1151-1348), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -435,7 +435,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 > **Scope:** This task creates the missing deletion method with proper transaction handling and tests. Task 4c will add property cascade deletion to all three methods.
 
-**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
+**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2125-2168)
 
 **Acceptance Criteria:**
 
@@ -490,7 +490,7 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 
 > **Scope:** This task adds property cascade deletion to existing deletion methods, adds an orphan cleanup goroutine, and implements startup integrity checks.
 
-**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
+**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2125-2168)
 
 **Acceptance Criteria:**
 
@@ -601,7 +601,7 @@ git commit -m "feat(world): add property cascade deletion and orphan cleanup"
 
 ### Task 5: Define core types (AccessRequest, Decision, Effect, PolicyMatch, AttributeBags)
 
-**Spec References:** Core Interfaces (lines 195-512) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
+**Spec References:** Core Interfaces (lines 195-785) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
 
 **Acceptance Criteria:**
 
@@ -818,7 +818,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 ### Task 6: Define subject/resource prefix constants and parser
 
-**Spec References:** Core Interfaces > AccessRequest (lines 283-325), Session Subject Resolution (lines 326-392)
+**Spec References:** Core Interfaces > AccessRequest (lines 305-347), Session Subject Resolution (lines 348-414)
 
 **Acceptance Criteria:**
 
@@ -1102,7 +1102,7 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 
 ### Task 7: Policy store interface and PostgreSQL implementation
 
-**Spec References:** Policy Storage > Schema (lines 1973-2114), Policy Storage > Cache Invalidation (lines 2115-2159)
+**Spec References:** Policy Storage > Schema (lines 2028-2169), Policy Storage > Cache Invalidation (lines 2170-2215)
 
 **Acceptance Criteria:**
 

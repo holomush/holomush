@@ -7,7 +7,7 @@
 
 ### Task 8: Define AST node types
 
-**Spec References:** Policy DSL > Grammar (lines 737-946)
+**Spec References:** Policy DSL > Grammar (lines 791-1000)
 
 **Acceptance Criteria:**
 
@@ -28,7 +28,7 @@ Test that AST nodes render back to readable DSL text (useful for debugging and `
 
 **Step 2: Implement AST types using participle struct tags**
 
-Map the EBNF grammar from the spec (lines 739-810) to participle annotations. Key AST nodes:
+Map the EBNF grammar from the spec (lines 793-864) to participle annotations. Key AST nodes:
 
 - `Policy` — top-level: effect + target + optional conditions + semicolon
 - `Target` — principal clause + action clause + resource clause
@@ -57,7 +57,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 ### Task 9: Build DSL parser
 
-**Spec References:** Policy DSL > Grammar (lines 737-946), Policy DSL > Supported Operators (lines 1019-1036), Replacing Static Roles > Seed Policies (lines 2929-3006)
+**Spec References:** Policy DSL > Grammar (lines 791-1000), Policy DSL > Supported Operators (lines 1073-1090), Replacing Static Roles > Seed Policies (lines 2984-3061)
 
 **Acceptance Criteria:**
 
@@ -121,7 +121,7 @@ forbid(principal is character, action in ["read"], resource is property) when { 
 - Reserved word as attribute name
 - Nesting depth >32 → error
 - Malformed conditions
-- Entity reference using Type::"value" syntax (spec lines 939-945 requires parser MUST reject this form)
+- Entity reference using Type::"value" syntax (spec lines 993-999 requires parser MUST reject this form)
 
 **Step 2: Implement parser using participle**
 
@@ -170,7 +170,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 ### Task 10: Add DSL fuzz tests
 
-**Spec References:** Testing Strategy — Fuzz Testing (lines 3272-3314), Policy DSL Grammar (lines 737-825)
+**Spec References:** Testing Strategy — Fuzz Testing (lines 3327-3369), Policy DSL Grammar (lines 791-879)
 
 **Acceptance Criteria:**
 
@@ -231,7 +231,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ### Task 11: Build DSL condition evaluator
 
-**Spec References:** Policy DSL > Supported Operators (lines 1019-1036), Attribute Resolution > Error Handling (lines 1503-1640), Evaluation Algorithm > Key Behaviors (lines 1692-1714), Testing Strategy — Fuzz Testing (lines 3272-3314)
+**Spec References:** Policy DSL > Supported Operators (lines 1073-1090), Attribute Resolution > Error Handling (lines 1557-1695), Evaluation Algorithm > Key Behaviors (lines 1746-1768), Testing Strategy — Fuzz Testing (lines 3327-3369)
 
 **Acceptance Criteria:**
 
@@ -384,7 +384,7 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 
 ### Task 12: Build PolicyCompiler
 
-**Spec References:** Policy DSL > Grammar (lines 737-946) (compilation is part of the grammar section)
+**Spec References:** Policy DSL > Grammar (lines 791-1000) (compilation is part of the grammar section)
 
 **Risk Note:** `CompiledPolicy` embeds `*dsl.ConditionBlock` which contains participle-generated AST nodes. These may include unexported fields or types that don't serialize cleanly to JSON. Early validation of AST serialization round-tripping is required (write the serialization test first). If participle ASTs don't serialize cleanly, implement custom `MarshalJSON`/`UnmarshalJSON` methods or store a different representation in `compiled_ast` JSONB.
 

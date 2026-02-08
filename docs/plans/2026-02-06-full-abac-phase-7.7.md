@@ -7,7 +7,7 @@
 
 ### Task 30: Integration tests for full ABAC flow
 
-**Spec References:** Testing Strategy > Integration Tests (lines 3315-3350), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
+**Spec References:** Testing Strategy > Integration Tests (lines 3370-3405), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 
 **Acceptance Criteria:**
 
@@ -15,7 +15,7 @@
 - [ ] testcontainers for PostgreSQL (pattern from `test/integration/world/`)
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
-- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected (spec lines 559-576, prevented by convention)
+- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected (spec lines 612-620, prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
@@ -55,7 +55,7 @@ var _ = Describe("Access Policy Engine", func() {
 
     Describe("Re-entrance guard", func() {
         It("panics when provider calls Evaluate() synchronously", func() { })
-        It("does NOT detect goroutine-based re-entry (spec lines 559-576: prevented by convention, not runtime checks)", func() { })
+        It("does NOT detect goroutine-based re-entry (spec lines 612-620: prevented by convention, not runtime checks)", func() { })
     })
 
     Describe("Cache invalidation", func() {
@@ -98,7 +98,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 31: Degraded mode implementation
 
-**Spec References:** Degraded Mode (lines 1606-1629)
+**Spec References:** Degraded Mode (lines 1660-1683)
 
 **Acceptance Criteria:**
 
@@ -140,7 +140,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 32: Schema evolution on plugin reload
 
-**Spec References:** Schema Evolution on Plugin Reload (lines 1443-1502)
+**Spec References:** Schema Evolution on Plugin Reload (lines 1497-1556)
 
 **Acceptance Criteria:**
 
@@ -171,7 +171,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 33: Lock tokens discovery command
 
-**Spec References:** Lock Token Discovery (lines 2613-2638)
+**Spec References:** Lock Token Discovery (lines 2668-2693)
 
 **Acceptance Criteria:**
 
@@ -200,9 +200,9 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 34: General provider circuit breaker
 
-**Spec References:** Provider Circuit Breaker (lines 1540-1568, 1830-1846)
+**Spec References:** Provider Circuit Breaker (lines 1594-1622, 1884-1900)
 
-> **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1544-1548: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1830-1846: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1544-1548 are subsumed by the budget-utilization approach.
+> **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1598-1602: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1884-1900: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1598-1602 are subsumed by the budget-utilization approach.
 
 **Acceptance Criteria:**
 

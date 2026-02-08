@@ -7,7 +7,7 @@
 
 ### Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
 
-**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3230), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -232,7 +232,7 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 
 ### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
-**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3175-3230), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 

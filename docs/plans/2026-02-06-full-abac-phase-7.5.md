@@ -7,7 +7,7 @@
 
 ### Task 24: Lock token registry
 
-**Spec References:** Access Control Layers > Layer 2: Object Locks (lines 2393-2679), Lock Token Registry (lines 2467-2563)
+**Spec References:** Access Control Layers > Layer 2: Object Locks (lines 2448-2734), Lock Token Registry (lines 2522-2618)
 
 **Acceptance Criteria:**
 
@@ -69,7 +69,7 @@ git commit -m "feat(access): add lock token registry"
 
 ### Task 25: Lock expression parser and compiler
 
-**Spec References:** Lock Expression Syntax (lines 2432-2466), Lock-to-DSL Compilation (lines 2564-2612), Lock Token Registry — ownership and rate limits (lines 2592-2669)
+**Spec References:** Lock Expression Syntax (lines 2487-2521), Lock-to-DSL Compilation (lines 2619-2667), Lock Token Registry — ownership and rate limits (lines 2647-2724)
 
 **Acceptance Criteria:**
 
@@ -150,7 +150,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ### Task 25b: Lock and unlock in-game command handlers
 
-**Spec References:** Lock Expression Syntax > In-Game Lock Commands (lines 2393-2679)
+**Spec References:** Lock Expression Syntax > In-Game Lock Commands (lines 2448-2734)
 
 **Acceptance Criteria:**
 
@@ -193,7 +193,7 @@ Lock command workflow:
 9. Generate policy name: `lock:<type>:<resource_id>:<action>` (e.g., `lock:object:01ABC:read`)
 10. Store policy via PolicyStore with source="lock"
 
-> **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per spec (lines 2656-2662). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
+> **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per spec (lines 2711-2717). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
 
 Unlock command workflow:
 
@@ -215,7 +215,7 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 
 ### Task 26a: Admin commands — policy CRUD (create/list/show/edit/delete)
 
-**Spec References:** Admin Commands (lines 2695-2914) — CRUD commands
+**Spec References:** Admin Commands (lines 2750-2971) — CRUD commands
 
 **Acceptance Criteria:**
 
@@ -263,7 +263,7 @@ git commit -m "feat(command): add policy CRUD admin commands (create/list/show/e
 
 ### Task 26b: Admin commands — policy state management (enable/disable/history/rollback)
 
-**Spec References:** Admin Commands (lines 2695-2914) — state management commands
+**Spec References:** Admin Commands (lines 2750-2971) — state management commands
 
 **Acceptance Criteria:**
 
@@ -306,7 +306,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 ### Task 27a: Admin command — policy test
 
-**Spec References:** Policy Management Commands (lines 2695-2912) — policy test command with verbose, JSON, suite modes
+**Spec References:** Policy Management Commands (lines 2750-2971) — policy test command with verbose, JSON, suite modes
 
 > **Design note:** Task 27 split into 27a (policy test) and 27b (remaining admin commands) due to complexity. The `policy test` command has significant implementation scope (verbose mode, JSON mode, suite mode, builder redaction, audit logging) that warrants its own task for reviewability.
 
@@ -319,7 +319,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - [ ] Builder attribute redaction: resource attributes redacted for objects/locations the builder doesn't own
 - [ ] `policy test --suite <file>` → batch testing from YAML scenario file
 - [ ] YAML scenario file format: list of {subject, action, resource, expected_decision} entries
-- [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2790-2794)
+- [ ] **All `policy test` invocations logged to audit log** — metadata: subject, action, resource, decision, matched policies, admin invoker (spec lines 2845-2849)
 - [ ] **Audit logging security justification:** `policy test` enables reconnaissance of permission boundaries; full audit trail prevents unauthorized probing
 - [ ] All tests pass via `task test`
 
@@ -351,7 +351,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 ### Task 27b: Admin commands — policy validate/reload/attributes/audit/seed/recompile
 
-**Spec References:** Policy Management Commands (lines 2695-2912) — policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3076-3109), Degraded Mode (lines 1606-1629), Grammar Versioning (lines 947-976)
+**Spec References:** Policy Management Commands (lines 2750-2971) — policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3132-3165), Degraded Mode (lines 1660-1683), Grammar Versioning (lines 1001-1031)
 
 **Dependencies:** Task 27a (policy test command)
 
@@ -367,7 +367,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 - [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
 - [ ] `policy recompile-all` → recompiles all policies with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
 - [ ] `policy recompile <name>` → recompiles single policy with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
-- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text (spec line 1596), used to fix policies with invalid compiled_ast
+- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text (spec line 1650), used to fix policies with invalid compiled_ast
 - [ ] `policy list --old-grammar` → filters to policies with outdated grammar version
 - [ ] All tests pass via `task test`
 
@@ -390,7 +390,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 **Step 2: Implement**
 
-Policy recompile commands (spec lines 947-976):
+Policy recompile commands (spec lines 1001-1031):
 
 - `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version within compiled_ast JSONB
 - `policy recompile <name>` — fetches single policy by name, recompiles, updates compiled_ast JSONB
@@ -398,9 +398,9 @@ Policy recompile commands (spec lines 947-976):
 
 **Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
 
-Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 959). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
+Each policy's `CompiledPolicy` includes `GrammarVersion` field (spec line 1013). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
 
-**Failed recompilation handling** (spec lines 958-961): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
+**Failed recompilation handling** (spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 
 **Step 3: Run tests, commit**
 

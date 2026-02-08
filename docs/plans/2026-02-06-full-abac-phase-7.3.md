@@ -7,7 +7,7 @@
 
 ### Task 13: Attribute provider interface and schema registry
 
-**Spec References:** Core Interfaces > Attribute Providers (lines 513-604), Attribute Resolution > Attribute Schema Registry (lines 1339-1382)
+**Spec References:** Core Interfaces > Attribute Providers (lines 567-658), Attribute Resolution > Attribute Schema Registry (lines 1393-1436)
 
 > **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `types.AccessRequest` and `types.AttributeBags`. Both import from `types` package.
 
@@ -20,7 +20,7 @@
 - [ ] Empty namespace → error
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
-- [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Core Attribute Schema, lines 605-731)
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Core Attribute Schema, lines 659-785)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -119,9 +119,9 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 ### Task 14: Attribute resolver with per-request caching
 
-**Spec References:** Attribute Resolution > Resolution Flow (lines 1301-1327), Evaluation Algorithm > Performance Targets (lines 1715-1822), Evaluation Algorithm > Attribute Caching (lines 1891-1970), ADR 0012 (Eager attribute resolution)
+**Spec References:** Attribute Resolution > Resolution Flow (lines 1355-1381), Evaluation Algorithm > Performance Targets (lines 1769-1945), Evaluation Algorithm > Attribute Caching (lines 1946-2025), ADR 0012 (Eager attribute resolution)
 
-> **Note (Bug I10):** Spec lines 1976-2005 explicitly specify LRU eviction with `maxEntries` default of 100 (line 1982). Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
+> **Note (Bug I10):** Spec lines 2031-2060 explicitly specify LRU eviction with `maxEntries` default of 100 (line 2037). Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
 
 **Acceptance Criteria:**
 
@@ -136,7 +136,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Re-entrance detection → provider calling `Evaluate()` on same context → panic
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
-- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per spec lines 1976-2005)
+- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per spec lines 1976-2006)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -244,7 +244,7 @@ git commit -m "feat(access): add AttributeResolver with fair-share timeouts and 
 
 ### Task 15: Core attribute providers (character, location, object)
 
-**Spec References:** Core Interfaces > Core Attribute Schema (lines 605-731) — character, location, and object attributes are in the table
+**Spec References:** Core Interfaces > Core Attribute Schema (lines 659-785) — character, location, and object attributes are in the table
 
 **Acceptance Criteria:**
 
@@ -301,7 +301,7 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 
 ### Task 16a: Simple providers (environment, command, stream)
 
-**Spec References:** Core Interfaces > Core Attribute Schema (lines 605-731) — environment, command, stream attributes are in the table
+**Spec References:** Core Interfaces > Core Attribute Schema (lines 659-785) — environment, command, stream attributes are in the table
 
 **Acceptance Criteria:**
 
@@ -352,7 +352,7 @@ git commit -m "feat(access): add simple providers (environment, command, stream)
 
 > **Note:** This task depends on Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (PropertyRepository must exist before PropertyProvider).
 
-**Spec References:** Property Model > Property Attributes (lines 1134-1149), ADR 0013 (Properties as first-class entities)
+**Spec References:** Property Model > Property Attributes (lines 1188-1203), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -432,7 +432,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 ### Task 17: Build AccessPolicyEngine
 
-**Spec References:** Evaluation Algorithm (lines 1642-1690), Core Interfaces > Session Subject Resolution (lines 326-392), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
+**Spec References:** Evaluation Algorithm (lines 1696-1745), Core Interfaces > Session Subject Resolution (lines 348-414), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 **Acceptance Criteria:**
 
@@ -455,7 +455,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
   - [ ] No policies match → `types.NewDecision(DefaultDeny, "no policies matched", "")`
 - [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
-- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all (spec lines 1697-1703)
+- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all (spec lines 1751-1757)
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] All tests pass via `task test`
@@ -469,7 +469,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 7-step evaluation algorithm (spec Evaluation Algorithm, lines 1642-1690):
+Table-driven tests covering the 7-step evaluation algorithm (spec Evaluation Algorithm, lines 1696-1745):
 
 1. **System bypass:** Subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
 2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
@@ -548,7 +548,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ### Task 18: Policy cache with LISTEN/NOTIFY invalidation
 
-**Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
+**Spec References:** Cache Invalidation (lines 2170-2215) — cache staleness threshold (lines 2191-2215), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
 **Acceptance Criteria:**
 
@@ -711,7 +711,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 ### Task 19: Audit logger
 
-**Spec References:** Audit Log Serialization (lines 2161-2192), Audit Log Configuration (lines 2193-2269), Audit Log Retention (lines 2271-2310)
+**Spec References:** Audit Log Serialization (lines 2216-2234), Audit Log Configuration (lines 2248-2325), Audit Log Retention (lines 2326-2423)
 
 **Acceptance Criteria:**
 
@@ -721,7 +721,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
 
-> **Note:** Denials elevated from spec SHOULD (line 2238) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
+> **Note:** Denials elevated from spec SHOULD (line 2293) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 
 > **Note:** System bypasses use sync path per ADR 66. Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
 
@@ -841,7 +841,7 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 ### Task 19b: Audit log retention and partition management
 
-**Spec References:** Policy Storage > Audit Log Retention (lines 2271-2368)
+**Spec References:** Policy Storage > Audit Log Retention (lines 2326-2423)
 
 **Acceptance Criteria:**
 
@@ -953,7 +953,7 @@ func (pm *PartitionManager) HealthCheck(ctx context.Context) error {
 }
 ```
 
-Partition lifecycle (spec lines 2271-2318):
+Partition lifecycle (spec lines 2326-2373):
 
 1. Pre-create partitions for next 3 months
 2. Detach partitions older than `RetainDenials` (90 days for denials, 7 days for allows)
@@ -971,7 +971,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 
 ### Task 20: Prometheus metrics for ABAC
 
-**Spec References:** Evaluation Algorithm > Performance Targets (lines 1715-1822) — observability metrics are part of the performance targets section
+**Spec References:** Evaluation Algorithm > Performance Targets (lines 1769-1945) — observability metrics are part of the performance targets section
 
 **Acceptance Criteria:**
 
@@ -1068,7 +1068,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 ### Task 21: Performance benchmarks
 
-**Spec References:** Evaluation Algorithm > Performance Targets (lines 1715-1822)
+**Spec References:** Evaluation Algorithm > Performance Targets (lines 1769-1945)
 
 **Acceptance Criteria:**
 
@@ -1094,7 +1094,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 - Create: `internal/access/policy/engine_bench_test.go`
 
-**Step 1: Write benchmarks per spec performance targets (lines 1715-1741)**
+**Step 1: Write benchmarks per spec performance targets (lines 1769-1795)**
 
 ```go
 func BenchmarkEvaluate_ColdCache(b *testing.B)         // target: <10ms p99
@@ -1136,7 +1136,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 > **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
 
-**Spec References:** Replacing Static Roles > Seed Policies (lines 2929-3006) — seed policies reference command names without @ prefix
+**Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061) — seed policies reference command names without @ prefix
 
 **Acceptance Criteria:**
 

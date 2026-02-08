@@ -7,7 +7,7 @@
 
 ### Task 22: Define seed policy constants
 
-**Spec References:** Replacing Static Roles > Seed Policies (lines 2929-3006)
+**Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061)
 
 **Acceptance Criteria:**
 
@@ -16,7 +16,7 @@
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
-- [ ] DSL text matches spec exactly (lines 2935-2999)
+- [ ] DSL text matches spec exactly (lines 2990-3054)
 - [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
 - [ ] All tests pass via `task test`
 
@@ -151,7 +151,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 16 seed policies listed above: 15 permit policies for standard access patterns, plus 1 forbid policy for excluded_from visibility (per lines 1191-1217, 1245-1271). Default deny behavior is provided by EffectDefaultDeny.)
+(Note: 16 seed policies listed above: 15 permit policies for standard access patterns, plus 1 forbid policy for excluded_from visibility (per lines 1245-1271, 1299-1325). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 
@@ -164,7 +164,7 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 23: Bootstrap sequence
 
-**Spec References:** Bootstrap Sequence (lines 3007-3122), Seed Policy Migrations (lines 3123-3173)
+**Spec References:** Bootstrap Sequence (lines 3062-3177), Seed Policy Migrations (lines 3178-3229)
 
 **Acceptance Criteria:**
 
@@ -318,7 +318,7 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
 - Upgrade logic compares shipped `seed.SeedVersion` against stored `existing.SeedVersion`
 - `--skip-seed-migrations` server flag sets `opts.SkipSeedMigrations=true`
 - Legacy policies without `SeedVersion` (nil) will not be upgraded; future enhancement may treat nil as version 0
-- `--force-seed-version=N` flag enables rollback (future enhancement, see spec lines 3066-3074)
+- `--force-seed-version=N` flag enables rollback (future enhancement, see spec lines 3121-3129)
 
 **Step 3: Run tests, commit**
 
@@ -333,7 +333,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 > **Note:** This task was moved from Phase 7.7 (Task 35 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
 
-**Spec References:** Seed Policy Validation (lines 3076-3122)
+**Spec References:** Seed Policy Validation (lines 3132-3177)
 
 **Acceptance Criteria:**
 
