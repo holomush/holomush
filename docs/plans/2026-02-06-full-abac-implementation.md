@@ -3977,12 +3977,13 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 Intentional deviations from the design spec, tracked here for discoverability and review.
 
-| Deviation                                                        | Spec Reference  | Task    | Rationale                                                                         |
-| ---------------------------------------------------------------- | --------------- | ------- | --------------------------------------------------------------------------------- |
-| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015 | Task 2  | Better partition compatibility                                                    |
-| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877  | Task 20 | Prevents unbounded cardinality from admin-created policy names                    |
-| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238  | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable |
-| Lock naming uses `lock:<type>:<id>:<action>` format              | Spec line 2656  | Task 26 | Explicit resource type prefix improves discoverability and query filtering        |
+| Deviation                                                        | Spec Reference    | Task    | Rationale                                                                                                                                |
+| ---------------------------------------------------------------- | ----------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015   | Task 2  | Better partition compatibility                                                                                                           |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877    | Task 20 | Prevents unbounded cardinality from admin-created policy names                                                                           |
+| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238    | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
+| Lock naming uses `lock:<type>:<id>:<action>` format              | Spec line 2656    | Task 26 | Explicit resource type prefix improves discoverability and query filtering                                                               |
+| Policy compilation moved from PolicyStore to caller              | Spec lines 278-281 | Task 7  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
 
 ## Deferred Features
 
