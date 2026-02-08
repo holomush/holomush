@@ -37,16 +37,16 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 
-| ADR      | Title                                      | Applies To      |
-| -------- | ------------------------------------------ | --------------- |
-| ADR 0009 | Custom Go-Native ABAC Engine               | Task 17         |
-| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics     | Task 11         |
-| ADR 0011 | Deny-overrides conflict resolution         | Tasks 17, 30    |
-| ADR 0012 | Eager attribute resolution                 | Tasks 14, 17    |
-| ADR 0013 | Properties as first-class entities         | Tasks 3, 4a, 4b, 16b |
-| ADR 0014 | Direct replacement (no adapter)            | Tasks 28-29     |
-| ADR 0015 | Three-Layer Player Access Control          | Tasks 4a, 4b, 16a-c  |
-| ADR 0016 | LISTEN/NOTIFY cache invalidation           | Task 18         |
+| ADR      | Title                                  | Applies To           |
+| -------- | -------------------------------------- | -------------------- |
+| ADR 0009 | Custom Go-Native ABAC Engine           | Task 17              |
+| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics | Task 11              |
+| ADR 0011 | Deny-overrides conflict resolution     | Tasks 17, 30         |
+| ADR 0012 | Eager attribute resolution             | Tasks 14, 17         |
+| ADR 0013 | Properties as first-class entities     | Tasks 3, 4a, 4b, 16b |
+| ADR 0014 | Direct replacement (no adapter)        | Tasks 28-29          |
+| ADR 0015 | Three-Layer Player Access Control      | Tasks 4a, 4b, 16a-b  |
+| ADR 0016 | LISTEN/NOTIFY cache invalidation       | Task 18              |
 
 ### Acceptance Criteria
 
@@ -109,7 +109,6 @@ graph TD
         T15[Task 15: Core providers]
         T16a[Task 16a: Simple providers]
         T16b[Task 16b: PropertyProvider]
-        T16c[Task 16c: Visibility checks]
         T17[Task 17: AccessPolicyEngine]
         T18[Task 18: Policy cache LISTEN/NOTIFY]
         T19[Task 19: Audit logger]
@@ -122,8 +121,6 @@ graph TD
         T15 --> T16a
         T16a --> T16b
         T15 --> T17
-        T16b --> T16c
-        T17 --> T16c
         T17 --> T18
         T17 --> T19
         T19 --> T19b
@@ -206,7 +203,6 @@ graph TD
 
 - Phase 7.2 (Tasks 8-11) can start independently; only Task 12 (PolicyCompiler) requires Task 7
 - Task 16a (simple providers) can proceed independently of Task 16b (PropertyProvider)
-- Task 16c (visibility checks) requires Task 16b and Task 17 (strictly sequential: 16a → 16b → 16c)
 - Task 19b (audit retention) can proceed in parallel with Task 20 (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23
 - Phase 7.7 (Resilience) can proceed after Task 23b and Task 17
@@ -1304,7 +1300,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 **Acceptance Criteria:**
 
-- [ ] All 14 seed policy DSL strings parse successfully
+- [ ] All 16 seed policy DSL strings parse successfully
 - [ ] All operators parse correctly: `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `like`, `has`, `containsAll`, `containsAny`, `!`, `&&`, `||`, `if-then-else`
 - [ ] `resource == "location:01XYZ"` (exact match) parses correctly
 - [ ] Missing semicolon → descriptive error with position info
@@ -1323,7 +1319,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (14 seed policies plus catch-all forbid test case):**
+**Valid policies (16 seed policies plus catch-all forbid test case):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };
@@ -2161,173 +2157,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 
 ---
 
-### Task 16c: Implement Layer 1 restricted visibility metadata checks
-
-**Spec References:** Visibility Seed Policies (lines 1191-1223), Property Model > Restricted Visibility (lines 1152-1185)
-
-**Acceptance Criteria:**
-
-- [ ] Layer 1 visibility checks execute BEFORE ABAC policy evaluation
-- [ ] `visible_to` check: If property has `visible_to` list, allow only if `principal.id in resource.visible_to`
-- [ ] `excluded_from` check: If property has `excluded_from` list, deny if `principal.id in resource.excluded_from`
-- [ ] System subject bypasses visibility checks (system can access all properties)
-- [ ] Visibility check short-circuits: denied by Layer 1 → skip policy engine, return `Decision{Allowed: false, Effect: DefaultDeny}`
-- [ ] Visibility checks use metadata only (NOT seed policies)
-- [ ] Integration with PropertyProvider: visibility attributes resolved from property metadata
-- [ ] All tests pass via `task test`
-
-**Dependencies:**
-
-- Task 16b (PropertyProvider) — provides property metadata for visibility checks
-- Task 17 (AccessPolicyEngine) — engine.go must exist before adding Layer 1 visibility checks to it
-
-**Files:**
-
-- Modify: `internal/access/policy/engine.go` (add Layer 1 visibility checks before policy evaluation)
-- Test: `internal/access/policy/visibility_test.go`
-
-**TDD Test List:**
-
-- Restricted property with `visible_to=[char1]`, principal=char1 → Layer 1 allows, continues to policy eval
-- Restricted property with `visible_to=[char1]`, principal=char2 → Layer 1 denies, short-circuits
-- Restricted property with `excluded_from=[char1]`, principal=char1 → Layer 1 denies, short-circuits
-- Restricted property with `excluded_from=[char1]`, principal=char2 → Layer 1 allows, continues to policy eval
-- System subject accessing restricted property → Layer 1 bypasses visibility, continues to policy eval
-- Public property (no `visible_to`/`excluded_from`) → Layer 1 allows, continues to policy eval
-
-**Step 1: Write failing tests**
-
-Test that visibility checks execute before policy evaluation:
-
-```go
-// internal/access/policy/visibility_test.go
-package policy_test
-
-import (
-    "context"
-    "testing"
-    "github.com/holomush/holomush/internal/access/policy"
-)
-
-func TestEngine_RestrictedVisibilityLayer1(t *testing.T) {
-    tests := []struct {
-        name           string
-        principalID    string
-        visibleTo      []string
-        excludedFrom   []string
-        expectAllowed  bool
-        expectEffect   policy.Effect
-    }{
-        {
-            name:          "visible_to match allows",
-            principalID:   "char1",
-            visibleTo:     []string{"char1", "char2"},
-            excludedFrom:  nil,
-            expectAllowed: true, // Layer 1 passes, policy eval continues
-        },
-        {
-            name:          "visible_to mismatch denies",
-            principalID:   "char3",
-            visibleTo:     []string{"char1", "char2"},
-            excludedFrom:  nil,
-            expectAllowed: false,
-            expectEffect:  policy.EffectDefaultDeny,
-        },
-        {
-            name:          "excluded_from match denies",
-            principalID:   "char1",
-            visibleTo:     nil,
-            excludedFrom:  []string{"char1"},
-            expectAllowed: false,
-            expectEffect:  policy.EffectDefaultDeny,
-        },
-        {
-            name:          "excluded_from mismatch allows",
-            principalID:   "char2",
-            visibleTo:     nil,
-            excludedFrom:  []string{"char1"},
-            expectAllowed: true, // Layer 1 passes, policy eval continues
-        },
-        {
-            name:          "system subject bypasses visibility",
-            principalID:   "system",
-            visibleTo:     []string{"char1"},
-            excludedFrom:  nil,
-            expectAllowed: true,
-            expectEffect:  policy.EffectSystemBypass,
-        },
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // Setup: engine with property provider that returns visibility metadata
-            // Execute: Evaluate() with restricted property
-            // Assert: Layer 1 check result matches expectation
-        })
-    }
-}
-```
-
-**Step 2: Implement visibility checks in engine**
-
-In `internal/access/policy/engine.go`, add Layer 1 checks after system bypass but before policy evaluation:
-
-```go
-func (e *Engine) Evaluate(ctx context.Context, req AccessRequest) (Decision, error) {
-    // Step 1: System bypass
-    if req.Subject == "system" {
-        return Decision{Allowed: true, Effect: EffectSystemBypass}, nil
-    }
-
-    // Step 2: Session resolution
-    // ...
-
-    // Step 3: Eager attribute resolution
-    // ...
-
-    // Step 3b: Layer 1 restricted visibility checks (metadata-based, NOT policies)
-    if req.Resource.Type == "property" {
-        // Resolve property metadata (visible_to, excluded_from)
-        attrs, err := e.resolver.ResolveResource(ctx, req.Resource.Type, req.Resource.ID)
-        if err != nil {
-            return Decision{Allowed: false, Effect: EffectDefaultDeny}, err
-        }
-
-        // Check excluded_from first (explicit deny)
-        if excludedFrom, ok := attrs["excluded_from"].([]string); ok && len(excludedFrom) > 0 {
-            if contains(excludedFrom, req.Subject) {
-                return Decision{Allowed: false, Effect: EffectDefaultDeny, Reason: "Layer 1: excluded_from"}, nil
-            }
-        }
-
-        // Check visible_to (allowlist)
-        if visibleTo, ok := attrs["visible_to"].([]string); ok && len(visibleTo) > 0 {
-            if !contains(visibleTo, req.Subject) {
-                return Decision{Allowed: false, Effect: EffectDefaultDeny, Reason: "Layer 1: not in visible_to"}, nil
-            }
-        }
-    }
-
-    // Step 4-7: Policy evaluation, deny-overrides, audit
-    // ...
-}
-```
-
-**Step 3: Run tests**
-
-Run: `task test`
-Expected: PASS
-
-**Step 4: Commit**
-
-```bash
-git add internal/access/policy/engine.go internal/access/policy/visibility_test.go
-git commit -m "feat(access): add Layer 1 restricted visibility metadata checks"
-```
-
----
-
-### Task 18: Policy cache with LISTEN/NOTIFY invalidation
+### Task 17: Build AccessPolicyEngine
 
 **Spec References:** Cache Invalidation (lines 2115-2159) — cache staleness threshold (lines 2136-2159), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
@@ -2858,7 +2688,7 @@ git commit -m "refactor(commands): remove @ prefix from command names"
 
 **Acceptance Criteria:**
 
-- [ ] All 14 seed policies defined as `SeedPolicy` structs (all permit)
+- [ ] All 16 seed policies defined as `SeedPolicy` structs (14 permit, 2 with visibility)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
@@ -2874,7 +2704,7 @@ git commit -m "refactor(commands): remove @ prefix from command names"
 
 **Step 1: Write failing tests**
 
-- All 14 seed policies compile without error via `PolicyCompiler`
+- All 16 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -2894,7 +2724,7 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 14 seed policies (all permit).
+// SeedPolicies returns the complete set of 16 seed policies (14 permit, 2 visibility).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
@@ -2982,11 +2812,23 @@ func SeedPolicies() []SeedPolicy {
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };`,
             SeedVersion: 1,
         },
+        {
+            Name:        "seed:property-visible-to",
+            Description: "Properties with visible_to lists: only listed characters can read",
+            DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };`,
+            SeedVersion: 1,
+        },
+        {
+            Name:        "seed:property-excluded-from",
+            Description: "Exclude specific characters from seeing a property",
+            DSLText:     `forbid(principal is character, action in ["read"], resource is property) when { resource has excluded_from && principal.id in resource.excluded_from };`,
+            SeedVersion: 1,
+        },
     }
 }
 ```
 
-(Note: 14 seed policies listed above, all permit policies from spec (lines 2935-2999). Default deny behavior is provided by EffectDefaultDeny, not an explicit forbid policy.)
+(Note: 16 seed policies listed above: 14 permit policies for standard access patterns (lines 2935-2999), plus 2 visibility policies (1 permit for visible_to, 1 forbid for excluded_from per lines 1078-1090). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 
@@ -3018,8 +2860,6 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
 - [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
-
-> **Note:** Restricted visibility does NOT need a separate seed policy. Restricted properties use the `visible_to`/`excluded_from` mechanism (Layer 1, metadata-based checks in Task 16c), which is enforced at the property read layer before policy evaluation, not via ABAC policies. Similarly, system visibility resources are accessible only via system bypass (`subject == "system"`) and do not need a seed policy. See Task 16c for Layer 1 restricted visibility checks.
 
 **Dependencies:**
 
@@ -3661,6 +3501,7 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 Migrate per-package, with each commit including both DI wiring changes and all call site updates for that package. This ensures every commit compiles and passes `task build`.
 
 **Call site counts verified (as of 2026-02-07):**
+
 - Production: 28 call sites (3 in command, 24 in world, 1 in plugin)
 - Tests: 57 call sites in `internal/access/static_test.go` + ~20 in `internal/plugin/capability/enforcer_test.go` (Task 29)
 
@@ -4003,7 +3844,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **TDD Test List:**
 
-- >80% budget utilization in >50% of calls (minimum 10 calls) over 60-second rolling window → circuit opens
+- 80% budget utilization in >50% of calls (minimum 10 calls) over 60-second rolling window → circuit opens
 - Circuit open → provider skipped for 60s, empty attributes returned
 - WARN log on circuit open with provider name and budget utilization details
 - Prometheus counter incremented on trip
@@ -4046,19 +3887,19 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 Intentional deviations from the design spec, tracked here for discoverability and review.
 
-| Deviation                                                        | Spec Reference | Task   | Rationale                                                                                          |
-| ---------------------------------------------------------------- | -------------- | ------ | -------------------------------------------------------------------------------------------------- |
-| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015 | Task 2 | Better partition compatibility                                                                     |
-| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877 | Task 20 | Prevents unbounded cardinality from admin-created policy names                                     |
-| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238 | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                  |
+| Deviation                                                        | Spec Reference  | Task    | Rationale                                                                         |
+| ---------------------------------------------------------------- | --------------- | ------- | --------------------------------------------------------------------------------- |
+| Primary key uses composite PK instead of spec's serial PK        | Spec line ~2015 | Task 2  | Better partition compatibility                                                    |
+| Metric labels use `{source, effect}` instead of `{name, effect}` | Spec line 1877  | Task 20 | Prevents unbounded cardinality from admin-created policy names                    |
+| Denial audit sync writes elevated from SHOULD to MUST            | Spec line 2238  | Task 19 | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable |
 
 ## Deferred Features
 
 The following features are intentionally deferred from this implementation plan. They are noted here for discoverability.
 
-| Feature                             | Spec Reference           | Status   | Notes                                                                    |
-| ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------------ |
-| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands      |
-| `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative              |
-| Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                      |
-| `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows        |
+| Feature                             | Spec Reference           | Status   | Notes                                                               |
+| ----------------------------------- | ------------------------ | -------- | ------------------------------------------------------------------- |
+| `policy lint` / `policy lint --fix` | Spec line 848, line 3442 | Deferred | Migration tool for DSL syntax changes; listed under Future Commands |
+| `--force-seed-version=N` flag       | Spec lines 3066-3074     | Deferred | MAY-level; emergency recovery SQL documented as alternative         |
+| Web-based policy editor             | Spec line 3448           | Deferred | Future web UI for policy management                                 |
+| `policy import <file>`              | Spec line 3438           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
