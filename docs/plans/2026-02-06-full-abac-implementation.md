@@ -37,16 +37,16 @@ Each task MUST denote which spec sections and ADRs it implements. This is tracke
 
 Applicable ADRs (from spec References > Related ADRs, lines 3461+):
 
-| ADR      | Title                                  | Applies To           |
-| -------- | -------------------------------------- | -------------------- |
-| ADR 0009 | Custom Go-Native ABAC Engine           | Task 17              |
-| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics | Task 11              |
-| ADR 0011 | Deny-overrides conflict resolution     | Tasks 17, 30         |
-| ADR 0012 | Eager attribute resolution             | Tasks 14, 17         |
-| ADR 0013 | Properties as first-class entities     | Tasks 3, 4a, 4b, 16b |
-| ADR 0014 | Direct replacement (no adapter)        | Tasks 28-29          |
-| ADR 0015 | Three-Layer Player Access Control      | Tasks 4a, 4b, 16a-b  |
-| ADR 0016 | LISTEN/NOTIFY cache invalidation       | Task 18              |
+| ADR      | Title                                  | Applies To               |
+| -------- | -------------------------------------- | ------------------------ |
+| ADR 0009 | Custom Go-Native ABAC Engine           | Task 17                  |
+| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics | Task 11                  |
+| ADR 0011 | Deny-overrides conflict resolution     | Tasks 17, 30             |
+| ADR 0012 | Eager attribute resolution             | Tasks 14, 17             |
+| ADR 0013 | Properties as first-class entities     | Tasks 3, 4a, 4b, 4c, 16b |
+| ADR 0014 | Direct replacement (no adapter)        | Tasks 28-29              |
+| ADR 0015 | Three-Layer Player Access Control      | Tasks 4a, 4b, 4c, 16a-b  |
+| ADR 0016 | LISTEN/NOTIFY cache invalidation       | Task 18                  |
 
 ### Acceptance Criteria
 
@@ -78,7 +78,8 @@ graph TD
         T2[Task 2: access_audit_log migration]
         T3[Task 3: entity_properties migration]
         T4a[Task 4a: EntityProperty + PropertyRepository]
-        T4b[Task 4b: WorldService cascade + property lifecycle]
+        T4b[Task 4b: WorldService deletion methods]
+        T4c[Task 4c: Property cascade deletion and lifecycle]
         T5[Task 5: Core types]
         T6[Task 6: Subject/resource prefixes]
         T7[Task 7: Policy store]
@@ -86,6 +87,7 @@ graph TD
         T2 --> T7
         T3 --> T4a
         T4a --> T4b
+        T4b --> T4c
         T4a --> T7
         T5 --> T7
         T6 --> T5
@@ -188,6 +190,8 @@ graph TD
     %% Critical path (thick lines conceptually)
     style T3 fill:#ffcccc
     style T4a fill:#ffcccc
+    style T4b fill:#ffcccc
+    style T4c fill:#ffcccc
     style T7 fill:#ffcccc
     style T12 fill:#ffcccc
     style T17 fill:#ffcccc
@@ -197,7 +201,7 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → Task 12 → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Parallel Work Opportunities:**
 
@@ -457,7 +461,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 > **Note:** This task was originally Task 25 in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository interface/implementation.
 
-> **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Task 4b handles integrating property lifecycle with WorldService.
+> **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Tasks 4b and 4c handle integrating property lifecycle with WorldService.
 
 **Spec References:** Property Model (lines 1097-1294), ADR 0013 (Properties as first-class entities)
 
@@ -539,22 +543,77 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 ---
 
-### Task 4b: WorldService cascade deletion and property lifecycle
+### Task 4b: WorldService deletion methods
 
-> **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService to ensure properties are cleaned up when parent entities are deleted.
+> **Note:** This task creates the missing `DeleteCharacter()` method and ensures all three deletion methods exist in WorldService before Task 4c adds property cascade logic to them.
 
-> **Implementation Note:** `WorldService.DeleteCharacter()` does not currently exist in `internal/world/service.go` and MUST be created as part of this task's scope. `DeleteObject()` and `DeleteLocation()` already exist and MUST be modified to add property cascade deletion calls.
+> **Implementation Note:** `WorldService.DeleteCharacter()` does not currently exist in `internal/world/service.go` and MUST be created as part of this task's scope. `DeleteObject()` and `DeleteLocation()` already exist and are not modified in this task.
 
-> **Scope:** This task modifies WorldService deletion methods to cascade delete properties, adds an orphan cleanup goroutine, and implements startup integrity checks.
+> **Scope:** This task creates the missing deletion method with proper transaction handling and tests. Task 4c will add property cascade deletion to all three methods.
+
+**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
+
+**Acceptance Criteria:**
+
+- [ ] `WorldService.DeleteCharacter(ctx context.Context, id string) error` method created
+- [ ] DeleteCharacter uses transaction handling (via `s.tx.WithTransaction`)
+- [ ] DeleteCharacter calls `s.characterRepo.Delete(ctx, id)` to remove the character
+- [ ] DeleteCharacter includes proper error wrapping with oops
+- [ ] Tests cover: successful deletion, transaction rollback on error, character not found error
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/world/service.go` (DeleteCharacter method)
+- Test: `internal/world/service_test.go` (DeleteCharacter tests)
+
+**Step 1: Write failing tests (Task 4b)**
+
+- `WorldService.DeleteCharacter()` deletes a character by ID
+- DeleteCharacter handles character not found error
+- DeleteCharacter uses transaction (rollback on error)
+
+**Step 2: Implement DeleteCharacter**
+
+Add to `internal/world/service.go`:
+
+```go
+func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
+    return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
+        if err := s.characterRepo.Delete(ctx, id); err != nil {
+            return oops.With("operation", "delete_character").With("character_id", id).Wrap(err)
+        }
+        return nil
+    })
+}
+```
+
+**Step 3: Run tests, commit**
+
+```bash
+task test
+git add internal/world/service.go internal/world/service_test.go
+git commit -m "feat(world): add DeleteCharacter method to WorldService"
+```
+
+---
+
+### Task 4c: Property cascade deletion and lifecycle
+
+> **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService deletion methods (from Task 4b) to ensure properties are cleaned up when parent entities are deleted.
+
+> **Implementation Note:** This task modifies all three deletion methods (`DeleteCharacter`, `DeleteObject`, `DeleteLocation`) to add property cascade deletion calls via `PropertyRepository.DeleteByParent()`.
+
+> **Scope:** This task adds property cascade deletion to existing deletion methods, adds an orphan cleanup goroutine, and implements startup integrity checks.
 
 **Spec References:** Entity Properties — lifecycle on parent deletion (lines 2070-2113)
 
 **Acceptance Criteria:**
 
 - [ ] Property lifecycle on parent deletion: cascade delete in same transaction as parent entity deletion
-- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction
-- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction
-- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction
+- [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction (called before character deletion)
+- [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction (called before object deletion)
+- [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction (called before location deletion)
 - [ ] Orphan cleanup goroutine: runs on configurable timer (default: daily) to detect orphaned properties (parent entity no longer exists)
 - [ ] Orphan cleanup: detected orphans logged at WARN level on first discovery
 - [ ] Orphan cleanup: configurable grace period (default: 24h, configured via `world.orphan_grace_period` in server YAML)
@@ -565,13 +624,12 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Files:**
 
-- Create: `internal/world/service.go` (DeleteCharacter method)
-- Modify: `internal/world/service.go` (cascade deletion in DeleteObject, DeleteLocation)
+- Modify: `internal/world/service.go` (add property cascade deletion to DeleteCharacter, DeleteObject, DeleteLocation)
 - Create: `internal/world/property_lifecycle.go` (orphan cleanup goroutine, startup integrity check)
 - Test: `internal/world/service_test.go` (cascade deletion tests)
 - Test: `internal/world/property_lifecycle_test.go` (orphan cleanup tests)
 
-**Step 1: Write failing tests (Task 4b)**
+**Step 1: Write failing tests (Task 4c)**
 
 - `WorldService.DeleteCharacter()` deletes all properties for that character
 - `WorldService.DeleteObject()` deletes all properties for that object
@@ -580,7 +638,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 - Orphan cleanup goroutine identifies and deletes orphaned properties
 - Startup integrity check logs orphan count at WARN level
 
-**Step 2: Implement cascade deletion**
+**Step 2: Add property cascade deletion**
 
 Modify `internal/world/service.go`:
 
@@ -592,7 +650,10 @@ func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
             return oops.With("operation", "delete_character_properties").Wrap(err)
         }
         // Then delete character
-        return s.characterRepo.Delete(ctx, id)
+        if err := s.characterRepo.Delete(ctx, id); err != nil {
+            return oops.With("operation", "delete_character").With("character_id", id).Wrap(err)
+        }
+        return nil
     })
 }
 ```
