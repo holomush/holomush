@@ -555,31 +555,30 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 **Files:**
 
 - Create: `internal/access/policy/types/types.go`
-- Test: `internal/access/policy/types_test.go`
+- Test: `internal/access/policy/types/types_test.go`
 
 **Step 1: Write failing tests for Effect.String() and Decision invariants**
 
 ```go
-// internal/access/policy/types_test.go
-package policy_test
+// internal/access/policy/types/types_test.go
+package types
 
 import (
     "testing"
 
-    "github.com/holomush/holomush/internal/access/policy"
     "github.com/stretchr/testify/assert"
 )
 
 func TestEffect_String(t *testing.T) {
     tests := []struct {
         name     string
-        effect   policy.Effect
+        effect   Effect
         expected string
     }{
-        {"default deny", policy.EffectDefaultDeny, "default_deny"},
-        {"allow", policy.EffectAllow, "allow"},
-        {"deny", policy.EffectDeny, "deny"},
-        {"system bypass", policy.EffectSystemBypass, "system_bypass"},
+        {"default deny", EffectDefaultDeny, "default_deny"},
+        {"allow", EffectAllow, "allow"},
+        {"deny", EffectDeny, "deny"},
+        {"system bypass", EffectSystemBypass, "system_bypass"},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -591,17 +590,17 @@ func TestEffect_String(t *testing.T) {
 func TestDecision_Invariant(t *testing.T) {
     tests := []struct {
         name    string
-        effect  policy.Effect
+        effect  Effect
         allowed bool
     }{
-        {"allow is allowed", policy.EffectAllow, true},
-        {"deny is not allowed", policy.EffectDeny, false},
-        {"default deny is not allowed", policy.EffectDefaultDeny, false},
-        {"system bypass is allowed", policy.EffectSystemBypass, true},
+        {"allow is allowed", EffectAllow, true},
+        {"deny is not allowed", EffectDeny, false},
+        {"default deny is not allowed", EffectDefaultDeny, false},
+        {"system bypass is allowed", EffectSystemBypass, true},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            d := policy.NewDecision(tt.effect, "", "")
+            d := NewDecision(tt.effect, "", "")
             assert.Equal(t, tt.allowed, d.Allowed)
         })
     }
