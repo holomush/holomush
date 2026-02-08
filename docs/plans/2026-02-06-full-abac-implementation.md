@@ -1622,7 +1622,7 @@ type ValidationWarning struct {
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
 type CompiledPolicy struct {
     GrammarVersion int
-    Effect         Effect
+    Effect         PolicyEffect
     Target         CompiledTarget
     Conditions     *dsl.ConditionBlock
     GlobCache      map[string]glob.Glob
@@ -2937,19 +2937,8 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
                 }
                 compiledJSON, _ := json.Marshal(compiled)
 
-                // Convert policy.Effect to PolicyEffect
-                var effect policystore.PolicyEffect
-                switch compiled.Effect {
-                case policy.EffectAllow:
-                    effect = policystore.PolicyEffectPermit
-                case policy.EffectDeny:
-                    effect = policystore.PolicyEffectForbid
-                default:
-                    return oops.With("seed", seed.Name).Errorf("invalid effect for seed policy: %v", compiled.Effect)
-                }
-
                 existing.DSLText = seed.DSLText
-                existing.Effect = effect
+                existing.Effect = compiled.Effect
                 existing.CompiledAST = compiledJSON
                 existing.SeedVersion = &seed.SeedVersion
                 existing.ChangeNote = fmt.Sprintf("Auto-upgraded from seed v%d to v%d on server upgrade", oldVersion, seed.SeedVersion)
@@ -2975,21 +2964,10 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
         }
         compiledJSON, _ := json.Marshal(compiled)
 
-        // Convert policy.Effect to PolicyEffect
-        var effect policystore.PolicyEffect
-        switch compiled.Effect {
-        case policy.EffectAllow:
-            effect = policystore.PolicyEffectPermit
-        case policy.EffectDeny:
-            effect = policystore.PolicyEffectForbid
-        default:
-            return oops.With("seed", seed.Name).Errorf("invalid effect for seed policy: %v", compiled.Effect)
-        }
-
         err = policyStore.Create(ctx, &policystore.StoredPolicy{
             Name:        seed.Name,
             Description: seed.Description,
-            Effect:      effect,
+            Effect:      compiled.Effect,
             Source:      "seed",
             DSLText:     seed.DSLText,
             CompiledAST: compiledJSON,

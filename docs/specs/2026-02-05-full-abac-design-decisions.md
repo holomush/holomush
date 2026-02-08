@@ -1553,8 +1553,8 @@ decision #19 (Lock Policies Are Not Versioned); bead `holomush-5k1.193`.
 decision `Effect` enum (`EffectDefaultDeny`, `EffectAllow`, `EffectDeny`,
 `EffectSystemBypass`) for `StoredPolicy.Effect`. But the database stores policy
 effect as `TEXT CHECK ('permit', 'forbid')` — a fundamentally different concept.
-Policy effect declares what a policy *intends* (permit or forbid); decision
-effect records what the engine *decided* (allow, deny, default_deny, or
+Policy effect declares what a policy _intends_ (permit or forbid); decision
+effect records what the engine _decided_ (allow, deny, default_deny, or
 system_bypass). Conflating them creates type confusion and invalid states
 (e.g., a stored policy with `EffectSystemBypass`).
 
@@ -1568,8 +1568,15 @@ runtime outcome. Separating them makes invalid states unrepresentable at the
 type level. A stored policy can only be `permit` or `forbid`; the
 `system_bypass` and `default_deny` variants only exist in evaluation results.
 
+**Implementation note (PR #69, C2):** The bootstrap code in Task 21 no longer
+needs to convert between types. `PolicyCompiler` returns `CompiledPolicy.Effect`
+as `PolicyEffect` directly, which is stored in `StoredPolicy.Effect` without
+conversion. The awkward switch statement comparing `compiled.Effect` against
+`policy.EffectAllow`/`policy.EffectDeny` (which are decision-level values) was
+eliminated by making the type correction at the compiler level.
+
 **Cross-reference:** Main spec, Policy Data Model section; bead
-`holomush-5k1.53`.
+`holomush-5k1.53`, `holomush-5k1.202`.
 
 ---
 
