@@ -2076,26 +2076,32 @@ PropertyProvider's `parent_location` uses recursive CTE covering all three place
 
 ```sql
 WITH RECURSIVE containment AS (
-    SELECT parent_type, parent_id, 0 AS depth
+    SELECT parent_type, parent_id, ARRAY[parent_id] AS path, 0 AS depth
     FROM entity_properties WHERE id = $1
     UNION ALL
     -- Path 1: Direct location (location_id non-NULL)
-    SELECT 'location', o.location_id, c.depth + 1
+    SELECT 'location', o.location_id::text, c.path || o.id::text, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20 AND o.location_id IS NOT NULL
+    WHERE c.depth < 20
+      AND o.location_id IS NOT NULL
+      AND NOT o.id::text = ANY(c.path)
     UNION ALL
     -- Path 2: Held by character (held_by_character_id non-NULL)
-    SELECT 'character', o.held_by_character_id, c.depth + 1
+    SELECT 'character', o.held_by_character_id::text, c.path || o.id::text, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20 AND o.held_by_character_id IS NOT NULL
+    WHERE c.depth < 20
+      AND o.held_by_character_id IS NOT NULL
+      AND NOT o.id::text = ANY(c.path)
     UNION ALL
     -- Path 3: Contained in another object (contained_in_object_id non-NULL)
-    SELECT 'object', o.contained_in_object_id, c.depth + 1
+    SELECT 'object', o.contained_in_object_id::text, c.path || o.id::text, c.depth + 1
     FROM containment c
     JOIN objects o ON c.parent_type = 'object' AND c.parent_id = o.id::text
-    WHERE c.depth < 20 AND o.contained_in_object_id IS NOT NULL
+    WHERE c.depth < 20
+      AND o.contained_in_object_id IS NOT NULL
+      AND NOT o.id::text = ANY(c.path)
 )
 SELECT parent_id FROM containment
 WHERE parent_type = 'location'
