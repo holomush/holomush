@@ -4,7 +4,7 @@
 
 **Goal:** Replace the static role-based `AccessControl` system with a full policy-driven `AccessPolicyEngine` supporting a Cedar-inspired DSL, extensible attribute providers, audit logging, and admin commands.
 
-**Architecture:** Custom Go-native ABAC engine with eager attribute resolution, in-memory policy cache invalidated via PostgreSQL LISTEN/NOTIFY, deny-overrides conflict resolution, and per-request attribute caching. No adapter layer — direct replacement of all ~28 production call sites (plus test files and generated mocks).
+**Architecture:** Custom Go-native ABAC engine with eager attribute resolution, in-memory policy cache invalidated via PostgreSQL LISTEN/NOTIFY, deny-overrides conflict resolution, and per-request attribute caching. No adapter layer — direct replacement of all **28 production call sites** (24 in `internal/world/service.go`, 3 in `internal/command/`, 1 in `internal/plugin/hostfunc/commands.go`) plus **57 test call sites** in `internal/access/static_test.go` and generated mocks.
 
 **Tech Stack:** Go 1.23+, [participle](https://github.com/alecthomas/participle) (struct-tag parser generator), pgx/pgxpool, oops (structured errors), prometheus/client_golang, testify + Ginkgo/Gomega, mockery
 
@@ -3496,7 +3496,14 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 - [ ] `SessionResolver` wired
 - [ ] `AuditLogger` wired
 - [ ] `Bootstrap()` called at startup to seed policies
-- [ ] ALL ~28 production call sites (plus test files and generated mocks) migrated from `AccessControl.Check()` to `engine.Evaluate()`
+- [ ] ALL **28 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
+  - [ ] 24 call sites in `internal/world/service.go`
+  - [ ] 1 call site in `internal/command/dispatcher.go`
+  - [ ] 1 call site in `internal/command/rate_limit_middleware.go`
+  - [ ] 1 call site in `internal/command/handlers/boot.go`
+  - [ ] 1 call site in `internal/plugin/hostfunc/commands.go`
+- [ ] ALL **57 test call sites** in `internal/access/static_test.go` migrated to new engine
+- [ ] Generated mocks regenerated with mockery
 - [ ] Each call site uses `policy.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
@@ -3526,28 +3533,37 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 
 Migrate per-package, with each commit including both DI wiring changes and all call site updates for that package. This ensures every commit compiles and passes `task build`.
 
-**Package 1: internal/command**
+**Call site counts verified (as of 2026-02-07):**
+- Production: 28 call sites (3 in command, 24 in world, 1 in plugin)
+- Tests: 57 call sites in `internal/access/static_test.go`
+
+**Package 1: internal/command (3 call sites)**
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for command package dependencies
-2. Update all call sites in `internal/command/dispatcher.go`, `rate_limit_middleware.go`, and `handlers/boot.go`
+2. Update 3 production call sites:
+   - `internal/command/dispatcher.go` (1 call)
+   - `internal/command/rate_limit_middleware.go` (1 call)
+   - `internal/command/handlers/boot.go` (1 call)
 3. Update tests to mock `AccessPolicyEngine` instead of `AccessControl`
 4. Run `task test` — MUST PASS
 5. Run `task build` — MUST PASS
 6. Commit: `"refactor(command): migrate dispatcher to AccessPolicyEngine"`
 
-**Package 2: internal/world**
+**Package 2: internal/world (24 call sites)**
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for world package dependencies
-2. Update all call sites in `internal/world/service.go`
+2. Update 24 production call sites in `internal/world/service.go`
 3. Update tests to mock `AccessPolicyEngine`
 4. Run `task test` — MUST PASS
 5. Run `task build` — MUST PASS
 6. Commit: `"refactor(world): migrate WorldService to AccessPolicyEngine"`
 
-**Package 3: internal/plugin**
+**Package 3: internal/plugin (1 call site)**
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for plugin package dependencies
-2. Update all call sites in `internal/plugin/hostfunc/commands.go` and `functions.go`
+2. Update 1 production call site:
+   - `internal/plugin/hostfunc/commands.go` (1 call)
+   - Note: `functions.go` has capability enforcer calls, not AccessControl
 3. Update tests to mock `AccessPolicyEngine`
 4. Run `task test` — MUST PASS
 5. Run `task build` — MUST PASS
