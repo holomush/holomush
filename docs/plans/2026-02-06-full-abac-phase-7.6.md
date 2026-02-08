@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)** | **[Next: Phase 7.7](./2026-02-06-full-abac-phase-7.7.md)**
 
-### Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
+## Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
 
 **Spec References:** Replacing Static Roles > Implementation Sequence (lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
 

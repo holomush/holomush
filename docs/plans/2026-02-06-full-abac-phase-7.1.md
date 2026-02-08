@@ -1,13 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
+# Phase 7.1: Policy Schema (Database Tables + Policy Store)
+
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Next: Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)**
-
-## Phase 7.1: Policy Schema (Database Tables + Policy Store)
-
+>
 > **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
 
-### Task 0: AST Serialization Spike
+## Task 0: AST Serialization Spike
 
 **Purpose:** Validate that participle-generated AST nodes can survive JSON serialization round-trips BEFORE implementing the policy storage and compiler. This spike prevents discovering storage model failures at Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) after 11 tasks are complete.
 
@@ -344,7 +344,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 ### Task 4a: EntityProperty type and PropertyRepository
 
 > **Note:** This task was originally Task 25 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) in Phase 7.5, but moved to Phase 7.1 because PropertyProvider (Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) depends on PropertyRepository existing. The entity_properties migration (Task 3) creates the table, and this task creates the Go types and repository interface/implementation.
-
+>
 > **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Tasks 4b and 4c handle integrating property lifecycle with WorldService.
 
 **Spec References:** Property Model (lines 1151-1348), ADR 0013 (Properties as first-class entities)
@@ -430,9 +430,9 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 ### Task 4b: WorldService deletion methods
 
 > **Note:** This task creates the missing `DeleteCharacter()` method and ensures all three deletion methods exist in WorldService before Task 4c adds property cascade logic to them.
-
+>
 > **Implementation Note:** `WorldService.DeleteCharacter()` does not currently exist in `internal/world/service.go` and MUST be created as part of this task's scope. `DeleteObject()` and `DeleteLocation()` already exist and are not modified in this task.
-
+>
 > **Scope:** This task creates the missing deletion method with proper transaction handling and tests. Task 4c will add property cascade deletion to all three methods.
 
 **Spec References:** Entity Properties — lifecycle on parent deletion (lines 2125-2168)
@@ -485,9 +485,9 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 ### Task 4c: Property cascade deletion and lifecycle
 
 > **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService deletion methods (from Task 4b) to ensure properties are cleaned up when parent entities are deleted.
-
+>
 > **Implementation Note:** This task modifies all three deletion methods (`DeleteCharacter`, `DeleteObject`, `DeleteLocation`) to add property cascade deletion calls via `PropertyRepository.DeleteByParent()`.
-
+>
 > **Scope:** This task adds property cascade deletion to existing deletion methods, adds an orphan cleanup goroutine, and implements startup integrity checks.
 
 **Spec References:** Entity Properties — lifecycle on parent deletion (lines 2125-2168)
@@ -796,6 +796,7 @@ type AttributeSchema struct {
 ```
 
 > **Implementation Note (Bug TD4):** Use typed string constants for enum-like string fields to add compile-time safety at zero cost. Specifically:
+>
 > - `StoredPolicy.Source` → define `type PolicySource string` with constants `PolicySourceSeed`, `PolicySourceLock`, `PolicySourceAdmin`, `PolicySourcePlugin`
 > - `EntityProperty.Visibility` → define `type PropertyVisibility string` with constants `PropertyVisibilityPublic`, `PropertyVisibilityPrivate`, `PropertyVisibilityRestricted`, `PropertyVisibilitySystem`, `PropertyVisibilityAdmin`
 > - `EntityProperty.ParentType` → define `type EntityType string` with constants `EntityTypeCharacter`, `EntityTypeLocation`, `EntityTypeObject`
@@ -1223,7 +1224,6 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 ```
 
 ---
-
 
 ---
 

@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
 
-### Task 22: Define seed policy constants
+## Task 22: Define seed policy constants
 
 **Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061)
 

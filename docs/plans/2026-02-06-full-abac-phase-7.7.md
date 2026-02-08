@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)**
 
-### Task 30: Integration tests for full ABAC flow
+## Task 30: Integration tests for full ABAC flow
 
 **Spec References:** Testing Strategy > Integration Tests (lines 3370-3405), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 

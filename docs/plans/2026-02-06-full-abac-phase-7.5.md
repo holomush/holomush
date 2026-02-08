@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)** | **[Next: Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)**
 
-### Task 24: Lock token registry
+## Task 24: Lock token registry
 
 **Spec References:** Access Control Layers > Layer 2: Object Locks (lines 2448-2734), Lock Token Registry (lines 2522-2618)
 

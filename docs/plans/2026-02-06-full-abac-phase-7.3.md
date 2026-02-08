@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)** | **[Next: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)**
 
-### Task 13: Attribute provider interface and schema registry
+## Task 13: Attribute provider interface and schema registry
 
 **Spec References:** Core Interfaces > Attribute Providers (lines 567-658), Attribute Resolution > Attribute Schema Registry (lines 1393-1436)
 

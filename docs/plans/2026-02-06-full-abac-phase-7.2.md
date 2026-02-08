@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)** | **[Next: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)**
 
-### Task 8: Define AST node types
+## Task 8: Define AST node types
 
 **Spec References:** Policy DSL > Grammar (lines 791-1000)
 
