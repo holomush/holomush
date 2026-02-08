@@ -408,10 +408,10 @@ type EntityProperty struct {
 type PropertyRepository interface {
     Create(ctx context.Context, p *EntityProperty) error
     Get(ctx context.Context, id ulid.ULID) (*EntityProperty, error)
-    ListByParent(ctx context.Context, parentType, parentID string) ([]*EntityProperty, error)
+    ListByParent(ctx context.Context, parentType string, parentID ulid.ULID) ([]*EntityProperty, error)
     Update(ctx context.Context, p *EntityProperty) error
     Delete(ctx context.Context, id ulid.ULID) error
-    DeleteByParent(ctx context.Context, parentType, parentID string) error
+    DeleteByParent(ctx context.Context, parentType string, parentID ulid.ULID) error
 }
 ```
 
@@ -530,7 +530,7 @@ Modify `internal/world/service.go`:
 func (s *WorldService) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
     return s.tx.WithTransaction(ctx, func(ctx context.Context) error {
         // Delete properties first
-        if err := s.propertyRepo.DeleteByParent(ctx, "character", id.String()); err != nil {
+        if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
             return oops.With("operation", "delete_character_properties").Wrap(err)
         }
         // Then delete character
