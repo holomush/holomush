@@ -151,7 +151,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 16 seed policies listed above: 15 permit policies for standard access patterns, plus 1 forbid policy for excluded_from visibility (per lines 1078-1090). Default deny behavior is provided by EffectDefaultDeny.)
+(Note: 16 seed policies listed above: 15 permit policies for standard access patterns, plus 1 forbid policy for excluded_from visibility (per lines 1191-1217, 1245-1271). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 
