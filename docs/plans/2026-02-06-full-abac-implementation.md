@@ -2684,6 +2684,48 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ---
 
+### Task 21a: Remove @-prefix from command names
+
+**Spec References:** Replacing Static Roles > Seed Policies (lines 2929-3006) — seed policies reference command names without @ prefix
+
+**Acceptance Criteria:**
+
+- [ ] All command name handling removes @ prefix
+- [ ] No `@`-prefixed command names remain in codebase
+- [ ] Command lock expressions reference bare command names (e.g., `dig`, `create`, not `@dig`, `@create`)
+- [ ] `task test` passes
+- [ ] `task lint` passes
+
+**Files:**
+
+- Search and modify: all files referencing `@`-prefixed command names
+- Likely files: `internal/plugin/capability/`, lock expression parsing, command registration
+
+**Step 1: Search for @-prefixed command usage**
+
+```bash
+rg '@(dig|create|describe|link|say|pose|look|go)' --type go
+```
+
+**Step 2: Remove @ prefix from all command name handling**
+
+Update command name parsing, lock expressions, and any references to strip or avoid the @ prefix.
+
+**Step 3: Run tests**
+
+```bash
+task test
+```
+
+**Step 4: Commit**
+
+```bash
+git add .
+git commit -m "refactor(commands): remove @ prefix from command names"
+```
+
+---
+
 ## Phase 7.4: Seed Policies & Bootstrap
 
 ### Task 22: Define seed policy constants
@@ -3535,7 +3577,6 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
 - [ ] Zero `char:` prefix usage (all migrated to `character:`)
-- [ ] Zero `@`-prefixed command names
 - [ ] `task test` passes
 - [ ] `task lint` passes
 
@@ -3550,7 +3591,6 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 - Modify: `internal/access/access.go` — remove `AccessControl` interface
 - Delete or modify: `internal/plugin/capability/` — remove `Enforcer` (capabilities now seed policies)
 - Search and remove: all `char:` prefix usage (replace with `character:`)
-- Search and remove: all `@`-prefixed command name handling
 - Run: `mockery` to regenerate mocks for new `AccessPolicyEngine` interface
 
 **Step 1: Delete static access control files**
@@ -3563,10 +3603,9 @@ Keep `ParseSubject()` or migrate it to `policy.ParseEntityRef()`. Keep any utili
 
 Plugin manifests are now handled by seed policies. Remove enforcer and all references.
 
-**Step 4: Remove legacy prefixes**
+**Step 4: Remove legacy char: prefix**
 
-- `char:` → `character:` (search all `.go` files)
-- `@dig` → `dig` (command name without `@` prefix)
+Search and replace `char:` → `character:` in all `.go` files.
 
 **Step 5: Run tests**
 
