@@ -247,6 +247,8 @@ For each command, test:
 - Permission check (admin-only for create/edit/delete)
 - Invalid input produces helpful error message
 - `policy create <name> <dsl>` → validates DSL, stores policy, triggers NOTIFY
+- `policy create` with `seed:` prefix → rejected with error message
+- `policy create` with `lock:` prefix → rejected with error message
 - `policy list` → shows all policies (filterable by `--source`, `--enabled`/`--disabled`)
 - `policy show <name>` → displays full policy details
 - `policy edit <name> <new_dsl>` → validates new DSL, increments version
@@ -305,6 +307,12 @@ Register commands in the command registry following existing handler patterns in
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
 git commit -m "feat(command): add policy state management commands (enable/disable/history/rollback)"
 ```
+
+**Spec Deviations:**
+
+| What                     | Deviation                                                 | Rationale                                                                                                      |
+| ------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `policy rollback` command | Elevated from SHOULD to MUST — acceptance criteria require | Rollback is critical for safe policy updates — operators need guaranteed ability to revert changes immediately |
 
 ---
 

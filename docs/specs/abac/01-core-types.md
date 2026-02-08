@@ -227,10 +227,21 @@ intervention.
 
 ```go
 // Decision represents the outcome of a policy evaluation.
+//
 // Invariant: allowed is true if and only if Effect is EffectAllow or EffectSystemBypass.
 // The allowed field is unexported to prevent direct field mutation that would violate the invariant.
 // Use NewDecision() to construct Decision instances with enforced invariants.
 // Use IsAllowed() to access the authorization result.
+//
+// Value Semantics Safety:
+// The mixed visibility pattern (allowed unexported, Effect exported) is intentional and safe
+// due to Go's value semantics. Decision is always passed by value, never by pointer (see NewDecision
+// return type). This means callers receive a copy of the struct. The invariant is enforced at
+// creation via NewDecision(), and value copying prevents any mutation of the original Decision
+// that might violate the invariant. No API changes are required — the exported Effect field
+// remains accessible for all use cases, while the unexported allowed field is protected by
+// virtue of struct value copying. Callers must use IsAllowed() to access the authorization result,
+// but the Effect field is publicly readable for debugging and logging scenarios.
 type Decision struct {
     allowed    bool            // unexported to enforce invariant via constructor
     Effect     Effect          // Allow, Deny, DefaultDeny (no policy matched), or SystemBypass

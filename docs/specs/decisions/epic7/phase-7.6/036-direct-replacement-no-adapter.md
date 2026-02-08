@@ -31,5 +31,4 @@ been released wastes effort and makes the design harder to understand.
 - The `AccessControl` interface and `StaticAccessControl` struct are deleted
   in phase 7.6
 
-**Supersedes:** [Decision #5](005-migration-strategy.md) (adapter pattern),
-[Decision #21](021-shadow-mode-cutover-criteria.md) (shadow mode)
+**Supersedes:** [Decision #5](005-migration-strategy.md) (adapter pattern)
