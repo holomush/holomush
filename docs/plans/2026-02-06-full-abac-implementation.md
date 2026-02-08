@@ -73,6 +73,10 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ```mermaid
 graph TD
+    subgraph "Phase 7.0: Validation Spike"
+        T0[Task 0: AST Serialization Spike]
+    end
+
     subgraph "Phase 7.1: Policy Schema"
         T1[Task 1: access_policies migration]
         T2[Task 2: access_audit_log migration]
@@ -167,6 +171,8 @@ graph TD
     end
 
     %% Critical cross-phase dependencies
+    T0 --> T7
+    T0 --> T8
     T7 --> T12
     T7 --> T18
     T12 --> T17
@@ -188,6 +194,7 @@ graph TD
     T14 --> T34
 
     %% Critical path (thick lines conceptually)
+    style T0 fill:#ffffcc
     style T3 fill:#ffcccc
     style T4a fill:#ffcccc
     style T4b fill:#ffcccc
@@ -204,12 +211,13 @@ graph TD
     style T29 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → (DSL chain: Task 12) + (Provider chain: Task 13 → Task 14 → Task 15) → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
+**Critical Path (highlighted in red):** Task 0 (spike, yellow) → Task 3 → Task 4a → Task 4b → Task 4c → Task 7 → (DSL chain: Task 12) + (Provider chain: Task 13 → Task 14 → Task 15) → Task 17 → Task 18 → Task 23 → Task 28 → Task 29
 
 **Note:** Task 17 depends on BOTH Task 12 (DSL compiler) and Task 15 (core attribute providers). These chains can run in parallel after Task 7 completes, but both must finish before Task 17 can start.
 
 **Parallel Work Opportunities:**
 
+- After Task 0 (spike) completes, Task 7 and Task 8 can proceed in parallel (Task 0 validates both)
 - After Task 7 completes, two critical chains can run in parallel:
   - DSL chain: Tasks 8-11 can start independently; only Task 12 (PolicyCompiler) requires Task 7
   - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain
@@ -223,6 +231,100 @@ graph TD
 ## Phase 7.1: Policy Schema (Database Tables + Policy Store)
 
 > **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
+
+### Task 0: AST Serialization Spike
+
+**Purpose:** Validate that participle-generated AST nodes can survive JSON serialization round-trips BEFORE implementing the policy storage and compiler. This spike prevents discovering storage model failures at Task 12 after 11 tasks are complete.
+
+**Spec References:** Policy DSL > Grammar (lines 737-946), Policy Storage > Schema (lines 1973-2114)
+
+**Acceptance Criteria:**
+
+- [ ] Parse sample policy DSL string into participle AST
+- [ ] Marshal AST to JSON using `json.Marshal`
+- [ ] Unmarshal JSON back to AST using `json.Unmarshal`
+- [ ] Compare original AST to round-tripped AST (deep equality check)
+- [ ] If round-trip fails, document alternative serialization approach (custom MarshalJSON/UnmarshalJSON or switch to protobuf)
+- [ ] Spike findings documented in commit message or inline comments
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/access/policy/dsl/ast_spike_test.go` (temporary spike test file)
+
+**Implementation Steps:**
+
+**Step 1: Write spike test**
+
+```go
+// internal/access/policy/dsl/ast_spike_test.go
+package dsl_test
+
+import (
+    "encoding/json"
+    "testing"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestAST_JSONRoundTrip_Spike(t *testing.T) {
+    // Sample DSL policy
+    dslText := `permit(principal is character, action in ["read"], resource is location) when { resource.id == principal.location };`
+
+    // Step 1: Parse DSL to AST (use parser once Task 8 AST types exist)
+    // For spike: define minimal AST types inline or use placeholder struct
+
+    // Step 2: Marshal to JSON
+    jsonBytes, err := json.Marshal(ast)
+    require.NoError(t, err, "AST marshaling should succeed")
+
+    // Step 3: Unmarshal back to AST
+    var roundTripped PolicyAST
+    err = json.Unmarshal(jsonBytes, &roundTripped)
+    require.NoError(t, err, "AST unmarshaling should succeed")
+
+    // Step 4: Compare
+    assert.Equal(t, ast, roundTripped, "Round-tripped AST must match original")
+}
+```
+
+**Step 2: Define minimal AST types for spike**
+
+Create just enough AST structure to represent a simple policy. Use participle struct tags if available, or plain structs if not. Focus on proving the round-trip works.
+
+**Step 3: Run test and verify**
+
+```bash
+task test
+```
+
+Expected: Test PASSES — AST round-trips correctly through JSON.
+
+If test FAILS: Document the failure mode (unexported fields, interface types, pointer semantics) and propose fix (custom MarshalJSON, protobuf, etc).
+
+**Step 4: Commit spike findings**
+
+```bash
+git add internal/access/policy/dsl/ast_spike_test.go
+git commit -m "spike(access): validate AST JSON serialization round-trip
+
+Confirms participle AST nodes survive json.Marshal/Unmarshal.
+[If failure: describe issue and proposed fix]"
+```
+
+**Step 5: Clean up or keep**
+
+- If spike PASSES: Keep test file as regression test, proceed to Task 1
+- If spike FAILS: Document findings, update Task 7 and Task 8 to use alternative serialization
+
+**Notes:**
+
+- This spike is intentionally minimal — just enough to prove/disprove the storage model
+- If participle ASTs use unexported fields or interface types that break JSON, we discover it NOW instead of at Task 12
+- Alternative serialization approaches: custom `MarshalJSON`/`UnmarshalJSON`, protobuf, gob encoding
+
+---
 
 ### Task 1: Create access\_policies migration
 
