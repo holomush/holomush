@@ -63,6 +63,10 @@ Every task MUST pass review before being marked complete:
 
 A task is complete ONLY when: tests pass, acceptance criteria met, AND review passed.
 
+### License Headers
+
+All new `.go` files MUST include SPDX license headers. Run `task license:add` after creating new files, or rely on the lefthook pre-commit hook to add them automatically. See CLAUDE.md License Headers section for format details.
+
 ---
 
 ## Phase Dependency Diagram
