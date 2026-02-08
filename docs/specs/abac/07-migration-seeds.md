@@ -83,6 +83,25 @@ when { resource.visibility == "private"
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
+
+// seed:property-owner-write
+// Property owners can write and delete their properties
+permit(principal is character, action in ["write", "delete"], resource is property)
+when { resource.owner == principal.id };
+
+// seed:property-restricted-visible-to
+// Restricted properties: readable by characters in the visible_to list
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "restricted"
+    && resource has visible_to
+    && principal.id in resource.visible_to };
+
+// seed:property-restricted-excluded
+// Restricted properties: denied to characters in the excluded_from list
+forbid(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "restricted"
+    && resource has excluded_from
+    && principal.id in resource.excluded_from };
 ```
 
 The comment preceding each policy IS the deterministic name used during

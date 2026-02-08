@@ -202,7 +202,9 @@ compilation process:
 4. **Generate** a `permit` policy scoped to the specific resource and action
 5. **Store** the policy via `PolicyStore.Create()`
 
-Compilation example:
+**Compilation examples:**
+
+**Object lock (includes ownership check):**
 
 ```text
 Input:  lock my-chest/read = (faction:rebels | flag:ally) & level:>=3
@@ -218,11 +220,35 @@ Output:
   };
 ```
 
-**Ownership check requirement:** All lock-generated policies **MUST** include
-`resource.owner == principal.id` in the condition block to prevent lock
-policies from surviving ownership transfer. Without this check, a lock set by
-the original owner would grant access to the lock's conditions even after the
+**Location lock (omits ownership check):**
+
+```text
+Input:  lock armory/enter = faction:rebels & level:>=3
+Output:
+  permit(
+    principal is character,
+    action in ["enter"],
+    resource == "location:01XYZ..."
+  ) when {
+    principal.faction == "rebels"
+    && principal.level >= 3
+  };
+```
+
+**Ownership check requirement:** Lock-generated policies **MUST** include
+`resource.owner == principal.id` in the condition block for resources that
+have an owner attribute (objects, properties). This prevents lock policies
+from surviving ownership transfer. Without this check, a lock set by the
+original owner would grant access to the lock's conditions even after the
 resource is transferred to a new owner, creating a backdoor permit.
+
+For locations (which have no owner attribute), the ownership check is
+**omitted** — locations use role-based write access authorization instead.
+Location locks rely on the builder having write permission to the location at
+lock creation time, and the generated policy conditions apply to all
+principals without an ownership constraint. This allows location builders to
+set access conditions (e.g., `level:>=5`) that apply regardless of which
+builder created the lock.
 
 **System attribute immutability:** The attributes `level`, `role`, and
 `faction` are **non-writable system attributes** managed by the core engine.

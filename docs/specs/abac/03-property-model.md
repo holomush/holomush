@@ -113,14 +113,27 @@ permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "private"
     && resource.owner == principal.id };
 
-// Restricted properties: visible_to/excluded_from policies handle these
-// (already defined in Example Policies section)
+// Restricted properties: visible_to/excluded_from policies are defined as seed policies below
 
 // System properties: only accessible by system subject (handled by system bypass)
 
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
+
+// seed:property-restricted-visible-to
+// Restricted properties: readable by characters in the visible_to list
+permit(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "restricted"
+    && resource has visible_to
+    && principal.id in resource.visible_to };
+
+// seed:property-restricted-excluded
+// Restricted properties: denied to characters in the excluded_from list
+forbid(principal is character, action in ["read"], resource is property)
+when { resource.visibility == "restricted"
+    && resource has excluded_from
+    && principal.id in resource.excluded_from };
 ```
 
 **Note:** The `PropertyProvider` MUST also expose a `parent_location` attribute

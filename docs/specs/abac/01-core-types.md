@@ -133,6 +133,8 @@ mapping is:
 | `session:`   | (resolved)  | `session:web-123`       |
 | `location:`  | `location`  | `location:01XYZ`        |
 | `object:`    | `object`    | `object:01DEF`          |
+| `exit:`      | `exit`      | `exit:01MNO`            |
+| `scene:`     | `scene`     | `scene:01PQR`           |
 | `command:`   | `command`   | `command:say`           |
 | `property:`  | `property`  | `property:01GHI`        |
 | `stream:`    | `stream`    | `stream:location:01XYZ` |

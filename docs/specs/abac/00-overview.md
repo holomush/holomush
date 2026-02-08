@@ -88,12 +88,17 @@ All string identifiers in the ABAC system use reserved prefixes for validation a
 |                  | `session:`   | Session ID (resolved to `character:`)  | `session:01XYZ`               |
 | Resource Strings | `location:`  | Location/room reference                | `location:01XYZ`              |
 |                  | `object:`    | Object entity reference                | `object:01DEF`                |
+|                  | `exit:`      | Exit entity reference                  | `exit:01MNO`                  |
+|                  | `scene:`     | Scene entity reference                 | `scene:01PQR`                 |
+|                  | `character:` | Character as resource (dual-use)       | `character:01ABC`             |
 |                  | `command:`   | Command name                           | `command:say`                 |
 |                  | `property:`  | Property entity reference              | `property:01GHI`              |
 |                  | `stream:`    | Event stream reference                 | `stream:location:01XYZ`       |
 | Policy Names     | `seed:`      | System seed policies                   | `seed:player-self-access`     |
 |                  | `lock:`      | Lock-generated policies                | `lock:object:01ABC:read`      |
 | Policy IDs       | `infra:`     | Infrastructure error disambiguation    | `infra:attr-resolution-error` |
+
+**Dual-use prefix:** `character:` appears in both Subject Strings and Resource Strings because characters can be both the subject performing an action (e.g., `character:01ABC` reading a location) and the resource being acted upon (e.g., another character reading `character:01ABC`'s attributes). The engine distinguishes these roles by the field in `AccessRequest`: `Subject` vs. `Resource`. Existing world providers resolve character attributes in both subject and resource contexts.
 
 See [AccessRequest](01-core-types.md#accessrequest) for subject/resource format details and [Seed Policies](07-migration-seeds.md#seed-policies) for policy name conventions.
 
