@@ -377,14 +377,20 @@ AttributeBags.Action = map[string]any{
 }
 ```
 
-**Note:** The action bag currently contains only `name`. The
-`PolicyCompiler` MUST reject policies referencing unregistered `action.*`
-attributes (e.g., `action.type`, `action.scope`) at compile time — the
-attribute schema registry defines the complete set of valid attributes. The
-runtime fail-safe behavior (conditions on missing attributes evaluate to
-`false`) serves as defense-in-depth but is not expected to trigger for
-`action.*` attributes in production. Future attributes MAY be added by
-registering them in the action schema when use cases emerge.
+**Action bag purpose and MVP deferrability:** The action bag exists for **plugin
+extensibility** — plugins MAY define custom actions with metadata (e.g.,
+`action.type`, `action.severity`) in future versions. However, the MVP
+implementation MAY skip action bag population if no policies reference `action.*`
+attributes. The key insight is that **target-clause action matching**
+(`action in ["read", "write"]`) covers all built-in use cases and requires no
+action attributes. Plugins that need action metadata are deferred to future
+phases. The `PolicyCompiler` MUST reject policies referencing unregistered
+`action.*` attributes at compile time — the attribute schema registry defines
+the complete set of valid attributes. The runtime fail-safe behavior (conditions
+on missing attributes evaluate to `false`) serves as defense-in-depth but is
+not expected to trigger for `action.*` attributes in production. Future
+attributes MAY be added by registering them in the action schema when use cases
+emerge.
 
 ### Attribute Providers
 

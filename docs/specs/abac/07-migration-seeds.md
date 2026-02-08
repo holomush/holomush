@@ -84,6 +84,11 @@ when { resource.visibility == "private"
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
 
+// seed:property-system-forbid
+// Explicit deny for system properties — provides audit attribution instead of relying on default-deny
+forbid(principal is character, action, resource is property)
+when { resource.visibility == "system" };
+
 // seed:property-owner-write
 // Property owners can write and delete their properties
 permit(principal is character, action in ["write", "delete"], resource is property)

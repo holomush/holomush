@@ -115,7 +115,11 @@ when { resource.visibility == "private"
 
 // Restricted properties: visible_to/excluded_from policies are defined as seed policies below
 
-// System properties: only accessible by system subject (handled by system bypass)
+// System properties: only accessible by system subject
+// seed:property-system-forbid
+// Explicit deny for system properties — provides audit attribution instead of relying on default-deny
+forbid(principal is character, action, resource is property)
+when { resource.visibility == "system" };
 
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)

@@ -14,12 +14,14 @@ optional allow logging. There was no way to disable audit logging entirely
 
 | Mode           | What is logged            | Use case                    |
 | -------------- | ------------------------- | --------------------------- |
-| `off`          | Nothing                   | Development, performance    |
+| `off`          | System bypasses only      | Development, performance    |
 | `denials_only` | Deny + default_deny       | Production default          |
 | `all`          | All decisions incl. allow | Debugging, compliance audit |
 
 When mode is `all`, system subject bypasses are also logged with
 `effect = "system_bypass"` to provide a complete audit trail.
+
+**Related Decisions:** See [Decision #56](./056-system-bypass-logging.md) for details on system bypass logging.
 
 **Rationale:** At 200 users with ~120 checks/sec peak, `all` mode produces
 ~10M records/day (~35GB at 7-day retention). `denials_only` mode reduces this

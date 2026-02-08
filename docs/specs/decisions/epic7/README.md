@@ -80,3 +80,11 @@ options considered, and rationale for the chosen approach.
 | 75 | Dual-Use Resource Prefixes                                   | General | [075](general/075-dual-use-resource-prefixes.md)                                               |
 | 76 | Compound Resource Decomposition During Migration             | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
 | 77 | Decision Type Mixed Visibility (Value Semantics Safety)      | General | [077](general/077-decision-type-mixed-visibility.md)                                           |
+
+## Numbering Gaps
+
+The ADR numbering has intentional gaps (60-64, 66-73) that reflect decision slots reserved during the initial design phases but not all utilized. These are **not** deleted decisions — they are unused reserved numbers. The gaps exist to maintain stable numbering should additional decisions be needed in those ranges during future design iterations or maintenance.
+
+Current gaps:
+- **60-64:** Reserved during Phase 7.3 design; design decisions addressed elsewhere
+- **66-73:** Reserved during Phase 7.6 design; design decisions addressed elsewhere
