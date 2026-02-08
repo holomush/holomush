@@ -3545,7 +3545,6 @@ git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/r
 - Modify: `internal/command/handlers/boot.go` — Boot command permission check
 - Modify: `internal/world/service.go` — World model operation authorization
 - Modify: `internal/plugin/hostfunc/commands.go` — Plugin command execution auth
-- Modify: `internal/plugin/hostfunc/functions.go` — Plugin host function auth
 - Modify: `internal/core/broadcaster_test.go` — Test mock injection
 
 **Key files include (non-exhaustive)** — run `grep -r "AccessControl" internal/ --include="*.go" -l` for the authoritative list.
@@ -3658,6 +3657,7 @@ Ensure all subject strings use `character:` prefix (not legacy `char:`).
 - Delete: `internal/access/accesstest/mock.go` (generated mock)
 - Modify: `internal/access/access.go` — remove `AccessControl` interface
 - Delete or modify: `internal/plugin/capability/` — remove `Enforcer` (capabilities now seed policies)
+- Modify: `internal/plugin/hostfunc/functions.go` — uses capability.Enforcer, not AccessControl
 - Search and remove: all `char:` prefix usage (replace with `character:`)
 - Run: `mockery` to regenerate mocks for new `AccessPolicyEngine` interface
 
