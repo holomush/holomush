@@ -2925,7 +2925,7 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 23: Bootstrap sequence
 
-**Spec References:** Bootstrap Sequence (lines 2916-2992), Seed Policy Migrations (lines 3123-3173)
+**Spec References:** Bootstrap Sequence (lines 3007-3122), Seed Policy Migrations (lines 3123-3173)
 
 **Acceptance Criteria:**
 
