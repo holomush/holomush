@@ -1,0 +1,31 @@
+# rumdl configuration for documentation site (zensical/MkDocs)
+# Extends root rules with MkDocs-specific adjustments
+
+[global]
+flavor = "mkdocs"
+
+disable = [
+  "MD013", # Line length - disabled for prose
+  "MD030", # List marker spacing (needed for MkDocs grid cards)
+  "MD033", # Inline HTML
+  "MD034", # Bare URLs
+  "MD036", # Emphasis as pseudo-headings
+  "MD044", # Proper names capitalization (too noisy)
+  "MD046", # Code block style (allow both fenced and indented for tabs)
+  "MD057", # Relative link validation (TODO: re-enable after fixing broken links)
+  "MD060", # Table column alignment
+]
+
+exclude = [
+  ".git",
+  "node_modules",
+  "dist",
+]
+
+respect-gitignore = true
+
+[MD026]
+punctuation = ".,;:!。，；：！"
+
+[MD048]
+style = "backtick"

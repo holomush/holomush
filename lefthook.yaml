@@ -42,7 +42,11 @@ pre-commit:
 
     lint-markdown:
       glob: "*.md"
-      run: markdownlint-cli2 {staged_files}
+      run: rumdl check {staged_files}
+
+    fmt-markdown:
+      glob: "*.md"
+      run: rumdl fmt --check {staged_files}
 
     lint-yaml:
       glob: "*.{yaml,yml}"
