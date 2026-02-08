@@ -78,6 +78,11 @@ rationale for the chosen approach.
 64. [Remove Admin Bypass of Cache Staleness and Degraded Mode](#64-remove-admin-bypass-of-cache-staleness-and-degraded-mode)
 65. [Git Revert as Migration Rollback Strategy](#65-git-revert-as-migration-rollback-strategy)
 66. [System Bypasses Use Sync Audit Path](#66-system-bypasses-use-sync-audit-path)
+67. [String-Based PolicyEffect Type](#67-string-based-policyeffect-type)
+68. [Unexported Decision.allowed Field](#68-unexported-decisionallowed-field)
+69. [Direct `types` Package Imports (No Re-Export Aliases)](#69-direct-types-package-imports-no-re-export-aliases)
+70. [pg_notify Payload Uses policyID](#70-pg_notify-payload-uses-policyid)
+71. [Goroutine Re-Entrance Detection Is Convention-Only](#71-goroutine-re-entrance-detection-is-convention-only)
 
 ---
 
@@ -1688,3 +1693,129 @@ justified that trade-off.
 **Cross-reference:** Decision #52 (Async Audit Writes); decision #53 (Audit
 WAL Best-Effort Semantics); decision #56 (Audit Off Mode Includes System
 Bypasses); bead `holomush-5k1.208`.
+
+---
+
+## 67. String-Based PolicyEffect Type
+
+**Review finding (PR #69 batch 4, TD1):** If both `PolicyEffect` and `Effect`
+use `iota` starting from 0, then `PolicyEffectPermit == 0` maps to
+`EffectDefaultDeny == 0` under numeric conversion — a silent security bug where
+a permit policy could be interpreted as default-deny, or vice versa.
+
+**Decision:** `PolicyEffect` MUST be a string type, not a numeric `iota` type.
+Constants are `PolicyEffectPermit PolicyEffect = "permit"` and
+`PolicyEffectForbid PolicyEffect = "forbid"`. A sanctioned conversion function
+MUST provide explicit mapping: `Permit → EffectAllow`,
+`Forbid → EffectDeny`. No implicit numeric conversion is possible.
+
+**Rationale:** String-based enums eliminate an entire class of numeric confusion
+bugs at zero runtime cost (Go string constants are interned). The `Effect` type
+MAY remain `iota`-based since it is never stored in the database and only used
+in evaluation results. The conversion function is the single point of contact
+between the two type domains.
+
+**Implementation note:** Task 5 defines `PolicyEffect` in
+`internal/access/policy/types/types.go`. The conversion function lives alongside
+the type definition.
+
+**Cross-reference:** Decision #62 (Separate PolicyEffect Type); decision #39
+(`EffectSystemBypass` as Fourth Effect Variant); bead `holomush-5k1.238`.
+
+---
+
+## 68. Unexported Decision.allowed Field
+
+**Review finding (PR #69 batch 4, TD2):** The `Decision` struct's exported
+`Allowed` field can be set directly via struct literal, bypassing the
+`Allowed`/`Effect` invariant. `Decision{Allowed: true, Effect: EffectDeny}`
+compiles without error and grants unauthorized access — a critical security
+vulnerability.
+
+**Decision:** The `allowed` field MUST be unexported. Access is via
+`IsAllowed() bool` accessor. Constructor functions `NewAllowDecision()` and
+`NewDenyDecision()` enforce the `allowed`/`Effect` invariant at creation time.
+A `Validate()` method MUST be called at the engine return boundary to catch any
+invariant violation that might slip through internal code paths.
+
+**Rationale:** Making invalid states unrepresentable is the strongest defense
+against authorization bugs. The constructor pattern ensures every `Decision`
+value is internally consistent. The `Validate()` boundary check provides
+defense-in-depth — even if internal code somehow constructs an inconsistent
+`Decision`, the validation catches it before it reaches callers.
+
+**Implementation note:** Task 5 defines `Decision` in
+`internal/access/policy/types/types.go`. The `Validate()` call is placed in
+`AccessPolicyEngine.Evaluate()` just before returning.
+
+**Cross-reference:** Main spec, Decision type section; bead
+`holomush-5k1.239`.
+
+---
+
+## 69. Direct `types` Package Imports (No Re-Export Aliases)
+
+**Review finding (PR #69 batch 4, I3):** Code snippets across the
+implementation plan inconsistently import core types — some use
+`internal/access/policy` (as `policy.AccessRequest`), others use
+`internal/access/policy/types` (as `types.AccessRequest`), and Task 17's
+engine references `AccessRequest`/`Decision` as if they were in the same
+package.
+
+**Decision:** All packages MUST import core ABAC types directly from
+`internal/access/policy/types`. No re-export type aliases from the `policy`
+package. Snippets use `types.AccessRequest`, `types.Decision`,
+`types.PolicyEffect`, etc.
+
+**Rationale:** Direct imports are explicit and unambiguous. Re-export aliases
+add a layer of indirection that makes it harder to find the canonical type
+definition. The `types` package is a leaf package with no internal dependencies,
+so importing it cannot create circular imports.
+
+**Cross-reference:** Decision #22 (Flat Prefixed Strings Over Typed Structs);
+bead `holomush-5k1.222`.
+
+---
+
+## 70. pg_notify Payload Uses policyID
+
+**Review finding (PR #69 batch 4, I7):** The implementation plan uses
+`pg_notify('policy_changed', name)` in Task 7's `PolicyStore.Create()`, but
+the main spec (line 2117) uses `pg_notify('policy_changed', policyID)`.
+
+**Decision:** The plan MUST match the spec: `pg_notify('policy_changed',
+policyID)`. The policy ID (ULID) is the stable identifier; policy names can
+be renamed without invalidating cache entries keyed by ID.
+
+**Rationale:** Using `policyID` is consistent with the spec and avoids cache
+invalidation issues if policies are renamed. The ULID is immutable for the
+lifetime of the policy, while the name is a mutable display label.
+
+**Cross-reference:** Main spec, Cache Invalidation section (line 2117); bead
+`holomush-5k1.226`.
+
+---
+
+## 71. Goroutine Re-Entrance Detection Is Convention-Only
+
+**Review finding (PR #69 batch 4, T8):** Task 30's integration test description
+says it "detects goroutine-based re-entry attempts," but the main spec (lines
+559–576) explicitly states cross-goroutine re-entrance is NOT detected at
+runtime — it is "prevented by the MUST NOT prohibition in the provider contract,
+enforced through convention and code review, not runtime checks."
+
+**Decision:** The plan MUST match the spec: cross-goroutine re-entrance is
+NOT detected at runtime. The integration test MUST document this as a known
+limitation rather than claiming detection. The test verifies that synchronous
+(same-goroutine) re-entry IS detected via panic, and documents that
+goroutine-spawned re-entry bypasses the guard.
+
+**Rationale:** Runtime detection of cross-goroutine re-entrance would require
+goroutine-local storage or a global lock, both of which add complexity and
+performance overhead for a scenario that should never occur in correct provider
+implementations. Convention enforcement via code review and the explicit
+MUST NOT prohibition in the provider contract is sufficient.
+
+**Cross-reference:** Decision #31 (Provider Re-Entrance Prohibition); decision
+#58 (Provider Re-Entrance Goroutine Prohibition); main spec lines 559–576;
+bead `holomush-5k1.237`.
