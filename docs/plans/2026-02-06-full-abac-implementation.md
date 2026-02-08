@@ -547,7 +547,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 > **Note:** This task integrates the PropertyRepository (from Task 4a) with WorldService to ensure properties are cleaned up when parent entities are deleted.
 
-> **Implementation Note:** `WorldService.DeleteCharacter()`, `DeleteObject()`, and `DeleteLocation()` do not currently exist in `internal/world/service.go`. They MUST be created as part of this task's scope before property cascade deletion can be wired in.
+> **Implementation Note:** `WorldService.DeleteCharacter()` does not currently exist in `internal/world/service.go` and MUST be created as part of this task's scope. `DeleteObject()` and `DeleteLocation()` already exist and MUST be modified to add property cascade deletion calls.
 
 > **Scope:** This task modifies WorldService deletion methods to cascade delete properties, adds an orphan cleanup goroutine, and implements startup integrity checks.
 
@@ -565,7 +565,8 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Files:**
 
-- Modify: `internal/world/service.go` (cascade deletion in DeleteCharacter, DeleteObject, DeleteLocation)
+- Create: `internal/world/service.go` (DeleteCharacter method)
+- Modify: `internal/world/service.go` (cascade deletion in DeleteObject, DeleteLocation)
 - Create: `internal/world/property_lifecycle.go` (orphan cleanup goroutine, startup integrity check)
 - Test: `internal/world/service_test.go` (cascade deletion tests)
 - Test: `internal/world/property_lifecycle_test.go` (orphan cleanup tests)
@@ -596,7 +597,7 @@ func (s *WorldService) DeleteCharacter(ctx context.Context, id string) error {
 }
 ```
 
-Repeat for `DeleteObject()` and `DeleteLocation()`.
+Add similar property cascade deletion logic to existing `DeleteObject()` and `DeleteLocation()` methods.
 
 **Step 3: Implement orphan cleanup**
 
