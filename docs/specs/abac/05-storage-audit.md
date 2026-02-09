@@ -249,11 +249,11 @@ type AuditConfig struct {
 }
 ```
 
-| Mode           | What is logged            | Typical use case            |
-| -------------- | ------------------------- | --------------------------- |
-| `off`          | System bypasses only      | Development, performance    |
-| `denials_only` | Deny + default_deny       | Production default          |
-| `all`          | All decisions incl. allow | Debugging, compliance audit |
+| Mode           | What is logged            | Typical use case                      |
+| -------------- | ------------------------- | ------------------------------------- |
+| `off`          | System bypasses + denials | Development, performance (allows off) |
+| `denials_only` | Deny + default_deny       | Production default                    |
+| `all`          | All decisions incl. allow | Debugging, compliance audit           |
 
 The default mode is `denials_only` — this balances operational visibility with
 storage efficiency.
@@ -274,11 +274,9 @@ unbounded growth.
 the audit trail, regardless of the configured audit mode.
 
 **Security requirement (S3):** Denial records (`deny` and `default_deny`)
-MUST be logged regardless of the configured audit mode. If the audit mode
-`off` is intended to suppress denial logging, the mode name and documentation
-MUST be updated with clear warnings that denial records will not be logged,
-creating a security blind spot. Tests MUST verify that denial logging behavior
-matches the documented mode semantics.
+MUST be logged regardless of the configured audit mode. All modes (`off`,
+`denials_only`, `all`) log denials. The `off` mode suppresses only `allow`
+records. Tests MUST verify that denial logging occurs in all modes.
 
 **Synchronous denial audits:** Denial events (`deny` and `default_deny`) **SHOULD**
 be written synchronously to PostgreSQL before `Evaluate()` returns. This prevents

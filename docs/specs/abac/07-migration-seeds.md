@@ -84,10 +84,15 @@ when { resource.visibility == "private"
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
 
-// seed:property-system-forbid
-// Explicit deny for system properties — provides audit attribution instead of relying on default-deny
-forbid(principal is character, action, resource is property)
-when { resource.visibility == "system" };
+// System properties (visibility == "system") are protected by default-deny.
+// No seed policy grants access to them, so they remain inaccessible to all
+// characters (including admins). This is intentional — system properties are
+// reserved for internal use by the platform itself, not player access.
+// We rely on default-deny instead of an explicit forbid policy because:
+// 1. Under deny-overrides conflict resolution, a forbid would block even
+//    seed:admin-full-access (permit), locking admins out permanently.
+// 2. Default-deny still provides full audit attribution (effect=default_deny
+//    is logged), so the forbid comment about "audit attribution" was incorrect.
 
 // seed:property-owner-write
 // Property owners can write and delete their properties
@@ -311,7 +316,10 @@ skips customized seeds and logs the appropriate warning.
 3. **Phase 7.3 (Policy Engine):** Build `AccessPolicyEngine`, attribute
    providers, and audit logger. Replace `AccessControl` with
    `AccessPolicyEngine` in dependency injection. Update all call sites to use
-   `Evaluate()` directly.
+   `Evaluate()` directly. All call sites MUST use `character:` prefix
+   (via `SubjectCharacter` constant from T6, Phase 7.1) per
+   [ADR #13](../decisions/epic7/phase-7.1/013-subject-prefix-normalization.md).
+   The engine MUST reject `char:` prefix with a clear error.
 
 4. **Phase 7.4 (Seed & Bootstrap):** Seed policies on first startup. Verify
    with integration tests.
@@ -338,8 +346,6 @@ skips customized seeds and logs the appropriate warning.
 | `internal/command/handlers/boot`         | Boot command permission check       |
 | `internal/world/service`                 | World model operation authorization |
 | `internal/plugin/hostfunc/commands`      | Plugin command execution auth       |
-| `internal/plugin/hostfunc/functions`     | Plugin host function auth           |
-| `internal/access/static.go`              | Static evaluator checks             |
 | `internal/core/broadcaster` (test)       | Test mock injection                 |
 
 This list is derived from the current codebase. Run `grep -r "AccessControl"

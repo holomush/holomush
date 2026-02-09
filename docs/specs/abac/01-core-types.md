@@ -612,10 +612,10 @@ SHOULD use `resource.name like "policy*"` to match all subcommands, or
 Stub provider returns only type and ID — sufficient for target matching
 (`resource is exit`). Full attribute schema deferred to backlog.
 
-| Attribute | Type   | Requirement | Description        |
-| --------- | ------ | ----------- | ------------------ |
-| `type`    | string | MUST        | Always `"exit"`    |
-| `id`      | string | MUST        | ULID of the exit   |
+| Attribute | Type   | Requirement | Description      |
+| --------- | ------ | ----------- | ---------------- |
+| `type`    | string | MUST        | Always `"exit"`  |
+| `id`      | string | MUST        | ULID of the exit |
 
 **SceneProvider** (`scene` namespace) — **stub only** ([Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)):
 
@@ -625,10 +625,10 @@ Stub provider returns only type and ID — sufficient for target matching
 Stub provider returns only type and ID — sufficient for target matching
 (`resource is scene`). Full attribute schema deferred to backlog.
 
-| Attribute | Type   | Requirement | Description        |
-| --------- | ------ | ----------- | ------------------ |
-| `type`    | string | MUST        | Always `"scene"`   |
-| `id`      | string | MUST        | ULID of the scene  |
+| Attribute | Type   | Requirement | Description       |
+| --------- | ------ | ----------- | ----------------- |
+| `type`    | string | MUST        | Always `"scene"`  |
+| `id`      | string | MUST        | ULID of the scene |
 
 **Action bag** is constructed by the engine directly from the `AccessRequest` —
 see [Action bag construction](#attributebags) above.

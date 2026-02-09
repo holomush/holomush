@@ -115,11 +115,15 @@ when { resource.visibility == "private"
 
 // Restricted properties: visible_to/excluded_from policies are defined as seed policies below
 
-// System properties: only accessible by system subject
-// seed:property-system-forbid
-// Explicit deny for system properties — provides audit attribution instead of relying on default-deny
-forbid(principal is character, action, resource is property)
-when { resource.visibility == "system" };
+// System properties (visibility == "system") are protected by default-deny.
+// No seed policy grants access to them, so they remain inaccessible to all
+// characters (including admins). This is intentional — system properties are
+// reserved for internal use by the platform itself, not player access.
+// We rely on default-deny instead of an explicit forbid policy because:
+// 1. Under deny-overrides conflict resolution, a forbid would block even
+//    seed:admin-full-access (permit), locking admins out permanently.
+// 2. Default-deny still provides full audit attribution (effect=default_deny
+//    is logged), so an explicit forbid provides no additional value.
 
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)

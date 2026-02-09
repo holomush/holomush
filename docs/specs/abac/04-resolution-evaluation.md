@@ -407,7 +407,7 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 │
 └─ 7. Audit
      ├─ Log system bypasses in ALL modes (off, denials_only, all)
-     ├─ Log denials (forbid + default deny) in denials_only and all modes
+     ├─ Log denials (forbid + default deny) in ALL modes (off, denials_only, all)
      ├─ Log allows only in all mode
      └─ Include: decision, matched policies, attribute snapshot
 ```

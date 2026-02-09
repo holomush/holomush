@@ -31,6 +31,8 @@
 - [ ] Each call site uses `types.AccessRequest{Subject, Action, Resource}` struct
 - [ ] Error handling: `Evaluate()` error → fail-closed (deny), logged via slog
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
+- [ ] **All migrated call sites MUST use `SubjectCharacter` constant, not `char:` prefix** (per ADR #13 prefix normalization)
+- [ ] **Static analysis check for remaining `char:` prefix usage** — verify no call sites use legacy `char:` prefix after migration
 - [ ] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names)
 - [ ] Audit logs are immutable: old entries keep `char:` prefix, new entries use `character:` prefix
 - [ ] Tests verify both prefix variants are accepted by EventStore during migration period

@@ -100,7 +100,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ## Critical Path Overview
 
-The full dependency diagram below shows all 43 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
+The full dependency diagram below shows all 50 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
 
 ```mermaid
 graph LR
@@ -141,7 +141,7 @@ graph LR
 
 ## Phase Dependency Diagram
 
-The complete task dependency graph showing all 43 tasks:
+The complete task dependency graph showing all 50 tasks:
 
 ```mermaid
 graph TD
@@ -263,6 +263,7 @@ graph TD
     T12 --> T23
     T21a --> T22
     T6 --> T23
+    T16a --> T23
     T18 --> T23
     T14 --> T17
     T17 --> T24
@@ -326,31 +327,32 @@ graph TD
 
 The following table lists all dependencies that cross phase boundaries. These gates determine when downstream phases can start:
 
-| Source Task | Source Phase | Target Task | Target Phase | Gate Rationale                                       |
-| ----------- | ------------ | ----------- | ------------ | ---------------------------------------------------- |
-| T0          | 7.1          | T8          | 7.2          | AST serialization spike validates DSL design         |
-| T4a         | 7.1          | T16b        | 7.3          | Property metadata enables PropertyProvider           |
-| T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup          |
-| T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                 |
-| T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler         |
-| T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                 |
-| T7          | 7.1          | T26b        | 7.5          | Store needed for admin state commands                |
-| T7          | 7.1          | T32         | 7.7          | Store interface needed for schema evolution          |
-| T12         | 7.2          | T17         | 7.3          | DSL compiler needed by policy engine                 |
-| T12         | 7.2          | T22         | 7.4          | Compiler validates seed policy DSL                   |
-| T12         | 7.2          | T23         | 7.4          | Compiler needed for bootstrap compilation            |
-| T14         | 7.3          | T34         | 7.7          | Resolver needed for circuit breaker                  |
-| T17         | 7.3          | T24         | 7.5          | Engine needed before lock registry                   |
-| T17         | 7.3          | T25b        | 7.5          | Engine needed for lock/unlock commands               |
-| T17         | 7.3          | T28         | 7.6          | Engine must exist before migration                   |
-| T17         | 7.3          | T31         | 7.7          | Engine needed for degraded mode                      |
-| T18         | 7.3          | T23         | 7.4          | Cached policies for bootstrap sequence               |
-| T21a        | 7.3          | T22         | 7.4          | @-prefix removal before seed policies use bare names |
-| T23         | 7.4          | T26a        | 7.5          | Seeded policies before admin CRUD                    |
-| T23         | 7.4          | T27a        | 7.5          | Seeded policies before policy test                   |
-| T23         | 7.4          | T28         | 7.6          | Bootstrap must complete before migration             |
-| T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests             |
-| T24         | 7.5          | T33         | 7.7          | Lock registry needed for discovery command           |
+| Source Task | Source Phase | Target Task | Target Phase | Gate Rationale                                                 |
+| ----------- | ------------ | ----------- | ------------ | -------------------------------------------------------------- |
+| T0          | 7.1          | T8          | 7.2          | AST serialization spike validates DSL design                   |
+| T4a         | 7.1          | T16b        | 7.3          | Property metadata enables PropertyProvider                     |
+| T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup                    |
+| T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                           |
+| T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler                   |
+| T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                           |
+| T7          | 7.1          | T26b        | 7.5          | Store needed for admin state commands                          |
+| T7          | 7.1          | T32         | 7.7          | Store interface needed for schema evolution                    |
+| T12         | 7.2          | T17         | 7.3          | DSL compiler needed by policy engine                           |
+| T12         | 7.2          | T22         | 7.4          | Compiler validates seed policy DSL                             |
+| T12         | 7.2          | T23         | 7.4          | Compiler needed for bootstrap compilation                      |
+| T14         | 7.3          | T34         | 7.7          | Resolver needed for circuit breaker                            |
+| T16a        | 7.3          | T23         | 7.4          | Simple providers (Stream, Command) needed for seed policy eval |
+| T17         | 7.3          | T24         | 7.5          | Engine needed before lock registry                             |
+| T17         | 7.3          | T25b        | 7.5          | Engine needed for lock/unlock commands                         |
+| T17         | 7.3          | T28         | 7.6          | Engine must exist before migration                             |
+| T17         | 7.3          | T31         | 7.7          | Engine needed for degraded mode                                |
+| T18         | 7.3          | T23         | 7.4          | Cached policies for bootstrap sequence                         |
+| T21a        | 7.3          | T22         | 7.4          | @-prefix removal before seed policies use bare names           |
+| T23         | 7.4          | T26a        | 7.5          | Seeded policies before admin CRUD                              |
+| T23         | 7.4          | T27a        | 7.5          | Seeded policies before policy test                             |
+| T23         | 7.4          | T28         | 7.6          | Bootstrap must complete before migration                       |
+| T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests                       |
+| T24         | 7.5          | T33         | 7.7          | Lock registry needed for discovery command                     |
 
 **Key Insights:**
 
@@ -438,13 +440,13 @@ T-shirt size estimates for sprint planning:
 | T34   | Circuit breaker               | M    | Resilience pattern                   |
 | T35   | Property orphan cleanup       | M    | Background cleanup                   |
 
-**Summary:** 6 XS, 12 S, 19 M, 8 L, 2 XL = 43 tasks
+**Summary:** 1 XS, 15 S, 23 M, 9 L, 2 XL = 50 tasks
 
 ---
 
 ## Phase Files
 
-This implementation consists of **43 tasks** split across **7 phases** for manageability:
+This implementation consists of **50 tasks** split across **7 phases** for manageability:
 
 - [Phase 7.1: Policy Schema (Database Tables + Policy Store)](./2026-02-06-full-abac-phase-7.1.md)
 - [Phase 7.2: DSL & Compiler](./2026-02-06-full-abac-phase-7.2.md)
@@ -533,16 +535,16 @@ Intentional deviations from the design spec, tracked here for discoverability an
 
 The following features are intentionally deferred from this implementation plan. They are noted here for discoverability.
 
-| Feature                                  | Spec Reference                                                                                                                                                                                          | Status   | Notes                                                                                                         |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `policy lint` / `policy lint --fix`      | [02-policy-dsl.md](../specs/abac/02-policy-dsl.md) (was line 902), [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3497) | Deferred | Migration tool for DSL syntax changes; listed under Future Commands                                           |
-| `--force-seed-version=N` flag            | [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3121-3129)                                                                                | Deferred | MAY-level; emergency recovery SQL documented as alternative                                                   |
-| Web-based policy editor                  | [00-overview.md#non-goals](../specs/abac/00-overview.md#non-goals) (was line 38)                                                                                                                        | Deferred | Future web UI for policy management                                                                           |
-| `policy import <file>`                   | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3492)                                                                    | Deferred | Bulk policy import from file; useful for backup/restore workflows                                             |
-| `policy diff <id1> <id2>`                | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)                                                              | Deferred | Compare two policy versions; shows DSL text diff                                                              |
-| `policy export [--format=json]`          | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)                                                              | Deferred | Export all policies to stdout for backup/migration                                                            |
-| `exit:` and `scene:` full attribute providers | [01-core-types.md](../specs/abac/01-core-types.md), [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md) | Partial  | Stub providers (type/id only) added in T16a; full attribute schemas deferred (holomush-5k1.422, holomush-5k1.424) |
-| Entity references in policy DSL          | [02-policy-dsl.md](../specs/abac/02-policy-dsl.md)                                                                                                                                                      | Deferred | References like `subject.owns(resource)` require entity relationship model not yet built                      |
-| Cross-resource policy conditions         | [04-resolution-evaluation.md](../specs/abac/04-resolution-evaluation.md)                                                                                                                                | Deferred | Conditions spanning multiple resources (e.g., "if owner of parent location"); single-resource evaluation only |
-| RBAC compatibility layer                 | [00-overview.md](../specs/abac/00-overview.md)                                                                                                                                                          | Deferred | No backwards-compatible RBAC wrapper; direct migration from static roles to ABAC (Decision #36)               |
-| Multi-tenant policy isolation            | N/A                                                                                                                                                                                                     | Deferred | Single-server model; no per-game or per-shard policy scoping                                                  |
+| Feature                                       | Spec Reference                                                                                                                                                                                          | Status   | Notes                                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `policy lint` / `policy lint --fix`           | [02-policy-dsl.md](../specs/abac/02-policy-dsl.md) (was line 902), [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3497) | Deferred | Migration tool for DSL syntax changes; listed under Future Commands                                               |
+| `--force-seed-version=N` flag                 | [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3121-3129)                                                                                | Deferred | MAY-level; emergency recovery SQL documented as alternative                                                       |
+| Web-based policy editor                       | [00-overview.md#non-goals](../specs/abac/00-overview.md#non-goals) (was line 38)                                                                                                                        | Deferred | Future web UI for policy management                                                                               |
+| `policy import <file>`                        | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3492)                                                                    | Deferred | Bulk policy import from file; useful for backup/restore workflows                                                 |
+| `policy diff <id1> <id2>`                     | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)                                                              | Deferred | Compare two policy versions; shows DSL text diff                                                                  |
+| `policy export [--format=json]`               | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)                                                              | Deferred | Export all policies to stdout for backup/migration                                                                |
+| `exit:` and `scene:` full attribute providers | [01-core-types.md](../specs/abac/01-core-types.md), [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)                                                                 | Partial  | Stub providers (type/id only) added in T16a; full attribute schemas deferred (holomush-5k1.422, holomush-5k1.424) |
+| Entity references in policy DSL               | [02-policy-dsl.md](../specs/abac/02-policy-dsl.md)                                                                                                                                                      | Deferred | References like `subject.owns(resource)` require entity relationship model not yet built                          |
+| Cross-resource policy conditions              | [04-resolution-evaluation.md](../specs/abac/04-resolution-evaluation.md)                                                                                                                                | Deferred | Conditions spanning multiple resources (e.g., "if owner of parent location"); single-resource evaluation only     |
+| RBAC compatibility layer                      | [00-overview.md](../specs/abac/00-overview.md)                                                                                                                                                          | Deferred | No backwards-compatible RBAC wrapper; direct migration from static roles to ABAC (Decision #36)                   |
+| Multi-tenant policy isolation                 | N/A                                                                                                                                                                                                     | Deferred | Single-server model; no per-game or per-shard policy scoping                                                      |
