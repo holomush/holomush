@@ -82,6 +82,21 @@ options considered, and rationale for the chosen approach.
 | 76 | Compound Resource Decomposition During Migration             | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
 | 77 | Decision Type Mixed Visibility (Value Semantics Safety)      | General | [077](general/077-decision-type-mixed-visibility.md)                                           |
 
+## Spec ADR Reference Mapping
+
+The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-full-abac-design.md)) references 8 key ADRs using a dual numbering scheme (ADR 0009-0016). This table maps those spec references to their corresponding decision file numbers in this directory:
+
+| Spec ADR | File # | Title                                        | Link                                                                                        |
+| -------- | ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| ADR 0009 | 001    | Custom Go-Native ABAC Engine                 | [001](general/001-policy-engine-approach.md)                                                |
+| ADR 0010 | 028    | Cedar-Aligned Fail-Safe Type Semantics       | [028](phase-7.3/028-cedar-aligned-missing-attribute-semantics.md)                           |
+| ADR 0011 | 004    | Deny-Overrides Without Priority              | [004](general/004-conflict-resolution.md)                                                   |
+| ADR 0012 | 003    | Eager Attribute Resolution                   | [003](general/003-attribute-resolution-strategy.md)                                         |
+| ADR 0013 | 009    | Properties as First-Class Entities           | [009](phase-7.1/009-property-model.md)                                                      |
+| ADR 0014 | 036    | Direct Static Access Control Replacement     | [036](phase-7.6/036-direct-replacement-no-adapter.md)                                       |
+| ADR 0015 | 012    | Three-Layer Player Access Control            | [012](phase-7.1/012-player-access-control-layers.md)                                        |
+| ADR 0016 | 011    | LISTEN/NOTIFY Policy Cache Invalidation      | [011](phase-7.3/011-cache-invalidation.md)                                                  |
+
 ## Numbering Gaps
 
 The ADR numbering has intentional gaps (60-64, 67-73) that reflect decision slots reserved during the initial design phases but not all utilized. These are **not** deleted decisions — they are unused reserved numbers. The gaps exist to maintain stable numbering should additional decisions be needed in those ranges during future design iterations or maintenance.

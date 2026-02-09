@@ -20,6 +20,10 @@
 - [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
 - [ ] All tests pass via `task test`
 
+**Dependencies:**
+
+- Task 21a ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) (remove @ prefix from command names) — seed policies reference bare command names (e.g., `"say"`, `"dig"`) which require @-prefix removal first
+
 **Files:**
 
 - Create: `internal/access/policy/seed.go`
@@ -148,15 +152,15 @@ func SeedPolicies() []SeedPolicy {
             SeedVersion: 1,
         },
         {
-            Name:        "seed:property-visible-to",
-            Description: "Properties with visible_to lists: only listed characters can read",
-            DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };`,
+            Name:        "seed:property-restricted-visible-to",
+            Description: "Restricted properties: readable by characters in the visible_to list",
+            DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "restricted" && resource has visible_to && principal.id in resource.visible_to };`,
             SeedVersion: 1,
         },
         {
-            Name:        "seed:property-excluded-from",
-            Description: "Exclude specific characters from seeing a property",
-            DSLText:     `forbid(principal is character, action in ["read"], resource is property) when { resource has excluded_from && principal.id in resource.excluded_from };`,
+            Name:        "seed:property-restricted-excluded",
+            Description: "Restricted properties: denied to characters in the excluded_from list",
+            DSLText:     `forbid(principal is character, action in ["read"], resource is property) when { resource.visibility == "restricted" && resource has excluded_from && principal.id in resource.excluded_from };`,
             SeedVersion: 1,
         },
     }
@@ -188,6 +192,7 @@ git commit -m "feat(access): define seed policies"
 - [ ] Seed version upgrade: if shipped `seed_version > stored.seed_version`, update `dsl_text`, `compiled_ast`, and `seed_version`
 - [ ] Upgrade populates `change_note` with `"Auto-upgraded from seed v{N} to v{N+1} on server upgrade"`
 - [ ] Respects `--skip-seed-migrations` flag to disable automatic upgrades
+- [ ] Bootstrap handles `PolicyCompiler` compilation errors gracefully during seed insertion and upgrades
 - [ ] `PolicyStore.UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` method for migration-delivered seed fixes
 - [ ] `UpdateSeed()` checks if policy exists with `source='seed'`; fails if not
 - [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
@@ -212,6 +217,8 @@ git commit -m "feat(access): define seed policies"
 - Existing non-seed policy (same name, `source!="seed"`) → skipped, warning logged
 - Seed version upgrade (shipped version > stored version) → policy updated with new DSL and incremented version
 - `--skip-seed-migrations` flag → no version upgrades, only new seed insertions
+- Malformed seed DSL during bootstrap → compilation error handled gracefully, bootstrap fails with clear error
+- Partial bootstrap failure → some seeds compile successfully, some don't; bootstrap fails but successful seeds are not committed
 
 **Step 2: Implement**
 
