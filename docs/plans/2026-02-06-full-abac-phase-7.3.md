@@ -136,6 +136,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Provider exceeding fair-share timeout → cancelled
 - [ ] **Re-entrance guard:** Provider calling `Evaluate()` during attribute resolution → panic with descriptive error. Implementation: store `inResolution` flag in context at resolver entry, check flag before calling providers, panic if flag is true. Guards against deadlock (Engine → Resolver → Provider → Engine). See [ADR #31](../specs/decisions/epic7/phase-7.3/031-provider-re-entrance-prohibition.md) (Provider Re-Entrance Prohibition)
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
+- [ ] **Security (S6):** Runtime namespace validation — provider return keys MUST match registered namespace, invalid keys rejected with error logging and metric emission
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
 - [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), was spec lines 1976-2006)
 - [ ] All tests pass via `task test`
@@ -738,6 +739,11 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 > **Note:** Denials elevated from spec SHOULD (line 2293) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 >
 > **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
+>
+> **Security requirement (S3):** If audit mode `off` is implemented to suppress
+> denial logging (creating a security blind spot), the mode name and
+> documentation MUST include clear warnings. Tests MUST verify denial logging
+> behavior matches documented semantics.
 
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented

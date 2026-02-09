@@ -132,6 +132,12 @@ in its schema, the engine MUST handle this gracefully:
 3. **Emit a metric** `abac_unregistered_attributes_total{namespace="X",key="Y"}`
    to track schema drift
 
+**Security requirement (S6):** Plugin attribute providers MUST have their
+return values validated at runtime against the registered namespace. Providers
+returning attribute keys outside their registered namespace MUST have those
+keys rejected, with error logging and metric emission. Tests MUST verify that
+namespace enforcement occurs at runtime, not just during registration.
+
 This approach balances safety (logging the schema violation) with availability
 (policies continue working even with schema drift).
 

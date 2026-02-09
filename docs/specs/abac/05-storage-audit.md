@@ -268,6 +268,13 @@ unbounded growth.
 `off`). This ensures bugs or compromised system contexts are never invisible in
 the audit trail, regardless of the configured audit mode.
 
+**Security requirement (S3):** Denial records (`deny` and `default_deny`)
+MUST be logged regardless of the configured audit mode. If the audit mode
+`off` is intended to suppress denial logging, the mode name and documentation
+MUST be updated with clear warnings that denial records will not be logged,
+creating a security blind spot. Tests MUST verify that denial logging behavior
+matches the documented mode semantics.
+
 **Synchronous denial audits:** Denial events (`deny` and `default_deny`) **SHOULD**
 be written synchronously to PostgreSQL before `Evaluate()` returns. This prevents
 attackers from flooding the system to erase evidence of access violations. Allow

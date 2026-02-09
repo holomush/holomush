@@ -150,6 +150,13 @@ as constants (e.g., `SubjectCharacter = "character:"`, `SubjectPlugin =
 MUST use the full `character:` prefix (not the legacy `char:` abbreviation).
 The engine MUST reject unknown prefixes with a clear error.
 
+**Security requirement (S1):** The system subject string `"system"` and
+`WithSystemSubject(ctx)` context marker MUST be restricted to internal-only
+callers. API ingress layers MUST validate that external requests cannot use
+the system subject or system context marker to bypass ABAC checks. Tests MUST
+verify that API boundaries reject requests attempting to use system subject
+bypass mechanisms.
+
 **Design note:** Subject and resource use flat prefixed strings rather than typed
 structs to simplify serialization for audit logging and cross-process
 communication. Parsing overhead is negligible at <200 concurrent users. If

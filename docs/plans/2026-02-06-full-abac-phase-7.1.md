@@ -1024,6 +1024,11 @@ func ParseEntityRef(ref string) (typeName, id string, err error) {
 
 These helpers allow bootstrap and system operations to bypass ABAC by marking context as system-level.
 
+**Security requirement (S1):** These helpers MUST be restricted to internal-only
+callers. API ingress layers MUST validate that external requests cannot use
+the system subject or system context marker. Tests MUST verify rejection at
+API boundaries.
+
 ```go
 // internal/access/context.go
 package access
@@ -1036,6 +1041,10 @@ type systemSubjectKey struct{}
 // WithSystemSubject returns a new context marked as system-level operation.
 // Operations with system context bypass ABAC policy evaluation.
 // Used during bootstrap, migrations, and internal system tasks.
+//
+// SECURITY: This function MUST only be called by internal components.
+// API ingress layers MUST validate that external requests cannot use
+// this mechanism to bypass authorization.
 func WithSystemSubject(ctx context.Context) context.Context {
     return context.WithValue(ctx, systemSubjectKey{}, true)
 }

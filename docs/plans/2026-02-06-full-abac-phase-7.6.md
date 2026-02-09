@@ -18,6 +18,7 @@
 - [ ] `SessionResolver` wired
 - [ ] `AuditLogger` wired
 - [ ] `Bootstrap()` called at startup to seed policies
+- [ ] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism
 - [ ] ALL **28 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
   - [ ] 24 call sites in `internal/world/service.go`
   - [ ] 1 call site in `internal/command/dispatcher.go`
