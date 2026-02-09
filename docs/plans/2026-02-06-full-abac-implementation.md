@@ -231,6 +231,8 @@ graph TD
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md))
 - Phase 7.7 (Resilience) can proceed after Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) and Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))
 
+**Cross-Phase Gate:** Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (Policy cache with LISTEN/NOTIFY invalidation) gates Phase 7.4 start via T18→T23 dependency. Task 18 remains in Phase 7.3 because it is engine infrastructure (cache invalidation) that logically belongs with other engine tasks, even though it blocks Phase 7.4 bootstrap.
+
 ---
 
 ## Phase Files
@@ -276,6 +278,7 @@ Intentional deviations from the design spec, tracked here for discoverability an
 | Denial audit sync writes elevated from SHOULD to MUST            | [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration) (was line 2293)    | Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) | Denial audit integrity critical for security forensics; ~1-2ms latency acceptable                                                        |
 | Lock naming uses `lock:<type>:<id>:<action>` format              | [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners) (was lines 2462-2477) | Task 25b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) | Explicit resource type prefix improves discoverability and query filtering                                                               |
 | Policy compilation moved from PolicyStore to caller              | [01-core-types.md#policycompiler](../specs/abac/01-core-types.md#policycompiler) (was lines 206-304) | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting |
+| Policy version records on enable/disable (not just DSL changes)  | [05-storage-audit.md#policy-version-records](../specs/abac/05-storage-audit.md#policy-version-records) (was line 215) | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))  | Enable/disable affects authorization behavior and SHOULD be tracked; spec's narrower scope (DSL changes only) leaves a gap in policy lifecycle auditing |
 
 ## Deferred Features
 
