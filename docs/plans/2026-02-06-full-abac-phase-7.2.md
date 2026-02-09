@@ -80,7 +80,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (18 seed policies: 16 permit, 2 forbid):**
+**Valid policies (18 seed policies):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };
@@ -99,6 +99,8 @@ permit(principal is character, action in ["read"], resource is property) when { 
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };
 permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };
 forbid(principal is character, action in ["read"], resource is property) when { resource has excluded_from && principal.id in resource.excluded_from };
+forbid(principal is character, action, resource is property) when { resource.visibility == "system" };
+permit(principal is character, action in ["write", "delete"], resource is property) when { resource.owner == principal.id };
 ```
 
 **Operator coverage:**

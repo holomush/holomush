@@ -44,6 +44,7 @@
 - [ ] `task test` passes after all migrations
 - [ ] No commits with intentional build breakage
 - [ ] Rollback strategy documented ([Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)): `git revert` of Task 28 commit(s) restores `AccessControl.Check()` call sites
+- [ ] Database rollback procedure documented ([Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md#database-migration-rollback-procedure)) covering all 3 migration files (000015, 000016, 000017) with down-migration order, backup requirements, and data recovery steps
 
 **Files:**
 
@@ -235,14 +236,22 @@ func TestAccessRequest_Construction(t *testing.T) {
 
 **Rollback Strategy:**
 
-If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` (documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md) of the design decisions document):
+If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` and down migrations (documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)):
 
 1. **Revert Task 28 commit(s)** — This restores all 28 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
-2. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
+2. **Run database down migrations** — Roll back 3 migration files in reverse order (000017 → 000016 → 000015) to remove ABAC tables. See [Decision #65 Database Migration Rollback Procedure](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md#database-migration-rollback-procedure) for detailed steps including required backup procedures and down-migration order.
+3. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
+
+**Pre-Rollback Requirements:**
+
+- [ ] **CRITICAL:** Full database backup taken (`pg_dump` of entire database)
+- [ ] ABAC tables exported separately for faster restore if needed
+- [ ] Policy data exported as CSV for manual recreation
+- [ ] Backup integrity verified via test restore to temporary database
 
 **Partial Migration Rollback:** If migration fails after N of M packages are migrated: (1) identify migrated packages via import path check (new package uses access.Check()), (2) each package migration is atomic — unmigrated packages continue using old interface, (3) resume migration from the failed package after fixing the issue.
 
-**Rationale:** No feature flag or adapter layer exists (per Decision #36 and Decision #37 — no adapter, no shadow mode). The migration is a direct replacement with comprehensive test coverage as the safety net. Git revert provides the rollback path (per [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)).
+**Rationale:** No feature flag or adapter layer exists (per Decision #36 and Decision #37 — no adapter, no shadow mode). The migration is a direct replacement with comprehensive test coverage as the safety net. Git revert provides the code rollback path, and down migrations provide the database rollback path (per [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)).
 
 ---
 
