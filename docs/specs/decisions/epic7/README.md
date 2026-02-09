@@ -92,14 +92,14 @@ The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-fu
 
 | Spec ADR | File # | Title                                        | Link                                                                                        |
 | -------- | ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| ADR 0009 | 001    | Custom Go-Native ABAC Engine                 | [001](general/001-policy-engine-approach.md)                                                |
-| ADR 0010 | 028    | Cedar-Aligned Fail-Safe Type Semantics       | [028](phase-7.3/028-cedar-aligned-missing-attribute-semantics.md)                           |
-| ADR 0011 | 004    | Deny-Overrides Without Priority              | [004](general/004-conflict-resolution.md)                                                   |
-| ADR 0012 | 003    | Eager Attribute Resolution                   | [003](general/003-attribute-resolution-strategy.md)                                         |
-| ADR 0013 | 009    | Properties as First-Class Entities           | [009](phase-7.1/009-property-model.md)                                                      |
-| ADR 0014 | 036    | Direct Static Access Control Replacement     | [036](phase-7.6/036-direct-replacement-no-adapter.md)                                       |
-| ADR 0015 | 012    | Three-Layer Player Access Control            | [012](phase-7.1/012-player-access-control-layers.md)                                        |
-| ADR 0016 | 011    | LISTEN/NOTIFY Policy Cache Invalidation      | [011](phase-7.3/011-cache-invalidation.md)                                                  |
+| ADR 0009 | 001    | Policy Engine Approach                       | [001](general/001-policy-engine-approach.md)                                                |
+| ADR 0010 | 028    | Cedar-Aligned Missing Attribute Semantics    | [028](phase-7.3/028-cedar-aligned-missing-attribute-semantics.md)                           |
+| ADR 0011 | 004    | Conflict Resolution                          | [004](general/004-conflict-resolution.md)                                                   |
+| ADR 0012 | 003    | Attribute Resolution Strategy                | [003](general/003-attribute-resolution-strategy.md)                                         |
+| ADR 0013 | 009    | Property Model                               | [009](phase-7.1/009-property-model.md)                                                      |
+| ADR 0014 | 036    | Direct Replacement (No Adapter)              | [036](phase-7.6/036-direct-replacement-no-adapter.md)                                       |
+| ADR 0015 | 012    | Player Access Control Layers                 | [012](phase-7.1/012-player-access-control-layers.md)                                        |
+| ADR 0016 | 011    | Cache Invalidation                           | [011](phase-7.3/011-cache-invalidation.md)                                                  |
 
 ## Numbering Gaps
 

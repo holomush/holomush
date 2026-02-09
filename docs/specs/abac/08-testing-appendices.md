@@ -227,11 +227,11 @@ policy management system:
 
 ### Related ADRs
 
-- [ADR 0009: Custom Go-Native ABAC Engine](../decisions/epic7/general/001-policy-engine-approach.md)
-- [ADR 0010: Cedar-Aligned Fail-Safe Type Semantics](../decisions/epic7/phase-7.3/028-cedar-aligned-missing-attribute-semantics.md)
-- [ADR 0011: Deny-Overrides Without Priority](../decisions/epic7/general/004-conflict-resolution.md)
-- [ADR 0012: Eager Attribute Resolution](../decisions/epic7/general/003-attribute-resolution-strategy.md)
-- [ADR 0013: Properties as First-Class Entities](../decisions/epic7/phase-7.1/009-property-model.md)
-- [ADR 0014: Direct Static Access Control Replacement](../decisions/epic7/phase-7.6/036-direct-replacement-no-adapter.md)
-- [ADR 0015: Three-Layer Player Access Control](../decisions/epic7/phase-7.1/012-player-access-control-layers.md)
-- [ADR 0016: LISTEN/NOTIFY Policy Cache Invalidation](../decisions/epic7/phase-7.3/011-cache-invalidation.md)
+- [ADR 0009: Policy Engine Approach](../decisions/epic7/general/001-policy-engine-approach.md)
+- [ADR 0010: Cedar-Aligned Missing Attribute Semantics](../decisions/epic7/phase-7.3/028-cedar-aligned-missing-attribute-semantics.md)
+- [ADR 0011: Conflict Resolution](../decisions/epic7/general/004-conflict-resolution.md)
+- [ADR 0012: Attribute Resolution Strategy](../decisions/epic7/general/003-attribute-resolution-strategy.md)
+- [ADR 0013: Property Model](../decisions/epic7/phase-7.1/009-property-model.md)
+- [ADR 0014: Direct Replacement (No Adapter)](../decisions/epic7/phase-7.6/036-direct-replacement-no-adapter.md)
+- [ADR 0015: Player Access Control Layers](../decisions/epic7/phase-7.1/012-player-access-control-layers.md)
+- [ADR 0016: Cache Invalidation](../decisions/epic7/phase-7.3/011-cache-invalidation.md)

@@ -42,14 +42,14 @@ Applicable ADRs (from [References > Related ADRs](../specs/abac/08-testing-appen
 
 | ADR      | Title                                  | Applies To               |
 | -------- | -------------------------------------- | ------------------------ |
-| ADR 0009 | Custom Go-Native ABAC Engine           | Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                  |
-| ADR 0010 | Cedar-Aligned Fail-Safe Type Semantics | Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))                  |
-| ADR 0011 | Deny-overrides conflict resolution     | Tasks 17, 30             |
-| ADR 0012 | Eager attribute resolution             | Tasks 14, 17             |
-| ADR 0013 | Properties as first-class entities     | Tasks 3, 4a, 4b, 4c, 16b |
-| ADR 0014 | Direct replacement (no adapter)        | Tasks 28-29              |
-| ADR 0015 | Three-Layer Player Access Control      | Tasks 4a, 4b, 4c, 16a-b  |
-| ADR 0016 | LISTEN/NOTIFY cache invalidation       | Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                  |
+| ADR 0009 | Policy Engine Approach                 | Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                  |
+| ADR 0010 | Cedar-Aligned Missing Attribute Semantics | Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))                  |
+| ADR 0011 | Conflict Resolution                    | Tasks 17, 30             |
+| ADR 0012 | Attribute Resolution Strategy          | Tasks 14, 17             |
+| ADR 0013 | Property Model                         | Tasks 3, 4a, 4b, 4c, 16b |
+| ADR 0014 | Direct Replacement (No Adapter)        | Tasks 28-29              |
+| ADR 0015 | Player Access Control Layers           | Tasks 4a, 4b, 4c, 16a-b  |
+| ADR 0016 | Cache Invalidation                     | Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                  |
 
 ### Acceptance Criteria
 
