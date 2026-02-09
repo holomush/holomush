@@ -19,6 +19,7 @@
 - [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected ([01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), was spec lines 612-620, prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Cache invalidation: Policy UPDATE operations trigger pg_notify and cache invalidation (not just CREATE/DELETE). All three CRUD operations verified.
+- [ ] Cache invalidation: Multi-step commands (e.g., "go north && look") invalidate cache between steps to prevent stale permission data from persisting across evaluations within same request
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
 - [ ] All integration tests pass: `go test -race -v -tags=integration ./test/integration/access/...`
@@ -63,6 +64,10 @@ var _ = Describe("Access Policy Engine", func() {
     Describe("Cache invalidation", func() {
         It("reloads policies when NOTIFY fires after create", func() { })
         It("reloads policies when NOTIFY fires after delete", func() { })
+        It("invalidates cache between multi-step command evaluations to prevent stale permissions", func() {
+            // Test scenario: "go north && look" where first command changes permissions
+            // that affect second command. Verify second evaluation sees updated state.
+        })
     })
 
     Describe("Audit logging", func() {

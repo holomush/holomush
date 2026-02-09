@@ -7,7 +7,9 @@
 
 ## Task 13: Attribute provider interface and schema registry
 
-**Spec References:** Core Interfaces > Attribute Providers (lines 567-658), Attribute Resolution > Attribute Schema Registry (lines 1393-1436)
+**Spec References:** [01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers) (was lines 567-658), [04-resolution-evaluation.md#attribute-schema-registry](../specs/abac/04-resolution-evaluation.md#attribute-schema-registry) (was lines 1393-1436), [04-resolution-evaluation.md#provider-registration](../specs/abac/04-resolution-evaluation.md#provider-registration) (lines 37-49)
+
+**ADR References:** [082-core-first-provider-registration-order.md](../specs/decisions/epic7/phase-7.3/082-core-first-provider-registration-order.md)
 
 > **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `types.AccessRequest` and `types.AttributeBags`. Both import from `types` package.
 
@@ -16,11 +18,12 @@
 - [ ] `AttributeProvider` interface: `Namespace()`, `ResolveSubject()`, `ResolveResource()`, `LockTokens()`
 - [ ] `EnvironmentProvider` interface: `Namespace()`, `Resolve()`
 - [ ] `AttributeSchema` supports: `Register()`, `IsRegistered()` (uses type definition from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)))
+- [ ] Engine enforces core-first provider registration order (ADR #82)
 - [ ] Duplicate namespace registration → error
 - [ ] Empty namespace → error
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
-- [ ] Providers MUST return all numeric attributes as `float64` (per spec Core Interfaces > Core Attribute Schema, lines 659-785)
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785))
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -121,7 +124,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 **Spec References:** [04-resolution-evaluation.md#resolution-flow](../specs/abac/04-resolution-evaluation.md#resolution-flow) (was lines 1355-1381), [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) (was lines 1769-1945), [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1946-2025), ADR 0012 (Eager attribute resolution)
 
-> **Note (Bug I10):** [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was spec lines 1976-2006) explicitly specifies LRU eviction with `maxEntries` default of 100. Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
+> **Note (Bug I10):** [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1976-2006) explicitly specifies LRU eviction with `maxEntries` default of 100. Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
 
 **Acceptance Criteria:**
 
@@ -138,7 +141,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
 - [ ] **Security (S6):** Runtime namespace validation — provider return keys MUST match registered namespace, invalid keys rejected with error logging and metric emission
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
-- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), was spec lines 1976-2006)
+- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1976-2006))
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -257,7 +260,7 @@ git commit -m "feat(access): add AttributeResolver with fair-share timeouts and 
 
 ### Task 15: Core attribute providers (character, location, object)
 
-**Spec References:** Core Interfaces > Core Attribute Schema (lines 659-785) — character, location, and object attributes are in the table
+**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785) — character, location, and object attributes are in the table
 
 **Acceptance Criteria:**
 
@@ -314,7 +317,7 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 
 ### Task 16a: Simple providers (environment, command, stream)
 
-**Spec References:** Core Interfaces > Core Attribute Schema (lines 659-785) — environment, command, stream attributes are in the table
+**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785) — environment, command, stream attributes are in the table
 
 **Acceptance Criteria:**
 
@@ -365,7 +368,7 @@ git commit -m "feat(access): add simple providers (environment, command, stream)
 
 > **Note:** This task depends on Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) — PropertyRepository (Task 4a) must exist before PropertyProvider (Task 16b).
 
-**Spec References:** Property Model > Property Attributes (lines 1188-1203), ADR 0013 (Properties as first-class entities)
+**Spec References:** [03-property-model.md#property-attributes](../specs/abac/03-property-model.md#property-attributes) (was lines 1188-1203), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 

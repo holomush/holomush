@@ -40,6 +40,14 @@ Plugins register attribute providers at startup. The engine calls all registered
 providers during eager resolution. Provider namespaces MUST be unique to prevent
 collisions.
 
+**Registration order constraint:** The engine MUST enforce core-first registration
+order. All core attribute providers (SubjectProvider, ResourceProvider,
+EnvironmentProvider) MUST register before any plugin providers. The provider
+registry MUST reject plugin provider registration attempts if any core provider
+has not yet registered. This prevents plugin providers from consuming timeout
+budget before core providers execute under fair-share scheduling (ADR
+[#82](../decisions/epic7/phase-7.3/082-core-first-provider-registration-order.md)).
+
 ```go
 engine.RegisterAttributeProvider(reputationProvider)
 engine.RegisterEnvironmentProvider(weatherProvider)
@@ -544,7 +552,7 @@ different failure modes:
 | Component        | Trigger                                                 | Window | Behavior              | Metric                                               | Rationale                                                                                                |
 | ---------------- | ------------------------------------------------------- | ------ | --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`          | Higher threshold because some transient slowness is expected; detects systematic performance degradation |
-| PropertyProvider | 3 timeout errors                                        | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | Lower threshold because timeouts indicate systematic issues with recursive CTE or data model corruption  |
+| PropertyProvider | 5 timeout errors                                        | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | More tolerant of transient DB load (see [Decision #83](../decisions/epic7/phase-7.3/083-circuit-breaker-threshold-increase.md)) while still detecting systematic issues  |
 
 **General provider circuit breaker:** Providers that stay just
 under the timeout but consistently consume >80% of their allocated budget

@@ -196,14 +196,14 @@ The repository determines the resolution strategy based on `parent_type`:
   error (return `(nil, err)`), triggering EffectDefaultDeny with error
   propagation.
 
-  If the PropertyProvider encounters **3 or more** query timeout errors within
+  If the PropertyProvider encounters **5 or more** query timeout errors within
   a **60-second window**, it **MUST** trip a circuit breaker and return
   default-deny for all subsequent resource attribute requests for that
   60-second window without executing additional queries. This prevents
   systematic timeout errors from overwhelming the database connection pool.
   The circuit breaker trip is logged once at ERROR level with message
-  `"PropertyProvider circuit breaker tripped after 3 timeout errors in 60s —
-  skipping queries"`. A Prometheus counter metric
+  `"PropertyProvider circuit breaker tripped after 5 timeout errors in 60s —
+  skipping queries"`. (See [Decision #83](../decisions/epic7/phase-7.3/083-circuit-breaker-threshold-increase.md) for rationale on the 5-timeout threshold.) A Prometheus counter metric
   `abac_property_provider_circuit_breaker_trips_total` **MUST** be
   incremented when the circuit breaker trips. Operators **SHOULD** configure
   alerting on this metric and investigate data model integrity issues (deep
