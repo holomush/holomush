@@ -50,20 +50,18 @@ jobs:
           # 1. Check for new releases: https://github.com/rvben/rumdl/releases
           # 2. Update RUMDL_VERSION below to new version
           # 3. Update cache key in "Cache rumdl" step above to match new version
-          # 4. SHA256 hash is automatically fetched from the release (see .sha256 file download below)
+          # 4. Download the new .sha256 file and update RUMDL_SHA256 below with the new hash
           # 5. Test locally: task lint:markdown
           if [ "${{ steps.cache-rumdl.outputs.cache-hit }}" != "true" ]; then
             RUMDL_VERSION="v0.1.15"
             RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
             RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
+            # SHA256 hash pinned as literal to prevent compromised releases from providing matching checksums
+            RUMDL_SHA256="b1c9fc9174f1b27bbd33de17c6e84105d8393598f7f24f564cc109ecb4ac23d8"  # rumdl v0.1.15
             curl -LsSfO "${RUMDL_URL}"
-            curl -LsSfO "${RUMDL_URL}.sha256"
-            # SHA256 verification provides integrity checking (detects corruption/truncation) but not
-            # authenticity verification. Both binary and checksum are fetched from the same GitHub origin,
-            # so this cannot detect a compromised release—only transmission errors.
-            sha256sum -c "${RUMDL_TARBALL}.sha256"
+            echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
             sudo tar xzf "${RUMDL_TARBALL}" -C /usr/local/bin
-            rm "${RUMDL_TARBALL}" "${RUMDL_TARBALL}.sha256"
+            rm "${RUMDL_TARBALL}"
           fi
           curl -fsSL https://dprint.dev/install.sh | sh
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
