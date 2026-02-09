@@ -85,6 +85,9 @@ options considered, and rationale for the chosen approach.
 | 79 | Standardize ADR Titles Across All Locations                  | General | [079](general/079-standardize-adr-titles.md)                                                   |
 | 80 | Add Task 0.5 — Dependency Audit Before Implementation        | 7.1     | [080](phase-7.1/080-task-0-5-dependency-audit.md)                                              |
 | 81 | Move Task 4c Orphan Cleanup Goroutine to Phase 7.7           | 7.7     | [081](phase-7.7/081-move-orphan-cleanup-to-resilience.md)                                      |
+| 82 | Core-First Provider Registration Order                       | 7.3     | [082](phase-7.3/082-core-first-provider-registration-order.md)                                 |
+| 83 | Circuit Breaker Threshold Increase (3 to 5)                  | 7.3     | [083](phase-7.3/083-circuit-breaker-threshold-increase.md)                                     |
+| 84 | Goroutine Re-Entry Spec Clarification                        | 7.3     | [084](phase-7.3/084-goroutine-re-entry-spec-clarification.md)                                  |
 
 ## Spec ADR Reference Mapping
 
