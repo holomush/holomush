@@ -139,6 +139,8 @@ See [AccessRequest](01-core-types.md#accessrequest) for subject/resource format 
 │                    │ ObjectProvider        │ ← World model            │
 │                    │ StreamProvider        │ ← Derived from stream ID │
 │                    │ CommandProvider       │ ← Command registry       │
+│                    │ ExitProvider (stub)   │ ← World model (type/id)  │
+│                    │ SceneProvider (stub)  │ ← World model (type/id)  │
 │                    │ Session Resolver      │ ← Session store (not a   │
 │                    │                       │   provider; see Session  │
 │                    │                       │   Subject Resolution)    │
@@ -188,6 +190,8 @@ internal/access/policy/        # NEW — AccessPolicyEngine, evaluation
     property.go                # Core: property attributes
     stream.go                  # Core: StreamProvider — stream attributes (derived from ID)
     command.go                 # Core: CommandProvider — command attributes
+    exit.go                    # Stub: ExitProvider — type/id only (TODO: full attrs, see holomush-5k1.422)
+    scene.go                   # Stub: SceneProvider — type/id only (TODO: full attrs, see holomush-5k1.424)
     environment.go             # Core: env attributes (time, game state)
   lock/                        # Lock expression system
     parser.go                  # Lock expression parser

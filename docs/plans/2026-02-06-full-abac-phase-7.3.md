@@ -315,22 +315,32 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 
 ---
 
-### Task 16a: Simple providers (environment, command, stream)
+### Task 16a: Simple providers (environment, command, stream, exit stub, scene stub)
 
-**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785) — environment, command, stream attributes are in the table
+**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785) — environment, command, stream attributes are in the table; [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md) — exit/scene stubs
 
 **Acceptance Criteria:**
 
 - [ ] EnvironmentProvider implements `EnvironmentProvider` interface; resolves `time`, `hour`, `minute`, `day_of_week`, `maintenance`
 - [ ] CommandProvider resolves `type`, `name` for `command` resources only
 - [ ] StreamProvider resolves `type`, `name`, `location` for `stream` resources only
+- [ ] ExitProvider stub resolves `type`, `id` for `exit` resources only (Decision #88)
+- [ ] SceneProvider stub resolves `type`, `id` for `scene` resources only (Decision #88)
 - [ ] All tests pass via `task test`
+
+<!-- TODO: ExitProvider and SceneProvider are stubs returning type/id only.
+     Full implementations are backlog items:
+     - ExitProvider full attrs: holomush-5k1.422
+     - SceneProvider full attrs: holomush-5k1.424
+     See Decision #88 for rationale. -->
 
 **Files:**
 
 - Create: `internal/access/policy/attribute/environment.go`
 - Create: `internal/access/policy/attribute/command.go`
 - Create: `internal/access/policy/attribute/stream.go`
+- Create: `internal/access/policy/attribute/exit.go` (stub — Decision #88)
+- Create: `internal/access/policy/attribute/scene.go` (stub — Decision #88)
 - Test files for each
 
 **Step 1: Write failing tests**
@@ -348,16 +358,27 @@ StreamProvider:
 
 - `ResolveResource("stream", "location:01XYZ")` → `{"type": "stream", "name": "location:01XYZ", "location": "01XYZ"}`
 
+ExitProvider (stub — Decision #88):
+
+- `ResolveResource("exit", "01MNO")` → `{"type": "exit", "id": "01MNO"}`
+- `ResolveResource("location", "...")` → `(nil, nil)` — wrong type
+
+SceneProvider (stub — Decision #88):
+
+- `ResolveResource("scene", "01PQR")` → `{"type": "scene", "id": "01PQR"}`
+- `ResolveResource("location", "...")` → `(nil, nil)` — wrong type
+
 **Step 2: Implement simple providers**
 
-EnvironmentProvider, CommandProvider, StreamProvider are straightforward mappings with no database queries or complex logic.
+EnvironmentProvider, CommandProvider, StreamProvider are straightforward mappings with no database queries or complex logic. ExitProvider and SceneProvider are minimal stubs returning only `{type, id}` — full attribute resolution deferred to backlog (holomush-5k1.422, holomush-5k1.424).
 
 **Step 3: Run tests, commit**
 
 ```bash
 git add internal/access/policy/attribute/environment.go internal/access/policy/attribute/command.go
-git add internal/access/policy/attribute/stream.go internal/access/policy/attribute/*_test.go
-git commit -m "feat(access): add simple providers (environment, command, stream)"
+git add internal/access/policy/attribute/stream.go internal/access/policy/attribute/exit.go
+git add internal/access/policy/attribute/scene.go internal/access/policy/attribute/*_test.go
+git commit -m "feat(access): add simple providers (environment, command, stream, exit/scene stubs)"
 ```
 
 > **Known Limitation:** Sequential provider execution allows one slow provider to starve others. This is acceptable for MVP scale (~200 users). Future optimization: parallel provider execution if profiling reveals bottlenecks.

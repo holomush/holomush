@@ -604,6 +604,32 @@ SHOULD use `resource.name like "policy*"` to match all subcommands, or
 | `type`    | string | MUST        | Always `"command"`           |
 | `name`    | string | MUST        | Command name (e.g., `"say"`) |
 
+**ExitProvider** (`exit` namespace) — **stub only** ([Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)):
+
+<!-- TODO: Implement full ExitProvider with exit attributes (direction, destination,
+     lock status, bidirectionality). See backlog bead holomush-5k1.422. -->
+
+Stub provider returns only type and ID — sufficient for target matching
+(`resource is exit`). Full attribute schema deferred to backlog.
+
+| Attribute | Type   | Requirement | Description        |
+| --------- | ------ | ----------- | ------------------ |
+| `type`    | string | MUST        | Always `"exit"`    |
+| `id`      | string | MUST        | ULID of the exit   |
+
+**SceneProvider** (`scene` namespace) — **stub only** ([Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)):
+
+<!-- TODO: Implement full SceneProvider with scene attributes (privacy, participants,
+     creator, active status). See backlog bead holomush-5k1.424. -->
+
+Stub provider returns only type and ID — sufficient for target matching
+(`resource is scene`). Full attribute schema deferred to backlog.
+
+| Attribute | Type   | Requirement | Description        |
+| --------- | ------ | ----------- | ------------------ |
+| `type`    | string | MUST        | Always `"scene"`   |
+| `id`      | string | MUST        | ULID of the scene  |
+
 **Action bag** is constructed by the engine directly from the `AccessRequest` —
 see [Action bag construction](#attributebags) above.
 
