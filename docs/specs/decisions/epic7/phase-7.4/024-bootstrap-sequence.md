@@ -19,5 +19,5 @@ algorithm (step 1). Seeding at startup is consistent with how the static system
 initializes default roles. Deterministic naming prevents duplicate seeds on
 restart.
 
-**Updates [Decision #36](../phase-7.1/036-direct-replacement.md):** Adds bootstrap mechanism to
+**Updates [Decision #36](../phase-7.6/036-direct-replacement-no-adapter.md):** Adds bootstrap mechanism to
 the direct replacement strategy.

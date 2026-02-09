@@ -240,6 +240,10 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 - [ ] Type mismatch → evaluates to `false` (fail-safe)
 - [ ] Depth limit enforced at 32 levels; exceeding returns `false`
 - [ ] `like` operator uses glob matching (e.g., `location:*` matches `location:01XYZ`)
+- [ ] Glob patterns MUST be limited to 100 characters
+- [ ] Glob patterns MUST NOT contain more than 5 wildcard characters (* or ? combined)
+- [ ] Compiler MUST reject patterns containing [, {, or **
+- [ ] Test steps include validation tests for each glob limit
 - [ ] `if-then-else` evaluates correctly when `has` condition is true/false
 - [ ] `containsAll` and `containsAny` work with list attributes
 - [ ] `FuzzEvaluateConditions` fuzz test runs for 30s without panics (per spec Testing Strategy)

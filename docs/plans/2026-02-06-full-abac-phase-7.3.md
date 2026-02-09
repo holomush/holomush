@@ -361,7 +361,7 @@ git commit -m "feat(access): add simple providers (environment, command, stream)
 
 ### Task 16b: PropertyProvider with recursive CTE
 
-> **Note:** This task depends on Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (PropertyRepository must exist before PropertyProvider).
+> **Note:** This task depends on Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) — PropertyRepository (Task 4a) must exist before PropertyProvider (Task 16b).
 
 **Spec References:** Property Model > Property Attributes (lines 1188-1203), ADR 0013 (Properties as first-class entities)
 
@@ -448,6 +448,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 **Acceptance Criteria:**
 
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
+- [ ] Engine MUST call Decision.Validate() before returning any Decision
 - [ ] Step 1: System bypass — subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
   - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
   - [ ] System bypass audit writes MUST use sync write path (same as denials) per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) — guarantees audit trail for privileged operations
@@ -469,6 +470,8 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all ([04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), was spec lines 1751-1757)
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
+- [ ] Test verifies Validate() is called on every engine return path
+- [ ] Test for Decision invariant violation (allowed=true but effect=deny) is rejected by Validate()
 - [ ] All tests pass via `task test`
 
 **Files:**

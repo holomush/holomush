@@ -913,6 +913,8 @@ func TestParseEntityRef(t *testing.T) {
         {"command", "command:say", "command", "say", false, ""},
         {"property", "property:01GHI", "property", "01GHI", false, ""},
         {"stream", "stream:location:01XYZ", "stream", "location:01XYZ", false, ""},
+        {"exit", "exit:01JKL", "exit", "01JKL", false, ""},
+        {"scene", "scene:01MNO", "scene", "01MNO", false, ""},
         {"unknown prefix", "bogus:123", "", "", true, "unknown entity prefix"},
         {"empty string", "", "", "", true, "empty entity reference"},
     }
@@ -964,6 +966,8 @@ const (
     ResourceCommand  = "command:"
     ResourceProperty = "property:"
     ResourceStream   = "stream:"
+    ResourceExit     = "exit:"
+    ResourceScene    = "scene:"
 )
 
 // Error code constants for session resolution.
@@ -987,6 +991,8 @@ var knownPrefixes = []struct {
     {ResourceObject, "object"},
     {ResourceCommand, "command"},
     {ResourceProperty, "property"},
+    {ResourceExit, "exit"},
+    {ResourceScene, "scene"},
 }
 
 // ParseEntityRef parses a prefixed entity string into type and ID.
