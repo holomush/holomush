@@ -101,6 +101,42 @@ Confirms participle AST nodes survive json.Marshal/Unmarshal.
 - If participle ASTs use unexported fields or interface types that break JSON, we discover it NOW instead of at Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))
 - Alternative serialization approaches: custom `MarshalJSON`/`UnmarshalJSON`, protobuf, gob encoding
 
+**Contingency Plan: If Participle Spike Fails**
+
+If the participle parser proves insufficient for our AST serialization needs, we have the following alternative approaches:
+
+**Alternative 1: Protobuf Serialization**
+
+- Define AST schema in `.proto` files
+- Use protobuf's native serialization (battle-tested, efficient, schema-versioned)
+- Trade-off: Adds protoc dependency to build pipeline
+- Estimated effort: 2-3 days to define schemas + migrate
+
+**Alternative 2: Custom JSON Marshaling**
+
+- Implement custom `MarshalJSON`/`UnmarshalJSON` for each AST node type
+- Maintain full control over serialization format
+- Trade-off: More boilerplate code, manual maintenance
+- Estimated effort: 1-2 days for core AST types
+
+**Alternative 3: Simplified AST**
+
+- Reduce AST complexity by flattening nested structures
+- Store minimal representation, reconstruct details on demand
+- Trade-off: May lose fidelity for complex policies
+- Estimated effort: 3-4 days to redesign + implement
+
+**Decision Criteria for Abandoning Participle:**
+
+Abandon participle if the spike shows:
+
+- More than 2x development time vs. custom marshaling (>4 days to resolve serialization issues)
+- Fundamental incompatibility requiring AST redesign
+- Performance issues that cannot be resolved (>100ms per policy parse)
+- Maintenance burden that exceeds benefits of structured parsing
+
+If abandoning participle, the recommended fallback is **Alternative 2 (Custom JSON Marshaling)** due to lowest migration cost and alignment with existing Go patterns in the codebase.
+
 ---
 
 ## Task 0.5: Dependency Audit

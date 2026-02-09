@@ -86,7 +86,7 @@ git commit -m "feat(access): add lock token registry"
 - [ ] Location locks use write-access authorization instead
 - [ ] Test: location lock created by builder without ownership check
 - [ ] Test: object/property locks still require ownership
-- [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
+- [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded (SHOULD be configurable via server settings; default: 50 lock attempts per character per minute)
 - [ ] Fuzz tests cover lock expression parser edge cases
 - [ ] All tests pass via `task test`
 
@@ -114,6 +114,16 @@ Compiler takes parsed lock expression + target resource string → DSL policy te
 
 Lock expression compilation converts lock syntax into valid DSL permit policies. The compiled policy MUST include the ownership check requirement: `resource.owner == principal.id`.
 
+**Implementation Note: Configurable Lock Rate Limit**
+
+The lock rate limit (default 50 lock policies per character per minute) SHOULD be configurable via server settings to allow operators to adjust based on their server's scale and player behavior patterns. The default value remains 50/character for backward compatibility and reasonable protection against policy storage exhaustion.
+
+Configuration approach:
+
+- Add `lock_rate_limit_per_character` to server config file (default: 50)
+- Expose via environment variable `HOLOMUSH_LOCK_RATE_LIMIT` (optional override)
+- Document in operator documentation under access control configuration
+
 **Step 3: Run tests, commit**
 
 ```bash
@@ -134,7 +144,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - [ ] `unlock <resource>` → removes all lock policies for the resource
 - [ ] Resource target resolution: resolve object/exit by name in current location
 - [ ] Ownership verification: character must own the target resource (checked via `Evaluate()`)
-- [ ] Rate limiting: max 50 lock policies per character → error on create if exceeded
+- [ ] Rate limiting: max 50 lock policies per character → error on create if exceeded (SHOULD be configurable via server settings; default: 50)
 - [ ] Lock policy naming: `lock:<type>:<resource_id>:<action>` format (per spec: `<type>` is bare resource type like `object`, `property`, `location`)
 - [ ] Commands registered in command registry following existing handler patterns
 - [ ] All tests pass via `task test`
@@ -162,7 +172,7 @@ Lock command workflow:
 3. Determine resource type (object, property, location, etc.) from resolved resource
 4. Check ownership via `engine.Evaluate(ctx, AccessRequest{Subject: character, Action: "own", Resource: resource})`
 5. Count existing lock policies for character (from PolicyStore, filter by `WHERE source = 'lock' AND created_by = <character_id>`)
-6. If count >= 50, return error "Rate limit exceeded: max 50 lock policies per character"
+6. If count >= configured rate limit (default 50), return error "Rate limit exceeded: max N lock policies per character"
 7. Parse lock expression via lock parser (from Task 25)
 8. Compile to DSL policy via lock compiler (from Task 25)
 9. Generate policy name: `lock:<type>:<resource_id>:<action>` (e.g., `lock:object:01ABC:read`)
