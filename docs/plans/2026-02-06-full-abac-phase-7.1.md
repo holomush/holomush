@@ -13,7 +13,7 @@
 
 **Purpose:** Validate that participle-generated AST nodes can survive JSON serialization round-trips BEFORE implementing the policy storage and compiler. This spike prevents discovering storage model failures at Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) after 11 tasks are complete.
 
-**Spec References:** Policy DSL > Grammar (lines 791-1000), Policy Storage > Schema (lines 2028-2169)
+**Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema)
 
 **Acceptance Criteria:**
 
@@ -197,7 +197,7 @@ All dependencies ready for Phase 7.1-7.7 implementation."
 
 ### Task 1: Create access\_policies migration
 
-**Spec References:** Policy Storage > Schema (lines 2028-2169)
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema)
 
 **Acceptance Criteria:**
 
@@ -270,7 +270,7 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 
 ### Task 2: Create access\_audit\_log migration
 
-**Spec References:** Policy Storage > Schema (lines 2028-2169), Policy Storage > Audit Log Serialization (lines 2216-2234)
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), [05-storage-audit.md#audit-log-serialization](../specs/abac/05-storage-audit.md#audit-log-serialization)
 
 **Acceptance Criteria:**
 
@@ -312,7 +312,7 @@ CREATE TABLE access_audit_log (
     duration_us     INTEGER,
     -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
     -- tables MUST include the partition key (timestamp) in the primary key.
-    -- Spec Policy Storage > Audit Log Serialization (line 2070) defines "id TEXT PRIMARY KEY" which is technically
+    -- Spec [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) (line 2070) defines "id TEXT PRIMARY KEY" which is technically
     -- incorrect for partitioned tables. This needs to be corrected in the spec.
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
@@ -364,13 +364,13 @@ git add internal/store/migrations/000016_access_audit_log.*
 git commit -m "feat(access): add access_audit_log table with monthly range partitioning"
 ```
 
-**NOTE:** The spec (Policy Storage > Audit Log Serialization, line 2070) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+**NOTE:** The spec ([05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), line 2070) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
 
 ---
 
 ### Task 3: Create entity\_properties migration
 
-**Spec References:** Policy Storage > Schema (lines 2028-2169), ADR 0013 (Properties as first-class entities)
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -441,7 +441,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 >
 > **Scope:** This task creates the new types (EntityProperty + PropertyRepository interface + PostgreSQL implementation) with full CRUD operations and validation logic. Tasks 4b and 4c handle integrating property lifecycle with WorldService.
 
-**Spec References:** Property Model (lines 1151-1348), ADR 0013 (Properties as first-class entities), ADR 0015 (Three-Layer Player Access Control)
+**Spec References:** [03-property-model.md](../specs/abac/03-property-model.md), ADR 0013 (Properties as first-class entities), ADR 0015 (Three-Layer Player Access Control)
 
 **Acceptance Criteria:**
 
@@ -529,7 +529,7 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 >
 > **Scope:** This task creates the missing deletion method with proper transaction handling and tests. Task 4c will add property cascade deletion to all three methods.
 
-**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2125-2168)
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties section discussing lifecycle
 
 **Acceptance Criteria:**
 
@@ -582,9 +582,9 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 >
 > **Implementation Note:** This task modifies all three deletion methods (`DeleteCharacter`, `DeleteObject`, `DeleteLocation`) to add property cascade deletion calls via `PropertyRepository.DeleteByParent()`.
 >
-> **Scope:** This task adds property cascade deletion to existing deletion methods, adds an orphan cleanup goroutine, and implements startup integrity checks.
+> **Scope:** This task adds property cascade deletion to existing deletion methods. The orphan cleanup goroutine and startup integrity checks have been moved to Phase 7.7 as resilience features.
 
-**Spec References:** Entity Properties — lifecycle on parent deletion (lines 2125-2168)
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties section discussing lifecycle
 
 **Acceptance Criteria:**
 
@@ -592,20 +592,12 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 - [ ] `WorldService.DeleteCharacter()` → `PropertyRepository.DeleteByParent("character", charID)` in same transaction (called before character deletion)
 - [ ] `WorldService.DeleteObject()` → `PropertyRepository.DeleteByParent("object", objID)` in same transaction (called before object deletion)
 - [ ] `WorldService.DeleteLocation()` → `PropertyRepository.DeleteByParent("location", locID)` in same transaction (called before location deletion)
-- [ ] Orphan cleanup goroutine: runs on configurable timer (default: daily) to detect orphaned properties (parent entity no longer exists)
-- [ ] Orphan cleanup: detected orphans logged at WARN level on first discovery
-- [ ] Orphan cleanup: configurable grace period (default: 24h, configured via `world.orphan_grace_period` in server YAML)
-- [ ] Orphan cleanup: orphans persisting across two consecutive runs are actively deleted with batch `DELETE` and logged at INFO level with count
-- [ ] Startup integrity check: count orphaned properties on server startup
-- [ ] Startup integrity check: if orphan count exceeds configurable threshold (default: 100), log at ERROR level but continue starting (not fail-fast)
 - [ ] All tests pass via `task test`
 
 **Files:**
 
 - Modify: `internal/world/service.go` (add property cascade deletion to DeleteCharacter, DeleteObject, DeleteLocation)
-- Create: `internal/world/property_lifecycle.go` (orphan cleanup goroutine, startup integrity check)
 - Test: `internal/world/service_test.go` (cascade deletion tests)
-- Test: `internal/world/property_lifecycle_test.go` (orphan cleanup tests)
 
 **Step 1: Write failing tests (Task 4c)**
 
@@ -613,8 +605,6 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 - `WorldService.DeleteObject()` deletes all properties for that object
 - `WorldService.DeleteLocation()` deletes all properties for that location
 - Cascade deletion happens in same transaction (rollback on error)
-- Orphan cleanup goroutine identifies and deletes orphaned properties
-- Startup integrity check logs orphan count at WARN level
 
 **Step 2: Add property cascade deletion**
 
@@ -638,64 +628,21 @@ func (s *WorldService) DeleteCharacter(ctx context.Context, subjectID string, id
 
 Add similar property cascade deletion logic to existing `DeleteObject()` and `DeleteLocation()` methods.
 
-**Step 3: Implement orphan cleanup**
-
-Create `internal/world/property_lifecycle.go`:
-
-```go
-// StartPropertyLifecycleManager starts background goroutine for orphan cleanup
-func (s *WorldService) StartPropertyLifecycleManager(ctx context.Context, interval time.Duration) {
-    go s.cleanupOrphansLoop(ctx, interval)
-}
-
-func (s *WorldService) cleanupOrphansLoop(ctx context.Context, interval time.Duration) {
-    ticker := time.NewTicker(interval)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case <-ticker.C:
-            if err := s.cleanupOrphanedProperties(ctx); err != nil {
-                errutil.LogError(s.logger, "orphan cleanup failed", err)
-            }
-        }
-    }
-}
-
-func (s *WorldService) cleanupOrphanedProperties(ctx context.Context) error {
-    // Query for properties where parent entity no longer exists
-    // Delete orphaned properties
-    // Log count at WARN level if orphans found
-}
-
-func (s *WorldService) StartupIntegrityCheck(ctx context.Context) error {
-    orphanCount, err := s.countOrphanedProperties(ctx)
-    if err != nil {
-        return err
-    }
-    if orphanCount > 0 {
-        s.logger.Warn("orphaned properties detected", "count", orphanCount)
-    }
-    return nil
-}
-```
-
-**Step 4: Run tests, commit**
+**Step 3: Run tests, commit**
 
 ```bash
 task test
-git add internal/world/service.go internal/world/property_lifecycle.go
-git add internal/world/service_test.go internal/world/property_lifecycle_test.go
-git commit -m "feat(world): add property cascade deletion and orphan cleanup"
+git add internal/world/service.go internal/world/service_test.go
+git commit -m "feat(world): add property cascade deletion"
 ```
+
+> **Note:** Orphan cleanup goroutine and startup integrity checks have been moved to Phase 7.7 (new task after Task 34) as they are resilience features, not core schema concerns.
 
 ---
 
 ### Task 5: Define core types (AccessRequest, Decision, Effect, PolicyMatch, AttributeBags)
 
-**Spec References:** Core Interfaces (lines 195-785) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
+**Spec References:** [01-core-types.md](../specs/abac/01-core-types.md) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
 
 **Acceptance Criteria:**
 
@@ -916,7 +863,7 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 
 ### Task 6: Define subject/resource prefix constants and parser
 
-**Spec References:** Core Interfaces > AccessRequest (lines 305-347), Session Subject Resolution (lines 348-414)
+**Spec References:** [01-core-types.md#accessrequest](../specs/abac/01-core-types.md#accessrequest), [01-core-types.md#session-subject-resolution](../specs/abac/01-core-types.md#session-subject-resolution)
 
 **Acceptance Criteria:**
 
@@ -1215,7 +1162,7 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 
 ### Task 7: Policy store interface and PostgreSQL implementation
 
-**Spec References:** Policy Storage > Schema (lines 2028-2169), Policy Storage > Cache Invalidation (lines 2170-2215)
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), [05-storage-audit.md#cache-invalidation](../specs/abac/05-storage-audit.md#cache-invalidation)
 
 **Acceptance Criteria:**
 

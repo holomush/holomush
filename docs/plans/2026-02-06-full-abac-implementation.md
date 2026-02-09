@@ -176,6 +176,7 @@ graph TD
         T32[Task 32: Schema evolution]
         T33[Task 33: Lock discovery command]
         T34[Task 34: Circuit breaker]
+        T35[Task 35: Property orphan cleanup]
     end
 
     %% Critical cross-phase dependencies
@@ -203,6 +204,7 @@ graph TD
     T7 --> T32
     T24 --> T33
     T14 --> T34
+    T4c --> T35
 
     %% Critical path (red); spike (yellow); PropertyProvider parallel chain (orange)
     style T0 fill:#ffffcc

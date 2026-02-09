@@ -248,7 +248,105 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 35: CLI flag --validate-seeds (MOVED to Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)))
+### Task 35: Property orphan cleanup goroutine
+
+**Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties lifecycle section
+
+> **Note:** This task was moved from Phase 7.1 (Task 4c) because orphan cleanup is a resilience concern, not a core schema concern. Cascade deletion remains in Phase 7.1.
+
+**Acceptance Criteria:**
+
+- [ ] Orphan cleanup goroutine: runs on configurable timer (default: daily) to detect orphaned properties (parent entity no longer exists)
+- [ ] Orphan cleanup: detected orphans logged at WARN level on first discovery
+- [ ] Orphan cleanup: configurable grace period (default: 24h, configured via `world.orphan_grace_period` in server YAML)
+- [ ] Orphan cleanup: orphans persisting across two consecutive runs are actively deleted with batch `DELETE` and logged at INFO level with count
+- [ ] Startup integrity check: count orphaned properties on server startup
+- [ ] Startup integrity check: if orphan count exceeds configurable threshold (default: 100), log at ERROR level but continue starting (not fail-fast)
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Create: `internal/world/property_lifecycle.go` (orphan cleanup goroutine, startup integrity check)
+- Test: `internal/world/property_lifecycle_test.go` (orphan cleanup tests)
+
+**TDD Test List:**
+
+- Background goroutine runs on configurable timer (default: daily)
+- Detected orphans logged at WARN level on first discovery
+- Grace period configurable via YAML (default: 24h)
+- Orphans persisting across two consecutive runs are deleted
+- Batch DELETE logged at INFO level with count
+- Startup integrity check counts orphaned properties
+- If orphan count exceeds threshold (default: 100), log at ERROR but continue starting
+- No fail-fast on orphan detection (resilience requirement)
+
+**Step 1: Write failing tests**
+
+- Orphan cleanup goroutine runs on timer
+- Orphans logged at WARN on first detection
+- Grace period enforced before deletion
+- Batch deletion after grace period
+- Startup integrity check logs orphan count
+- Threshold-based ERROR logging
+
+**Step 2: Implement orphan cleanup**
+
+Create `internal/world/property_lifecycle.go`:
+
+```go
+// StartPropertyLifecycleManager starts background goroutine for orphan cleanup
+func (s *WorldService) StartPropertyLifecycleManager(ctx context.Context, interval time.Duration) {
+    go s.cleanupOrphansLoop(ctx, interval)
+}
+
+func (s *WorldService) cleanupOrphansLoop(ctx context.Context, interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            if err := s.cleanupOrphanedProperties(ctx); err != nil {
+                errutil.LogError(s.logger, "orphan cleanup failed", err)
+            }
+        }
+    }
+}
+
+func (s *WorldService) cleanupOrphanedProperties(ctx context.Context) error {
+    // Query for properties where parent entity no longer exists
+    // Delete orphaned properties after grace period
+    // Log count at WARN level if orphans found
+    // Log count at INFO level after deletion
+}
+
+func (s *WorldService) StartupIntegrityCheck(ctx context.Context) error {
+    orphanCount, err := s.countOrphanedProperties(ctx)
+    if err != nil {
+        return err
+    }
+    if orphanCount > 100 {
+        s.logger.Error("orphaned properties exceed threshold", "count", orphanCount, "threshold", 100)
+    } else if orphanCount > 0 {
+        s.logger.Warn("orphaned properties detected", "count", orphanCount)
+    }
+    return nil
+}
+```
+
+**Step 3: Run tests, commit**
+
+```bash
+task test
+git add internal/world/property_lifecycle.go internal/world/property_lifecycle_test.go
+git commit -m "feat(world): add property orphan cleanup goroutine and startup integrity check"
+```
+
+---
+
+### Task 36: CLI flag --validate-seeds (MOVED to Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)))
 
 > **Note:** This task was moved to Phase 7.4 (Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md))) to enable CI validation during later phases. See Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) for implementation details.
 
