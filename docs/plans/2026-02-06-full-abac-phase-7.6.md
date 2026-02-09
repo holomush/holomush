@@ -19,6 +19,7 @@
 - [ ] `AuditLogger` wired
 - [ ] `Bootstrap()` called at startup to seed policies
 - [ ] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism
+- [ ] **Security (S8 - holomush-5k1.355):** A static analysis rule or go vet check MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST enforce this check. Migration checklist MUST include per-site verification.
 - [ ] ALL **28 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
   - [ ] 24 call sites in `internal/world/service.go`
   - [ ] 1 call site in `internal/command/dispatcher.go`
@@ -256,6 +257,7 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 - [ ] `AccessControl` interface removed from `access.go` and `internal/plugin/hostfunc/commands.go`
 - [ ] `capability.Enforcer` and `capability.CapabilityChecker` removed (capabilities now seed policies)
 - [ ] `internal/plugin/hostfunc/functions.go` — Remove `CapabilityChecker` field and `wrap()` capability checks (plugin capabilities now enforced via ABAC policies)
+- [ ] **Security (S8 - holomush-5k1.355):** Static analysis rule added to CI via `go vet` or custom linter to detect remaining `AccessControl.Check()` calls
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
 - [ ] Zero references to `CapabilityChecker` or `capability.Enforcer` in codebase
@@ -304,12 +306,28 @@ Plugin manifests are now handled by seed policies. Remove enforcer and all refer
 
 Search and replace `char:` → `character:` in all `.go` files.
 
-**Step 5: Run tests**
+**Step 5: Add static analysis check (S8 - holomush-5k1.355)**
+
+Create a custom go vet analyzer or CI check to detect remaining `AccessControl.Check()` calls:
+
+```bash
+# Add to .github/workflows/ci.yml or equivalent
+- name: Verify no remaining AccessControl.Check calls
+  run: |
+    if grep -r "AccessControl\.Check" internal/ --include="*.go" | grep -v "_test.go" | grep -v "^Binary"; then
+      echo "ERROR: Found remaining AccessControl.Check() calls after migration"
+      exit 1
+    fi
+```
+
+OR add a custom go vet analyzer in `tools/migration-check/` that fails on `AccessControl.Check()` invocations.
+
+**Step 6: Run tests**
 
 Run: `task test`
 Expected: PASS
 
-**Step 6: Commit**
+**Step 7: Commit**
 
 ```bash
 git add internal/access/ internal/world/worldtest/ internal/plugin/capability/

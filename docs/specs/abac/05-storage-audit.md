@@ -182,6 +182,11 @@ prolonged staleness **MUST** use the `policy reload` command (see Policy
 Management Commands) to manually force a cache refresh, or use direct CLI/database
 access outside the policy engine.
 
+**Security requirement (S5 - holomush-5k1.346):** An out-of-band cache reload
+mechanism MUST exist that bypasses ABAC authorization. Bypass MUST be
+restricted to local/system callers only. Tests MUST verify recovery from stale
+cache state.
+
 **Rationale for 30s default:** The staleness threshold must exceed the
 maximum expected reconnection backoff to avoid triggering fail-closed during
 brief network disruptions. The `pgconn` reconnection backoff schedule is:
@@ -282,12 +287,17 @@ and system bypass events **MAY** be written asynchronously via a buffered channe
 with batch writes. Synchronous writes add ~1-2ms latency per denial evaluation.
 
 **Write-Ahead Log fallback:** If the synchronous database write fails (connection
-unavailable, timeout, constraint violation), the audit logger **SHOULD** write
-the denial audit entry to a local Write-Ahead Log (WAL) file at
+unavailable, timeout, constraint violation), the audit logger **MUST** write
+denial and system_bypass audit entries to a local Write-Ahead Log (WAL) file at
 `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (or `/var/lib/holomush/audit-wal.jsonl`
-in production) for later replay. Each line is a single JSON-encoded audit entry
+in production) for later replay. For allow events, the WAL fallback **SHOULD** be
+used but **MAY** be skipped. Each line is a single JSON-encoded audit entry
 matching the `access_audit_log` table schema. The WAL file is append-only and
 written synchronously (O_APPEND | O_SYNC) to ensure durability.
+
+**Security requirement (S7 - holomush-5k1.353):** WAL fallback for denial and
+system_bypass audit events MUST be used (not SHOULD). If primary write fails
+and WAL isn't used, denial/bypass events are lost.
 
 The audit logger **MUST** expose a `ReplayWAL()` method that reads entries from
 the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success.

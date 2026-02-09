@@ -20,6 +20,11 @@ to force-refresh the cache when LISTEN/NOTIFY was potentially down.
    policy cache from PostgreSQL. Admin-only. Intended for emergency use when
    LISTEN/NOTIFY may be disconnected.
 
+**Security requirement (S5 - holomush-5k1.346):** `policy reload` MUST bypass
+ABAC authorization to avoid cache staleness deadlock. The out-of-band reload
+mechanism MUST be restricted to local/system callers only. Tests MUST verify
+recovery from stale cache state.
+
 **Rationale:** `policy validate` closes the feedback loop — admins can iterate
 on policy syntax without creating throwaway policies. `policy reload` provides
 a manual override for the automatic cache invalidation system, ensuring admins

@@ -16,6 +16,11 @@ stating that providers MUST NOT spawn goroutines that call back into
 tracking. Integration tests SHOULD include a scenario verifying that
 goroutine-based re-entry is handled (panic or error).
 
+**Security requirement (S2 - holomush-5k1.340):** The re-entrance guard MUST
+be request-scoped (context-based), not goroutine-scoped. Guard MUST detect
+evaluations spawned from attribute provider goroutines. Tests MUST verify
+re-entrance detection across goroutine boundaries.
+
 **Rationale:** Runtime goroutine ID tracking (via `sync.Map` or similar) adds
 complexity and performance overhead to every `Evaluate()` call. At the current
 scale, convention enforcement through code review and clear contract

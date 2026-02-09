@@ -250,6 +250,11 @@ principals without an ownership constraint. This allows location builders to
 set access conditions (e.g., `level:>=5`) that apply regardless of which
 builder created the lock.
 
+**Security requirement (S4 - holomush-5k1.344):** Lock operations MUST
+re-verify ownership on each operation, not just at creation. Creator identity
+MUST be persisted with the lock record. Periodic reconciliation SHOULD detect
+orphaned or ownership-transferred locks.
+
 **System attribute immutability:** The attributes `level`, `role`, and
 `faction` are **non-writable system attributes** managed by the core engine.
 These cannot be modified by players or builders through attribute commands.

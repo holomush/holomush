@@ -231,6 +231,13 @@ failures. No call site migration **MAY** proceed without passing integration
 tests for all affected seed policies. Coverage target: 100% of seed policies
 tested before Phase 7.3 cutover.
 
+**Security requirement (S8 - holomush-5k1.355):** Migration of ~28 production
+call sites from `AccessControl.Check()` to `AccessPolicyEngine.Evaluate()`
+requires static analysis verification. A static analysis rule or go vet check
+MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST
+enforce this check. Migration checklist MUST include per-site verification to
+prevent privilege escalation from incorrect migration.
+
 #### Seed Policy Migrations
 
 When a server version needs to fix a seed policy bug or update seed policy

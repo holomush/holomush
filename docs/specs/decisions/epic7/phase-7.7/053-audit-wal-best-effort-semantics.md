@@ -19,6 +19,11 @@ to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (XDG_STATE_HOME is semantically
 correct for transient state) and consolidate the duplicate WAL descriptions in
 the spec into a single section.
 
+**Security requirement (S7 - holomush-5k1.353):** WAL fallback for denial and
+system_bypass audit events MUST be used when the primary write fails. The SHOULD
+applies only to allow events. Denial/bypass event loss creates an unacceptable
+security blind spot.
+
 **Rationale:** A pragmatic approach that preserves audit logging during normal
 operation while avoiding the impossible contract of guaranteed writes during
 infrastructure failure. The stderr fallback ensures operators can still observe
