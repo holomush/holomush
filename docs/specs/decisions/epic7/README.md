@@ -76,6 +76,7 @@ options considered, and rationale for the chosen approach.
 | 58 | Provider Re-Entrance Goroutine Prohibition                   | 7.3     | [058](phase-7.3/058-provider-re-entrance-goroutine-prohibition.md)                             |
 | 59 | Fair-Share Provider Timeout Scheduling                       | 7.3     | [059](phase-7.3/059-fair-share-provider-timeout-scheduling.md)                                 |
 | 65 | Git Revert as Migration Rollback Strategy                    | 7.6     | [065](phase-7.6/065-git-revert-migration-rollback.md)                                         |
+| 66 | Sync Audit Writes for System Bypass                          | 7.5     | [066](phase-7.5/066-sync-audit-system-bypass.md)                                              |
 | 74 | Unified Circuit Breaker via Task 34                          | 7.7     | [074](phase-7.7/074-unified-circuit-breaker-task-34.md)                                        |
 | 75 | Dual-Use Resource Prefixes                                   | General | [075](general/075-dual-use-resource-prefixes.md)                                               |
 | 76 | Compound Resource Decomposition During Migration             | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
@@ -83,8 +84,8 @@ options considered, and rationale for the chosen approach.
 
 ## Numbering Gaps
 
-The ADR numbering has intentional gaps (60-64, 66-73) that reflect decision slots reserved during the initial design phases but not all utilized. These are **not** deleted decisions — they are unused reserved numbers. The gaps exist to maintain stable numbering should additional decisions be needed in those ranges during future design iterations or maintenance.
+The ADR numbering has intentional gaps (60-64, 67-73) that reflect decision slots reserved during the initial design phases but not all utilized. These are **not** deleted decisions — they are unused reserved numbers. The gaps exist to maintain stable numbering should additional decisions be needed in those ranges during future design iterations or maintenance.
 
 Current gaps:
 - **60-64:** Reserved during Phase 7.3 design; design decisions addressed elsewhere
-- **66-73:** Reserved during Phase 7.6 design; design decisions addressed elsewhere
+- **67-73:** Reserved during Phase 7.6 design; design decisions addressed elsewhere

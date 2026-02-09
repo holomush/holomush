@@ -450,7 +450,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
 - [ ] Step 1: System bypass — subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
   - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
-  - [ ] System bypass audit writes MUST use sync write path (same as denials) per ADR 66 — guarantees audit trail for privileged operations
+  - [ ] System bypass audit writes MUST use sync write path (same as denials) per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) — guarantees audit trail for privileged operations
   - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
   - [ ] Test case: system bypass subject with audit mode=off still produces audit entry (via sync write)
   - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
@@ -734,7 +734,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 >
 > **Note:** Denials elevated from spec SHOULD (line 2293) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 >
-> **Note:** System bypasses use sync path per ADR 66. Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
+> **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
 
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented

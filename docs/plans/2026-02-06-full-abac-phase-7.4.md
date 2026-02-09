@@ -11,7 +11,7 @@
 
 **Acceptance Criteria:**
 
-- [ ] All 16 seed policies defined as `SeedPolicy` structs (15 permit, 1 forbid)
+- [ ] All 18 seed policies defined as `SeedPolicy` structs (16 permit, 2 forbid)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
@@ -27,7 +27,7 @@
 
 **Step 1: Write failing tests**
 
-- All 16 seed policies compile without error via `PolicyCompiler`
+- All 18 seed policies compile without error via `PolicyCompiler`
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -47,7 +47,7 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 16 seed policies (15 permit, 1 forbid).
+// SeedPolicies returns the complete set of 18 seed policies (16 permit, 2 forbid).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
@@ -136,6 +136,18 @@ func SeedPolicies() []SeedPolicy {
             SeedVersion: 1,
         },
         {
+            Name:        "seed:property-system-forbid",
+            Description: "Explicit deny for system properties — provides audit attribution instead of relying on default-deny",
+            DSLText:     `forbid(principal is character, action, resource is property) when { resource.visibility == "system" };`,
+            SeedVersion: 1,
+        },
+        {
+            Name:        "seed:property-owner-write",
+            Description: "Property owners can write and delete their properties",
+            DSLText:     `permit(principal is character, action in ["write", "delete"], resource is property) when { resource.owner == principal.id };`,
+            SeedVersion: 1,
+        },
+        {
             Name:        "seed:property-visible-to",
             Description: "Properties with visible_to lists: only listed characters can read",
             DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };`,
@@ -151,7 +163,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 16 seed policies listed above: 15 permit policies for standard access patterns, plus 1 forbid policy for excluded_from visibility (per lines 1245-1271, 1299-1325). Default deny behavior is provided by EffectDefaultDeny.)
+(Note: 18 seed policies listed above: 16 permit policies for standard access patterns, plus 2 forbid policies (seed:property-system-forbid for audit attribution of system property denials, seed:property-excluded-from for restricted property exclusion). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 
@@ -181,7 +193,7 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
 - [ ] `UpdateSeed()` skips with warning if stored DSL differs from old DSL (customized by admins)
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
-- [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 6 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store) acceptance criteria
+- [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
 
 **Dependencies:**
