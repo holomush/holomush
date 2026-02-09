@@ -81,6 +81,10 @@ options considered, and rationale for the chosen approach.
 | 75 | Dual-Use Resource Prefixes                                   | General | [075](general/075-dual-use-resource-prefixes.md)                                               |
 | 76 | Compound Resource Decomposition During Migration             | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
 | 77 | Decision Type Mixed Visibility (Value Semantics Safety)      | General | [077](general/077-decision-type-mixed-visibility.md)                                           |
+| 78 | Task 27b Split into 3 Sub-Tasks                              | 7.4     | [078](phase-7.4/078-task-27b-split-into-sub-tasks.md)                                          |
+| 79 | Standardize ADR Titles Across All Locations                  | General | [079](general/079-standardize-adr-titles.md)                                                   |
+| 80 | Add Task 0.5 — Dependency Audit Before Implementation        | 7.1     | [080](phase-7.1/080-task-0-5-dependency-audit.md)                                              |
+| 81 | Move Task 4c Orphan Cleanup Goroutine to Phase 7.7           | 7.7     | [081](phase-7.7/081-move-orphan-cleanup-to-resilience.md)                                      |
 
 ## Spec ADR Reference Mapping
 
