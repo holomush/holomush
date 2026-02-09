@@ -169,7 +169,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 18 seed policies listed above: 16 permit policies for standard access patterns, plus 2 forbid policies (seed:property-system-forbid for audit attribution of system property denials, seed:property-excluded-from for restricted property exclusion). Default deny behavior is provided by EffectDefaultDeny.)
+(Note: 18 seed policies listed above: 16 permit policies for standard access patterns, plus 2 forbid policies (seed:property-system-forbid for audit attribution of system property denials, seed:property-restricted-excluded for restricted property exclusion). Default deny behavior is provided by EffectDefaultDeny.)
 
 **Step 3: Run tests, commit**
 

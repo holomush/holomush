@@ -42,11 +42,21 @@ pre-commit:
 
     lint-markdown:
       glob: "*.md"
+      exclude: "site/**"
       run: rumdl check {staged_files}
+
+    lint-markdown-site:
+      glob: "site/**/*.md"
+      run: rumdl check --config site/.rumdl.toml {staged_files}
 
     fmt-markdown:
       glob: "*.md"
+      exclude: "site/**"
       run: rumdl fmt --check {staged_files}
+
+    fmt-markdown-site:
+      glob: "site/**/*.md"
+      run: rumdl fmt --check --config site/.rumdl.toml {staged_files}
 
     lint-yaml:
       glob: "*.{yaml,yml}"
