@@ -20,5 +20,7 @@ environments where `off` mode is used for performance, operators should be
 aware of bypass activity. The volume is negligible (system operations are
 rare), so there is no performance impact.
 
+**Updated by:** [Decision #86](../general/086-audit-off-mode-logs-denials.md) — off mode now also logs denials
+
 **Cross-reference:** Main spec, Audit Log Configuration section; bead
 `holomush-75um`.

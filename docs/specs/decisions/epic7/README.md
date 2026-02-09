@@ -141,4 +141,4 @@ Current gaps:
 
 ## Superseded Decisions
 
-**Superseded Decisions:** ADRs #5, #20, and #21 are superseded (see their 'Status' fields). Superseded decisions are retained at their original paths for referential integrity. Their superseded status is documented within each file's header.
+**Superseded Decisions:** ADRs #5, #20, and #21 are superseded (see their 'Superseded by' notes). Superseded decisions are retained at their original paths for referential integrity. Their superseded status is documented within each file's header.

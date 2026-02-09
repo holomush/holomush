@@ -27,6 +27,8 @@ system bypass logging and
 [Decision #86](../general/086-audit-off-mode-logs-denials.md) for denial
 logging in off mode.
 
+**Updated by:** [Decision #86](../general/086-audit-off-mode-logs-denials.md) — off mode now also logs denials
+
 **Rationale:** At 200 users with ~120 checks/sec peak, `all` mode produces
 ~10M records/day (~35GB at 7-day retention). `denials_only` mode reduces this
 to a small fraction (most checks result in allows). `off` mode eliminates
