@@ -24,7 +24,7 @@
 
 **Dependencies:**
 
-- Task 21a ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) (remove @ prefix from command names) — seed policies reference bare command names (e.g., `"say"`, `"dig"`) which require @-prefix removal first
+- Task 21a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (remove @ prefix from command names) — seed policies reference bare command names (e.g., `"say"`, `"dig"`) which require @-prefix removal first
 
 **Files:**
 
