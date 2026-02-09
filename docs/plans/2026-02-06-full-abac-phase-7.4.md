@@ -4,6 +4,8 @@
 # Phase 7.4: Seed Policies & Bootstrap
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
+>
+> **Prerequisite:** Task 18 from Phase 7.3 must complete before Phase 7.4 tasks begin (T18→T23 dependency).
 
 ## Task 22: Define seed policy constants
 

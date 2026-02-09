@@ -6,6 +6,8 @@
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Next: Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)**
 >
 > **Note:** Migration numbers in this phase (000015, 000016, 000017) are relative to the current latest migration `000014_aliases`. If other migrations merge before this work, these numbers MUST be updated to avoid collisions.
+>
+> **Note:** Tasks 1-12 use bare spec line references. Tasks 13+ use the improved file.md#anchor format. Both reference the same spec sections.
 
 ## Task 0: AST Serialization Spike
 
@@ -1125,6 +1127,7 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 - [ ] `PolicyEffect.String()` serializes to DB TEXT values ("permit"/"forbid")
 - [ ] Documentation clearly distinguishes `PolicyEffect` (what a policy declares) from `policy.Effect` (what the engine decides)
 - [ ] `Create()` generates ULID, inserts row, and calls `pg_notify('policy_changed', policyID)`
+- [ ] pg_notify MUST be in same transaction as CRUD operation. Test verifies NOTIFY is sent within same DB transaction as policy write.
 - [ ] `Update()` increments version, inserts into `access_policy_versions`, calls `pg_notify`
 - [ ] `Delete()` removes row (CASCADE), calls `pg_notify`
 - [ ] `ListEnabled()` returns only `enabled = true` rows

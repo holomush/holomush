@@ -26,3 +26,7 @@ const (
 **Rationale:** Making bypass explicit in the type system means audit logging,
 metrics, and callers can distinguish all four outcomes. The `all` audit mode
 logs bypass events, providing a complete trail of system-level operations.
+
+**Related:** [ADR #4](../general/004-conflict-resolution.md) defines the
+deny-overrides conflict resolution that `EffectSystemBypass` short-circuits
+around.

@@ -28,3 +28,6 @@ override, they write a more specific `allow` that avoids triggering the `deny`
 condition, rather than using priority escalation. The `system` subject bypass
 (already existing) handles the "ultimate override" case. Keeps the mental model
 simple: deny always wins, period.
+
+**Related:** [ADR #39](../phase-7.1/039-effect-system-bypass.md) defines
+`EffectSystemBypass` which short-circuits before conflict resolution applies.

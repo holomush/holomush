@@ -127,6 +127,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 - [ ] Single provider → correct attribute bags returned
 - [ ] Multiple providers → merge semantics (last-registered wins for scalars, concatenate for lists)
+- [ ] Multi-provider list concatenation: two providers contributing to same list attribute are merged (e.g., Provider A: factions:[rebels], Provider B: factions:[traders] → merged: factions:[rebels,traders]). Verify order determinism.
 - [ ] Core-to-plugin key collision → reject plugin registration at startup
 - [ ] Plugin-to-plugin key collision → warn, last registered wins
 - [ ] Provider error → skip provider, continue, record `ProviderError`
@@ -1194,6 +1195,10 @@ task test
 git add internal/access/permissions.go internal/access/permissions_test.go internal/access/static_test.go
 git commit -m "refactor(commands): remove @ prefix from command names"
 ```
+
+---
+
+**Cross-Phase Gate:** Task 18 (policy cache with LISTEN/NOTIFY invalidation) gates Phase 7.4. Task 18 is engine infrastructure that logically belongs here, even though T18→T23 creates a Phase 7.4 dependency.
 
 ---
 

@@ -81,6 +81,10 @@ git commit -m "feat(access): add lock token registry"
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
 - [ ] All lock-generated policies MUST include `resource.owner == principal.id` in condition block (ownership check requirement)
+- [ ] Location lock policies omit ownership check (locations have no owner attribute)
+- [ ] Location locks use write-access authorization instead
+- [ ] Test: location lock created by builder without ownership check
+- [ ] Test: object/property locks still require ownership
 - [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
 - [ ] **pg_notify semantics MUST be transactional:** policy write and cache invalidation notification MUST occur in the same database transaction (prevents race conditions where cache invalidates before write commits)
 - [ ] Fuzz tests cover lock expression parser edge cases

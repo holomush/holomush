@@ -17,6 +17,7 @@
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
 - [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected ([01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), was spec lines 612-620, prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
+- [ ] Cache invalidation: Policy UPDATE operations trigger pg_notify and cache invalidation (not just CREATE/DELETE). All three CRUD operations verified.
 - [ ] Audit logging: denials\_only mode, all mode, off mode
 - [ ] Lock system: apply lock → permit policy, remove lock → allow
 - [ ] All integration tests pass: `go test -race -v -tags=integration ./test/integration/access/...`

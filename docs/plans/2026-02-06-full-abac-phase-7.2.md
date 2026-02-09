@@ -240,6 +240,9 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 - [ ] Type mismatch → evaluates to `false` (fail-safe)
 - [ ] Depth limit enforced at 32 levels; exceeding returns `false`
 - [ ] `like` operator uses glob matching (e.g., `location:*` matches `location:01XYZ`)
+- [ ] `like` operator : separator tested
+- [ ] Test cases for `location:*`, `stream:chat:*`
+- [ ] Edge cases for : in patterns vs : in values
 - [ ] Glob patterns MUST be limited to 100 characters
 - [ ] Glob patterns MUST NOT contain more than 5 wildcard characters (* or ? combined)
 - [ ] Compiler MUST reject patterns containing [, {, or **
