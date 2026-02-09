@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
 >
-> **Prerequisites:** Task 16a and Task 18 from Phase 7.3 must complete before Phase 7.4 tasks begin (T16a→T23 and T18→T23 dependencies). T16a provides StreamProvider and CommandProvider, which are referenced by seed policies `seed:player-stream-emit` and `seed:player-basic-commands`.
+> **Prerequisites:** Task 16a, Task 16b, and Task 18 from Phase 7.3 must complete before Phase 7.4 tasks begin (T16a→T23, T16b→T23, and T18→T23 dependencies). T16a provides StreamProvider and CommandProvider, which are referenced by seed policies `seed:player-stream-emit` and `seed:player-basic-commands`. T16b provides PropertyProvider, which enables `property.*` attribute resolution for seed policies `seed:property-public-read`, `seed:property-private-read`, `seed:property-admin-read`, `seed:property-system-forbid`, `seed:property-owner-write`, `seed:property-restricted-visible-to`, and `seed:property-restricted-excluded`.
 
 ## Task 22: Define seed policy constants
 
@@ -13,13 +13,15 @@
 
 **Acceptance Criteria:**
 
-- [ ] All 18 seed policies defined as `SeedPolicy` structs (16 permit, 2 forbid)
+- [ ] All 18 seed policies defined as `SeedPolicy` structs (17 permit, 1 forbid)
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
 - [ ] DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2990-3054)
 - [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
+- [ ] Seed policy coverage validated against all 28 production call sites (see [Appendix A](#appendix-a-seed-policy-coverage-matrix))
+- [ ] All gaps from Appendix A resolved or documented as intentional before Phase 7.6 migration begins
 - [ ] All tests pass via `task test`
 
 **Dependencies:**
@@ -33,7 +35,7 @@
 
 **Step 1: Write failing tests**
 
-- All 18 seed policies compile without error via `PolicyCompiler`
+- All 18 seed policies compile without error via `PolicyCompiler` (17 permit, 1 forbid)
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -53,8 +55,9 @@ type SeedPolicy struct {
     SeedVersion int // Default 1, incremented for upgrades
 }
 
-// SeedPolicies returns the complete set of 18 seed policies (16 permit, 2 forbid).
+// SeedPolicies returns the complete set of 18 seed policies (17 permit, 1 forbid).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
+// See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 func SeedPolicies() []SeedPolicy {
     return []SeedPolicy{
         {
@@ -91,6 +94,12 @@ func SeedPolicies() []SeedPolicy {
             Name:        "seed:player-movement",
             Description: "Characters can enter any location (restrict via forbid policies)",
             DSLText:     `permit(principal is character, action in ["enter"], resource is location);`,
+            SeedVersion: 1,
+        },
+        {
+            Name:        "seed:player-exit-use",
+            Description: "Characters can use exits for navigation",
+            DSLText:     `permit(principal is character, action in ["use"], resource is exit);`,
             SeedVersion: 1,
         },
         {
@@ -142,12 +151,6 @@ func SeedPolicies() []SeedPolicy {
             SeedVersion: 1,
         },
         {
-            Name:        "seed:property-system-forbid",
-            Description: "Explicit deny for system properties — provides audit attribution instead of relying on default-deny",
-            DSLText:     `forbid(principal is character, action, resource is property) when { resource.visibility == "system" };`,
-            SeedVersion: 1,
-        },
-        {
             Name:        "seed:property-owner-write",
             Description: "Property owners can write and delete their properties",
             DSLText:     `permit(principal is character, action in ["write", "delete"], resource is property) when { resource.owner == principal.id };`,
@@ -169,7 +172,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 18 seed policies listed above: 16 permit policies for standard access patterns, plus 2 forbid policies (seed:property-system-forbid for audit attribution of system property denials, seed:property-restricted-excluded for restricted property exclusion). Default deny behavior is provided by EffectDefaultDeny.)
+(Note: 18 seed policies listed above: 17 permit policies for standard access patterns, plus 1 forbid policy (seed:property-restricted-excluded for restricted property exclusion). System properties are protected by default-deny instead of an explicit forbid (see ADR 087 - under deny-overrides conflict resolution, a forbid would block seed:admin-full-access, locking admins out permanently).)
 
 **Step 3: Run tests, commit**
 
@@ -205,10 +208,11 @@ git commit -m "feat(access): define seed policies"
 - [ ] After bootstrap completes, `SELECT COUNT(*) FROM access_policies WHERE source='seed'` returns expected seed count matching number of defined seeds in Task 22
 - [ ] Spot-check: at least one bootstrap integration test verifies a specific seed policy's `name`, `dsl_text`, and `effect` match expected values
 - [ ] Bootstrap test verifies no duplicate seed policies exist (`SELECT name, COUNT(*) FROM access_policies WHERE source='seed' GROUP BY name HAVING COUNT(*) > 1` returns zero rows)
+- [ ] After bootstrap completes, admin subject can successfully execute policy edit operations via `policyStore.Update()` (verifies `seed:admin-full-access` policy works for policy management; integration test coverage deferred to Task 27a/27b which define policy edit handlers)
 
 **Dependencies:**
 
-- Task 6 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (prefix constants and access control types) — provides `access.WithSystemSubject()` and `access.IsSystemContext()` helpers
+- Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store interface and PostgreSQL implementation) — provides `PolicyStore` interface for seed policy bootstrap operations
 
 **Files:**
 
@@ -402,6 +406,98 @@ Add flag parsing and validation logic in `cmd/holomush/main.go`. Use the DSL com
 git add cmd/holomush/main.go cmd/holomush/main_test.go
 git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 ```
+
+---
+
+## Appendix A: Seed Policy Coverage Matrix
+
+This appendix maps each of the 28 production call sites (documented in Task 28.5, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) to the seed policies that authorize them. Every call site MUST have at least one applicable seed policy, or rely on default-deny for intentional denial.
+
+### Command Package (3 call sites)
+
+| # | Call Site                                         | Action    | Resource Type | Applicable Seed Policies                                                                                                            | Notes                                                                       |
+| - | ------------------------------------------------- | --------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 1 | `dispatcher.go:157` — command execution           | `execute` | `command`     | `seed:player-basic-commands` (say/pose/look/go), `seed:builder-commands` (dig/create/describe/link), `seed:admin-full-access` (all) | Unlisted commands: default-deny for players; admins covered by full-access  |
+| 2 | `rate_limit_middleware.go:39` — rate limit bypass | `execute` | `capability`  | `seed:admin-full-access`                                                                                                            | Only admins bypass rate limits; players denied via default-deny             |
+| 3 | `handlers/boot.go:52` — boot command              | `execute` | `admin.boot`  | `seed:admin-full-access`                                                                                                            | Admin-only operation; no specific seed policy — relies on admin full-access |
+
+### World Service — Location Operations (6 call sites)
+
+| # | Call Site                             | Action   | Resource Type | Applicable Seed Policies                                | Notes                                              |
+| - | ------------------------------------- | -------- | ------------- | ------------------------------------------------------- | -------------------------------------------------- |
+| 4 | `service.go:74` — GetLocation         | `read`   | `location`    | `seed:player-location-read`, `seed:admin-full-access`   | Player reads own current location; admin reads any |
+| 5 | `service.go:94` — CreateLocation      | `write`  | `location`    | `seed:builder-location-write`, `seed:admin-full-access` | Builder/admin only                                 |
+| 6 | `service.go:123` — UpdateLocation     | `write`  | `location`    | `seed:builder-location-write`, `seed:admin-full-access` | Builder/admin only                                 |
+| 7 | `service.go:144` — DeleteLocation     | `delete` | `location`    | `seed:builder-location-write`, `seed:admin-full-access` | Builder/admin write+delete; admin full-access      |
+| 8 | `service.go:796` — FindLocationByName | `read`   | `location`    | `seed:player-location-read`, `seed:admin-full-access`   | Player scoped to current location; admin reads any |
+| 9 | `service.go:655` — ExamineLocation    | `read`   | `location`    | `seed:player-location-read`, `seed:admin-full-access`   | Player examines current location                   |
+
+### World Service — Exit Operations (5 call sites)
+
+| #  | Call Site                             | Action   | Resource Type | Applicable Seed Policies                              | Notes                                                                                                                                            |
+| -- | ------------------------------------- | -------- | ------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 10 | `service.go:162` — GetExit            | `read`   | `exit`        | `seed:admin-full-access`                              | **GAP**: No player-level seed policy for reading exits. Players rely on default-deny unless exit is in current location (see Gap Analysis below) |
+| 11 | `service.go:185` — CreateExit         | `write`  | `exit`        | `seed:admin-full-access`                              | **GAP**: No `seed:builder-exit-write` policy. Builders cannot create exits unless admin. See Gap Analysis                                        |
+| 12 | `service.go:217` — UpdateExit         | `write`  | `exit`        | `seed:admin-full-access`                              | **GAP**: Same as #11 — no builder-level exit write policy                                                                                        |
+| 13 | `service.go:241` — DeleteExit         | `delete` | `exit`        | `seed:admin-full-access`                              | **GAP**: Same as #11 — no builder-level exit delete policy                                                                                       |
+| 14 | `service.go:279` — GetExitsByLocation | `read`   | `location`    | `seed:player-location-read`, `seed:admin-full-access` | Resource is location (not exit), so location-read applies                                                                                        |
+
+### World Service — Object Operations (6 call sites)
+
+| #  | Call Site                        | Action   | Resource Type | Applicable Seed Policies                                  | Notes                                                                                                                                  |
+| -- | -------------------------------- | -------- | ------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 15 | `service.go:295` — GetObject     | `read`   | `object`      | `seed:player-object-colocation`, `seed:admin-full-access` | Player reads co-located objects                                                                                                        |
+| 16 | `service.go:315` — CreateObject  | `write`  | `object`      | `seed:builder-object-write`, `seed:admin-full-access`     | Builder/admin only                                                                                                                     |
+| 17 | `service.go:347` — UpdateObject  | `write`  | `object`      | `seed:builder-object-write`, `seed:admin-full-access`     | Builder/admin only                                                                                                                     |
+| 18 | `service.go:371` — DeleteObject  | `delete` | `object`      | `seed:builder-object-write`, `seed:admin-full-access`     | Builder/admin write+delete                                                                                                             |
+| 19 | `service.go:401` — MoveObject    | `write`  | `object`      | `seed:builder-object-write`, `seed:admin-full-access`     | **NOTE**: Players cannot move objects unless builder/admin — may need `seed:player-object-move` if players should pick up/drop objects |
+| 20 | `service.go:713` — ExamineObject | `read`   | `object`      | `seed:player-object-colocation`, `seed:admin-full-access` | Player examines co-located object                                                                                                      |
+
+### World Service — Character Operations (5 call sites)
+
+| #  | Call Site                                  | Action            | Resource Type | Applicable Seed Policies                                                                                   | Notes                                                                                                                           |
+| -- | ------------------------------------------ | ----------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 21 | `service.go:452` — GetCharacter            | `read`            | `character`   | `seed:player-self-access` (own), `seed:player-character-colocation` (co-located), `seed:admin-full-access` |                                                                                                                                 |
+| 22 | `service.go:471` — GetCharactersByLocation | `list_characters` | `location`    | `seed:admin-full-access`                                                                                   | **GAP**: No seed policy covers `list_characters` action for players. Compound resource decomposed per ADR #76. See Gap Analysis |
+| 23 | `service.go:558` — MoveCharacter           | `write`           | `character`   | `seed:player-self-access` (own character), `seed:admin-full-access`                                        | Player writes own character; movement also requires `seed:player-movement` (enter location) + `seed:player-exit-use` (use exit) |
+| 24 | `service.go:768` — ExamineCharacter        | `read`            | `character`   | `seed:player-self-access` (own), `seed:player-character-colocation` (co-located), `seed:admin-full-access` |                                                                                                                                 |
+
+### World Service — Scene Operations (3 call sites)
+
+| #  | Call Site                                 | Action  | Resource Type | Applicable Seed Policies | Notes                                                                  |
+| -- | ----------------------------------------- | ------- | ------------- | ------------------------ | ---------------------------------------------------------------------- |
+| 25 | `service.go:488` — AddSceneParticipant    | `write` | `scene`       | `seed:admin-full-access` | **GAP**: No player-level seed policy for scene write. See Gap Analysis |
+| 26 | `service.go:509` — RemoveSceneParticipant | `write` | `scene`       | `seed:admin-full-access` | **GAP**: Same as #25                                                   |
+| 27 | `service.go:527` — ListSceneParticipants  | `read`  | `scene`       | `seed:admin-full-access` | **GAP**: No player-level seed policy for scene read. See Gap Analysis  |
+
+### Plugin Package (1 call site)
+
+| #  | Call Site                                   | Action    | Resource Type    | Applicable Seed Policies | Notes                                                                                                                                   |
+| -- | ------------------------------------------- | --------- | ---------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 28 | `hostfunc/commands.go:119` — plugin command | `execute` | `plugin_command` | `seed:admin-full-access` | **GAP**: No seed policy for `plugin_command` resource type. Plugin commands rely on admin full-access or default-deny. See Gap Analysis |
+
+### Gap Analysis
+
+The following call sites have no player/builder-level seed policy and rely solely on `seed:admin-full-access` or default-deny:
+
+| Gap | Call Sites                                   | Resource Type                  | Missing Policy                             | Severity   | Recommendation                                                                                                                                                                                          |
+| --- | -------------------------------------------- | ------------------------------ | ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1  | #10 (GetExit)                                | `exit` (read)                  | `seed:player-exit-read`                    | **Medium** | Players need to read exits to navigate. `seed:player-exit-use` covers `use` action but not `read`. Add `seed:player-exit-read` or extend colocation policy to exits                                     |
+| G2  | #11-#13 (CreateExit, UpdateExit, DeleteExit) | `exit` (write/delete)          | `seed:builder-exit-write`                  | **Medium** | Builders can write locations and objects but not exits. Exits are typically created alongside locations. Add `seed:builder-exit-write`                                                                  |
+| G3  | #22 (GetCharactersByLocation)                | `location` (`list_characters`) | Player policy for `list_characters` action | **High**   | Compound resource decomposition created a new action not covered by any seed policy. `seed:player-location-read` only covers `read` action. Add `list_characters` to location-read or create new policy |
+| G4  | #25-#27 (Scene operations)                   | `scene` (read/write)           | `seed:player-scene-access`                 | **Medium** | Scenes are a core RP feature. Players need to join/leave/view scenes. Add scene access policies                                                                                                         |
+| G5  | #28 (Plugin commands)                        | `plugin_command` (execute)     | `seed:player-plugin-commands`              | **Low**    | Plugin commands are game-specific. Individual plugins SHOULD define their own ABAC policies at install time. Default-deny is correct baseline; document that plugin authors must create policies        |
+| G6  | #19 (MoveObject)                             | `object` (write)               | `seed:player-object-move`                  | **Low**    | If players should be able to pick up/drop objects, a separate policy is needed. Current `seed:builder-object-write` only covers builders. May be intentional — evaluate game design requirements        |
+
+**Summary:** 22 of 28 call sites are fully covered by seed policies. 6 gaps identified (G1-G6). Gaps G1-G4 are functional issues that will block normal gameplay if not addressed before migration. G5-G6 are design decisions that may be intentional.
+
+**Recommended Actions:**
+
+1. **G1+G2 (Exits):** Add `seed:player-exit-read` and `seed:builder-exit-write` to Task 22 seed policies (raises count from 18 to 20)
+2. **G3 (list_characters):** Expand `seed:player-location-read` to include `list_characters` action, OR add a dedicated `seed:player-location-list-characters` policy
+3. **G4 (Scenes):** Add `seed:player-scene-participant` (read+write own scenes) and `seed:player-scene-read` (read scenes in current location)
+4. **G5 (Plugin commands):** Document in plugin developer guide that plugins MUST define their own ABAC policies. No seed policy change needed
+5. **G6 (MoveObject):** Defer to game design review — if players can pick up/drop, add policy; if builder-only, document as intentional
 
 ---
 

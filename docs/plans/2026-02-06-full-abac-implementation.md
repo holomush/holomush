@@ -78,7 +78,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 **For experienced implementers:** Start here to jump directly to critical tasks without reading the full plan.
 
-**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain→T17→T18→T23→T28→T28.5→T29
+**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain→T17.1→T17.2→T17.3→T17.4→T18→T23→T28→T28.5→T29
 
 **First 3 tasks:**
 
@@ -100,7 +100,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ## Critical Path Overview
 
-The full dependency diagram below shows all 50 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
+The full dependency diagram below shows all 53 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
 
 ```mermaid
 graph LR
@@ -111,10 +111,13 @@ graph LR
     T7 --> T8_12([T8-T12:<br/>DSL Chain<br/>M2 End])
     T7 --> T13_15([T13-T15:<br/>Provider Chain])
 
-    T8_12 --> T17([T17: Engine<br/>M3 End])
-    T13_15 --> T17
+    T8_12 --> T17_1([T17.1: Bypass<br/>+ Session])
+    T13_15 --> T17_1
+    T17_1 --> T17_2([T17.2: Target<br/>Matching])
+    T17_2 --> T17_3([T17.3: Condition<br/>Evaluation])
+    T17_3 --> T17_4([T17.4: Deny-<br/>Overrides<br/>M3 End])
 
-    T17 --> T18([T18: Cache])
+    T17_4 --> T18([T18: Cache])
     T18 --> T23([T23: Bootstrap<br/>M4 End])
     T23 --> T28([T28: Migration<br/>M5 End])
     T28 --> T28_5([T28.5: Equiv Tests])
@@ -122,7 +125,10 @@ graph LR
 
     style T7 fill:#ffcccc
     style T8_12 fill:#ffe6cc
-    style T17 fill:#ffcccc
+    style T17_1 fill:#ffcccc
+    style T17_2 fill:#ffcccc
+    style T17_3 fill:#ffcccc
+    style T17_4 fill:#ffcccc
     style T23 fill:#ffcccc
     style T28 fill:#ffe6cc
     style T29 fill:#ffcccc
@@ -132,7 +138,7 @@ graph LR
 
 - **M1:** Schema foundation complete (T7)
 - **M2:** DSL parser and compiler ready (T12)
-- **M3:** Policy engine functional (T17)
+- **M3:** Policy engine functional (T17.4)
 - **M4:** Bootstrap policies loaded (T23)
 - **M5:** Legacy adapter migrated (T28)
 - **M6:** All legacy code removed (T29)
@@ -141,7 +147,7 @@ graph LR
 
 ## Phase Dependency Diagram
 
-The complete task dependency graph showing all 50 tasks:
+The complete task dependency graph showing all 53 tasks:
 
 ```mermaid
 graph TD
@@ -189,7 +195,10 @@ graph TD
         T15[Task 15: Core providers]
         T16a[Task 16a: Simple providers]
         T16b[Task 16b: PropertyProvider]
-        T17[Task 17: AccessPolicyEngine]
+        T17_1[Task 17.1: System bypass + session]
+        T17_2[Task 17.2: Target matching]
+        T17_3[Task 17.3: Condition evaluation]
+        T17_4[Task 17.4: Deny-overrides + integration]
         T18[Task 18: Policy cache LISTEN/NOTIFY]
         T19[Task 19: Audit logger]
         T19b[Task 19b: Audit retention]
@@ -200,12 +209,15 @@ graph TD
         T13 --> T14
         T14 --> T15
         T14 --> T16a
-        T15 --> T17
-        T17 --> T18
-        T17 --> T19
+        T15 --> T17_1
+        T17_1 --> T17_2
+        T17_2 --> T17_3
+        T17_3 --> T17_4
+        T17_4 --> T18
+        T17_4 --> T19
         T19 --> T19b
-        T17 --> T20
-        T17 --> T21
+        T17_4 --> T20
+        T17_4 --> T21
         T21 --> T21b
     end
 
@@ -257,7 +269,7 @@ graph TD
     T0 --> T8
     T7 --> T12
     T7 --> T18
-    T12 --> T17
+    T12 --> T17_1
     T4a --> T16b
     T5 --> T13
     T12 --> T22
@@ -265,17 +277,18 @@ graph TD
     T21a --> T22
     T6 --> T23
     T16a --> T23
+    T16b --> T23
     T18 --> T23
-    T14 --> T17
-    T17 --> T24
+    T14 --> T17_1
+    T17_4 --> T24
     T23 --> T26a
     T23 --> T27a
-    T17 --> T28
+    T17_4 --> T28
     T23 --> T28
     T23b --> T30
     T7 --> T26b
-    T17 --> T25b
-    T17 --> T31
+    T17_4 --> T25b
+    T17_4 --> T31
     T7 --> T32
     T24 --> T33
     T14 --> T34
@@ -289,7 +302,10 @@ graph TD
     style T13 fill:#ffcccc
     style T14 fill:#ffcccc
     style T15 fill:#ffcccc
-    style T17 fill:#ffcccc
+    style T17_1 fill:#ffcccc
+    style T17_2 fill:#ffcccc
+    style T17_3 fill:#ffcccc
+    style T17_4 fill:#ffcccc
     style T18 fill:#ffcccc
     style T23 fill:#ffcccc
     style T28 fill:#ffcccc
@@ -301,13 +317,13 @@ graph TD
     style T28_5 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow) → Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → (DSL chain: Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
+**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow) → Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → (DSL chain: Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17.1 → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
 
 **Parallel PropertyProvider chain (highlighted in orange):** Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)). Tasks 3, 4b, 4c are a side chain (property cascade) off Task 3/4a and do not gate downstream work.
 
-**Note:** T16b (PropertyProvider) is intentionally NOT a dependency of T17 (AccessPolicyEngine). The engine works using core providers (T15) and simple providers (T16a); PropertyProvider adds `property.*` namespace support but is not required for engine operation. See [Decision #85](../specs/decisions/epic7/phase-7.3/085-property-provider-not-on-critical-path.md).
+**Note:** T16b (PropertyProvider) is intentionally NOT a dependency of T17.1 (AccessPolicyEngine). The engine works using core providers (T15) and simple providers (T16a); PropertyProvider adds `property.*` namespace support but is not required for engine operation. See [Decision #85](../specs/decisions/epic7/phase-7.3/085-property-provider-not-on-critical-path.md).
 
-**Note:** Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) depends on BOTH Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) and Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (core attribute providers). These chains can run in parallel after Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, but both must finish before Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) can start.
+**Note:** Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) depends on BOTH Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) and Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (core attribute providers). These chains can run in parallel after Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, but both must finish before Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) can start. Sub-tasks T17.1 through T17.4 are sequential within the engine implementation.
 
 **Parallel Work Opportunities:**
 
@@ -318,7 +334,7 @@ graph TD
 - Task 16a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (simple providers) can proceed independently of Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (PropertyProvider)
 - Task 19b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (audit retention) can proceed in parallel with Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (metrics)
 - Phase 7.5 (Locks & Admin) can proceed independently after Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md))
-- Phase 7.7 (Resilience) can proceed after Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) and Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))
+- Phase 7.7 (Resilience) can proceed after Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) and Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))
 
 **Cross-Phase Gate:** Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (Policy cache with LISTEN/NOTIFY invalidation) gates Phase 7.4 start via T18→T23 dependency. Task 18 remains in Phase 7.3 because it is engine infrastructure (cache invalidation) that logically belongs with other engine tasks, even though it blocks Phase 7.4 bootstrap.
 
@@ -328,32 +344,33 @@ graph TD
 
 The following table lists all dependencies that cross phase boundaries. These gates determine when downstream phases can start:
 
-| Source Task | Source Phase | Target Task | Target Phase | Gate Rationale                                                 |
-| ----------- | ------------ | ----------- | ------------ | -------------------------------------------------------------- |
-| T0          | 7.1          | T8          | 7.2          | AST serialization spike validates DSL design                   |
-| T4a         | 7.1          | T16b        | 7.3          | Property metadata enables PropertyProvider                     |
-| T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup                    |
-| T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                           |
-| T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler                   |
-| T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                           |
-| T7          | 7.1          | T26b        | 7.5          | Store needed for admin state commands                          |
-| T7          | 7.1          | T32         | 7.7          | Store interface needed for schema evolution                    |
-| T12         | 7.2          | T17         | 7.3          | DSL compiler needed by policy engine                           |
-| T12         | 7.2          | T22         | 7.4          | Compiler validates seed policy DSL                             |
-| T12         | 7.2          | T23         | 7.4          | Compiler needed for bootstrap compilation                      |
-| T14         | 7.3          | T34         | 7.7          | Resolver needed for circuit breaker                            |
-| T16a        | 7.3          | T23         | 7.4          | Simple providers (Stream, Command) needed for seed policy eval |
-| T17         | 7.3          | T24         | 7.5          | Engine needed before lock registry                             |
-| T17         | 7.3          | T25b        | 7.5          | Engine needed for lock/unlock commands                         |
-| T17         | 7.3          | T28         | 7.6          | Engine must exist before migration                             |
-| T17         | 7.3          | T31         | 7.7          | Engine needed for degraded mode                                |
-| T18         | 7.3          | T23         | 7.4          | Cached policies for bootstrap sequence                         |
-| T21a        | 7.3          | T22         | 7.4          | @-prefix removal before seed policies use bare names           |
-| T23         | 7.4          | T26a        | 7.5          | Seeded policies before admin CRUD                              |
-| T23         | 7.4          | T27a        | 7.5          | Seeded policies before policy test                             |
-| T23         | 7.4          | T28         | 7.6          | Bootstrap must complete before migration                       |
-| T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests                       |
-| T24         | 7.5          | T33         | 7.7          | Lock registry needed for discovery command                     |
+| Source Task | Source Phase | Target Task | Target Phase | Gate Rationale                                                  |
+| ----------- | ------------ | ----------- | ------------ | --------------------------------------------------------------- |
+| T0          | 7.1          | T8          | 7.2          | AST serialization spike validates DSL design                    |
+| T4a         | 7.1          | T16b        | 7.3          | Property metadata enables PropertyProvider                      |
+| T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup                     |
+| T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                            |
+| T16b        | 7.3          | T23         | 7.4          | PropertyProvider enables property.* attributes in seed policies |
+| T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler                    |
+| T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                            |
+| T7          | 7.1          | T26b        | 7.5          | Store needed for admin state commands                           |
+| T7          | 7.1          | T32         | 7.7          | Store interface needed for schema evolution                     |
+| T12         | 7.2          | T17.1       | 7.3          | DSL compiler needed by policy engine                            |
+| T12         | 7.2          | T22         | 7.4          | Compiler validates seed policy DSL                              |
+| T12         | 7.2          | T23         | 7.4          | Compiler needed for bootstrap compilation                       |
+| T14         | 7.3          | T34         | 7.7          | Resolver needed for circuit breaker                             |
+| T16a        | 7.3          | T23         | 7.4          | Simple providers (Stream, Command) needed for seed policy eval  |
+| T17.4       | 7.3          | T24         | 7.5          | Engine needed before lock registry                              |
+| T17.4       | 7.3          | T25b        | 7.5          | Engine needed for lock/unlock commands                          |
+| T17.4       | 7.3          | T28         | 7.6          | Engine must exist before migration                              |
+| T17.4       | 7.3          | T31         | 7.7          | Engine needed for degraded mode                                 |
+| T18         | 7.3          | T23         | 7.4          | Cached policies for bootstrap sequence                          |
+| T21a        | 7.3          | T22         | 7.4          | @-prefix removal before seed policies use bare names            |
+| T23         | 7.4          | T26a        | 7.5          | Seeded policies before admin CRUD                               |
+| T23         | 7.4          | T27a        | 7.5          | Seeded policies before policy test                              |
+| T23         | 7.4          | T28         | 7.6          | Bootstrap must complete before migration                        |
+| T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests                        |
+| T24         | 7.5          | T33         | 7.7          | Lock registry needed for discovery command                      |
 
 **Key Insights:**
 
@@ -370,7 +387,7 @@ The following milestones mark major integration checkpoints for progress trackin
 | --------- | --------- | --------------------------------------------------- | ----- |
 | M1        | T7        | PolicyStore interface + migration operational       | 7.1   |
 | M2        | T12       | Policy DSL compiles and evaluates correctly         | 7.2   |
-| M3        | T17       | AccessPolicyEngine evaluates real policies          | 7.3   |
+| M3        | T17.4     | AccessPolicyEngine evaluates real policies          | 7.3   |
 | M4        | T23       | Bootstrap inserts seed policies successfully        | 7.4   |
 | M5        | T27b3     | All admin commands functional                       | 7.5   |
 | M6        | T29       | Old AccessControl removed, engine is sole authority | 7.6   |
@@ -383,6 +400,126 @@ The following milestones mark major integration checkpoints for progress trackin
 - **M4 (Policies Seeded)** enables real-world testing and admin tooling
 - **M5 (Admin Ready)** completes operator tooling for policy management
 - **M6 (Migration Complete)** marks full ABAC cutover and old system removal
+
+#### M1 Integration Test Gate Requirements
+
+**Phase:** 7.1 (Policy Schema)
+
+**Test Scope:**
+
+- PolicyStore CRUD operations (Create, Read, List, Update, Delete, ListVersions)
+- Database schema integrity (`access_policies`, `access_audit_log`, `entity_properties` tables)
+- Transaction rollback behavior for invalid policy writes
+- Concurrent policy read/write operations under load
+
+**Coverage Threshold:**
+
+- Integration test coverage: ≥80% of PolicyStore interface methods
+- Unit test coverage: ≥85% for `internal/access/policy/store/` package
+
+**Cross-Phase Integration:**
+
+- Database migration rollback and re-application (idempotency check)
+- Property cascade deletion via WorldService methods (Tasks 4b, 4c)
+
+**Required Test Suite:**
+
+- `test/integration/access/policy_store_test.go` — Full PolicyStore contract validation
+- `test/integration/access/policy_migration_test.go` — Schema migration idempotency
+
+**Sign-off Criteria:**
+
+- All integration tests pass in CI with PostgreSQL testcontainer
+- No data loss or corruption under concurrent writes
+- Migration can be applied twice without errors (idempotency)
+
+#### M2 Integration Test Gate Requirements
+
+**Phase:** 7.2 (DSL & Compiler)
+
+**Test Scope:**
+
+- DSL parsing for all supported expressions (attribute checks, comparisons, logical ops)
+- PolicyCompiler end-to-end compilation (DSL text → CompiledPolicy with version)
+- Policy evaluation against mock attribute sets (allow/deny/error cases)
+- Fuzz test stability (30s runtime without panics)
+
+**Coverage Threshold:**
+
+- Integration test coverage: ≥85% of DSL parser + evaluator + compiler
+- Unit test coverage: ≥90% for `internal/access/policy/dsl/` package
+- Fuzz test coverage: All parser entry points fuzzed
+
+**Cross-Phase Integration:**
+
+- Compiled policies serialized to AST and stored via PolicyStore (Phase 7.1)
+- Evaluator handles missing attributes per ADR 0010 semantics
+
+**Required Test Suite:**
+
+- `test/integration/access/dsl_compiler_test.go` — End-to-end DSL compilation
+- `test/integration/access/dsl_evaluation_test.go` — Policy evaluation correctness
+- `internal/access/policy/dsl/parser_fuzz_test.go` — Fuzz tests (already in plan as T10)
+
+**Sign-off Criteria:**
+
+- All test cases from spec examples compile and evaluate correctly
+- Fuzz tests run 30s without panics or crashes
+- Compiler rejects invalid DSL with clear error messages
+- Evaluator returns correct Deny for missing required attributes
+
+#### M3 Integration Test Gate Requirements
+
+**Phase:** 7.3 (Policy Engine & Attribute Providers)
+
+**Test Scope:**
+
+- AccessPolicyEngine full evaluation pipeline (attribute resolution → policy matching → conflict resolution)
+- Multi-policy evaluation with deny-overrides conflict resolution
+- Attribute provider integration (Subject, Resource, Environment, Stream, Command)
+- Cache invalidation via PostgreSQL LISTEN/NOTIFY (Task 18)
+- Audit logging in all three modes (off, deny-only, all-decisions)
+- Performance benchmarks meet spec targets (<2ms p50, <5ms p99)
+
+**Coverage Threshold:**
+
+- Integration test coverage: ≥90% of AccessPolicyEngine and AttributeResolver
+- Unit test coverage: ≥85% for all `internal/access/abac/` packages
+- Benchmark coverage: All critical paths benchmarked (evaluation, resolution, cache hits)
+
+**Cross-Phase Integration:**
+
+- Engine evaluates compiled policies from PolicyStore (Phase 7.1)
+- Engine uses DSL evaluator from PolicyCompiler (Phase 7.2)
+- Cache invalidation triggers on policy updates
+- Audit logger persists decisions to `access_audit_log` table
+
+**Required Test Suite:**
+
+- `test/integration/access/engine_evaluation_test.go` — End-to-end policy evaluation
+- `test/integration/access/engine_cache_test.go` — Cache invalidation via LISTEN/NOTIFY
+- `test/integration/access/attribute_resolution_test.go` — Multi-provider resolution
+- `test/integration/access/audit_logging_test.go` — Audit log persistence in all modes
+- `internal/access/abac/engine_bench_test.go` — Performance benchmarks
+
+**Cross-Phase Integration Test Matrix:**
+
+| Test Case                         | Phase 7.1 (Store) | Phase 7.2 (DSL) | Phase 7.3 (Engine) | Expected Outcome                         |
+| --------------------------------- | ----------------- | --------------- | ------------------ | ---------------------------------------- |
+| Store policy → Compile → Evaluate | ✓                 | ✓               | ✓                  | Policy evaluates correctly from database |
+| Update policy → Cache invalidates | ✓                 | -               | ✓                  | Cache refreshes via LISTEN/NOTIFY        |
+| Missing attribute → Deny          | -                 | ✓               | ✓                  | Evaluator denies per ADR 0010            |
+| Multi-policy deny-overrides       | ✓                 | ✓               | ✓                  | Conflicting policies resolve to deny     |
+| Audit log written (deny-only)     | ✓                 | -               | ✓                  | Denial persisted to `access_audit_log`   |
+| Performance <2ms p50              | ✓                 | ✓               | ✓                  | Benchmark meets spec target              |
+
+**Sign-off Criteria:**
+
+- All integration tests pass in CI with PostgreSQL testcontainer
+- Cache invalidation triggers within 100ms of policy update
+- Benchmarks meet spec targets (p50 <2ms, p99 <5ms)
+- Audit log correctly records denials in deny-only mode
+- No panics or deadlocks under concurrent evaluation (100 goroutines, 1000 requests)
 
 ### Task Complexity Estimates
 
@@ -411,7 +548,10 @@ T-shirt size estimates for sprint planning:
 | T15   | Core attribute providers      | M    | 3 providers (subject, resource, env) |
 | T16a  | Simple providers              | S    | Thin provider wrappers               |
 | T16b  | PropertyProvider              | M    | Property-to-attribute mapping        |
-| T17   | AccessPolicyEngine            | XL   | Core engine, highest complexity      |
+| T17.1 | System bypass + session       | M    | Engine scaffold, steps 1-2           |
+| T17.2 | Target matching               | M    | Policy filtering, step 4             |
+| T17.3 | Condition evaluation          | M    | DSL evaluation, step 5               |
+| T17.4 | Deny-overrides + integration  | L    | Combination logic, steps 6-7 + glue  |
 | T18   | Policy cache                  | M    | LRU cache + invalidation             |
 | T19   | Audit logger                  | M    | Structured logging + config          |
 | T19b  | Retention/partitions          | S    | PostgreSQL partition management      |
@@ -441,13 +581,13 @@ T-shirt size estimates for sprint planning:
 | T34   | Circuit breaker               | M    | Resilience pattern                   |
 | T35   | Property orphan cleanup       | M    | Background cleanup                   |
 
-**Summary:** 1 XS, 15 S, 23 M, 9 L, 2 XL = 50 tasks
+**Summary:** 1 XS, 15 S, 26 M, 10 L, 1 XL = 53 tasks
 
 ---
 
 ## Phase Files
 
-This implementation consists of **50 tasks** split across **7 phases** for manageability:
+This implementation consists of **53 tasks** split across **7 phases** for manageability:
 
 - [Phase 7.1: Policy Schema (Database Tables + Policy Store)](./2026-02-06-full-abac-phase-7.1.md)
 - [Phase 7.2: DSL & Compiler](./2026-02-06-full-abac-phase-7.2.md)

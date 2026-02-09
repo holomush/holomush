@@ -89,6 +89,11 @@ options considered, and rationale for the chosen approach.
 | 83 | Circuit Breaker Threshold Increase (3 to 5)                  | 7.3     | [083](phase-7.3/083-circuit-breaker-threshold-increase.md)                |
 | 84 | Goroutine Re-Entry Spec Clarification                        | 7.3     | [084](phase-7.3/084-goroutine-re-entry-spec-clarification.md)             |
 | 85 | PropertyProvider Not on Critical Path                        | 7.3     | [085](phase-7.3/085-property-provider-not-on-critical-path.md)            |
+| 86 | Audit Off Mode Logs Denials                                  | General | [086](general/086-audit-off-mode-logs-denials.md)                         |
+| 87 | Remove seed:property-system-forbid Policy                    | 7.4     | [087](phase-7.4/087-remove-seed-property-system-forbid.md)                |
+| 88 | Add ExitProvider and SceneProvider Stubs                     | 7.3     | [088](phase-7.3/088-exit-scene-provider-stubs.md)                         |
+| 89 | Add original_subject Field to Audit Log Schema               | 7.1     | [089](phase-7.1/089-original-subject-audit-field.md)                      |
+| 90 | System Bypass Takes Precedence Over Degraded Mode            | 7.3     | [090](phase-7.3/090-system-bypass-precedence-over-degraded-mode.md)       |
 
 ## Spec ADR Reference Mapping
 

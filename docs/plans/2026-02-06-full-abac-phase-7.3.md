@@ -396,12 +396,15 @@ git commit -m "feat(access): add simple providers (environment, command, stream,
 - [ ] PropertyProvider resolves all property attributes including `parent_location`
 - [ ] `parent_location` uses recursive CTE covering all three placement scenarios: direct location (location_id), held by character (held_by_character_id), contained in object (contained_in_object_id)
 - [ ] `parent_location` CTE depth limit: 20 levels
-- [ ] `parent_location` resolution timeout: 100ms (circuit breaker deferred to Task 34, see Decision #74)
+- [ ] `parent_location` resolution timeout: 100ms enforced via context.WithTimeout; circuit breaker wrapping added in Task 34 per ADR #74
+- [ ] Test case: timeout enforcement verifies `parent_location` resolution aborts after 100ms with context.DeadlineExceeded error
 - [ ] Test case: Object at location (location_id non-NULL) → resolves `parent_location`
 - [ ] Test case: Object held by character (held_by_character_id non-NULL) → resolves to character's location
 - [ ] Test case: Object inside object inside room (contained_in_object_id) → resolves `parent_location` to room
 - [ ] Cycle detection → error before depth limit
 - [ ] All tests pass via `task test`
+
+> **Note:** Timeout is enforced via context.WithTimeout in PropertyProvider; circuit breaker wrapping (trip threshold, backoff) is deferred to Task 34 per ADR #74.
 
 **Files:**
 
@@ -466,75 +469,92 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 ---
 
-### Task 17: Build AccessPolicyEngine
+### Task 17: AccessPolicyEngine (Summary)
 
-**Spec References:** Evaluation Algorithm (lines 1696-1745), Core Interfaces > Session Subject Resolution (lines 348-414), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
+> **This task has been split into 4 sub-tasks (T17.1–T17.4) for better progress tracking and isolated testing.** The sub-tasks implement the 7-step evaluation algorithm from the spec. Each sub-task has its own acceptance criteria, test suite, and files. The final engine integrates all components in the 7-step evaluation flow.
+
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) (was lines 1696-1745), Core Interfaces > Session Subject Resolution (was lines 348-414), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 > **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
->
-> **Implementation Guidance:** This is an XL-complexity task. Implementers MAY consider splitting T17 into sub-tasks for better progress tracking and isolated testing:
->
-> 1. System bypass + session resolution (Steps 1-2 of the 7-step algorithm)
-> 2. Target matching and policy filtering (Step 4)
-> 3. Condition evaluation (Step 5, DSL evaluation against attribute bags)
-> 4. Deny-overrides combination logic (Step 6)
->
-> Each sub-task would include its own test suite and can be completed independently. The final engine integrates these components in the 7-step evaluation flow.
+
+**Sub-tasks:**
+
+| Sub-task | Scope                                    | Algorithm Steps | Size |
+| -------- | ---------------------------------------- | --------------- | ---- |
+| T17.1    | System bypass + session resolution       | Steps 1-2       | M    |
+| T17.2    | Target matching and policy filtering     | Step 4          | M    |
+| T17.3    | Condition evaluation via DSL             | Step 5          | M    |
+| T17.4    | Deny-overrides combination + integration | Step 6 + glue   | L    |
+
+**Dependencies between sub-tasks:** T17.1 → T17.2 → T17.3 → T17.4 (sequential — each builds on the previous)
+
+**Shared files (created incrementally across sub-tasks):**
+
+- `internal/access/policy/engine.go` — Engine struct, interfaces, `Evaluate()` method (built incrementally)
+- `internal/access/policy/engine_test.go` — Test file (test cases added per sub-task)
+- `internal/access/policy/session_resolver.go` — SessionResolver (T17.1)
+- `internal/access/policy/session_resolver_test.go` — SessionResolver tests (T17.1)
+
+**Cross-cutting acceptance criteria (verified in T17.4 after all sub-tasks complete):**
+
+- [ ] Implements the 7-step evaluation algorithm from the spec exactly
+- [ ] Engine MUST call `Decision.Validate()` before returning any Decision
+- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is `all` ([04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), was spec lines 1751-1757)
+- [ ] Provider error → evaluation continues, error recorded in decision
+- [ ] Per-request cache → second call reuses cached attributes
+- [ ] Test verifies `Validate()` is called on every engine return path
+- [ ] Test for Decision invariant violation (`allowed=true` but `effect=deny`) is rejected by `Validate()`
+- [ ] All tests pass via `task test`
+
+---
+
+#### Task 17.1: System bypass + session resolution (Steps 1-2)
+
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 1-2 (was lines 1696-1710), Core Interfaces > Session Subject Resolution (was lines 348-414), [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) (sync audit for system bypass)
 
 **Acceptance Criteria:**
 
-- [ ] Implements the 7-step evaluation algorithm from the spec exactly
-- [ ] Engine MUST call Decision.Validate() before returning any Decision
+- [ ] `Engine` struct created with constructor accepting `AttributeResolver`, `PolicyCache`, `SessionResolver`, `AuditLogger`
+- [ ] `AccessPolicyEngine` interface defined with `Evaluate(ctx, AccessRequest) (Decision, error)`
+- [ ] `SessionResolver` interface defined with `ResolveSession(ctx, sessionID) (characterID, error)`
+- [ ] `AuditLogger` interface defined with `Log(entry AuditEntry)`
 - [ ] Step 1: System bypass — subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
-  - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though Evaluate() short-circuits at step 1
+  - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though `Evaluate()` short-circuits at step 1
   - [ ] System bypass audit writes MUST use sync write path (same as denials) per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) — guarantees audit trail for privileged operations
   - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
   - [ ] Test case: system bypass subject with audit mode=off still produces audit entry (via sync write)
   - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
-- [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via SessionResolver
+- [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via `SessionResolver`
   - [ ] Invalid session → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
   - [ ] Session store error → `types.NewDecision(DefaultDeny, "session store error", "infra:session-store-error")`
-  - [ ] PostgreSQL SessionResolver implementation queries session store for character ID
-  - [ ] Character deletion handling: deleted characters return SESSION_INVALID error code
-  - [ ] All SessionResolver error codes tested: SESSION_INVALID, SESSION_STORE_ERROR
-- [ ] Step 3: Eager attribute resolution (all attributes collected before evaluation)
-- [ ] Step 4: Engine loads matching policies from the in-memory cache
-- [ ] Step 5: Engine evaluates each policy's conditions against the attribute bags
-- [ ] Step 6: Deny-overrides — forbid + permit both match → forbid wins (ADR 0011)
-  - [ ] No policies match → `types.NewDecision(DefaultDeny, "no policies matched", "")`
-- [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
-- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is all ([04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), was spec lines 1751-1757)
-- [ ] Provider error → evaluation continues, error recorded in decision
-- [ ] Per-request cache → second call reuses cached attributes
-- [ ] Test verifies Validate() is called on every engine return path
-- [ ] Test for Decision invariant violation (allowed=true but effect=deny) is rejected by Validate()
+  - [ ] PostgreSQL `SessionResolver` implementation queries session store for character ID
+  - [ ] Character deletion handling: deleted characters return `SESSION_INVALID` error code
+  - [ ] All `SessionResolver` error codes tested: `SESSION_INVALID`, `SESSION_STORE_ERROR`
+- [ ] `Evaluate()` returns `DefaultDeny` for non-system, non-session subjects as a placeholder (subsequent steps implemented in T17.2-T17.4)
+- [ ] `Decision.Validate()` called before returning any Decision
 - [ ] All tests pass via `task test`
 
 **Files:**
 
-- Create: `internal/access/policy/engine.go`
-- Test: `internal/access/policy/engine_test.go`
+- Create: `internal/access/policy/engine.go` (Engine struct, interfaces, Steps 1-2 of `Evaluate()`)
+- Test: `internal/access/policy/engine_test.go` (system bypass and session resolution tests)
 - Create: `internal/access/policy/session_resolver.go` (PostgreSQL SessionResolver implementation)
 - Test: `internal/access/policy/session_resolver_test.go`
 
 **Step 1: Write failing tests**
 
-Table-driven tests covering the 7-step evaluation algorithm (spec Evaluation Algorithm, lines 1696-1745):
+Table-driven tests:
 
 1. **System bypass:** Subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
-2. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, then evaluated
-3. **Session invalid:** Subject `"session:expired"` → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
-4. **Session store error:** DB failure → `types.NewDecision(DefaultDeny, "session store error", "infra:session-store-error")`
-5. **Eager attribute resolution:** All providers called before evaluation
-6. **Policy matching:** Target filtering — principal type, action list, resource type/exact
-7. **Condition evaluation:** Policies with satisfied conditions
-8. **Deny-overrides:** Both permit and forbid match → forbid wins
-9. **Default deny:** No policies match → `types.NewDecision(DefaultDeny, "no policies matched", "")`
-10. **Audit logging:** Audit entry logged per configured mode
-11. **Provider error:** Provider fails → evaluation continues, error recorded in decision
-12. **Cache warmth:** Second call in same request reuses per-request attribute cache
+2. **System bypass audit (mode=off):** Verify audit entry still written synchronously
+3. **System bypass audit write failure:** Verify WAL fallback triggered
+4. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, returns `DefaultDeny` placeholder
+5. **Session invalid:** Subject `"session:expired"` → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
+6. **Session store error:** DB failure → `types.NewDecision(DefaultDeny, "session store error", "infra:session-store-error")`
+7. **Character deleted:** Subject `"session:deleted-char"` → `SESSION_INVALID`
+8. **Non-system subject:** Subject `"character:01ABC"` → `DefaultDeny` placeholder (steps 3-6 not yet implemented)
 
-**Step 2: Implement engine**
+**Step 2: Implement**
 
 ```go
 // internal/access/policy/engine.go
@@ -542,6 +562,7 @@ package policy
 
 import (
     "context"
+    "strings"
 
     "github.com/holomush/holomush/internal/access/policy/types"
 )
@@ -559,39 +580,236 @@ type SessionResolver interface {
 // AuditLogger logs access decisions.
 type AuditLogger interface {
     Log(entry AuditEntry)
+    LogSync(entry AuditEntry) error
 }
 
 // Engine implements AccessPolicyEngine.
 type Engine struct {
-    resolver     *attribute.AttributeResolver
-    policyCache  *PolicyCache
-    sessions     SessionResolver
-    auditLogger  AuditLogger
+    resolver    *attribute.AttributeResolver
+    policyCache *PolicyCache
+    sessions    SessionResolver
+    auditLogger AuditLogger
 }
 
-func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache, sessions SessionResolver, audit AuditLogger) *Engine
+func NewEngine(resolver *attribute.AttributeResolver, cache *PolicyCache,
+    sessions SessionResolver, audit AuditLogger) *Engine
 
 func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
     // Step 1: System bypass
+    if req.Subject == "system" {
+        decision := types.NewDecision(types.SystemBypass, "system bypass", "")
+        if err := decision.Validate(); err != nil {
+            return decision, err
+        }
+        // Sync audit write (all modes, including off)
+        e.auditLogger.LogSync(/* entry */)
+        return decision, nil
+    }
+
     // Step 2: Session resolution
-    // Step 3: Resolve attributes (eager)
-    // Step 4: Load applicable policies (from cache snapshot)
-    // Step 5: Evaluate conditions per policy
-    // Step 6: Combine decisions (deny-overrides)
-    // Step 7: Audit
+    if strings.HasPrefix(req.Subject, "session:") {
+        sessionID := strings.TrimPrefix(req.Subject, "session:")
+        characterID, err := e.sessions.ResolveSession(ctx, sessionID)
+        if err != nil {
+            // Return appropriate error decision
+        }
+        req.Subject = "character:" + characterID
+    }
+
+    // Steps 3-6: Implemented in T17.2-T17.4
+    // Step 7: Audit — integrated in T17.4
+
+    decision := types.NewDecision(types.DefaultDeny, "evaluation pending", "")
+    decision.Validate()
+    return decision, nil
 }
 ```
 
-**Step 3: Run tests**
-
-Run: `task test`
-Expected: PASS
-
-**Step 4: Commit**
+**Step 3: Run tests, commit**
 
 ```bash
 git add internal/access/policy/engine.go internal/access/policy/engine_test.go
-git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluation"
+git add internal/access/policy/session_resolver.go internal/access/policy/session_resolver_test.go
+git commit -m "feat(access): add engine scaffold with system bypass and session resolution (T17.1)"
+```
+
+---
+
+#### Task 17.2: Target matching and policy filtering (Step 4)
+
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 4 (was lines 1718-1730)
+
+> **Depends on:** T17.1 (Engine struct and interfaces must exist)
+
+**Acceptance Criteria:**
+
+- [ ] Engine loads policies from the in-memory `PolicyCache` snapshot
+- [ ] Step 3: Eager attribute resolution — all attributes collected via `AttributeResolver` before policy filtering
+- [ ] Step 4: Target matching filters policies by:
+  - [ ] Principal type: `"principal is character"` matches when parsed subject prefix equals `character`. Bare `"principal"` matches all subject types. Valid types: `character`, `plugin`. `"session"` is never valid (resolved in step 2).
+  - [ ] Action list: `"action in [say, pose]"` matches when request action is in the list. Bare `"action"` matches all actions.
+  - [ ] Resource type: `"resource is location"` matches when parsed resource prefix equals `location`. `"resource == location:01XYZ"` matches exact string. Bare `"resource"` matches all resource types.
+- [ ] `findApplicablePolicies()` helper function (or method) returns only matching policies
+- [ ] Non-matching policies excluded from evaluation
+- [ ] Test cases cover: exact principal match, wildcard principal, action list match, action wildcard, resource type match, resource exact match, resource wildcard, no policies match (empty candidate set), mixed targets (some match, some don't)
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/engine.go` (add Step 3 attribute resolution + Step 4 target matching)
+- Modify: `internal/access/policy/engine_test.go` (add target matching tests)
+
+**Step 1: Write failing tests**
+
+Table-driven tests:
+
+1. **Principal type match:** Policy targets `"principal is character"`, subject `"character:01ABC"` → policy included
+2. **Principal type mismatch:** Policy targets `"principal is plugin"`, subject `"character:01ABC"` → policy excluded
+3. **Principal wildcard:** Policy targets bare `"principal"` → always included
+4. **Action list match:** Policy targets `"action in [say, pose]"`, action `"say"` → included
+5. **Action list mismatch:** Policy targets `"action in [say, pose]"`, action `"dig"` → excluded
+6. **Action wildcard:** Policy targets bare `"action"` → always included
+7. **Resource type match:** Policy targets `"resource is location"`, resource `"location:01XYZ"` → included
+8. **Resource exact match:** Policy targets `"resource == location:01XYZ"`, resource `"location:01XYZ"` → included
+9. **Resource exact mismatch:** Policy targets `"resource == location:01XYZ"`, resource `"location:01ABC"` → excluded
+10. **Resource wildcard:** Policy targets bare `"resource"` → always included
+11. **No policies match:** Empty candidate set → returns empty slice
+12. **Mixed targets:** Multiple policies with different targets → only matching ones returned
+
+**Step 2: Implement**
+
+Add `findApplicablePolicies()` method to `Engine`. Wire Step 3 (eager attribute resolution via `AttributeResolver.Resolve()`) and Step 4 (policy filtering) into `Evaluate()`.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/access/policy/engine.go internal/access/policy/engine_test.go
+git commit -m "feat(access): add target matching and policy filtering (T17.2)"
+```
+
+---
+
+#### Task 17.3: Condition evaluation via DSL (Step 5)
+
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 5 (was lines 1731-1736), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors) (was lines 1751-1757), ADR 0010 (Cedar-Aligned Missing Attribute Semantics)
+
+> **Depends on:** T17.2 (target matching must produce candidate policies); also depends on Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) DSL evaluator
+
+**Acceptance Criteria:**
+
+- [ ] Step 5: For each candidate policy, evaluate DSL conditions against `AttributeBags`
+- [ ] If all conditions true → policy is "satisfied"
+- [ ] If any condition false → policy does not apply
+- [ ] Missing attribute in condition → condition evaluates to `false` (fail-safe, per ADR 0010)
+- [ ] Provider error → evaluation continues with remaining policies, error recorded in decision's `ProviderErrors`
+- [ ] `evaluatePolicy()` helper returns `(satisfied bool, err error)` for each candidate policy
+- [ ] DSL evaluator called with policy's compiled AST and the resolved `AttributeBags`
+- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is `all`
+- [ ] All satisfied policies recorded in `Decision.Policies` slice for audit/debugging
+- [ ] Test cases cover: simple condition satisfied, simple condition unsatisfied, missing attribute → false, compound condition (AND/OR), nested conditions, provider error with continued evaluation, multiple policies with mixed results
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/engine.go` (add Step 5 condition evaluation)
+- Modify: `internal/access/policy/engine_test.go` (add condition evaluation tests)
+
+**Step 1: Write failing tests**
+
+Table-driven tests:
+
+1. **Simple condition satisfied:** `subject.role == "admin"` with `role="admin"` in bags → satisfied
+2. **Simple condition unsatisfied:** `subject.role == "admin"` with `role="player"` → not satisfied
+3. **Missing attribute:** `subject.faction == "rebels"` with no `faction` attribute → false (fail-safe)
+4. **Compound AND:** `subject.role == "admin" && resource.type == "location"` — both true → satisfied
+5. **Compound AND partial:** One condition true, one false → not satisfied
+6. **Compound OR:** `subject.role == "admin" || subject.role == "storyteller"` — one true → satisfied
+7. **Nested conditions:** `(a && b) || c` with various truth value combinations
+8. **Numeric comparison:** `subject.level > 5` with `level=7` → satisfied
+9. **List membership:** `"vip" in subject.flags` with `flags=["vip"]` → satisfied
+10. **Provider error:** Provider fails, attribute missing → condition false, error recorded
+11. **Multiple policies mixed:** 3 policies, 2 satisfied, 1 not → 2 in satisfied set
+12. **Full evaluation mode:** All policies evaluated even after first forbid match
+
+**Step 2: Implement**
+
+Add `evaluatePolicy()` method that calls the DSL evaluator (from Task 11, [Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) with compiled AST and `AttributeBags`. Wire into `Evaluate()` after Step 4. Collect satisfied policies into `Decision.Policies`.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/access/policy/engine.go internal/access/policy/engine_test.go
+git commit -m "feat(access): add DSL condition evaluation for policies (T17.3)"
+```
+
+---
+
+#### Task 17.4: Deny-overrides combination + integration (Step 6 + glue)
+
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 6-7 (was lines 1737-1745), ADR 0011 (Deny-overrides conflict resolution), [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration) (was lines 2248-2325)
+
+> **Depends on:** T17.3 (condition evaluation must produce satisfied policy set)
+
+**Acceptance Criteria:**
+
+- [ ] Step 6: Deny-overrides combination — forbid + permit both match → forbid wins (ADR 0011)
+  - [ ] Any satisfied forbid policy → `Decision{Allowed: false, Effect: Deny}`
+  - [ ] Only satisfied permit policies → `Decision{Allowed: true, Effect: Allow}`
+  - [ ] No policies satisfied → `Decision{Allowed: false, Effect: DefaultDeny, Reason: "no policies matched"}`
+- [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
+  - [ ] Denials (forbid + default deny) use sync audit write
+  - [ ] Allows use async audit write
+  - [ ] Audit mode respected: `off` (system bypasses + denials), `denials_only`, `all`
+- [ ] `combineDecisions()` helper implements deny-overrides algorithm
+- [ ] `Decision.Validate()` called on every return path (including error paths)
+- [ ] Per-request attribute cache verified: second `Evaluate()` call in same context reuses cached attributes
+- [ ] End-to-end integration tests covering full 7-step flow:
+  - [ ] System bypass → audit → return
+  - [ ] Session resolution → attribute resolution → policy matching → condition eval → deny-overrides → audit → return
+  - [ ] Provider error mid-flow → continued evaluation → deny → audit
+  - [ ] No matching policies → default deny → audit
+  - [ ] Multiple permits → allow → audit
+  - [ ] Permit + forbid → forbid wins → audit
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/access/policy/engine.go` (add Steps 6-7, finalize `Evaluate()` flow)
+- Modify: `internal/access/policy/engine_test.go` (add deny-overrides + integration tests)
+
+**Step 1: Write failing tests**
+
+Table-driven tests:
+
+1. **Deny-overrides: forbid wins:** Permit and forbid both satisfied → `Decision{Allowed: false, Effect: Deny}`
+2. **Permit only:** Only permit policies satisfied → `Decision{Allowed: true, Effect: Allow}`
+3. **Default deny:** No policies satisfied → `Decision{Allowed: false, Effect: DefaultDeny}`
+4. **Multiple forbid:** Two forbid policies satisfied → `Deny` (first forbid recorded as primary)
+5. **Multiple permit:** Two permit policies satisfied → `Allow`
+6. **Audit mode off + denial:** Denial audited (sync)
+7. **Audit mode off + allow:** Allow NOT audited
+8. **Audit mode denials_only:** Denial audited, allow skipped
+9. **Audit mode all:** Both denial and allow audited
+10. **Validate() on every path:** Mock `Validate()` to track calls, verify called for system bypass, session error, deny, allow, default deny
+11. **Decision invariant violation:** `allowed=true` but `effect=deny` → `Validate()` rejects
+12. **Per-request cache warmth:** Two `Evaluate()` calls in same context → `AttributeResolver.Resolve()` called once (cached)
+
+End-to-end integration tests:
+
+13. **Full flow: admin permit:** `"character:01ABC"` with `role=admin` → seed policy matches → `Allow`
+14. **Full flow: deny-overrides:** Permit + forbid both match → `Deny`
+15. **Full flow: session → character:** `"session:web-123"` resolved → evaluated → decision
+16. **Full flow: provider error:** Provider fails → partial attributes → default deny → error in decision
+
+**Step 2: Implement**
+
+Add `combineDecisions()` implementing deny-overrides: scan satisfied policies, any forbid → deny, else any permit → allow, else default deny. Wire Step 7 audit logging. Finalize `Evaluate()` to call all 7 steps in sequence. Ensure `Decision.Validate()` on every return path.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/access/policy/engine.go internal/access/policy/engine_test.go
+git commit -m "feat(access): add deny-overrides combination and full engine integration (T17.4)"
 ```
 
 ---
@@ -1388,6 +1606,10 @@ git commit -m "ci(access): enforce benchmark regression limits in CI"
 > **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
 
 **Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061) — seed policies reference command names without @ prefix
+
+**Placement Justification:**
+
+This task is placed in Phase 7.3 as a prerequisite for Task 22 seed policies (Phase 7.4), which reference bare command names (e.g., `dig`, `create`) rather than @-prefixed variants. The @-prefix removal must occur before seed policy installation to ensure policy conditions match actual command names.
 
 **Implementation Note:**
 

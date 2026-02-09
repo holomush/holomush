@@ -318,97 +318,280 @@ func TestMigrationEquivalence(t *testing.T) {
         resource string
         comment  string // Document expected divergence if any
     }{
-        // Command dispatcher (internal/command/dispatcher.go)
+        // === Command package (3 call sites) ===
+
+        // #1: Command dispatcher (internal/command/dispatcher.go:157)
         {
-            name:     "command execution - admin",
+            name:     "command execution - admin executes privileged command",
             subject:  "character:admin-01ABC",
             action:   "execute",
             resource: "command:shutdown",
         },
         {
-            name:     "command execution - player",
+            name:     "command execution - player executes basic command",
             subject:  "character:player-01DEF",
             action:   "execute",
             resource: "command:look",
         },
 
-        // Rate limit bypass (internal/command/rate_limit_middleware.go)
+        // #2: Rate limit bypass (internal/command/rate_limit_middleware.go:39)
         {
-            name:     "rate limit bypass - admin",
+            name:     "rate limit bypass - admin bypasses rate limit",
             subject:  "character:admin-01ABC",
-            action:   "bypass_rate_limit",
-            resource: "system:rate_limiter",
+            action:   "execute",
+            resource: "capability:rate_limit_bypass",
+        },
+        {
+            name:     "rate limit bypass - player denied bypass",
+            subject:  "character:player-01DEF",
+            action:   "execute",
+            resource: "capability:rate_limit_bypass",
         },
 
-        // Boot command (internal/command/handlers/boot.go)
+        // #3: Boot command (internal/command/handlers/boot.go:52)
         {
-            name:     "boot character - owner",
+            name:     "boot command - admin boots player",
             subject:  "character:admin-01ABC",
-            action:   "boot",
-            resource: "character:player-01DEF",
+            action:   "execute",
+            resource: "admin.boot",
+        },
+        {
+            name:     "boot command - player denied boot",
+            subject:  "character:player-01DEF",
+            action:   "execute",
+            resource: "admin.boot",
         },
 
-        // World service operations (24 call sites in internal/world/service.go)
+        // === World service - Location operations (6 call sites) ===
+
+        // #4: GetLocation (internal/world/service.go:74)
         {
-            name:     "create location - builder",
-            subject:  "character:builder-01GHI",
-            action:   "create",
-            resource: "location:*",
-        },
-        {
-            name:     "read location - player",
+            name:     "get location - player reads location",
             subject:  "character:player-01DEF",
             action:   "read",
             resource: "location:01JKL",
         },
+
+        // #5: CreateLocation (internal/world/service.go:94)
         {
-            name:     "update location - owner",
+            name:     "create location - builder creates location",
             subject:  "character:builder-01GHI",
-            action:   "update",
-            resource: "location:01JKL",
+            action:   "write",
+            resource: "location:*",
         },
         {
-            name:     "delete location - admin",
+            name:     "create location - player denied",
+            subject:  "character:player-01DEF",
+            action:   "write",
+            resource: "location:*",
+        },
+
+        // #6: UpdateLocation (internal/world/service.go:123)
+        {
+            name:     "update location - builder updates location",
+            subject:  "character:builder-01GHI",
+            action:   "write",
+            resource: "location:01JKL",
+        },
+
+        // #7: DeleteLocation (internal/world/service.go:144)
+        {
+            name:     "delete location - admin deletes location",
             subject:  "character:admin-01ABC",
             action:   "delete",
             resource: "location:01JKL",
         },
         {
-            name:     "list characters in location - decomposed compound resource",
-            subject:  "character:player-01DEF",
-            action:   "list_characters", // Decomposed from "location:01JKL:characters"
-            resource: "location:01JKL",
-            comment:  "Compound resource decomposed per ADR #76",
-        },
-        {
-            name:     "create exit - builder",
+            name:     "delete location - builder denied",
             subject:  "character:builder-01GHI",
-            action:   "create",
+            action:   "delete",
+            resource: "location:01JKL",
+        },
+
+        // #8: FindLocationByName (internal/world/service.go:796)
+        {
+            name:     "find location by name - player searches locations",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "location:*",
+        },
+
+        // #9: ExamineLocation (internal/world/service.go:655)
+        {
+            name:     "examine location - player examines location",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "location:01JKL",
+        },
+
+        // === World service - Exit operations (5 call sites) ===
+
+        // #10: GetExit (internal/world/service.go:162)
+        {
+            name:     "get exit - player reads exit",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "exit:01STU",
+        },
+
+        // #11: CreateExit (internal/world/service.go:185)
+        {
+            name:     "create exit - builder creates exit",
+            subject:  "character:builder-01GHI",
+            action:   "write",
             resource: "exit:*",
         },
+
+        // #12: UpdateExit (internal/world/service.go:217)
         {
-            name:     "create scene - player",
-            subject:  "character:player-01DEF",
-            action:   "create",
-            resource: "scene:*",
+            name:     "update exit - builder updates exit",
+            subject:  "character:builder-01GHI",
+            action:   "write",
+            resource: "exit:01STU",
         },
+
+        // #13: DeleteExit (internal/world/service.go:241)
         {
-            name:     "join scene - invited player",
-            subject:  "character:player-01MNO",
-            action:   "join",
+            name:     "delete exit - admin deletes exit",
+            subject:  "character:admin-01ABC",
+            action:   "delete",
+            resource: "exit:01STU",
+        },
+
+        // #14: GetExitsByLocation (internal/world/service.go:279)
+        {
+            name:     "get exits by location - player lists exits from location",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "location:01JKL",
+        },
+
+        // === World service - Object operations (6 call sites) ===
+
+        // #15: GetObject (internal/world/service.go:295)
+        {
+            name:     "get object - player reads object",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "object:01VWX",
+        },
+
+        // #16: CreateObject (internal/world/service.go:315)
+        {
+            name:     "create object - builder creates object",
+            subject:  "character:builder-01GHI",
+            action:   "write",
+            resource: "object:*",
+        },
+
+        // #17: UpdateObject (internal/world/service.go:347)
+        {
+            name:     "update object - builder updates object",
+            subject:  "character:builder-01GHI",
+            action:   "write",
+            resource: "object:01VWX",
+        },
+
+        // #18: DeleteObject (internal/world/service.go:371)
+        {
+            name:     "delete object - admin deletes object",
+            subject:  "character:admin-01ABC",
+            action:   "delete",
+            resource: "object:01VWX",
+        },
+
+        // #19: MoveObject (internal/world/service.go:401)
+        {
+            name:     "move object - player moves object",
+            subject:  "character:player-01DEF",
+            action:   "write",
+            resource: "object:01VWX",
+        },
+
+        // #20: ExamineObject (internal/world/service.go:713)
+        {
+            name:     "examine object - player examines object",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "object:01VWX",
+        },
+
+        // === World service - Character operations (5 call sites) ===
+
+        // #21: GetCharacter (internal/world/service.go:452)
+        {
+            name:     "get character - player reads character",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "character:01YZA",
+        },
+
+        // #22: GetCharactersByLocation (internal/world/service.go:471)
+        {
+            name:     "get characters by location - decomposed compound resource",
+            subject:  "character:player-01DEF",
+            action:   "list_characters",
+            resource: "location:01JKL",
+            comment:  "Compound resource decomposed per ADR #76: OLD format was location:<id>:characters",
+        },
+
+        // #23: MoveCharacter (internal/world/service.go:558)
+        {
+            name:     "move character - player moves own character",
+            subject:  "character:player-01DEF",
+            action:   "write",
+            resource: "character:01DEF",
+        },
+
+        // #24: ExamineCharacter (internal/world/service.go:768)
+        {
+            name:     "examine character - player examines another character",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "character:01YZA",
+        },
+
+        // === World service - Scene operations (3 call sites) ===
+
+        // #25: AddSceneParticipant (internal/world/service.go:488)
+        {
+            name:     "add scene participant - player adds participant",
+            subject:  "character:player-01DEF",
+            action:   "write",
             resource: "scene:01PQR",
         },
 
-        // Plugin command execution (internal/plugin/hostfunc/commands.go)
+        // #26: RemoveSceneParticipant (internal/world/service.go:509)
         {
-            name:     "plugin command - with capability",
+            name:     "remove scene participant - player removes participant",
+            subject:  "character:player-01DEF",
+            action:   "write",
+            resource: "scene:01PQR",
+        },
+
+        // #27: ListSceneParticipants (internal/world/service.go:527)
+        {
+            name:     "list scene participants - player lists participants",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "scene:01PQR",
+        },
+
+        // === Plugin package (1 call site) ===
+
+        // #28: Plugin command execution (internal/plugin/hostfunc/commands.go:119)
+        {
+            name:     "plugin command - player with capability",
             subject:  "character:player-01DEF",
             action:   "execute",
             resource: "plugin_command:custom_cmd",
         },
-
-        // Add remaining world operations...
-        // (Full list of 28 call sites should be enumerated here)
+        {
+            name:     "plugin command - player without capability",
+            subject:  "character:player-01MNO",
+            action:   "execute",
+            resource: "plugin_command:admin_cmd",
+        }
     }
 
     for _, tt := range tests {

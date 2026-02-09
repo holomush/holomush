@@ -323,6 +323,11 @@ persists until administratively cleared. In degraded mode:
 
 - All access evaluation requests receive `EffectDefaultDeny` without
   evaluating any policies (fail-closed for all subjects)
+- **Exception:** The system bypass check (Step 1 of the evaluation algorithm)
+  occurs BEFORE the degraded mode check. Requests with `subject == "system"`
+  receive `EffectSystemBypass` even in degraded mode (see ADR #90). This
+  ensures system operations (bootstrap, recovery, health checks) continue
+  functioning during degraded mode.
 - The CRITICAL log entry **MUST** include the policy name, effect, and
   degraded mode activation message
 - All deny decisions during degraded mode **MUST** be audited with the reason
@@ -331,7 +336,7 @@ persists until administratively cleared. In degraded mode:
   be exposed for alerting
 - Administrators **MUST** use CLI access or direct database access to
   resolve the corruption; the policy engine is unavailable to all subjects
-  during degraded mode
+  during degraded mode (except system subject)
 
 **Recovery:** The `policy clear-degraded-mode` admin command clears the
 degraded mode flag and allows normal evaluation to resume. Operators
@@ -339,6 +344,11 @@ degraded mode flag and allows normal evaluation to resume. Operators
 `abac_degraded_mode` gauge. Policies with effect `permit` do **not**
 trigger degraded mode when corrupted, as skipping a permit policy defaults
 to deny, which is fail-safe.
+
+**Test requirement:** Implementation **MUST** include a test case verifying
+that requests with `subject == "system"` receive `EffectSystemBypass` even
+when the engine is in degraded mode. This ensures system operations continue
+during policy corruption incidents.
 
 **Future work:** The current seed policy `seed:admin-full-access` grants
 unrestricted access. A future iteration **SHOULD** split admin privileges
@@ -358,6 +368,8 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 │
 ├─ 1. System bypass
 │    subject == "system" → return Decision{Allowed: true, Effect: SystemBypass}
+│    NOTE: This check occurs BEFORE degraded mode. System subject bypasses
+│    even when the engine is in degraded mode (see ADR #90).
 │
 ├─ 2. Session resolution
 │    subject starts with "session:" → resolve to character ID

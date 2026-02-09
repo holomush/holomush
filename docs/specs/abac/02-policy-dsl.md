@@ -83,7 +83,6 @@ boolean        = "true" | "false"
 (* The parser SHOULD enforce a maximum nesting depth of 32 levels for
    conditions, rejecting deeply nested policies with a clear error. This
    prevents stack overflow during evaluation from naive or malicious input. *)
-```text
 
 **Parser disambiguation:** The `condition` production is ambiguous at the `expr`
 alternative — when the parser encounters `principal.faction`, it cannot know
@@ -118,7 +117,7 @@ permit(principal, action in ["read"], resource)
 // VALID - bare literals allowed
 permit(principal, action in ["debug"], resource)
   when { false };  // Policy disabled
-````
+```
 
 **Migration:** Existing policies with bare boolean attributes can be automatically
 fixed using `policy lint --fix`, which rewrites bare attributes as
@@ -369,3 +368,4 @@ when {
 permit(principal is plugin, action in ["emit"], resource is stream)
 when { principal.name == "echo-bot" && resource.name like "location:*" };
 ```
+````

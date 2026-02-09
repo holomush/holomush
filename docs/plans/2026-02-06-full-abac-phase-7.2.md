@@ -89,6 +89,7 @@ permit(principal is character, action in ["read"], resource is character) when {
 permit(principal is character, action in ["read"], resource is object) when { resource.location == principal.location };
 permit(principal is character, action in ["emit"], resource is stream) when { resource.name like "location:*" && resource.location == principal.location };
 permit(principal is character, action in ["enter"], resource is location);
+permit(principal is character, action in ["use"], resource is exit);
 permit(principal is character, action in ["execute"], resource is command) when { resource.name in ["say", "pose", "look", "go"] };
 permit(principal is character, action in ["write", "delete"], resource is location) when { principal.role in ["builder", "admin"] };
 permit(principal is character, action in ["write", "delete"], resource is object) when { principal.role in ["builder", "admin"] };
@@ -97,10 +98,9 @@ permit(principal is character, action, resource) when { principal.role == "admin
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "public" && principal.location == resource.parent_location };
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "private" && resource.owner == principal.id };
 permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "admin" && principal.role == "admin" };
-permit(principal is character, action in ["read"], resource is property) when { resource has visible_to && principal.id in resource.visible_to };
-forbid(principal is character, action in ["read"], resource is property) when { resource has excluded_from && principal.id in resource.excluded_from };
-forbid(principal is character, action, resource is property) when { resource.visibility == "system" };
 permit(principal is character, action in ["write", "delete"], resource is property) when { resource.owner == principal.id };
+permit(principal is character, action in ["read"], resource is property) when { resource.visibility == "restricted" && resource has visible_to && principal.id in resource.visible_to };
+forbid(principal is character, action in ["read"], resource is property) when { resource.visibility == "restricted" && resource has excluded_from && principal.id in resource.excluded_from };
 ```
 
 **Operator coverage:**
@@ -123,7 +123,7 @@ permit(principal is character, action in ["write", "delete"], resource is proper
 - Reserved word as attribute name
 - Nesting depth >32 → error
 - Malformed conditions
-- Entity reference using Type::"value" syntax ([02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), was spec lines 993-999, requires parser MUST reject this form)
+- Entity reference using Type::"value" syntax ([02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar) (was monolithic spec lines 993-999), requires parser MUST reject this form)
 
 **Step 2: Implement parser using participle**
 
