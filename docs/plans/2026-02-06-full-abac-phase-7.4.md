@@ -521,6 +521,198 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 
 ---
 
+### Task 23c: Smoke Test Gate
+
+> **Note:** This task gates the irreversible migration step (Task 28, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Positioned between T23b (seed validation) and T28 (call site migration) to exercise common auth patterns with the ABAC engine before replacing all production call sites.
+
+**Purpose:** Verify that seed policies correctly authorize common player, builder, and admin operations using the full ABAC engine before committing to migration. This gate ensures no functional regressions are introduced by the transition from static role checks to policy-driven evaluation.
+
+**Acceptance Criteria:**
+
+- [ ] Smoke test implementation covers minimum scenarios (see below)
+- [ ] All smoke tests pass with expected permissions (Allow for authorized, Deny for unauthorized)
+- [ ] Tests exercise the full evaluation pipeline (AttributeResolver → PolicyEngine → deny-overrides)
+- [ ] Tests run against a real test server with seeded policies
+- [ ] Tests validate that unauthorized operations are denied (negative cases)
+- [ ] All tests pass via `task test`
+
+**Minimum Scenarios:**
+
+| Scenario                             | Subject             | Action    | Resource                     | Expected Result |
+| ------------------------------------ | ------------------- | --------- | ---------------------------- | --------------- |
+| **Basic Player Commands**            |                     |           |                              |                 |
+| Player executes "say"                | character (player)  | `execute` | command (say)                | Allow           |
+| Player executes "look"               | character (player)  | `execute` | command (look)               | Allow           |
+| Player moves to adjacent location    | character (player)  | `enter`   | location (destination)       | Allow           |
+| Player uses exit                     | character (player)  | `use`     | exit                         | Allow           |
+| Player reads co-located character    | character (player)  | `read`    | character (co-located)       | Allow           |
+| Player executes "dig" (unauthorized) | character (player)  | `execute` | command (dig)                | Deny            |
+| **Builder Operations**               |                     |           |                              |                 |
+| Builder executes "dig"               | character (builder) | `execute` | command (dig)                | Allow           |
+| Builder creates location             | character (builder) | `write`   | location                     | Allow           |
+| Builder creates exit                 | character (builder) | `write`   | exit                         | Allow           |
+| Builder describes object             | character (builder) | `write`   | object                       | Allow           |
+| **Admin Operations**                 |                     |           |                              |                 |
+| Admin executes "shutdown"            | character (admin)   | `execute` | command (shutdown)           | Allow           |
+| Admin reads any location             | character (admin)   | `read`    | location (any)               | Allow           |
+| Admin deletes location               | character (admin)   | `delete`  | location                     | Allow           |
+| Admin creates policy                 | character (admin)   | `write`   | policy                       | Allow           |
+| **Negative Cases (Deny Expected)**   |                     |           |                              |                 |
+| Player deletes location              | character (player)  | `delete`  | location                     | Deny            |
+| Builder executes admin-only command  | character (builder) | `execute` | command (admin-only)         | Deny            |
+| Player writes co-located object      | character (player)  | `write`   | object (co-located, unowned) | Deny            |
+
+**Dependencies:**
+
+- Task 23b ([CLI --validate-seeds](#task-23b-cli-flag---validate-seeds)) — seed policies are validated before smoke tests exercise them
+- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) — AccessPolicyEngine is operational
+- Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) — policy cache is functional
+- Task 22b ([Resolve seed policy gaps](#task-22b-resolve-seed-policy-coverage-gaps)) — seed policies cover all required actions
+
+**Files:**
+
+- Create: `test/integration/access/smoke_test.go`
+
+**Implementation Notes:**
+
+- Use Ginkgo/Gomega for BDD-style test organization
+- Test server setup:
+  1. Spin up PostgreSQL testcontainer
+  2. Run migrations (schema + bootstrap)
+  3. Create test characters with player/builder/admin roles
+  4. Initialize AccessPolicyEngine with full provider chain
+- Tests MUST call `AccessPolicyEngine.Evaluate()` directly (not via service layer wrappers)
+- Each test case verifies `Decision.Effect` matches expected Allow/Deny
+- Failures MUST block T28 migration start — smoke test gate is a hard dependency
+
+**Step 1: Write failing tests**
+
+- Test setup: bootstrap seeds, create test subjects (player/builder/admin characters), initialize engine
+- Each minimum scenario above as a separate `It()` block
+- Verify `Decision.Effect == EffectAllow` for authorized cases
+- Verify `Decision.Effect == EffectDeny` for unauthorized cases
+
+**Step 2: Implement**
+
+Add test file `test/integration/access/smoke_test.go`:
+
+```go
+//go:build integration
+
+package access_test
+
+import (
+    "context"
+    "testing"
+
+    . "github.com/onsi/ginkgo/v2"
+    . "github.com/onsi/gomega"
+
+    "github.com/holomush/holomush/internal/access"
+    "github.com/holomush/holomush/internal/access/abac"
+    policystore "github.com/holomush/holomush/internal/access/policy/store"
+    // ... other imports
+)
+
+var _ = Describe("ABAC Smoke Test Gate", func() {
+    var (
+        ctx    context.Context
+        engine *abac.AccessPolicyEngine
+        player, builder, admin *world.Character
+    )
+
+    BeforeEach(func() {
+        // Setup: testcontainer, migrations, bootstrap, engine init
+        // Create test characters with appropriate roles
+    })
+
+    Describe("Basic Player Commands", func() {
+        It("player executes 'say'", func() {
+            req := access.AccessRequest{
+                Subject:  "character:" + player.ID.String(),
+                Action:   "execute",
+                Resource: "command:say",
+            }
+            decision, err := engine.Evaluate(ctx, req)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(decision.Effect).To(Equal(access.EffectAllow))
+        })
+
+        It("player executes 'dig' (unauthorized)", func() {
+            req := access.AccessRequest{
+                Subject:  "character:" + player.ID.String(),
+                Action:   "execute",
+                Resource: "command:dig",
+            }
+            decision, err := engine.Evaluate(ctx, req)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(decision.Effect).To(Equal(access.EffectDeny))
+        })
+
+        // ... remaining player scenarios
+    })
+
+    Describe("Builder Operations", func() {
+        It("builder executes 'dig'", func() {
+            req := access.AccessRequest{
+                Subject:  "character:" + builder.ID.String(),
+                Action:   "execute",
+                Resource: "command:dig",
+            }
+            decision, err := engine.Evaluate(ctx, req)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(decision.Effect).To(Equal(access.EffectAllow))
+        })
+
+        // ... remaining builder scenarios
+    })
+
+    Describe("Admin Operations", func() {
+        It("admin executes 'shutdown'", func() {
+            req := access.AccessRequest{
+                Subject:  "character:" + admin.ID.String(),
+                Action:   "execute",
+                Resource: "command:shutdown",
+            }
+            decision, err := engine.Evaluate(ctx, req)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(decision.Effect).To(Equal(access.EffectAllow))
+        })
+
+        // ... remaining admin scenarios
+    })
+
+    Describe("Negative Cases (Deny Expected)", func() {
+        It("player deletes location", func() {
+            req := access.AccessRequest{
+                Subject:  "character:" + player.ID.String(),
+                Action:   "delete",
+                Resource: "location:" + testLocationID.String(),
+            }
+            decision, err := engine.Evaluate(ctx, req)
+            Expect(err).NotTo(HaveOccurred())
+            Expect(decision.Effect).To(Equal(access.EffectDeny))
+        })
+
+        // ... remaining negative cases
+    })
+})
+
+func TestABACSmoke(t *testing.T) {
+    RegisterFailHandler(Fail)
+    RunSpecs(t, "ABAC Smoke Test Gate Suite")
+}
+```
+
+**Step 3: Run tests, commit**
+
+```bash
+git add test/integration/access/smoke_test.go
+git commit -m "test(access): add smoke test gate for Phase 7.4→7.6 transition"
+```
+
+---
+
 ## Appendix A: Seed Policy Coverage Matrix
 
 This appendix maps each of the 28 production call sites (documented in Task 28.5, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) to the seed policies that authorize them. Every call site MUST have at least one applicable seed policy, or rely on default-deny for intentional denial.

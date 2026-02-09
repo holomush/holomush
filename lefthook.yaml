@@ -59,11 +59,13 @@ pre-commit:
       exclude: "site/**"
       # Double invocation pattern: root uses .rumdl.toml, site/ uses site/.rumdl.toml
       # (different config files for different markdown dialects/rules)
-      run: rumdl fmt --check {staged_files}
+      run: rumdl fmt {staged_files}
+      stage_fixed: true
 
     fmt-markdown-site:
       glob: "site/**/*.md"
-      run: rumdl fmt --check --config site/.rumdl.toml {staged_files}
+      run: rumdl fmt --config site/.rumdl.toml {staged_files}
+      stage_fixed: true
 
     lint-yaml:
       glob: "*.{yaml,yml}"

@@ -123,7 +123,9 @@ graph LR
     T21a --> T22([T22: Seeds])
     T22 --> T22b([T22b: Gap<br/>Resolution])
     T22b --> T23
-    T23 --> T28([T28: Migration<br/>M5 End])
+    T23 --> T23b([T23b: Validate<br/>Seeds])
+    T23b --> T23c([T23c: Smoke<br/>Test Gate])
+    T23c --> T28([T28: Migration<br/>M5 End])
     T28 --> T28_5([T28.5: Equiv Tests])
     T28_5 --> T29([T29: Cleanup<br/>M6 End])
 
@@ -238,9 +240,11 @@ graph TD
         T22b[Task 22b: Resolve seed policy gaps]
         T23[Task 23: Bootstrap sequence]
         T23b[Task 23b: CLI --validate-seeds]
+        T23c[Task 23c: Smoke Test Gate]
         T22 --> T22b
         T22b --> T23
         T23 --> T23b
+        T23b --> T23c
     end
 
     subgraph "Phase 7.5: Locks & Admin"
@@ -299,7 +303,7 @@ graph TD
     T23 --> T26a
     T23 --> T27a
     T17_4 --> T28
-    T23 --> T28
+    T23c --> T28
     T23b --> T30
     T7 --> T26b
     T17_4 --> T25b
