@@ -21,7 +21,6 @@
 - [ ] DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2990-3054)
 - [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
 - [ ] Seed policy coverage validated against all 28 production call sites (see [Appendix A](#appendix-a-seed-policy-coverage-matrix))
-- [ ] All gaps from Appendix A resolved or documented as intentional before Phase 7.6 migration begins
 - [ ] All tests pass via `task test`
 
 **Dependencies:**
@@ -183,12 +182,74 @@ git commit -m "feat(access): define seed policies"
 
 ---
 
+### Task 22b: Resolve seed policy coverage gaps
+
+> **Note:** Elevated from a T22 acceptance criterion to a dedicated task per [Decision #94](../specs/decisions/epic7/phase-7.4/094-elevate-seed-policy-gap-resolution.md). With direct replacement (no adapter/shadow mode), unresolved gaps cause immediate functional regressions at T28 migration.
+
+**Spec References:** [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2984-3061), [Appendix A](#appendix-a-seed-policy-coverage-matrix)
+
+**Acceptance Criteria:**
+
+- [ ] **G1 resolved:** `seed:player-exit-read` policy added — players can read exits in their current location (covers call site #10 GetExit)
+- [ ] **G2 resolved:** `seed:builder-exit-write` policy added — builders can create/update/delete exits (covers call sites #11-#13 CreateExit, UpdateExit, DeleteExit)
+- [ ] **G3 resolved:** `list_characters` action covered by expanding `seed:player-location-read` to include `list_characters`, OR a dedicated `seed:player-location-list-characters` policy added (covers call site #22 GetCharactersByLocation)
+- [ ] **G4 resolved:** Scene access policies added — `seed:player-scene-participant` (read+write own scenes) and/or `seed:player-scene-read` (read scenes in current location) (covers call sites #25-#27)
+- [ ] **G5 documented:** Plugin command gap documented as intentional — plugins MUST define their own ABAC policies at install time; default-deny is correct baseline
+- [ ] **G6 documented:** MoveObject gap evaluated against game design requirements — either `seed:player-object-move` policy added or documented as intentional builder-only behavior
+- [ ] Seed policy count updated in T22 and T23 to reflect additions
+- [ ] Updated seed policies compile without error via `PolicyCompiler`
+- [ ] Coverage matrix in Appendix A updated to reflect resolved gaps
+- [ ] All tests pass via `task test`
+
+**Dependencies:**
+
+- Task 22 (seed policy constants) — gap resolution requires the base seed policies to exist first
+
+**Files:**
+
+- Modify: `internal/access/policy/seed.go` (add new seed policies for G1-G4, optionally G6)
+- Modify: `internal/access/policy/seed_test.go` (test new seed policies)
+
+**Step 1: Write failing tests**
+
+- New seed policies (G1-G4) compile without error via `PolicyCompiler`
+- Each new seed policy name starts with `seed:`
+- Each new seed policy has `SeedVersion: 1`
+- No duplicate seed names after additions
+- Coverage matrix has no Medium/High severity gaps remaining
+
+**Step 2: Implement**
+
+Add missing seed policies based on Appendix A gap analysis recommendations:
+
+1. **G1+G2 (Exits):** Add `seed:player-exit-read` and `seed:builder-exit-write`
+2. **G3 (list\_characters):** Expand `seed:player-location-read` to include `list_characters` action, or add a dedicated policy
+3. **G4 (Scenes):** Add `seed:player-scene-participant` and `seed:player-scene-read`
+4. **G5 (Plugin commands):** Document in plugin developer guide — no seed policy change
+5. **G6 (MoveObject):** Evaluate and either add `seed:player-object-move` or document as intentional
+
+**Step 3: Update Appendix A coverage matrix, run tests, commit**
+
+```bash
+git add internal/access/policy/seed.go internal/access/policy/seed_test.go
+git commit -m "feat(access): resolve seed policy coverage gaps G1-G4"
+```
+
+---
+
 ### Task 23: Bootstrap sequence
 
 **Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3062-3177), [07-migration-seeds.md#seed-policy-migrations](../specs/abac/07-migration-seeds.md#seed-policy-migrations) (was lines 3178-3229)
 
+**ADR References:** [091-bootstrap-creates-initial-partitions.md](../specs/decisions/epic7/phase-7.4/091-bootstrap-creates-initial-partitions.md)
+
 **Acceptance Criteria:**
 
+- [ ] Creates initial `access_audit_log` partitions before seed policy insertion (per ADR #91)
+- [ ] At least 3 initial monthly partitions created (current month + 2 future months)
+- [ ] Partition naming follows spec convention: `access_audit_log_YYYY_MM`
+- [ ] Partition creation is idempotent (skips partitions that already exist via `IF NOT EXISTS`)
+- [ ] Partition creation failure is fatal (bootstrap aborts with clear error)
 - [ ] Uses `access.WithSystemSubject(context.Background())` to bypass ABAC for seed operations
 - [ ] Per-seed name-based idempotency check via `policyStore.Get(ctx, seed.Name)`
 - [ ] Skips seed if policy exists with same name and `source="seed"` (already seeded)
@@ -221,6 +282,9 @@ git commit -m "feat(access): define seed policies"
 
 **Step 1: Write failing tests**
 
+- Bootstrap creates initial audit log partitions (current month + 2 future months)
+- Partition creation is idempotent (re-running bootstrap does not fail on existing partitions)
+- Partition naming follows convention: `access_audit_log_YYYY_MM`
 - Empty `access_policies` table → all seeds created with `source="seed"`, `seed_version=1`
 - Existing seed policy (same name, `source="seed"`) → skipped (idempotent)
 - Existing non-seed policy (same name, `source!="seed"`) → skipped, warning logged
@@ -240,9 +304,11 @@ import (
     "encoding/json"
     "fmt"
     "log/slog"
+    "time"
 
     "github.com/holomush/holomush/internal/access"
     policystore "github.com/holomush/holomush/internal/access/policy/store"
+    "github.com/jackc/pgx/v5/pgxpool"
     "github.com/samber/oops"
 )
 
@@ -251,14 +317,24 @@ type BootstrapOptions struct {
     SkipSeedMigrations bool // Disable automatic seed version upgrades
 }
 
-// Bootstrap seeds the policy table with system policies.
+// Bootstrap seeds the policy table with system policies and creates
+// initial audit log partitions.
 // Called at server startup with system subject context (bypasses ABAC).
-// Idempotent: checks each seed policy by name before insertion.
+// Idempotent: checks each seed policy by name before insertion;
+// partition creation uses IF NOT EXISTS.
 // Supports seed version upgrades unless opts.SkipSeedMigrations is true.
-func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
+func Bootstrap(ctx context.Context, pool *pgxpool.Pool, policyStore policystore.PolicyStore, compiler *PolicyCompiler, logger *slog.Logger, opts BootstrapOptions) error {
     // Use system subject context to bypass ABAC during bootstrap
     ctx = access.WithSystemSubject(ctx)
 
+    // Step 1: Create initial audit log partitions (ADR #91).
+    // PostgreSQL rejects INSERTs into unpartitioned parent tables, so
+    // partitions MUST exist before any audit log writes occur.
+    if err := createAuditLogPartitions(ctx, pool, logger); err != nil {
+        return oops.Errorf("failed to create audit log partitions: %w", err)
+    }
+
+    // Step 2: Seed policies
     for _, seed := range SeedPolicies() {
         // Per-seed idempotency check: query by name
         existing, err := policyStore.Get(ctx, seed.Name)
@@ -335,10 +411,39 @@ func Bootstrap(ctx context.Context, policyStore policystore.PolicyStore, compile
 
     return nil
 }
+
+// createAuditLogPartitions creates initial monthly partitions for the
+// access_audit_log table. Creates current month + 2 future months.
+// Idempotent: uses CREATE TABLE IF NOT EXISTS to skip existing partitions.
+// Called before seed policy insertion to ensure audit log writes succeed.
+// See ADR #91 for rationale on bootstrap vs migration.
+func createAuditLogPartitions(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) error {
+    now := time.Now()
+    for i := 0; i < 3; i++ {
+        month := now.AddDate(0, i, 0)
+        start := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
+        end := start.AddDate(0, 1, 0)
+        name := fmt.Sprintf("access_audit_log_%d_%02d", start.Year(), start.Month())
+        sql := fmt.Sprintf(
+            "CREATE TABLE IF NOT EXISTS %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')",
+            name, start.Format("2006-01-02"), end.Format("2006-01-02"),
+        )
+        if _, err := pool.Exec(ctx, sql); err != nil {
+            return oops.With("partition", name).Wrap(err)
+        }
+        logger.Info("ensured audit log partition exists", "partition", name,
+            "from", start.Format("2006-01-02"), "to", end.Format("2006-01-02"))
+    }
+    return nil
+}
 ```
 
 **Implementation Notes:**
 
+- `createAuditLogPartitions()` runs BEFORE seed policy insertion to ensure audit log writes succeed during bootstrap (ADR #91)
+- Partition creation uses `CREATE TABLE IF NOT EXISTS` for idempotency — safe to re-run on every server startup
+- The same partition naming convention (`access_audit_log_YYYY_MM`) is used by T19b (audit retention/partition management) at runtime
+- `Bootstrap()` now accepts `*pgxpool.Pool` parameter for direct SQL partition creation (seed policies still use `PolicyStore` interface)
 - `SeedPolicies()` must return policies with `SeedVersion` field (default 1)
 - `store.PolicyStore.Get(ctx, name)` retrieves policy by name, returns `IsNotFound` error if absent
 - `access.WithSystemSubject(ctx)` marks context as system-level operation

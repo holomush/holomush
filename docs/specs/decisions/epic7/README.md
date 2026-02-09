@@ -97,6 +97,7 @@ options considered, and rationale for the chosen approach.
 | 91 | Bootstrap Creates Initial Audit Partitions                   | 7.4     | [091](phase-7.4/091-bootstrap-creates-initial-partitions.md)              |
 | 92 | Fatal Seed Bootstrap Failures                                | 7.4     | [092](phase-7.4/092-fatal-seed-bootstrap-failures.md)                     |
 | 93 | Pin CI Tool SHA256 Hashes as Literals                        | General | [093](general/093-pin-ci-tool-hashes.md)                                  |
+| 94 | Elevate Seed Policy Gap Resolution to Dedicated Task         | 7.4     | [094](phase-7.4/094-elevate-seed-policy-gap-resolution.md)                |
 
 ## Spec ADR Reference Mapping
 

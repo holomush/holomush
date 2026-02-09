@@ -278,8 +278,8 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 - [ ] `original_subject` TEXT field added to preserve session subject before resolution (nullable)
 - [ ] Composite PRIMARY KEY (id, timestamp) includes partition key per PostgreSQL requirement
 - [ ] SQL comment documents PK deviation from spec and rationale
-- [ ] At least 3 initial monthly partitions created (current month + 2 future months)
-- [ ] Partition naming follows spec convention: `access_audit_log_YYYY_MM`
+- [ ] Initial partition creation deferred to bootstrap (T23, Phase 7.4) per ADR #91
+- [ ] Partition naming follows spec convention: `access_audit_log_YYYY_MM` (enforced at bootstrap)
 - [ ] BRIN index on `timestamp` with `pages_per_range = 128`
 - [ ] Subject + timestamp DESC index for per-subject queries
 - [ ] Denied-only partial index for denial analysis queries
@@ -287,11 +287,12 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 - [ ] Up migration applies cleanly; down migration reverses it
 - [ ] Note added flagging spec update needed for PK inconsistency
 
+**ADR References:** [091-bootstrap-creates-initial-partitions.md](../specs/decisions/epic7/phase-7.4/091-bootstrap-creates-initial-partitions.md)
+
 **Files:**
 
 - Create: `internal/store/migrations/000016_access_audit_log.up.sql` (table schema, indexes)
 - Create: `internal/store/migrations/000016_access_audit_log.down.sql` (rollback)
-- Create: `internal/store/migrations/000016_access_audit_log_partitions.go` (Go migration for dynamic partition creation)
 
 **Step 1: Write the SQL migration (schema + indexes only)**
 
@@ -320,7 +321,9 @@ CREATE TABLE access_audit_log (
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
--- Partitions created by Go migration (see 000016_access_audit_log_partitions.go)
+-- Initial partitions created at bootstrap (T23, Phase 7.4) per ADR #91.
+-- PostgreSQL rejects INSERTs into unpartitioned parent tables, so the server
+-- MUST create at least one partition before any audit log writes.
 
 CREATE INDEX idx_audit_log_timestamp ON access_audit_log USING BRIN (timestamp)
     WITH (pages_per_range = 128);
@@ -329,46 +332,7 @@ CREATE INDEX idx_audit_log_denied ON access_audit_log(effect, timestamp DESC)
     WHERE effect IN ('deny', 'default_deny');
 ```
 
-**Step 2: Write the Go migration (dynamic partition creation)**
-
-Dynamic partition creation generates monthly partitions based on deployment date (current month + 2 future months).
-
-```go
-// internal/store/migrations/000016_access_audit_log_partitions.go
-package migrations
-
-import (
-    "context"
-    "fmt"
-    "time"
-
-    "github.com/jackc/pgx/v5"
-)
-
-// CreateAuditLogPartitions creates initial monthly partitions.
-// Creates current month + 2 future months.
-func CreateAuditLogPartitions(ctx context.Context, tx pgx.Tx) error {
-    now := time.Now()
-    for i := 0; i < 3; i++ {
-        month := now.AddDate(0, i, 0)
-        start := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
-        end := start.AddDate(0, 1, 0)
-        name := fmt.Sprintf("access_audit_log_%d_%02d", start.Year(), start.Month())
-        sql := fmt.Sprintf(
-            "CREATE TABLE %s PARTITION OF access_audit_log FOR VALUES FROM ('%s') TO ('%s')",
-            name, start.Format("2006-01-02"), end.Format("2006-01-02"),
-        )
-        if _, err := tx.Exec(ctx, sql); err != nil {
-            return err
-        }
-    }
-    return nil
-}
-```
-
-> **Note:** The SQL file defines the table schema and indexes. The Go file handles dynamic partition creation. This separation keeps SQL migrations declarative while allowing runtime-dependent partition boundaries.
-
-**Step 3: Write the down migration**
+**Step 2: Write the down migration**
 
 ```sql
 -- internal/store/migrations/000016_access_audit_log.down.sql
@@ -377,7 +341,7 @@ DROP TABLE IF EXISTS access_audit_log;
 
 The down migration drops the parent table, which automatically drops all partitions due to PostgreSQL CASCADE behavior. No Go code needed for rollback.
 
-**Step 4: Commit**
+**Step 3: Commit**
 
 ```bash
 git add internal/store/migrations/000016_access_audit_log.*
@@ -385,6 +349,8 @@ git commit -m "feat(access): add access_audit_log table with monthly range parti
 ```
 
 **NOTE:** The spec ([05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) (was monolithic spec line 2070)) defines `id TEXT PRIMARY KEY`, but PostgreSQL partitioned tables require the partition key (`timestamp`) to be included in the primary key. The implementation correctly uses `PRIMARY KEY (id, timestamp)`. **Action required:** Update spec to reflect this PostgreSQL constraint.
+
+**NOTE:** Initial partition creation is handled by the bootstrap sequence (T23, Phase 7.4) rather than a Go migration file. `golang-migrate` only executes `.up.sql`/`.down.sql` files, so a standalone Go file would not run automatically. See ADR #91 for rationale.
 
 ---
 
