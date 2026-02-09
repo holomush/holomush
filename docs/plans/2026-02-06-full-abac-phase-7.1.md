@@ -103,6 +103,98 @@ Confirms participle AST nodes survive json.Marshal/Unmarshal.
 
 ---
 
+## Task 0.5: Dependency Audit
+
+**Purpose:** Verify compatibility of Go module dependencies (pgx, ULID, oops, participle, gopher-lua, prometheus) BEFORE implementation begins. Version conflicts discovered at Task 12 or later would force rework.
+
+**Spec References:** N/A (implementation infrastructure validation)
+
+**Acceptance Criteria:**
+
+- [ ] pgx/pgxpool version compatible with existing codebase
+- [ ] ULID library compatible with existing usage in world/store
+- [ ] oops library compatible with existing error patterns
+- [ ] participle v2 available and supports struct-tag parsing
+- [ ] gopher-lua compatible with existing plugin system (for future plugin attribute providers)
+- [ ] prometheus/client_golang compatible with existing observability
+- [ ] All dependencies documented in commit message with versions
+- [ ] No version conflicts reported by `go mod tidy`
+
+**Files:**
+
+- No new files created (verification task only)
+- Document findings in commit message or add to `docs/plans/2026-02-06-full-abac-phase-7.1.md` as a note
+
+**Implementation Steps:**
+
+**Step 1: Check current dependency versions**
+
+```bash
+go list -m all | grep -E '(pgx|ulid|oops|participle|gopher-lua|prometheus)'
+```
+
+**Step 2: Verify participle availability**
+
+```bash
+go get github.com/alecthomas/participle/v2@latest
+go mod tidy
+```
+
+Check that participle v2 is available and supports the struct-tag parsing needed for DSL grammar.
+
+**Step 3: Check pgx compatibility**
+
+Verify current pgx version is v5.x (required for context-based API and improved connection pooling).
+
+```bash
+go list -m github.com/jackc/pgx/v5
+```
+
+**Step 4: Check ULID compatibility**
+
+Verify ULID library matches what's already used in `internal/world` and `internal/store`.
+
+```bash
+grep -r "github.com/oklog/ulid" internal/
+go list -m github.com/oklog/ulid/v2
+```
+
+**Step 5: Verify no conflicts**
+
+```bash
+go mod tidy
+go test ./...
+```
+
+Expected: No version conflicts, all tests pass.
+
+**Step 6: Document findings**
+
+Create a commit documenting verified versions:
+
+```bash
+git commit --allow-empty -m "docs(abac): verify dependency compatibility for ABAC implementation
+
+Verified versions:
+- pgx/pgxpool: v5.x.x (compatible)
+- ULID: v2.x.x (compatible with existing usage)
+- oops: vX.x.x (compatible)
+- participle: v2.x.x (struct-tag parsing supported)
+- gopher-lua: vX.x.x (compatible with plugin system)
+- prometheus: vX.x.x (compatible with observability)
+
+No version conflicts detected via go mod tidy.
+All dependencies ready for Phase 7.1-7.7 implementation."
+```
+
+**Notes:**
+
+- This task gates Task 1 (database migrations) to ensure we can proceed confidently
+- If conflicts are found, resolve them BEFORE starting Task 1
+- Dependency audit is a one-time validation; no runtime artifacts created
+
+---
+
 ### Task 1: Create access\_policies migration
 
 **Spec References:** Policy Storage > Schema (lines 2028-2169)
