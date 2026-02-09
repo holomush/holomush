@@ -38,7 +38,15 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@latest
           go install github.com/google/yamlfmt/cmd/yamlfmt@latest
           # Pinned to specific version for CI reproducibility. Update periodically to match local dev.
-          curl -LsSf https://github.com/rvben/rumdl/releases/download/v0.1.15/rumdl-v0.1.15-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C /usr/local/bin
+          # Note: Assumes x86_64 architecture on ubuntu-latest runners
+          RUMDL_VERSION="v0.1.15"
+          RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
+          curl -LsSfO "${RUMDL_URL}"
+          curl -LsSfO "${RUMDL_URL}.sha256"
+          sha256sum -c "${RUMDL_TARBALL}.sha256"
+          tar xzf "${RUMDL_TARBALL}" -C /usr/local/bin
+          rm "${RUMDL_TARBALL}" "${RUMDL_TARBALL}.sha256"
           curl -fsSL https://dprint.dev/install.sh | sh
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
 
