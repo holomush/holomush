@@ -259,6 +259,7 @@ git commit -m "feat(access): resolve seed policy coverage gaps G1-G4"
 - [ ] Upgrade populates `change_note` with `"Auto-upgraded from seed v{N} to v{N+1} on server upgrade"`
 - [ ] Respects `--skip-seed-migrations` flag to disable automatic upgrades
 - [ ] Bootstrap handles `PolicyCompiler` compilation errors gracefully during seed insertion and upgrades
+- [ ] **Seed compilation/install failure is fatal — server exits with error (ADR #92)**
 - [ ] `PolicyStore.UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` method for migration-delivered seed fixes
 - [ ] `UpdateSeed()` checks if policy exists with `source='seed'`; fails if not
 - [ ] `UpdateSeed()` skips if stored DSL matches new DSL (idempotent)
@@ -452,6 +453,12 @@ func createAuditLogPartitions(ctx context.Context, pool *pgxpool.Pool, logger *s
 - `--skip-seed-migrations` server flag sets `opts.SkipSeedMigrations=true`
 - Legacy policies without `SeedVersion` (nil) will not be upgraded; future enhancement may treat nil as version 0
 - `--force-seed-version=N` flag enables rollback (future enhancement, see [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence), was spec lines 3121-3129)
+- **Bootstrap failures are fatal (ADR #92):** Any seed policy compilation or
+  installation error causes `Bootstrap()` to return an error, which MUST cause
+  the server to exit with a non-zero code and descriptive error message. No
+  `--skip-seed-install` flag or degraded startup mode is supported. Seed
+  policy failures are configuration errors equivalent to missing database
+  connections or invalid TLS certificates.
 
 **Step 3: Run tests, commit**
 
