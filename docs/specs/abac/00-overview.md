@@ -199,4 +199,3 @@ internal/access/policy/        # NEW — AccessPolicyEngine, evaluation
     logger.go                  # Audit decision logger
     postgres.go                # Audit table writes
 ```
-

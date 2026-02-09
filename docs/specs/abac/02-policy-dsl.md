@@ -365,4 +365,3 @@ when {
 permit(principal is plugin, action in ["emit"], resource is stream)
 when { principal.name == "echo-bot" && resource.name like "location:*" };
 ```
-

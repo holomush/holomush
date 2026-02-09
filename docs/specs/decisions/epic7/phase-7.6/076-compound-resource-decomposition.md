@@ -23,8 +23,8 @@ site `location:<id>:characters` becomes `resource=location:<id>` with
 captures the intent (what you want to do) and the resource identifies the target
 (which location).
 
-**Rationale:** The ABAC model separates concerns: the resource identifies *what*
-is being accessed, the action identifies *how*. "List characters in a location"
+**Rationale:** The ABAC model separates concerns: the resource identifies _what_
+is being accessed, the action identifies _how_. "List characters in a location"
 is naturally `action=list_characters, resource=location:<id>`. A new prefix
 (option 2) proliferates prefix types. Multi-segment parsing (option 3) adds
 parser complexity for a pattern used in only one call site.

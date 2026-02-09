@@ -215,4 +215,3 @@ The repository determines the resolution strategy based on `parent_type`:
   cache mitigates within-request duplication. Implementations **SHOULD**
   prefer batch resolution: collect all needed properties upfront and resolve
   `parent_location` once per unique object.
-

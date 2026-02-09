@@ -23,7 +23,7 @@ make this safe: `Decision` is returned by value (not pointer) from
 their copy does not affect the canonical instance. The `NewDecision()`
 constructor enforces the `allowed`/`Effect` invariant at creation time.
 
-**Rationale:** The `allowed` field is unexported because it is a *derived*
+**Rationale:** The `allowed` field is unexported because it is a _derived_
 value — always computable from `Effect`. Making it unexported prevents callers
 from constructing an inconsistent `Decision{allowed: true, Effect: EffectDeny}`.
 `Effect` is exported because it is a primary field that callers read frequently

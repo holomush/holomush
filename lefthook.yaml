@@ -2,8 +2,7 @@
 # https://github.com/evilmartians/lefthook
 #
 # Prerequisites:
-# - rumdl: Install via `cargo install rumdl` or download from GitHub Releases
-#   (Homebrew formula availability should be verified - run `brew search rumdl`)
+# - rumdl: Install via `cargo install rumdl`, Homebrew (`brew install rumdl`), or download from GitHub Releases
 #
 # set because we chain through beads (bd) in spots
 no_auto_install: true

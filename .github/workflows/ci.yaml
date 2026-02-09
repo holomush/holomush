@@ -39,6 +39,11 @@ jobs:
           go install github.com/google/yamlfmt/cmd/yamlfmt@latest
           # Pinned to specific version for CI reproducibility. Update periodically to match local dev.
           # Note: Assumes x86_64 architecture on ubuntu-latest runners
+          # To update rumdl version:
+          # 1. Check for new releases: https://github.com/rvben/rumdl/releases
+          # 2. Update RUMDL_VERSION below to new version
+          # 3. Update SHA256 hash: download the new binary and run `shasum -a 256`
+          # 4. Test locally: task lint:markdown
           RUMDL_VERSION="v0.1.15"
           RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
           RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"

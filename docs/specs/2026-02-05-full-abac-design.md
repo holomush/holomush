@@ -13,17 +13,17 @@ management. Each section is a standalone file in the `abac/` directory.
 
 ## Sections
 
-| # | File | Contents |
-|---|------|----------|
-| 0 | [Overview](abac/00-overview.md) | Overview, Goals, Non-Goals, Glossary, Key Design Decisions, Reserved Prefixes, Architecture, Request Flow, Package Structure |
-| 1 | [Core Types](abac/01-core-types.md) | AccessPolicyEngine, PolicyCompiler, AccessRequest, Session Resolution, Decision, AttributeBags, Attribute Providers, Core Attribute Schema |
-| 2 | [Policy DSL](abac/02-policy-dsl.md) | Grammar, Grammar Versioning, Type System, Supported Operators, Example Policies |
-| 3 | [Property Model](abac/03-property-model.md) | Property Attributes, Visibility Levels, Visibility Seed Policies, Parent Location Resolution |
+| # | File                                                        | Contents                                                                                                                                                           |
+| - | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0 | [Overview](abac/00-overview.md)                             | Overview, Goals, Non-Goals, Glossary, Key Design Decisions, Reserved Prefixes, Architecture, Request Flow, Package Structure                                       |
+| 1 | [Core Types](abac/01-core-types.md)                         | AccessPolicyEngine, PolicyCompiler, AccessRequest, Session Resolution, Decision, AttributeBags, Attribute Providers, Core Attribute Schema                         |
+| 2 | [Policy DSL](abac/02-policy-dsl.md)                         | Grammar, Grammar Versioning, Type System, Supported Operators, Example Policies                                                                                    |
+| 3 | [Property Model](abac/03-property-model.md)                 | Property Attributes, Visibility Levels, Visibility Seed Policies, Parent Location Resolution                                                                       |
 | 4 | [Resolution & Evaluation](abac/04-resolution-evaluation.md) | Attribute Resolution Flow, Provider Registration, Schema Registry, Schema Validation, Error Handling, Evaluation Algorithm, Performance Targets, Attribute Caching |
-| 5 | [Storage & Audit](abac/05-storage-audit.md) | Policy Storage Schema, Cache Invalidation, Audit Log Serialization, Policy Versions, Audit Configuration, Audit Retention, Visibility Defaults |
-| 6 | [Layers & Commands](abac/06-layers-commands.md) | Access Control Layers (Metadata/Locks/Policies), Lock Syntax, Lock Token Registry, Lock Compilation, Admin Commands, Policy Management |
-| 7 | [Migration & Seeds](abac/07-migration-seeds.md) | Replacing Static Roles, Seed Policies, Bootstrap Sequence, Seed Upgrades, Implementation Sequence, Plugin Capability Migration |
-| 8 | [Testing & Appendices](abac/08-testing-appendices.md) | Testing Strategy, Fuzz Testing, Integration Tests, Known Limitations, Acceptance Criteria, Future Commands, References, Related ADRs |
+| 5 | [Storage & Audit](abac/05-storage-audit.md)                 | Policy Storage Schema, Cache Invalidation, Audit Log Serialization, Policy Versions, Audit Configuration, Audit Retention, Visibility Defaults                     |
+| 6 | [Layers & Commands](abac/06-layers-commands.md)             | Access Control Layers (Metadata/Locks/Policies), Lock Syntax, Lock Token Registry, Lock Compilation, Admin Commands, Policy Management                             |
+| 7 | [Migration & Seeds](abac/07-migration-seeds.md)             | Replacing Static Roles, Seed Policies, Bootstrap Sequence, Seed Upgrades, Implementation Sequence, Plugin Capability Migration                                     |
+| 8 | [Testing & Appendices](abac/08-testing-appendices.md)       | Testing Strategy, Fuzz Testing, Integration Tests, Known Limitations, Acceptance Criteria, Future Commands, References, Related ADRs                               |
 
 ## Quick Links
 

@@ -122,12 +122,12 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Degraded Mode Triggers:**
 
-| Trigger                          | Cause                                                   | Recovery                                                                |
-| -------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Compile-time corruption (forbid) | `compiled_ast` unmarshal fails on forbid policy load    | Disable corrupted policy, run `policy clear-degraded-mode`              |
-| Compile-time corruption (permit) | `compiled_ast` unmarshal fails on permit policy load    | Policy auto-disabled, normal evaluation continues (no degraded mode)    |
-| Runtime evaluation error         | AST structural invariants violated during evaluation    | Disable corrupted policy, run `policy clear-degraded-mode` if forbid    |
-| Transient database error         | PostgreSQL unavailable during policy load               | Fix DB connectivity, restart server or reload policies                  |
+| Trigger                          | Cause                                                | Recovery                                                             |
+| -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| Compile-time corruption (forbid) | `compiled_ast` unmarshal fails on forbid policy load | Disable corrupted policy, run `policy clear-degraded-mode`           |
+| Compile-time corruption (permit) | `compiled_ast` unmarshal fails on permit policy load | Policy auto-disabled, normal evaluation continues (no degraded mode) |
+| Runtime evaluation error         | AST structural invariants violated during evaluation | Disable corrupted policy, run `policy clear-degraded-mode` if forbid |
+| Transient database error         | PostgreSQL unavailable during policy load            | Fix DB connectivity, restart server or reload policies               |
 
 **Files:**
 
@@ -215,7 +215,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 > **Note:** This task's circuit breaker also covers PropertyProvider (formerly a
 > separate circuit breaker in Task 16b). See [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md).
-
+>
 > **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1598-1602: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1884-1900: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1598-1602 are subsumed by the budget-utilization approach.
 
 **Acceptance Criteria:**

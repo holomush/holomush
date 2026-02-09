@@ -617,4 +617,3 @@ reputation-gated guild policy can reference both namespaces:
 `principal.reputation.score >= 50 && principal.guilds.primary == "merchants"`.
 Each plugin resolves its own namespace; the DSL evaluator reads from the
 merged bag. No direct plugin-to-plugin dependency is needed.
-

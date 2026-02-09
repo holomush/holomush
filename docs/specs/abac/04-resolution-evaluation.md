@@ -549,10 +549,10 @@ expire regardless of what the current provider is doing.
 The ABAC engine uses three distinct circuit breaker designs, each tuned for
 different failure modes:
 
-| Component        | Trigger                                                 | Window | Behavior              | Metric                                               | Rationale                                                                                                |
-| ---------------- | ------------------------------------------------------- | ------ | --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`          | Higher threshold because some transient slowness is expected; detects systematic performance degradation |
-| PropertyProvider | 5 timeout errors                                        | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | More tolerant of transient DB load (see [Decision #83](../decisions/epic7/phase-7.3/083-circuit-breaker-threshold-increase.md)) while still detecting systematic issues  |
+| Component        | Trigger                                                 | Window | Behavior              | Metric                                               | Rationale                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------- | ------ | --------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| General provider | >80% budget utilization in >50% of calls (min 10 calls) | 60s    | Skip provider for 60s | `abac_provider_circuit_breaker_trips_total`          | Higher threshold because some transient slowness is expected; detects systematic performance degradation                                                                |
+| PropertyProvider | 5 timeout errors                                        | 60s    | Skip queries for 60s  | `abac_property_provider_circuit_breaker_trips_total` | More tolerant of transient DB load (see [Decision #83](../decisions/epic7/phase-7.3/083-circuit-breaker-threshold-increase.md)) while still detecting systematic issues |
 
 **General provider circuit breaker:** Providers that stay just
 under the timeout but consistently consume >80% of their allocated budget
@@ -691,4 +691,3 @@ by the cache itself, since most commands do not modify and re-check.
 short-TTL cache (100ms) for read-only attributes like character roles. This
 requires careful invalidation and is deferred until profiling demonstrates the
 need.
-

@@ -46,11 +46,11 @@ both code and database changes.
 Phase 7.1 creates the following migrations (relative numbers assume `000014_aliases`
 is the latest existing migration):
 
-| Migration | Tables Created | Task |
-|-----------|---------------|------|
-| `000015_access_policies` | `access_policies`, `access_policy_versions` | Phase 7.1 Task 1 |
-| `000016_access_audit_log` | `access_audit_log` (partitioned table) | Phase 7.1 Task 2 |
-| `000017_entity_properties` | `entity_properties` | Phase 7.1 Task 3 |
+| Migration                  | Tables Created                              | Task             |
+| -------------------------- | ------------------------------------------- | ---------------- |
+| `000015_access_policies`   | `access_policies`, `access_policy_versions` | Phase 7.1 Task 1 |
+| `000016_access_audit_log`  | `access_audit_log` (partitioned table)      | Phase 7.1 Task 2 |
+| `000017_entity_properties` | `entity_properties`                         | Phase 7.1 Task 3 |
 
 **Note:** Migration numbers may differ if other migrations merge before ABAC
 implementation. Use the actual migration file names from your deployment.
@@ -138,11 +138,13 @@ be taken before rollback.
 Before running down migrations, operators MUST:
 
 1. **Take a full database backup:**
+
    ```bash
    pg_dump -h localhost -U holomush -d holomush --file=full_backup_$(date +%Y%m%d_%H%M%S).sql
    ```
 
 2. **Export ABAC tables separately for faster restore if rollback fails:**
+
    ```bash
    pg_dump -h localhost -U holomush -d holomush \
      -t access_policies \
@@ -154,6 +156,7 @@ Before running down migrations, operators MUST:
    ```
 
 3. **Export critical policies as JSON for manual recreation:**
+
    ```bash
    psql -h localhost -U holomush -d holomush -c \
      "COPY (SELECT id, name, dsl_text, effect, enabled, seed_version FROM access_policies) \
@@ -161,6 +164,7 @@ Before running down migrations, operators MUST:
    ```
 
 4. **Verify backup integrity:**
+
    ```bash
    # Test restore to a temporary database
    createdb holomush_test_restore
@@ -208,6 +212,7 @@ If rollback is executed due to a critical issue:
 3. **Re-migration:** Deploy corrected ABAC implementation with up migrations
 4. **Policy restoration:** If policies were backed up, restore them after
    re-migration:
+
    ```bash
    psql -h localhost -U holomush -d holomush < abac_backup_YYYYMMDD_HHMMSS.sql
    ```
@@ -244,18 +249,21 @@ During rollback procedure, monitor:
 After completing rollback:
 
 1. **Verify schema state:**
+
    ```bash
    psql -h localhost -U holomush -d holomush -c "\dt" | grep -E "access_|entity_properties"
    # Expected: No results (ABAC tables absent)
    ```
 
 2. **Verify application startup:**
+
    ```bash
    # Start server with pre-ABAC code (post-git-revert)
    # Verify no ABAC-related errors in logs
    ```
 
 3. **Run integration tests:**
+
    ```bash
    task test:integration
    # Verify legacy AccessControl.Check() calls work

@@ -421,4 +421,3 @@ LIMIT 20;
 See [Visibility Levels](03-property-model.md#visibility-levels) and [Dependency layering](03-property-model.md#property-model)
 for the definitive visibility default rules. The Go property store
 (`PropertyRepository`) enforces these defaults — not database triggers.
-

@@ -179,7 +179,7 @@ tasks:
     desc: Lint Markdown files
     cmds:
       - rumdl check .
-      - rumdl check site/
+      - rumdl check --config site/.rumdl.toml site/
 
   lint:yaml:
     desc: Check YAML formatting
@@ -204,7 +204,7 @@ tasks:
     desc: Format Markdown files
     cmds:
       - rumdl fmt .
-      - rumdl fmt site/
+      - rumdl fmt --config site/.rumdl.toml site/
 
   fmt:go:
     desc: Format Go code
@@ -226,7 +226,7 @@ tasks:
     cmds:
       - dprint check
       - rumdl fmt --check .
-      - rumdl fmt --check site/
+      - rumdl fmt --check --config site/.rumdl.toml site/
 
   # Dependencies
   deps:

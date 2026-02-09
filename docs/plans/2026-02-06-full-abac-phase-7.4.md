@@ -9,7 +9,7 @@
 
 ## Task 22: Define seed policy constants
 
-**Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061)
+**Spec References:** [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2984-3061)
 
 **Acceptance Criteria:**
 
@@ -18,7 +18,7 @@
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
-- [ ] DSL text matches spec exactly (lines 2990-3054)
+- [ ] DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2990-3054)
 - [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
 - [ ] All tests pass via `task test`
 
@@ -37,7 +37,7 @@
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
-- DSL text matches spec exactly (lines 2990-3054)
+- DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2990-3054)
 
 **Step 2: Implement**
 
@@ -182,7 +182,7 @@ git commit -m "feat(access): define seed policies"
 
 ### Task 23: Bootstrap sequence
 
-**Spec References:** Bootstrap Sequence (lines 3062-3177), Seed Policy Migrations (lines 3178-3229)
+**Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3062-3177), [07-migration-seeds.md#seed-policy-migrations](../specs/abac/07-migration-seeds.md#seed-policy-migrations) (was lines 3178-3229)
 
 **Acceptance Criteria:**
 
@@ -202,6 +202,9 @@ git commit -m "feat(access): define seed policies"
 - [ ] `UpdateSeed()` updates DSL, compiled AST, logs info, invalidates cache if uncustomized
 - [ ] Policy store's `IsNotFound(err)` helper: either confirmed as pre-existing or added to Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store) acceptance criteria
 - [ ] All tests pass via `task test`
+- [ ] After bootstrap completes, `SELECT COUNT(*) FROM access_policies WHERE source='seed'` returns expected seed count matching number of defined seeds in Task 22
+- [ ] Spot-check: at least one bootstrap integration test verifies a specific seed policy's `name`, `dsl_text`, and `effect` match expected values
+- [ ] Bootstrap test verifies no duplicate seed policies exist (`SELECT name, COUNT(*) FROM access_policies WHERE source='seed' GROUP BY name HAVING COUNT(*) > 1` returns zero rows)
 
 **Dependencies:**
 
@@ -350,9 +353,9 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 **Spec Deviations:**
 
-| What                              | Deviation                                                                                                                                     | Rationale                                                                                                                                                                 |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UpdateSeed()` signature          | `UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` — 5 params vs spec's 3-param `UpdateSeed(ctx, name, dsl)` signature                      | `oldDSL` enables CAS (compare-and-swap) semantics for safe concurrent updates; `changeNote` provides audit trail context for migration-delivered fixes                    |
+| What                     | Deviation                                                                                                               | Rationale                                                                                                                                              |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `UpdateSeed()` signature | `UpdateSeed(ctx, name, oldDSL, newDSL, changeNote)` — 5 params vs spec's 3-param `UpdateSeed(ctx, name, dsl)` signature | `oldDSL` enables CAS (compare-and-swap) semantics for safe concurrent updates; `changeNote` provides audit trail context for migration-delivered fixes |
 
 ---
 
@@ -360,7 +363,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 > **Note:** This task was moved from Phase 7.7 (Task 36 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
 
-**Spec References:** Seed Policy Validation (lines 3132-3177)
+**Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3132-3177, seed verification section)
 
 **Acceptance Criteria:**
 

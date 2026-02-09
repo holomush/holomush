@@ -7,7 +7,7 @@
 
 ## Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
 
-**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence) (was lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -69,7 +69,7 @@ The codebase uses compound resource strings like `fmt.Sprintf("location:%s:chara
 - **OLD:** `resource = "location:<id>:characters"`
 - **NEW:** `resource = "location:<id>"`, `action = "list_characters"`
 
-Rationale: The ABAC model separates concerns — the resource identifies *what* is being accessed, the action identifies *how*. "List characters in a location" is naturally `action=list_characters, resource=location:<id>`. This decomposition avoids parser complexity and aligns with the ABAC model.
+Rationale: The ABAC model separates concerns — the resource identifies _what_ is being accessed, the action identifies _how_. "List characters in a location" is naturally `action=list_characters, resource=location:<id>`. This decomposition avoids parser complexity and aligns with the ABAC model.
 
 See ADR #76 (Compound Resource Decomposition During Migration) for full decision rationale.
 
@@ -502,7 +502,7 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 
 ### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
-**Spec References:** Replacing Static Roles > Implementation Sequence (lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence) (was lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 
@@ -518,6 +518,9 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 - [ ] Zero `char:` prefix usage (all migrated to `character:`)
 - [ ] `task test` passes
 - [ ] `task lint` passes
+- [ ] Rollback test: git-revert of Task 29 commit produces compilable code (validates ADR #65 rollback strategy)
+- [ ] Rollback test: existing tests pass after git-revert of Task 29 (old AccessControl interfaces restored)
+- [ ] Cross-reference: rollback strategy documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-migration-rollback-strategy.md) (was ADR #65 — see Decision #36 for migration approach)
 
 **Files:**
 

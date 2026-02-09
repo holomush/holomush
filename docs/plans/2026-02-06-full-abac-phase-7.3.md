@@ -449,6 +449,8 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 **Spec References:** Evaluation Algorithm (lines 1696-1745), Core Interfaces > Session Subject Resolution (lines 348-414), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
+> **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
+
 **Acceptance Criteria:**
 
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
@@ -740,7 +742,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
->
+
 > **Note:** Denials elevated from spec SHOULD (line 2293) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 >
 > **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
@@ -847,12 +849,12 @@ type Entry struct {
 
 **Audit Path Summary:**
 
-| Effect           | Write Path | Rationale                                        |
-|------------------|------------|--------------------------------------------------|
-| `deny`           | Sync       | Security forensics — evidence of denials         |
-| `default_deny`   | Sync       | Security forensics — evidence of denials         |
-| `system_bypass`  | Sync       | Privileged operations — guaranteed audit trail   |
-| `allow` (regular)| Async      | Performance — high-volume routine operations     |
+| Effect            | Write Path | Rationale                                      |
+| ----------------- | ---------- | ---------------------------------------------- |
+| `deny`            | Sync       | Security forensics — evidence of denials       |
+| `default_deny`    | Sync       | Security forensics — evidence of denials       |
+| `system_bypass`   | Sync       | Privileged operations — guaranteed audit trail |
+| `allow` (regular) | Async      | Performance — high-volume routine operations   |
 
 `ReplayWAL()` reads JSON-encoded entries from the WAL file, batch-inserts them to PostgreSQL, and truncates the file on success. The server calls this on startup and MAY call it periodically (e.g., every 5 minutes) during recovery.
 
@@ -1137,6 +1139,8 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 **Spec References:** Evaluation Algorithm > Performance Targets (lines 1769-1945)
 
+> **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
+
 **Acceptance Criteria:**
 
 - [ ] **DB-inclusive benchmarks** (with PostgreSQL queries):
@@ -1284,7 +1288,7 @@ jobs:
 
 Create `.benchmarks/baseline.txt` with values from Task 21 acceptance criteria:
 
-```
+```text
 BenchmarkEvaluate_ColdCache: 10ms p99
 BenchmarkEvaluate_WarmCache: 5ms p99
 BenchmarkAttributeResolution_Cold: 2ms
@@ -1325,7 +1329,7 @@ git commit -m "ci(access): enforce benchmark regression limits in CI"
 - [ ] Command lock expressions reference bare command names (e.g., `dig`, `create`, not `@dig`, `@create`)
 - [ ] `task test` passes
 - [ ] `task lint` passes
->
+
 > **Verified (2026-02-07):** @-prefixed command names confirmed in `permissions.go` (4), `permissions_test.go` (1), `static_test.go` (4). Total: 9 occurrences. Command validation rejects `@` as leading character — the `@` exists only in permission string encoding, not in actual command names.
 >
 > **Note:** 4 of 9 @-prefixed name occurrences are in `static_test.go` which is deleted by Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Only 5 occurrences in `permissions.go` and `permissions_test.go` need modification in this task.

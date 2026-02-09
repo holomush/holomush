@@ -351,4 +351,3 @@ phase 7.3.
 The current `capability.Enforcer` handles plugin permissions separately. Under
 ABAC, plugin manifests become seed policies. The Enforcer is removed alongside
 `StaticAccessControl` in phase 7.6.
-
