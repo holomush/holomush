@@ -94,6 +94,9 @@ options considered, and rationale for the chosen approach.
 | 88 | Add ExitProvider and SceneProvider Stubs                     | 7.3     | [088](phase-7.3/088-exit-scene-provider-stubs.md)                         |
 | 89 | Add original_subject Field to Audit Log Schema               | 7.1     | [089](phase-7.1/089-original-subject-audit-field.md)                      |
 | 90 | System Bypass Takes Precedence Over Degraded Mode            | 7.3     | [090](phase-7.3/090-system-bypass-precedence-over-degraded-mode.md)       |
+| 91 | Bootstrap Creates Initial Audit Partitions                   | 7.4     | [091](phase-7.4/091-bootstrap-creates-initial-partitions.md)              |
+| 92 | Fatal Seed Bootstrap Failures                                | 7.4     | [092](phase-7.4/092-fatal-seed-bootstrap-failures.md)                     |
+| 93 | Pin CI Tool SHA256 Hashes as Literals                        | General | [093](general/093-pin-ci-tool-hashes.md)                                  |
 
 ## Spec ADR Reference Mapping
 
