@@ -902,14 +902,14 @@ func (c *PolicyCache) Reload(ctx context.Context) error {
 }
 
 // Start spawns LISTEN/NOTIFY goroutine. Context cancellation stops goroutine.
-func (c *PolicyCache) Start(ctx context.Context, pool *pgxpool.Pool) {
-    go c.listenForNotifications(ctx, pool)
+func (c *PolicyCache) Start(ctx context.Context, connStr string) {
+    go c.listenForNotifications(ctx, connStr)
 }
 
 // listenForNotifications subscribes to PostgreSQL NOTIFY on 'policy_changed' channel.
 // Reconnects with exponential backoff on connection loss (100ms initial, 30s max, 2x backoff).
 // Exits cleanly on context cancellation.
-func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.Pool) {
+func (c *PolicyCache) listenForNotifications(ctx context.Context, connStr string) {
     backoff := 100 * time.Millisecond
     const maxBackoff = 30 * time.Second
 
@@ -962,7 +962,7 @@ func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.
 
 **Goroutine Lifecycle:**
 
-1. **Start:** `PolicyCache.Start(ctx, pool)` spawns the LISTEN/NOTIFY goroutine
+1. **Start:** `PolicyCache.Start(ctx, connStr)` spawns the LISTEN/NOTIFY goroutine
 2. **Reconnect:** Exponential backoff on connection loss (initial 100ms, max 30s, 2x backoff)
 3. **Reset:** Backoff timer resets to 100ms after successful NOTIFY receipt
 4. **Shutdown:** Context cancellation causes goroutine to exit cleanly

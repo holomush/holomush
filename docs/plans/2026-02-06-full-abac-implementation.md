@@ -118,9 +118,11 @@ graph LR
     T17_3 --> T17_4([T17.4: Deny-<br/>Overrides<br/>M3 End])
 
     T17_4 --> T18([T18: Cache])
-    T18 --> T22([T22: Seeds])
+    T17_4 --> T21a([T21a: Remove<br/>@-prefix])
+    T18 --> T23([T23: Bootstrap<br/>M4 End])
+    T21a --> T22([T22: Seeds])
     T22 --> T22b([T22b: Gap<br/>Resolution])
-    T22b --> T23([T23: Bootstrap<br/>M4 End])
+    T22b --> T23
     T23 --> T28([T28: Migration<br/>M5 End])
     T28 --> T28_5([T28.5: Equiv Tests])
     T28_5 --> T29([T29: Cleanup<br/>M6 End])
@@ -131,6 +133,7 @@ graph LR
     style T17_2 fill:#ffcccc
     style T17_3 fill:#ffcccc
     style T17_4 fill:#ffcccc
+    style T21a fill:#ffcccc
     style T22 fill:#ffcccc
     style T22b fill:#ffcccc
     style T23 fill:#ffcccc
@@ -146,6 +149,11 @@ graph LR
 - **M4:** Bootstrap policies loaded (T23)
 - **M5:** Legacy adapter migrated (T28)
 - **M6:** All legacy code removed (T29)
+
+**Notes:**
+
+- **T21a** (@-prefix removal) can be submitted as an early independent PR to reduce risk on the T21a→T22→T22b→T23 path
+- **T18** (cache) and **T21a** both gate **T23** via different paths (T18 direct, T21a via T22/T22b)
 
 ---
 
