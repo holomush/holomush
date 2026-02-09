@@ -1,0 +1,50 @@
+# markdownlint configuration
+# https://github.com/DavidAnson/markdownlint
+
+default: true
+
+# Line length - disabled for prose
+MD013: false
+
+# Allow multiple headings with same content (for changelogs)
+MD024:
+  siblings_only: true
+
+# Allow inline HTML (for badges, complex formatting)
+MD033: false
+
+# Allow bare URLs
+MD034: false
+
+# Allow emphasis as pseudo-headings (for step-by-step instructions)
+MD036: false
+
+# Fenced code blocks should have a language specified
+MD040: true
+
+# First line should be a top-level heading
+MD041: true
+
+# Proper names should have correct capitalization
+# Disabled - too noisy
+MD044: false
+
+# Allow trailing punctuation in headings
+MD026:
+  punctuation: ".,;:!。，；：！"
+
+# Code block style
+MD046:
+  style: fenced
+
+# Code fence style
+MD048:
+  style: backtick
+
+# Link fragments (relative links) - disabled: spec files use relative links
+# that cross worktree boundaries during development. Re-enable when all
+# links are verified in CI.
+MD057: false
+
+# Table column alignment - disabled (too strict for complex tables)
+MD060: false

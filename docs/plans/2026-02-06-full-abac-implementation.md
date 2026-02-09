@@ -210,6 +210,8 @@ graph TD
     style T28 fill:#ffcccc
     style T29 fill:#ffcccc
     style T4a fill:#ffddaa
+    style T4b fill:#ffddaa
+    style T4c fill:#ffddaa
     style T16b fill:#ffddaa
 ```
 

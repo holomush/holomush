@@ -1,0 +1,15 @@
+# markdownlint-cli2 configuration
+# https://github.com/DavidAnson/markdownlint-cli2
+
+globs:
+  - "**/*.md"
+
+ignores:
+  - ".git"
+  - ".worktrees"
+  - ".beads"
+  - ".claude"
+  - ".serena"
+  - "dist"
+  - "node_modules"
+  - "vendor"

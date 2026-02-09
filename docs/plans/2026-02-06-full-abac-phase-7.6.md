@@ -238,6 +238,8 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 1. **Revert Task 28 commit(s)** — This restores all 28 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
 2. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
 
+**Partial Migration Rollback:** If migration fails after N of M packages are migrated: (1) identify migrated packages via import path check (new package uses access.Check()), (2) each package migration is atomic — unmigrated packages continue using old interface, (3) resume migration from the failed package after fixing the issue.
+
 **Rationale:** No feature flag or adapter layer exists (per Decision #36 and Decision #37 — no adapter, no shadow mode). The migration is a direct replacement with comprehensive test coverage as the safety net. Git revert provides the rollback path (per [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)).
 
 ---

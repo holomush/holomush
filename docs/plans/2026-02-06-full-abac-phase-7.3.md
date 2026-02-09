@@ -134,7 +134,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] Per-request cache → second `Resolve()` with same entity reuses cached result
 - [ ] Fair-share budget: `max(remainingBudget / remainingProviders, 5ms)`
 - [ ] Provider exceeding fair-share timeout → cancelled
-- [ ] **Re-entrance guard:** Provider calling `Evaluate()` during attribute resolution → panic with descriptive error. Implementation: store `inResolution` flag in context at resolver entry, check flag before calling providers, panic if flag is true. Guards against deadlock (Engine → Resolver → Provider → Engine). See ADR #31 (Provider Re-Entrance Prohibition)
+- [ ] **Re-entrance guard:** Provider calling `Evaluate()` during attribute resolution → panic with descriptive error. Implementation: store `inResolution` flag in context at resolver entry, check flag before calling providers, panic if flag is true. Guards against deadlock (Engine → Resolver → Provider → Engine). See [ADR #31](../specs/decisions/epic7/phase-7.3/031-provider-re-entrance-prohibition.md) (Provider Re-Entrance Prohibition)
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
 - [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), was spec lines 1976-2006)
@@ -225,7 +225,7 @@ Key: fair-share timeout is `max(remainingBudget / remainingProviders, 5ms)`.
 5. Pass flagged context to all provider calls (`ResolveSubject`, `ResolveResource`, `Resolve`)
 6. Providers attempting to call `Evaluate()` with flagged context will trigger panic in step 2 of their own Evaluate() call (when resolver is entered again)
 
-See ADR #31 (Provider Re-Entrance Prohibition) for rationale.
+See [ADR #31](../specs/decisions/epic7/phase-7.3/031-provider-re-entrance-prohibition.md) (Provider Re-Entrance Prohibition) for rationale.
 
 ```go
 // internal/access/policy/attribute/cache.go

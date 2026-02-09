@@ -37,6 +37,7 @@ jobs:
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@latest
           go install github.com/google/yamlfmt/cmd/yamlfmt@latest
+          # Pinned to specific version for CI reproducibility. Update periodically to match local dev.
           curl -LsSf https://github.com/rvben/rumdl/releases/download/v0.1.15/rumdl-v0.1.15-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C /usr/local/bin
           curl -fsSL https://dprint.dev/install.sh | sh
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"

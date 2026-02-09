@@ -104,3 +104,7 @@ The ADR numbering has intentional gaps (60-64, 67-73) that reflect decision slot
 Current gaps:
 - **60-64:** Reserved during Phase 7.3 design; design decisions addressed elsewhere
 - **67-73:** Reserved during Phase 7.6 design; design decisions addressed elsewhere
+
+## Superseded Decisions
+
+**Superseded Decisions:** ADRs #5, #20, and #21 are superseded (see their 'Status' fields). Superseded decisions are retained at their original paths for referential integrity. Their superseded status is documented within each file's header.
