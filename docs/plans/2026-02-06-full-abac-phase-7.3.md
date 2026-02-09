@@ -370,8 +370,7 @@ git commit -m "feat(access): add simple providers (environment, command, stream)
 - [ ] PropertyProvider resolves all property attributes including `parent_location`
 - [ ] `parent_location` uses recursive CTE covering all three placement scenarios: direct location (location_id), held by character (held_by_character_id), contained in object (contained_in_object_id)
 - [ ] `parent_location` CTE depth limit: 20 levels
-- [ ] `parent_location` resolution timeout: 100ms
-- [ ] Circuit breaker: 3 timeout errors in 60s → skip queries for 60s
+- [ ] `parent_location` resolution timeout: 100ms (circuit breaker deferred to Task 34, see Decision #74)
 - [ ] Test case: Object at location (location_id non-NULL) → resolves `parent_location`
 - [ ] Test case: Object held by character (held_by_character_id non-NULL) → resolves to character's location
 - [ ] Test case: Object inside object inside room (contained_in_object_id) → resolves `parent_location` to room
@@ -430,7 +429,7 @@ WHERE parent_type = 'location'
 ORDER BY depth ASC LIMIT 1;
 ```
 
-Circuit breaker: 3 timeout errors in 60s → skip queries for 60s.
+**Note:** Circuit breaker behavior is deferred to Task 34 (Phase 7.7). See Decision #74 (Unified Circuit Breaker in Task 34).
 
 **Step 3: Run tests, commit**
 

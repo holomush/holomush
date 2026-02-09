@@ -13,7 +13,7 @@ Rationale" format appropriate for design-phase decisions. This format is
 documented in `docs/specs/decisions/epic7/README.md`. Traditional ADRs may use
 more detailed formats with explicit Consequences sections when needed.
 
-**Rationale:** The ADR numbering follows a 3-digit convention (001-083) for Epic
+**Rationale:** The ADR numbering follows a 3-digit convention (001-077) for Epic
 7 design decisions, stored in `docs/specs/decisions/epic7/` with subdirectories
 per phase. Most Epic 7 ADRs use a concise format optimized for design decisions
 made during architecture exploration. The format emphasizes:
