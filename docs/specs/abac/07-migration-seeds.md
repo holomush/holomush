@@ -225,7 +225,7 @@ before/after diffs and a human-readable change note.
 **Migration testing requirements:** Each seed policy **MUST** have an
 integration test suite with at least three scenarios: allowed operation,
 denied operation, and edge case (e.g., missing attribute, boundary condition).
-Direct replacement of ~30 call sites without shadow mode creates migration
+Direct replacement of ~28 call sites without shadow mode creates migration
 risk — a single seed policy bug can cause platform-wide authorization
 failures. No call site migration **MAY** proceed without passing integration
 tests for all affected seed policies. Coverage target: 100% of seed policies

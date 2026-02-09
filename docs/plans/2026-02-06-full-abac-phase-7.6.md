@@ -255,6 +255,251 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 
 ---
 
+### Task 28.5: Migration Equivalence Testing
+
+**Spec References:** Review Finding H5 (Architectural Recommendation) — No test validates identical authorization decisions between old StaticAccessControl and new ABAC engine
+
+**Acceptance Criteria:**
+
+- [ ] Equivalence test suite created covering all ~28 production call sites
+- [ ] Test validates identical decisions between `StaticAccessControl.Check()` and `AccessPolicyEngine.Evaluate()` for same inputs
+- [ ] Test covers all unique subject/action/resource combinations from production call sites:
+  - [ ] Command dispatcher authorization (1 call site)
+  - [ ] Rate limit bypass checks (1 call site)
+  - [ ] Boot command permission (1 call site)
+  - [ ] World service operations (24 call sites covering all world actions)
+  - [ ] Plugin command execution (1 call site)
+- [ ] Test uses table-driven approach with request sets for each call site pattern
+- [ ] Test instantiates both engines with identical bootstrap data (roles, permissions, policies)
+- [ ] Test verifies `Check()` return value matches `decision.IsAllowed()` for every request
+- [ ] Any behavioral differences documented with justification in test comments
+- [ ] Test fails explicitly if decisions diverge without documented justification
+- [ ] Test runs as part of `task test` during migration phase
+- [ ] Test covers compound resource decomposition cases (e.g., `location:<id>:characters` → `action=list_characters, resource=location:<id>`)
+
+**Files:**
+
+- Create: `internal/access/migration_equivalence_test.go`
+
+**Test Structure:**
+
+```go
+//go:build integration
+
+package access_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+
+    "github.com/holomush/holomush/internal/access"
+    "github.com/holomush/holomush/internal/access/policy"
+    "github.com/holomush/holomush/internal/access/types"
+)
+
+// TestMigrationEquivalence validates that StaticAccessControl and AccessPolicyEngine
+// produce identical authorization decisions for all production call sites.
+func TestMigrationEquivalence(t *testing.T) {
+    ctx := context.Background()
+
+    // Bootstrap both engines with identical data
+    staticEngine := bootstrapStaticEngine(t)
+    policyEngine := bootstrapPolicyEngine(t)
+
+    tests := []struct {
+        name     string
+        subject  string
+        action   string
+        resource string
+        comment  string // Document expected divergence if any
+    }{
+        // Command dispatcher (internal/command/dispatcher.go)
+        {
+            name:     "command execution - admin",
+            subject:  "character:admin-01ABC",
+            action:   "execute",
+            resource: "command:@shutdown",
+        },
+        {
+            name:     "command execution - player",
+            subject:  "character:player-01DEF",
+            action:   "execute",
+            resource: "command:look",
+        },
+
+        // Rate limit bypass (internal/command/rate_limit_middleware.go)
+        {
+            name:     "rate limit bypass - admin",
+            subject:  "character:admin-01ABC",
+            action:   "bypass_rate_limit",
+            resource: "system:rate_limiter",
+        },
+
+        // Boot command (internal/command/handlers/boot.go)
+        {
+            name:     "boot character - owner",
+            subject:  "character:admin-01ABC",
+            action:   "boot",
+            resource: "character:player-01DEF",
+        },
+
+        // World service operations (24 call sites in internal/world/service.go)
+        {
+            name:     "create location - builder",
+            subject:  "character:builder-01GHI",
+            action:   "create",
+            resource: "location:*",
+        },
+        {
+            name:     "read location - player",
+            subject:  "character:player-01DEF",
+            action:   "read",
+            resource: "location:01JKL",
+        },
+        {
+            name:     "update location - owner",
+            subject:  "character:builder-01GHI",
+            action:   "update",
+            resource: "location:01JKL",
+        },
+        {
+            name:     "delete location - admin",
+            subject:  "character:admin-01ABC",
+            action:   "delete",
+            resource: "location:01JKL",
+        },
+        {
+            name:     "list characters in location - decomposed compound resource",
+            subject:  "character:player-01DEF",
+            action:   "list_characters", // Decomposed from "location:01JKL:characters"
+            resource: "location:01JKL",
+            comment:  "Compound resource decomposed per ADR #76",
+        },
+        {
+            name:     "create exit - builder",
+            subject:  "character:builder-01GHI",
+            action:   "create",
+            resource: "exit:*",
+        },
+        {
+            name:     "create scene - player",
+            subject:  "character:player-01DEF",
+            action:   "create",
+            resource: "scene:*",
+        },
+        {
+            name:     "join scene - invited player",
+            subject:  "character:player-01MNO",
+            action:   "join",
+            resource: "scene:01PQR",
+        },
+
+        // Plugin command execution (internal/plugin/hostfunc/commands.go)
+        {
+            name:     "plugin command - with capability",
+            subject:  "character:player-01DEF",
+            action:   "execute",
+            resource: "plugin_command:custom_cmd",
+        },
+
+        // Add remaining world operations...
+        // (Full list of 28 call sites should be enumerated here)
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Old engine
+            staticResult := staticEngine.Check(ctx, tt.subject, tt.action, tt.resource)
+
+            // New engine
+            decision, err := policyEngine.Evaluate(ctx, types.AccessRequest{
+                Subject:  tt.subject,
+                Action:   tt.action,
+                Resource: tt.resource,
+            })
+            require.NoError(t, err, "policy engine evaluation failed")
+
+            policyResult := decision.IsAllowed()
+
+            // Validate equivalence
+            if tt.comment == "" {
+                // No documented divergence - decisions MUST match
+                assert.Equal(t, staticResult, policyResult,
+                    "Decision mismatch: static=%v, policy=%v (subject=%s, action=%s, resource=%s)",
+                    staticResult, policyResult, tt.subject, tt.action, tt.resource)
+            } else {
+                // Documented divergence - log and skip assertion
+                if staticResult != policyResult {
+                    t.Logf("Expected divergence: %s (static=%v, policy=%v)", tt.comment, staticResult, policyResult)
+                }
+            }
+        })
+    }
+}
+
+func bootstrapStaticEngine(t *testing.T) access.AccessControl {
+    // Bootstrap StaticAccessControl with production role/permission data
+    static := access.NewStaticAccessControl()
+    // ... seed roles and permissions
+    return static
+}
+
+func bootstrapPolicyEngine(t *testing.T) *policy.Engine {
+    // Bootstrap AccessPolicyEngine with equivalent policy data
+    // Use in-memory store or test database
+    store := setupTestPolicyStore(t)
+    cache := policy.NewMemoryCache()
+    resolver := setupTestAttributeResolver(t)
+
+    engine := policy.NewEngine(store, cache, resolver, nil)
+
+    // Seed policies matching static engine's roles/permissions
+    // Call Bootstrap() or manually insert equivalent policies
+
+    return engine
+}
+
+func setupTestPolicyStore(t *testing.T) policy.PolicyStore {
+    // Create in-memory or testcontainer PostgreSQL store
+    // Populate with policies equivalent to static roles
+    return nil // TODO
+}
+
+func setupTestAttributeResolver(t *testing.T) *policy.AttributeResolver {
+    // Wire up attribute providers for subject roles, resource ownership, etc.
+    return nil // TODO
+}
+```
+
+**Implementation Notes:**
+
+1. **Bootstrap Equivalence:** Both engines MUST be seeded with equivalent authorization data. Static engine uses roles/permissions, policy engine uses RBAC policies that grant same permissions.
+
+2. **Compound Resource Handling:** For compound resources like `location:<id>:characters`, test BOTH:
+   - Old format: `resource="location:01ABC:characters", action="read"`
+   - New format: `resource="location:01ABC", action="list_characters"`
+
+   Verify that new format produces same decision as old format.
+
+3. **Test Timing:** Run this test AFTER Task 28 Package 1-3 migrations are complete but BEFORE Task 29 deletes old code. This validates the migration before cleanup.
+
+4. **Failure Handling:** If decisions diverge:
+   - Investigate which engine is correct per ABAC spec
+   - Document justified divergences with `comment` field
+   - Fix incorrect engine or migration code
+   - DO NOT proceed to Task 29 until all unjustified divergences are resolved
+
+5. **Coverage Verification:** Audit all 28 production call sites to ensure each unique subject/action/resource pattern appears in test cases. Use `grep -n "\.Check(" internal/ --include="*.go"` to enumerate call sites.
+
+**Acceptance Gate:**
+
+This test MUST pass with zero unjustified divergences before Task 29 proceeds. Any documented divergences MUST have architectural justification (e.g., ABAC spec clarification, intentional behavior change).
+
+---
+
 ### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
 **Spec References:** Replacing Static Roles > Implementation Sequence (lines 3230-3285), ADR 0014 (Direct replacement, no adapter)

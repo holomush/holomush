@@ -1009,7 +1009,10 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label (registered here, tripped by Task 34's general circuit breaker — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
-- [ ] `abac_policy_cache_last_update` gauge with Unix timestamp
+- [ ] `abac_policy_cache_last_update` gauge with Unix timestamp (updated on every successful cache reload — tracks LISTEN/NOTIFY connection freshness)
+- [ ] **LISTEN/NOTIFY staleness monitoring (Review Finding H1):** Alert threshold for LISTEN/NOTIFY connection health documented (alert if `time.Now() - policy_cache_last_update > 5 minutes` indicates prolonged disconnection)
+- [ ] Staleness monitoring rationale: LISTEN/NOTIFY connection drop causes silent cache staleness without indication — gauge enables alerting on prolonged disconnection before cache becomes dangerously outdated
+- [ ] Recovery procedure reference: On prolonged disconnection, manual cache reload triggers full policy refresh (see Task 17 LISTEN/NOTIFY reconnect logic with exponential backoff)
 - [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
 - [ ] `RegisterMetrics()` follows existing pattern from `internal/observability/server.go`
 - [ ] All tests pass via `task test`
@@ -1065,7 +1068,7 @@ var (
     }, []string{"namespace", "error_type"})
     policyCacheLastUpdate = prometheus.NewGauge(prometheus.GaugeOpts{
         Name: "abac_policy_cache_last_update",
-        Help: "Unix timestamp of last policy cache update",
+        Help: "Unix timestamp of last policy cache update (LISTEN/NOTIFY connection health indicator)",
     })
     unregisteredAttributes = prometheus.NewCounterVec(prometheus.CounterOpts{
         Name: "abac_unregistered_attributes_total",
@@ -1080,6 +1083,22 @@ func RegisterMetrics(reg prometheus.Registerer) {
         providerErrorsTotal, policyCacheLastUpdate, unregisteredAttributes)
 }
 ```
+
+**LISTEN/NOTIFY Staleness Monitoring (Review Finding H1):**
+
+The `policy_cache_last_update` gauge tracks LISTEN/NOTIFY connection health. If the LISTEN connection drops silently, the cache becomes stale without indication. Alert configuration:
+
+```yaml
+# Prometheus alert rule (example)
+- alert: ABACPolicyCacheStale
+  expr: time() - abac_policy_cache_last_update > 300  # 5 minutes
+  for: 1m
+  severity: warning
+  summary: "ABAC policy cache potentially stale (LISTEN/NOTIFY connection may be down)"
+  description: "Policy cache last updated {{ $value | humanizeDuration }} ago. Check LISTEN/NOTIFY connection health."
+```
+
+**Recovery procedure:** Task 17's LISTEN/NOTIFY goroutine automatically reconnects with exponential backoff (initial 100ms, max 30s) and triggers full cache reload on reconnect. Manual intervention: restart server or trigger cache reload via admin API (future Task 37, Phase 7.7).
 
 **Step 3: Run tests, commit**
 
