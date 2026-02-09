@@ -126,6 +126,7 @@ graph TD
         T19b[Task 19b: Audit retention]
         T20[Task 20: Prometheus metrics]
         T21[Task 21: Performance benchmarks]
+        T21b[Task 21b: CI benchmark enforcement]
         T21a[Task 21a: Remove @-prefix from permissions]
         T13 --> T14
         T14 --> T15
@@ -136,6 +137,7 @@ graph TD
         T19 --> T19b
         T17 --> T20
         T17 --> T21
+        T21 --> T21b
     end
 
     subgraph "Phase 7.4: Seed Policies & Bootstrap"
@@ -296,10 +298,10 @@ This matrix maps major sections of the design spec to implementing tasks, ensuri
 | **Access Control Layers**            | Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)), Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 24 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 25 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 25b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md))                 | Property metadata, PropertyProvider, lock registry/parser/commands        |
 | **Admin Commands**                   | Task 26a ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 26b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 27a ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 27b1 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 27b2 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)), Task 27b3 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) | CRUD, state, test, validate/reload/attributes, audit/seeds, recompile    |
 | **Replacing Static Roles**           | Task 21a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)), Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))   | Remove @-prefix, seed policy constants, bootstrap, validation, migration  |
-| **Testing Strategy**                 | Task 10 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)), Task 21 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 30 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                                                 | Fuzz tests, benchmarks, integration tests                                 |
+| **Testing Strategy**                 | Task 10 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)), Task 21 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 30 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                                    | Fuzz tests, benchmarks, CI enforcement, integration tests                 |
 | **Known Limitations / Resilience**   | Task 31 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md)), Task 34 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                                                               | Degraded mode, circuit breaker                                            |
 | **Future Commands (Deferred)**       | *N/A*                                                                                           | Documented in Deferred Features section; not implemented in this plan     |
-| **Performance Targets/Observability** | Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                                                 | Engine implementation includes profiling, metrics, benchmarks             |
+| **Performance Targets/Observability** | Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                                    | Engine implementation includes profiling, metrics, benchmarks, CI checks  |
 | **Lock Token Discovery**             | Task 33 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                                                                                | `lock discover` command                                                   |
 
 **Validation notes:**

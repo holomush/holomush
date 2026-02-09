@@ -1157,6 +1157,115 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ---
 
+### Task 21b: CI benchmark enforcement
+
+> **Note:** This task depends on Task 21 — benchmarks must exist before CI can enforce regression limits.
+
+**Spec References:** Evaluation Algorithm > Performance Targets (lines 579-580) — "CI MUST fail if any benchmark exceeds 110% of its documented target value"
+
+**Acceptance Criteria:**
+
+- [ ] GitHub Actions workflow configured to run benchmarks on pull requests
+- [ ] Benchmark baseline file stored in repository (e.g., `.benchmarks/baseline.txt`)
+- [ ] CI step compares current benchmark results against baseline values
+- [ ] CI fails if ANY benchmark exceeds 110% of documented target (e.g., cold Evaluate p99 >11ms, warm >5.5ms)
+- [ ] Baseline update strategy documented: manual update via `make update-benchmark-baseline` or similar
+- [ ] Benchmark regression failures treated as build failures (PRs cannot merge)
+- [ ] Test: Simulate benchmark regression → verify CI fails with clear error message
+- [ ] Documentation added to contributor guide explaining benchmark enforcement
+
+**Files:**
+
+- Create: `.github/workflows/benchmark-check.yml`
+- Create: `scripts/check-benchmark-regression.sh`
+- Create: `.benchmarks/baseline.txt` (baseline values)
+- Modify: `docs/contributors/testing.md` or similar (document baseline update process)
+
+**Step 1: Write benchmark comparison script**
+
+Create `scripts/check-benchmark-regression.sh`:
+
+```bash
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# Compares current benchmark results against baseline.
+# Exits 1 if any benchmark exceeds 110% of baseline.
+
+set -euo pipefail
+
+BASELINE_FILE="${1:-.benchmarks/baseline.txt}"
+CURRENT_FILE="${2:-/dev/stdin}"
+
+# Parse benchmark results and compare
+# Exit 1 if regression detected
+```
+
+**Step 2: Create GitHub Actions workflow**
+
+Create `.github/workflows/benchmark-check.yml`:
+
+```yaml
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Benchmark Regression Check
+
+on:
+  pull_request:
+    paths:
+      - 'internal/access/policy/**'
+      - '.benchmarks/**'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Run benchmarks
+        run: |
+          go test -bench=. -benchmem ./internal/access/policy/ > current-benchmarks.txt
+      - name: Check for regressions
+        run: |
+          ./scripts/check-benchmark-regression.sh .benchmarks/baseline.txt current-benchmarks.txt
+```
+
+**Step 3: Create baseline file with documented targets**
+
+Create `.benchmarks/baseline.txt` with values from Task 21 acceptance criteria:
+
+```
+BenchmarkEvaluate_ColdCache: 10ms p99
+BenchmarkEvaluate_WarmCache: 5ms p99
+BenchmarkAttributeResolution_Cold: 2ms
+BenchmarkAttributeResolution_Warm: 100μs
+BenchmarkConditionEvaluation: 1ms
+BenchmarkCacheReload: 50ms
+```
+
+**Step 4: Document baseline update process**
+
+Add section to contributor docs explaining when and how to update baseline (e.g., after intentional performance improvements or architecture changes).
+
+**Step 5: Test regression detection**
+
+Temporarily modify a benchmark to exceed 110% threshold, verify CI fails with clear error message.
+
+**Step 6: Commit**
+
+```bash
+git add .github/workflows/benchmark-check.yml scripts/check-benchmark-regression.sh .benchmarks/
+git commit -m "ci(access): enforce benchmark regression limits in CI"
+```
+
+**Estimated Effort:** 4 hours
+
+---
+
 ### Task 21a: Remove @-prefix from command names
 
 > **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
