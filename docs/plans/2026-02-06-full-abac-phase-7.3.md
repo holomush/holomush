@@ -1007,6 +1007,8 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_audit_channel_full_total` counter for dropped audit entries
 - [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets)
 - [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
+- [ ] **Degraded mode alerting (Review Finding I3):** Alert configuration documented for `abac_degraded_mode == 1` with critical severity, includes recovery procedure reference to `policy clear-degraded-mode` command (Task 33, Phase 7.7)
+- [ ] Alert fires when `abac_degraded_mode` gauge equals 1 for >1 minute, indicating prolonged degraded state
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label (registered here, tripped by Task 34's general circuit breaker — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp (updated on every successful cache reload — tracks LISTEN/NOTIFY connection freshness)
@@ -1099,6 +1101,22 @@ The `policy_cache_last_update` gauge tracks LISTEN/NOTIFY connection health. If 
 ```
 
 **Recovery procedure:** Task 17's LISTEN/NOTIFY goroutine automatically reconnects with exponential backoff (initial 100ms, max 30s) and triggers full cache reload on reconnect. Manual intervention: restart server or trigger cache reload via admin API (future Task 37, Phase 7.7).
+
+**Degraded Mode Alerting (Review Finding I3):**
+
+The `abac_degraded_mode` gauge tracks engine degraded mode state (0=normal, 1=degraded). When a corrupted forbid/deny policy is detected (Task 33, Phase 7.7), the engine enters degraded mode and returns system-wide denials to prevent security bypass. Alert configuration:
+
+```yaml
+# Prometheus alert rule (example)
+- alert: ABACDegradedMode
+  expr: abac_degraded_mode == 1
+  for: 1m
+  severity: critical
+  summary: "ABAC engine in degraded mode (system-wide deny active)"
+  description: "ABAC engine detected corrupted deny/forbid policy and entered degraded mode. All requests are being denied. Use policy clear-degraded-mode command to recover after fixing the corrupted policy."
+```
+
+**Recovery procedure:** Task 33 (Phase 7.7) implements degraded mode behavior and the `policy clear-degraded-mode` command. Operator workflow: 1) Identify and fix/disable the corrupted policy, 2) Run `policy clear-degraded-mode` to restore normal operation, 3) Verify `abac_degraded_mode` gauge returns to 0.
 
 **Step 3: Run tests, commit**
 
