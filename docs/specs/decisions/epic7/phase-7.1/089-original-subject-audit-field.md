@@ -40,7 +40,7 @@ direct-character evaluations.
 
 **Cross-references:**
 
-- [05-storage-audit.md](../../abac/05-storage-audit.md) — audit log schema
-- [04-resolution-evaluation.md](../../abac/04-resolution-evaluation.md) — Step 2
+- [05-storage-audit.md](../../../abac/05-storage-audit.md) — audit log schema
+- [04-resolution-evaluation.md](../../../abac/04-resolution-evaluation.md) — Step 2
   session resolution
 - Phase 7.1 Task 2 — audit log migration

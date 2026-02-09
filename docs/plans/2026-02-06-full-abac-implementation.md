@@ -51,7 +51,7 @@ Applicable ADRs (from [References > Related ADRs](../specs/abac/08-testing-appen
 | ADR 0015 | Player Access Control Layers              | Tasks 4a, 4b, 4c, 16a-b                                    |
 | ADR 0016 | Cache Invalidation                        | Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) |
 
-**Note:** Full ADR directory contains 85 decisions. See `docs/specs/decisions/epic7/` for comprehensive decision history.
+**Note:** Full ADR directory contains 82 decisions. See `docs/specs/decisions/epic7/` for comprehensive decision history.
 
 ### Acceptance Criteria
 
@@ -267,6 +267,7 @@ graph TD
     %% Critical cross-phase dependencies
     T0 --> T7
     T0 --> T8
+    T5 --> T8
     T7 --> T12
     T7 --> T18
     T12 --> T17_1

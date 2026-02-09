@@ -47,7 +47,7 @@ apply.
 
 **Cross-references:**
 
-- [04-resolution-evaluation.md](../../abac/04-resolution-evaluation.md) —
+- [04-resolution-evaluation.md](../../../abac/04-resolution-evaluation.md) —
   evaluation algorithm Steps 1 and degraded mode
 - [Decision #39](../phase-7.1/039-effect-system-bypass.md) — system bypass
   design
