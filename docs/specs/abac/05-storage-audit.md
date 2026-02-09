@@ -57,6 +57,8 @@ CREATE TABLE access_audit_log (
     error_message   TEXT,
     provider_errors JSONB,                   -- e.g., [{"namespace": "reputation", "error": "connection refused", "timestamp": "2026-02-06T12:00:00Z", "duration_us": 1500}]
     duration_us     INTEGER                  -- evaluation duration in microseconds (for performance debugging)
+                                             -- NOTE: duration_us is total Evaluate() wall time; provider_errors[].duration_us is individual provider execution time.
+                                             -- Sum of provider durations may be less than total due to overhead (attribute resolution, policy matching, audit logging).
 );
 
 -- Essential indexes only. The effect column doubles as the decision indicator:

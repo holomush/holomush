@@ -63,6 +63,10 @@ type_name  = identifier
 (* Terminals *)
 identifier     = letter { letter | digit | "_" | "-" }
 string_literal = '"' { character } '"'
+               (* String literals support all printable characters including colons,
+                  enabling resource identifiers and stream names with namespace
+                  separators. Examples: "location:01ABC", "command:shutdown",
+                  "stream:location:*" *)
 number         = [ "-" ] digit { digit } [ "." digit { digit } ]
 boolean        = "true" | "false"
 

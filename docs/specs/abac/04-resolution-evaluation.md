@@ -681,6 +681,53 @@ short-TTL cache (100ms) for read-only attributes like character roles. This
 requires careful invalidation and is deferred until profiling demonstrates the
 need.
 
+## Known Limitations
+
+### Admin Lockout Risk During CharacterProvider Failure
+
+**Risk:** If `CharacterProvider` fails during attribute resolution, the admin
+role attribute is missing from the subject attribute bag. The seed policy
+`seed:admin-full-access` requires the role attribute to match its condition,
+and a missing attribute causes the condition to evaluate to `false`. This
+effectively locks admins out during provider failures.
+
+**Example scenario:**
+
+1. CharacterProvider is temporarily unavailable (database connection timeout, service crash)
+2. Admin character attempts to perform an action
+3. Attribute resolution returns error from CharacterProvider
+4. Engine continues evaluation with partial attributes (role attribute missing)
+5. Policy `seed:admin-full-access` condition check: `subject.role == "admin"` evaluates to `false` (missing attribute)
+6. Admin is denied access (default deny behavior)
+
+**Mitigation:** The ABAC engine provides alternative access paths during
+provider failures:
+
+1. **System subject bypass:** Requests with `subject == "system"` bypass all
+   policy evaluation entirely (see step 1 of Evaluation Algorithm). CLI
+   recovery and internal system operations can use system subjects when
+   providers are degraded. This enables operators to perform recovery actions
+   without waiting for provider availability.
+
+2. **CLI recovery:** Operators maintain direct database and CLI access
+   independent of policy evaluation. If the policy engine is unavailable or
+   degraded, operators can still manage world state, reload plugins, and
+   restore service using command-line tools. Policies are advisory to the
+   game engine, not authoritative — the operator can directly modify world
+   state if the engine fails.
+
+**Recommended operational procedures:**
+
+1. Configure monitoring/alerting on `abac_provider_errors_total` and
+   `abac_evaluate_duration_seconds` to detect provider degradation early
+2. Maintain runbooks for degraded-mode recovery (switching to system subjects,
+   using CLI recovery, restarting the provider service)
+3. Conduct incident response drills to ensure operators are familiar with
+   recovery procedures
+4. In future iterations, consider role hierarchies (e.g., `admin:policy`,
+   `admin:world`) and explicit fallback policies for critical operations to
+   reduce the risk surface of a single provider failure
+
 ## Prometheus Metrics Reference
 
 The ABAC engine exports the following Prometheus metrics for monitoring and alerting:

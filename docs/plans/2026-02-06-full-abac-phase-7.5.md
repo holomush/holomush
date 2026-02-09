@@ -87,7 +87,6 @@ git commit -m "feat(access): add lock token registry"
 - [ ] Test: location lock created by builder without ownership check
 - [ ] Test: object/property locks still require ownership
 - [ ] Lock rate limiting: max 50 lock policies per character → error on create if exceeded
-- [ ] **pg_notify semantics MUST be transactional:** policy write and cache invalidation notification MUST occur in the same database transaction (prevents race conditions where cache invalidates before write commits)
 - [ ] Fuzz tests cover lock expression parser edge cases
 - [ ] All tests pass via `task test`
 
@@ -114,38 +113,6 @@ Compiler takes parsed lock expression + target resource string → DSL policy te
 **Step 2: Implement parser and compiler**
 
 Lock expression compilation converts lock syntax into valid DSL permit policies. The compiled policy MUST include the ownership check requirement: `resource.owner == principal.id`.
-
-**Transactional pg_notify semantics:**
-
-When storing lock-compiled policies to the database, `pg_notify` for cache invalidation MUST be called within the same transaction as the policy write. This prevents race conditions where cache invalidation fires before the transaction commits.
-
-Example pattern:
-
-```go
-// Acquire transaction
-tx, err := conn.Begin(ctx)
-if err != nil {
-    return err
-}
-defer tx.Rollback(ctx)
-
-// Write policy
-_, err = tx.Exec(ctx, "INSERT INTO access_policies (...) VALUES (...)")
-if err != nil {
-    return err
-}
-
-// Call pg_notify WITHIN the transaction
-_, err = tx.Exec(ctx, "SELECT pg_notify('policy_changed', ?)", policyID)
-if err != nil {
-    return err
-}
-
-// Commit fires notification only after transaction succeeds
-if err = tx.Commit(ctx); err != nil {
-    return err
-}
-```
 
 **Step 3: Run tests, commit**
 

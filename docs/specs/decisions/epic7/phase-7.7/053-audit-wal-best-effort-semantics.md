@@ -30,5 +30,7 @@ infrastructure failure. The stderr fallback ensures operators can still observe
 failures through system-level log aggregation. XDG_STATE_HOME is the correct
 XDG directory for state data that is not essential to preserve across reinstalls.
 
+**Updated by:** Decision #66 (sync audit writes for system bypass).
+
 **Cross-reference:** Main spec, Audit Log Configuration section; bead
 `holomush-3hdt`.

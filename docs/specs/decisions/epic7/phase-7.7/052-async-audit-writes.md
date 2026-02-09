@@ -19,4 +19,6 @@ latency to every access check. Async writes decouple authorization performance
 from audit I/O. The best-effort model accepts that some audit entries may be
 lost under extreme load, which is preferable to blocking authorization.
 
+**Updated by:** Decision #53 (best-effort semantics), Decision #66 (sync writes for system bypass).
+
 **Cross-reference:** Main spec, Audit Log section.

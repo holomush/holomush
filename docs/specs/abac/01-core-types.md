@@ -413,6 +413,14 @@ AttributeBags.Action = map[string]any{
 }
 ```
 
+**Action attribute schema registration:** The `action.name` attribute MUST be
+registered in the `AttributeSchema` as a core attribute with type `string`. This
+ensures that the `PolicyCompiler` accepts policies referencing `action.name`
+(e.g., `action.name == "read"`) at compile time. Although target-clause action
+matching (`action in ["read", "write"]`) covers most built-in use cases without
+needing action attributes, registering `action.name` in the schema ensures that
+any policy referencing action attributes will pass schema validation.
+
 **Action bag purpose and MVP deferrability:** The action bag exists for **plugin
 extensibility** — plugins MAY define custom actions with metadata (e.g.,
 `action.type`, `action.severity`) in future versions. However, the MVP

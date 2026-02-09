@@ -471,6 +471,15 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 **Spec References:** Evaluation Algorithm (lines 1696-1745), Core Interfaces > Session Subject Resolution (lines 348-414), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 > **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
+>
+> **Implementation Guidance:** This is an XL-complexity task. Implementers MAY consider splitting T17 into sub-tasks for better progress tracking and isolated testing:
+>
+> 1. System bypass + session resolution (Steps 1-2 of the 7-step algorithm)
+> 2. Target matching and policy filtering (Step 4)
+> 3. Condition evaluation (Step 5, DSL evaluation against attribute bags)
+> 4. Deny-overrides combination logic (Step 6)
+>
+> Each sub-task would include its own test suite and can be completed independently. The final engine integrates these components in the 7-step evaluation flow.
 
 **Acceptance Criteria:**
 
@@ -609,6 +618,7 @@ git commit -m "feat(access): add AccessPolicyEngine with deny-overrides evaluati
 - [ ] When staleness threshold exceeded → fail-closed (return `EffectDefaultDeny`) without evaluating policies
 - [ ] Prometheus gauge `policy_cache_last_update` (Unix timestamp) updated on every successful reload
 - [ ] **Graceful shutdown:** LISTEN/NOTIFY goroutine stops via context cancellation; shutdown test verifies goroutine exits cleanly
+- [ ] **pg_notify semantics MUST be transactional:** policy write and cache invalidation notification MUST occur in the same database transaction (prevents race conditions where cache invalidates before write commits). All policy store mutations (PolicyStore interface) MUST include pg_notify call within the transaction.
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -744,6 +754,40 @@ func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.
 - **Read lock:** `Evaluate()` calls acquire read lock during policy evaluation (non-blocking during reload)
 - **Write lock:** `Reload()` acquires write lock only for swapping compiled policies (~50μs)
 - **No lock during compilation:** Fetch from DB and compile policies without holding lock (~50ms)
+
+**Transactional pg_notify Semantics:**
+
+All policy store mutations (PolicyStore interface implementations: `Create`, `Update`, `Delete`, etc.) MUST call `pg_notify('policy_changed', <payload>)` within the same database transaction as the policy write. This ensures cache invalidation notifications are atomic with policy persistence and prevents race conditions where cache invalidates before the transaction commits.
+
+Example pattern for any PolicyStore write operation:
+
+```go
+// Acquire transaction
+tx, err := conn.Begin(ctx)
+if err != nil {
+    return err
+}
+defer tx.Rollback(ctx)
+
+// Write policy
+_, err = tx.Exec(ctx, "INSERT INTO access_policies (...) VALUES (...)")
+if err != nil {
+    return err
+}
+
+// Call pg_notify WITHIN the transaction
+_, err = tx.Exec(ctx, "SELECT pg_notify('policy_changed', ?)", policyID)
+if err != nil {
+    return err
+}
+
+// Commit fires notification only after transaction succeeds
+if err = tx.Commit(ctx); err != nil {
+    return err
+}
+```
+
+This pattern applies to all PolicyStore implementations (T7 from Phase 7.1, T18 cache, and any other store mutations). By centralizing this requirement in T18, the cache infrastructure documents the transactional guarantee once, avoiding duplication across lock compiler (T25), command handlers (T26+), and other policy writers.
 
 **Step 3: Run tests, commit**
 
@@ -1344,6 +1388,10 @@ git commit -m "ci(access): enforce benchmark regression limits in CI"
 > **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
 
 **Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061) — seed policies reference command names without @ prefix
+
+**Implementation Note:**
+
+This task MAY be submitted as an independent PR before or during Phase 7.3, as the @-prefix removal is a standalone codebase-wide rename that does not depend on other ABAC infrastructure.
 
 **Acceptance Criteria:**
 
