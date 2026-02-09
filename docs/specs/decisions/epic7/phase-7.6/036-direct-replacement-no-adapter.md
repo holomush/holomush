@@ -27,7 +27,7 @@ been released wastes effort and makes the design harder to understand.
 - Removes shadow mode cutover criteria, exclusion filtering, disagreement
   tracking
 - All ~28 production call sites update to `AccessPolicyEngine.Evaluate()` in a single
-  phase (phase 7.3)
+  phase (phase 7.6)
 - The `AccessControl` interface and `StaticAccessControl` struct are deleted
   in phase 7.6
 

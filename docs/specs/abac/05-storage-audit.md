@@ -239,7 +239,7 @@ The audit logger supports three modes, configurable via server settings:
 type AuditMode string
 
 const (
-    AuditOff        AuditMode = "off"          // System bypasses only
+    AuditOff        AuditMode = "off"          // System bypasses + denials
     AuditDenialsOnly AuditMode = "denials_only" // Log deny + default_deny only
     AuditAll        AuditMode = "all"           // Log all decisions
 )
