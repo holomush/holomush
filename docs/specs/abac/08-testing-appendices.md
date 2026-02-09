@@ -94,7 +94,7 @@ Describe("AccessPolicyEngine", func() {
 
     Describe("Re-entrance guard", func() {
         It("panics when provider calls Evaluate() synchronously", func() { ... })
-        It("detects goroutine-based re-entry attempts", func() { ... })
+        It("detects same-goroutine re-entry attempts", func() { ... })
     })
 
     Describe("Lock-generated policies", func() {

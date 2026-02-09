@@ -451,7 +451,7 @@ entirely because the sentinel is stored in the calling goroutine's context,
 not in goroutine-global state. Cross-goroutine re-entrance is prevented by
 the MUST NOT prohibition in the provider contract (see above), enforced
 through convention and code review, not runtime checks. Integration tests
-MUST verify that goroutine-based re-entry attempts are detected (via panic
+MUST verify that same-goroutine re-entry attempts are detected (via panic
 or error) to prevent regression in guard implementation.
 
 **Provider context contract:** Providers **MUST** propagate the parent

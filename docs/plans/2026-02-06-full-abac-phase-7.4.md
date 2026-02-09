@@ -358,7 +358,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 ### Task 23b: CLI flag --validate-seeds
 
-> **Note:** This task was moved from Phase 7.7 (Task 35 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
+> **Note:** This task was moved from Phase 7.7 (Task 36 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
 
 **Spec References:** Seed Policy Validation (lines 3132-3177)
 
