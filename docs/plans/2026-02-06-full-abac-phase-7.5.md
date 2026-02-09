@@ -373,9 +373,11 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 ---
 
-### Task 27b: Admin commands — policy validate/reload/attributes/audit/seed/recompile
+### Task 27b-1: Admin commands — core policy management (validate/reload/attributes/list --old-grammar)
 
-**Spec References:** Policy Management Commands (lines 2750-2971) — policy validate, policy reload, policy attributes, policy audit, Seed Policy Validation (lines 3132-3165), Degraded Mode (lines 1660-1683), Grammar Versioning (lines 1001-1031)
+> **Note:** Task 27b was split into three sub-tasks (27b-1, 27b-2, 27b-3) to achieve atomic commits per the plan's principle. The original Task 27b covered 11 distinct features spanning policy validation, cache management, attribute introspection, audit querying, seed inspection, and policy recompilation/repair — too many unrelated features for a single reviewable commit.
+
+**Spec References:** Policy Management Commands (lines 2750-2971) — policy validate, policy reload, policy attributes, Grammar Versioning (lines 1001-1031)
 
 **Dependencies:** Task 27a (policy test command)
 
@@ -387,13 +389,6 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 - [ ] `policy reload` → forces cache reload from DB
 - [ ] `policy attributes` → lists all registered attribute namespaces and keys
 - [ ] `policy attributes --namespace reputation` → filters to specific namespace
-- [ ] `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
-- [ ] `policy seed verify` → compares installed seed policies against shipped seed text, highlights differences
-- [ ] `policy seed status` → shows seed policy versions, customization status
-- [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
-- [ ] `policy recompile-all` → recompiles all policies with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
-- [ ] `policy recompile <name>` → recompiles single policy with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
-- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text ([04-resolution-evaluation.md#error-handling](../specs/abac/04-resolution-evaluation.md#error-handling), was spec line 1650), used to fix policies with invalid compiled_ast
 - [ ] `policy list --old-grammar` → filters to policies with outdated grammar version
 - [ ] All tests pass via `task test`
 
@@ -408,11 +403,97 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 - `policy reload` → forces cache reload from DB
 - `policy attributes` → lists all registered attribute namespaces and keys
 - `policy attributes --namespace reputation` → filters to specific namespace
+- `policy list --old-grammar` → shows only policies with outdated grammar_version in compiled_ast JSONB
+
+**Step 2: Implement**
+
+`policy list --old-grammar` filter: query `compiled_ast->>'grammar_version' < current_version`.
+
+**Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
+git commit -m "feat(command): add policy validate/reload/attributes/list --old-grammar commands"
+```
+
+---
+
+### Task 27b-2: Admin commands — audit and seed inspection (audit/seed verify/seed status)
+
+**Spec References:** Policy Management Commands (lines 2750-2971) — policy audit, Seed Policy Validation (lines 3132-3165)
+
+**Dependencies:** Task 27b-1 (core admin commands)
+
+**Cross-Phase Dependencies:** T7 (Phase 7.1), T22 (Phase 7.4), T23 (Phase 7.4)
+
+**Acceptance Criteria:**
+
+- [ ] `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
+- [ ] `policy audit` supports time-based filters (`--since`, `--until`)
+- [ ] `policy audit` supports entity filters (`--subject`, `--resource`, `--action`)
+- [ ] `policy audit` supports decision filter (`--decision permit|deny`)
+- [ ] `policy seed verify` → compares installed seed policies against shipped seed text, highlights differences
+- [ ] `policy seed status` → shows seed policy versions, customization status
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/command/handlers/policy.go`
+- Test: `internal/command/handlers/policy_test.go`
+
+**Step 1: Write failing tests**
+
 - `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
+- `policy audit --decision permit` → shows only permit decisions
+- `policy audit --decision deny` → shows only deny decisions
+- `policy seed verify` → compares installed vs. shipped seed policies
+- `policy seed status` → shows seed versions and customization flags
+
+**Step 2: Implement**
+
+Audit log query with filter support. Seed verify compares stored DSL against `SeedPolicies()` function from Task 22 (Phase 7.4). Seed status shows seed_version field and detects customization by comparing stored DSL against shipped seed text.
+
+**Step 3: Run tests, commit**
+
+```bash
+git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
+git commit -m "feat(command): add policy audit/seed verify/seed status commands"
+```
+
+---
+
+### Task 27b-3: Admin commands — recompilation and repair (recompile-all/recompile/repair/clear-degraded-mode)
+
+**Spec References:** Policy Management Commands (lines 2750-2971), Degraded Mode (lines 1660-1683), Grammar Versioning (lines 1001-1031)
+
+**Dependencies:** Task 27b-2 (audit/seed inspection commands)
+
+**Cross-Phase Dependencies:** T7 (Phase 7.1), T12 (Phase 7.2), T17 (Phase 7.3)
+
+**Acceptance Criteria:**
+
+- [ ] `policy recompile-all` → recompiles all policies with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
+- [ ] `policy recompile <name>` → recompiles single policy with current grammar version; failed recompilation logged at ERROR level, policy left at original grammar version (not disabled)
+- [ ] `policy repair <name>` → re-compiles a corrupted policy from its DSL text ([04-resolution-evaluation.md#error-handling](../specs/abac/04-resolution-evaluation.md#error-handling), was spec line 1650), used to fix policies with invalid compiled_ast
+- [ ] `policy clear-degraded-mode` → clears degraded mode flag, resumes normal evaluation
+- [ ] Recompilation commands update grammar_version within compiled_ast JSONB
+- [ ] Failed recompilation does NOT disable policy — continues evaluating with old AST
+- [ ] All tests pass via `task test`
+
+**Files:**
+
+- Modify: `internal/command/handlers/policy.go`
+- Test: `internal/command/handlers/policy_test.go`
+
+**Step 1: Write failing tests**
+
 - `policy recompile-all` → recompiles all policies, updates grammar_version within compiled_ast JSONB
 - `policy recompile <name>` → recompiles single policy, updates grammar_version within compiled_ast JSONB
+- `policy recompile <name>` with compilation error → logs ERROR, policy remains at old grammar version, policy NOT disabled
 - `policy repair <name>` → re-compiles corrupted policy from DSL text, fixing invalid compiled_ast
-- `policy list --old-grammar` → shows only policies with outdated grammar_version in compiled_ast JSONB
+- `policy clear-degraded-mode` → clears degraded mode flag
 
 **Step 2: Implement**
 
@@ -420,7 +501,7 @@ Policy recompile commands ([02-policy-dsl.md#grammar-versioning](../specs/abac/0
 
 - `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version within compiled_ast JSONB
 - `policy recompile <name>` — fetches single policy by name, recompiles, updates compiled_ast JSONB
-- `policy list --old-grammar` — filter to `compiled_ast->>'grammar_version' < current_version`
+- `policy repair <name>` — re-compiles policy with invalid compiled_ast from DSL text
 
 **Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
 
@@ -432,7 +513,7 @@ Each policy's `CompiledPolicy` includes `GrammarVersion` field ([02-policy-dsl.m
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
-git commit -m "feat(command): add policy validate/reload/attributes/audit/seed/recompile commands"
+git commit -m "feat(command): add policy recompile-all/recompile/repair/clear-degraded-mode commands"
 ```
 
 ---

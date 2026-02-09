@@ -150,11 +150,15 @@ graph TD
         T26a[Task 26a: Admin CRUD commands]
         T26b[Task 26b: Admin state commands]
         T27a[Task 27a: policy test command]
-        T27b[Task 27b: remaining admin commands]
+        T27b1[Task 27b-1: Core admin commands]
+        T27b2[Task 27b-2: Audit/seed inspection]
+        T27b3[Task 27b-3: Recompilation/repair]
         T24 --> T25
         T25 --> T25b
         T26a --> T26b
-        T27a --> T27b
+        T27a --> T27b1
+        T27b1 --> T27b2
+        T27b2 --> T27b3
     end
 
     subgraph "Phase 7.6: Call Site Migration"
