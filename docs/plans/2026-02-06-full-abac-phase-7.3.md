@@ -1060,10 +1060,10 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 **Step 1: Write failing tests**
 
-- Mode `off`: only system bypasses logged
+- Mode `off`: only system bypasses logged (denials + system bypasses still written per ADR #86)
   - [ ] Test: off mode + system_bypass → written
   - [ ] Test: off mode + allow → dropped
-  - [ ] Test: off mode + deny → dropped
+  - [ ] Test: off mode + deny → written (denials logged even in off mode per ADR #86)
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
 - **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously, `Evaluate()` blocks until write completes
@@ -1160,7 +1160,7 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 - [ ] `AuditConfig` struct with `RetainDenials` (90 days), `RetainAllows` (7 days), `PurgeInterval` (24h)
 - [ ] Background goroutine for partition lifecycle: create future partitions, detach/drop expired partitions
-- [ ] Partition creation: pre-create next 3 months of partitions
+- [ ] Partition creation: pre-create next 3 months of partitions using IF NOT EXISTS (idempotent)
 - [ ] Two-tier retention strategy: partition drops at 90-day threshold (longer retention), row-level DELETE for allow rows older than 7 days within active partitions
 - [ ] Partition drops use 90-day threshold (denial retention period) since monthly partitions contain mixed effects
 - [ ] Row-level DELETE removes allow-effect rows older than 7 days within still-attached partitions
@@ -1246,6 +1246,7 @@ func (pm *PartitionManager) Start(ctx context.Context) {
 // createFuturePartitions pre-creates partitions for the next 3 months.
 func (pm *PartitionManager) createFuturePartitions(ctx context.Context) {
     // Create partitions for current month + next 3 months
+    // Uses IF NOT EXISTS for idempotency (safe to re-run on every startup)
     now := time.Now()
     for i := 0; i < 4; i++ {
         month := now.AddDate(0, i, 0)
