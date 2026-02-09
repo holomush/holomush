@@ -760,8 +760,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] **Graceful shutdown:** Async channel consumer goroutine stops accepting new entries, drains buffered channel, closes WAL file, exits cleanly
 - [ ] **Shutdown order:** Stop accepting new entries → drain channel → flush to DB → close WAL file → stop consumer goroutine
 - [ ] Shutdown test verifies all buffered entries written before goroutine exits
-- [ ] **WAL monitoring:** `abac_audit_wal_entries` Prometheus gauge tracks current WAL entry count
-- [ ] **WAL threshold:** Configurable threshold for WAL size (default 10MB or 10,000 entries) for alerting on persistent DB failures
+- [ ] **WAL monitoring:** `abac_audit_wal_entries` Prometheus gauge tracks current WAL entry count (registered by Task 20, updated by Task 19)
+- [ ] **WAL threshold:** Configurable threshold for WAL size (default 10MB or 10,000 entries) for alerting on persistent DB failures (Task 19 ownership)
+- [ ] **WAL metric updates:** WAL gauge incremented/decremented by audit logger (Task 19) during WAL write and replay operations
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -1004,9 +1005,10 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_policy_evaluations_total` counter with `source` (values: seed/lock/admin/plugin) and `effect` labels — avoids unbounded cardinality from admin-created policy names
 - [ ] Cardinality concern documented: `source` label preferred over `name` label to prevent metric explosion from admin policy names
 - [ ] All metrics reviewed for unbounded label values (no `name`, `subject_id`, `resource_id` labels)
-- [ ] `abac_audit_channel_full_total` counter for dropped audit entries
-- [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets)
-- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode)
+- [ ] `abac_audit_channel_full_total` counter for dropped audit entries (Task 20 ownership)
+- [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets) (Task 20 ownership)
+- [ ] `abac_audit_wal_entries` gauge for current WAL entry count (Task 20 ownership - registered here, updated by Task 19 audit logger)
+- [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode) (Task 20 ownership)
 - [ ] **Degraded mode alerting (Review Finding I3):** Alert configuration documented for `abac_degraded_mode == 1` with critical severity, includes recovery procedure reference to `policy clear-degraded-mode` command (Task 33, Phase 7.7)
 - [ ] Alert fires when `abac_degraded_mode` gauge equals 1 for >1 minute, indicating prolonged degraded state
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label (registered here, tripped by Task 34's general circuit breaker — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
@@ -1056,6 +1058,10 @@ var (
         Name: "abac_audit_failures_total",
         Help: "Failed audit writes by reason",
     }, []string{"reason"})
+    auditWALEntries = prometheus.NewGauge(prometheus.GaugeOpts{
+        Name: "abac_audit_wal_entries",
+        Help: "Current number of entries in audit WAL file (updated by Task 19 audit logger)",
+    })
     degradedMode = prometheus.NewGauge(prometheus.GaugeOpts{
         Name: "abac_degraded_mode",
         Help: "ABAC engine degraded mode status (0=normal, 1=degraded)",
@@ -1081,7 +1087,7 @@ var (
 // RegisterMetrics registers all ABAC metrics with the given registerer.
 func RegisterMetrics(reg prometheus.Registerer) {
     reg.MustRegister(evaluateDuration, policyEvaluations, auditChannelFull,
-        auditFailures, degradedMode, providerCircuitBreakerTrips,
+        auditFailures, auditWALEntries, degradedMode, providerCircuitBreakerTrips,
         providerErrorsTotal, policyCacheLastUpdate, unregisteredAttributes)
 }
 ```

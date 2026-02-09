@@ -1164,6 +1164,8 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), [05-storage-audit.md#cache-invalidation](../specs/abac/05-storage-audit.md#cache-invalidation)
 
+**ADR References:** [035-audit-log-source-column.md](../specs/decisions/epic7/phase-7.1/035-audit-log-source-column.md)
+
 **Acceptance Criteria:**
 
 - [ ] `PolicyStore` interface defines: `Create`, `Get`, `GetByID`, `Update`, `Delete`, `ListEnabled`, `List`
@@ -1180,6 +1182,7 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 - [ ] `Delete()` removes row (CASCADE), calls `pg_notify`
 - [ ] `ListEnabled()` returns only `enabled = true` rows
 - [ ] `ListOptions` supports filtering by `Source` and `Enabled`
+- [ ] **Source column naming constraint (ADR 35):** Policies named `seed:*` MUST have `source='seed'`; policies named `lock:*` MUST have `source='lock'`. Validation enforced at creation time.
 - [ ] Constructor accepts `*pgxpool.Pool`; errors use `oops` with context
 - [ ] Integration tests (with `//go:build integration`) cover all CRUD operations
 - [ ] All tests pass via `task test`

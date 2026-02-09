@@ -81,7 +81,7 @@ options considered, and rationale for the chosen approach.
 | 75 | Dual-Use Resource Prefixes                                   | General | [075](general/075-dual-use-resource-prefixes.md)                                               |
 | 76 | Compound Resource Decomposition During Migration             | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
 | 77 | Decision Type Mixed Visibility (Value Semantics Safety)      | General | [077](general/077-decision-type-mixed-visibility.md)                                           |
-| 78 | Task 27b Split into 3 Sub-Tasks                              | 7.4     | [078](phase-7.4/078-task-27b-split-into-sub-tasks.md)                                          |
+| 78 | Task 27b Split into 3 Sub-Tasks                              | 7.5     | [078](phase-7.5/078-task-27b-split-into-sub-tasks.md)                                          |
 | 79 | Standardize ADR Titles Across All Locations                  | General | [079](general/079-standardize-adr-titles.md)                                                   |
 | 80 | Add Task 0.5 — Dependency Audit Before Implementation        | 7.1     | [080](phase-7.1/080-task-0-5-dependency-audit.md)                                              |
 | 81 | Move Task 4c Orphan Cleanup Goroutine to Phase 7.7           | 7.7     | [081](phase-7.7/081-move-orphan-cleanup-to-resilience.md)                                      |
@@ -91,7 +91,9 @@ options considered, and rationale for the chosen approach.
 
 ## Spec ADR Reference Mapping
 
-The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-full-abac-design.md)) references 8 key ADRs using a dual numbering scheme (ADR 0009-0016). This table maps those spec references to their corresponding decision file numbers in this directory:
+The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-full-abac-design.md)) references 8 key ADRs using a dual numbering scheme (ADR 0009-0016). Implementation plans and modular spec sections reference additional ADRs. This table maps all spec-referenced ADRs to their corresponding decision file numbers in this directory:
+
+### Main Spec ADRs (ADR 0009-0016)
 
 | Spec ADR | File # | Title                                        | Link                                                                                        |
 | -------- | ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -103,6 +105,20 @@ The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-fu
 | ADR 0014 | 036    | Direct Replacement (No Adapter)              | [036](phase-7.6/036-direct-replacement-no-adapter.md)                                       |
 | ADR 0015 | 012    | Player Access Control Layers                 | [012](phase-7.1/012-player-access-control-layers.md)                                        |
 | ADR 0016 | 011    | Cache Invalidation                           | [011](phase-7.3/011-cache-invalidation.md)                                                  |
+
+### Additional Plan-Referenced ADRs
+
+| ADR # | Title                                                | Phase   | Link                                                                                           |
+| ----- | ---------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| 31    | Provider Re-Entrance Prohibition                     | 7.3     | [031](phase-7.3/031-provider-re-entrance-prohibition.md)                                       |
+| 35    | Audit Log Source Column and No Decision Column       | 7.1     | [035](phase-7.1/035-audit-log-source-column.md)                                                |
+| 38    | Audit Log Configuration Modes                        | 7.1     | [038](phase-7.1/038-audit-log-configuration-modes.md)                                          |
+| 39    | `EffectSystemBypass` as Fourth Effect Variant        | 7.1     | [039](phase-7.1/039-effect-system-bypass.md)                                                   |
+| 48    | Deterministic Seed Policy Names                      | 7.1     | [048](phase-7.1/048-deterministic-seed-policy-names.md)                                        |
+| 56    | Audit Off Mode Includes System Bypasses              | 7.1     | [056](phase-7.1/056-audit-off-mode-includes-system-bypasses.md)                                |
+| 66    | Sync Audit Writes for System Bypass                  | 7.5     | [066](phase-7.5/066-sync-audit-system-bypass.md)                                               |
+| 76    | Compound Resource Decomposition During Migration     | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                                        |
+| 82    | Core-First Provider Registration Order               | 7.3     | [082](phase-7.3/082-core-first-provider-registration-order.md)                                 |
 
 ## Numbering Gaps
 

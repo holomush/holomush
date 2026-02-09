@@ -177,7 +177,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 **Acceptance Criteria:**
 
 - [ ] `FuzzParse` function defined with seed corpus containing all valid policy forms
-- [ ] Fuzz test runs for 30s without any panics: `go test -fuzz=FuzzParse -fuzztime=30s`
+- [ ] Fuzz test runs for 60s without any panics: `go test -fuzz=FuzzParse -fuzztime=60s`
 - [ ] Parser never panics on arbitrary input (returns error instead)
 - [ ] Seed corpus includes at least: permit, forbid, all operator types, if-then-else
 
@@ -217,7 +217,7 @@ func FuzzParse(f *testing.F) {
 
 **Step 2: Run fuzz tests to verify they work**
 
-Run: `go test -fuzz=FuzzParse -fuzztime=30s ./internal/access/policy/dsl/`
+Run: `go test -fuzz=FuzzParse -fuzztime=60s ./internal/access/policy/dsl/`
 Expected: No panics
 
 **Note:** Direct `go test` is intentional here — fuzz testing is not covered by `task test` runner.
@@ -251,7 +251,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 - [ ] Test steps include validation tests for each glob limit
 - [ ] `if-then-else` evaluates correctly when `has` condition is true/false
 - [ ] `containsAll` and `containsAny` work with list attributes
-- [ ] `FuzzEvaluateConditions` fuzz test runs for 30s without panics (per spec Testing Strategy)
+- [ ] `FuzzEvaluateConditions` fuzz test runs for 60s without panics (per spec Testing Strategy)
 - [ ] Fuzz target uses random ASTs against random attribute bags
 - [ ] CI integration: 30s per build, extended nightly runs
 - [ ] All tests pass via `task test`
@@ -377,10 +377,10 @@ func randomAttributeBag() map[string]any {
 }
 ```
 
-Run: `go test -fuzz=FuzzEvaluateConditions -fuzztime=30s ./internal/access/policy/dsl/`
+Run: `go test -fuzz=FuzzEvaluateConditions -fuzztime=60s ./internal/access/policy/dsl/`
 Expected: No panics
 
-**Note:** CI runs fuzz tests for 30s per build. Nightly extended runs use `-fuzztime=10m`.
+**Note:** CI runs fuzz tests for 60s per build. Nightly extended runs use `-fuzztime=10m`.
 
 **Step 5: Commit**
 
