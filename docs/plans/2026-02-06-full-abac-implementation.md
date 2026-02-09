@@ -76,7 +76,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ```mermaid
 graph TD
-    subgraph "Phase 7.0: Validation Spike"
+    subgraph "Phase 7.1: Validation Spike"
         T0[Task 0: AST Serialization Spike]
     end
 
@@ -293,3 +293,4 @@ The following features are intentionally deferred from this implementation plan.
 | `policy import <file>`              | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was line 3492)           | Deferred | Bulk policy import from file; useful for backup/restore workflows   |
 | `policy diff <id1> <id2>`           | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)     | Deferred | Compare two policy versions; shows DSL text diff                    |
 | `policy export [--format=json]`     | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred) (was lines 3484-3502)     | Deferred | Export all policies to stdout for backup/migration                  |
+| `exit:` and `scene:` attribute providers | [01-core-types.md](../specs/abac/01-core-types.md) (exit/scene resource prefixes defined)     | Deferred | Attribute providers for exit and scene resource types; no seed policies currently reference these types |

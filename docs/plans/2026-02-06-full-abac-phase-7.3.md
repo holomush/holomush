@@ -666,7 +666,9 @@ func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.
         default:
         }
 
-        conn, err := pool.Acquire(ctx)
+        // Use pgx.Connect() instead of pool.Acquire() because LISTEN requires
+        // a persistent dedicated connection that cannot be recycled by the pool.
+        conn, err := pgx.Connect(ctx, connStr)
         if err != nil {
             time.Sleep(backoff)
             backoff = min(backoff*2, maxBackoff)
