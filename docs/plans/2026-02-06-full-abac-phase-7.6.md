@@ -9,6 +9,10 @@
 
 **Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence) (was lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
 
+**Migration Strategy:**
+
+This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering specific packages and call sites. Each commit compiles and passes `task build`. The world service package (24 call sites) is decomposed into 3 sub-commits by domain to reduce review complexity and blast radius.
+
 **Acceptance Criteria:**
 
 - [ ] Per-package atomic migration: DI wiring + call sites migrated together, each commit compiles and passes `task build`
@@ -21,11 +25,11 @@
 - [ ] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism
 - [ ] **Security (S8 - holomush-5k1.355):** A static analysis rule or go vet check MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST enforce this check. Migration checklist MUST include per-site verification.
 - [ ] ALL **28 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
-  - [ ] 24 call sites in `internal/world/service.go`
-  - [ ] 1 call site in `internal/command/dispatcher.go`
-  - [ ] 1 call site in `internal/command/rate_limit_middleware.go`
-  - [ ] 1 call site in `internal/command/handlers/boot.go`
-  - [ ] 1 call site in `internal/plugin/hostfunc/commands.go`
+  - [ ] 3 call sites in command package (T28-pkg1)
+  - [ ] 6 call sites in world: locations (T28-pkg2)
+  - [ ] 11 call sites in world: exits + objects (T28-pkg3)
+  - [ ] 7 call sites in world: characters + scenes (T28-pkg4)
+  - [ ] 1 call site in plugin package (T28-pkg5)
 - [ ] ALL **57 test call sites** in `internal/access/static_test.go` migrated to new engine
 - [ ] Generated mocks regenerated with mockery
 - [ ] Each call site uses `types.AccessRequest{Subject, Action, Resource}` struct
@@ -41,8 +45,8 @@
   1. Correct `AccessRequest` construction (subject, action, resource populated)
   2. `decision.IsAllowed()=false` handling (deny path returns error/fails operation)
   3. `Evaluate()` error handling (error != nil → fail-closed, operation denied, error logged)
-- [ ] Tests pass incrementally after each package migration
-- [ ] Committed per package (dispatcher, world, plugin)
+- [ ] Tests pass incrementally after each package sub-commit
+- [ ] 5 atomic commits: T28-pkg1, T28-pkg2, T28-pkg3, T28-pkg4, T28-pkg5
 - [ ] `task test` passes after all migrations
 - [ ] No commits with intentional build breakage
 - [ ] Rollback strategy documented ([Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)): `git revert` of Task 28 commit(s) restores `AccessControl.Check()` call sites
@@ -80,49 +84,128 @@ See ADR #76 (Compound Resource Decomposition During Migration) for full decision
 - Production: 28 call sites (3 in command, 24 in world, 1 in plugin)
 - Tests: 57 call sites in `internal/access/static_test.go` + ~20 in `internal/plugin/capability/enforcer_test.go` (Task 29)
 
-**Package 1: internal/command (3 call sites)**
+### T28-pkg1: Command Package (3 call sites)
+
+**Atomic commit:** `refactor(command): migrate command package to AccessPolicyEngine`
+
+**Call sites (3):**
+
+- `internal/command/dispatcher.go` (1 call)
+- `internal/command/rate_limit_middleware.go` (1 call)
+- `internal/command/handlers/boot.go` (1 call)
+
+**Steps:**
 
 1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for command package dependencies
-2. Update 3 production call sites:
-   - `internal/command/dispatcher.go` (1 call)
-   - `internal/command/rate_limit_middleware.go` (1 call)
-   - `internal/command/handlers/boot.go` (1 call)
+2. Update 3 production call sites using the migration pattern (see "Call site migration pattern" section)
 3. Update tests to mock `AccessPolicyEngine` instead of `AccessControl`
-4. Run `task test` — MUST PASS
-5. Run `task build` — MUST PASS
-6. Commit: `"refactor(command): migrate dispatcher to AccessPolicyEngine"`
+4. **Per-package error-path tests:** Add tests verifying `AccessRequest` construction, `decision.IsAllowed()=false` handling, and `Evaluate()` error handling
+5. Run `task test` — MUST PASS
+6. Run `task build` — MUST PASS
+7. Commit
 
-**Package 2: internal/world (24 call sites)**
+### T28-pkg2: World Service - Locations (6 call sites)
 
-1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for world package dependencies
-2. Update 24 production call sites in `internal/world/service.go`
-   - **NOTE:** `service.go:470` uses compound resource format `location:<id>:characters`. Decompose to `resource=location:<id>` with `action=list_characters` per ADR #76
+**Atomic commit:** `refactor(world): migrate location operations to AccessPolicyEngine`
+
+**Call sites (6):**
+
+- `GetLocation` (`internal/world/service.go:74`)
+- `CreateLocation` (`internal/world/service.go:94`)
+- `UpdateLocation` (`internal/world/service.go:123`)
+- `DeleteLocation` (`internal/world/service.go:144`)
+- `FindLocationByName` (`internal/world/service.go:796`)
+- `ExamineLocation` (`internal/world/service.go:655`)
+
+**Steps:**
+
+1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for world package dependencies (if not done in pkg1)
+2. Update 6 location-related call sites in `internal/world/service.go`
 3. Update tests to mock `AccessPolicyEngine`
+4. **Per-package error-path tests:** Add tests verifying correct behavior for location operations
+5. Run `task test` — MUST PASS
+6. Run `task build` — MUST PASS
+7. Commit
+
+### T28-pkg3: World Service - Exits & Objects (11 call sites)
+
+**Atomic commit:** `refactor(world): migrate exit and object operations to AccessPolicyEngine`
+
+**Call sites - Exits (5):**
+
+- `GetExit` (`internal/world/service.go:162`)
+- `CreateExit` (`internal/world/service.go:185`)
+- `UpdateExit` (`internal/world/service.go:217`)
+- `DeleteExit` (`internal/world/service.go:241`)
+- `GetExitsByLocation` (`internal/world/service.go:279`)
+
+**Call sites - Objects (6):**
+
+- `GetObject` (`internal/world/service.go:295`)
+- `CreateObject` (`internal/world/service.go:315`)
+- `UpdateObject` (`internal/world/service.go:347`)
+- `DeleteObject` (`internal/world/service.go:371`)
+- `MoveObject` (`internal/world/service.go:401`)
+- `ExamineObject` (`internal/world/service.go:713`)
+
+**Steps:**
+
+1. Update 11 call sites (5 exits + 6 objects) in `internal/world/service.go`
+2. Update tests to mock `AccessPolicyEngine`
+3. **Per-package error-path tests:** Add tests verifying correct behavior for exit and object operations
 4. Run `task test` — MUST PASS
 5. Run `task build` — MUST PASS
-6. Commit: `"refactor(world): migrate WorldService to AccessPolicyEngine"`
+6. Commit
 
-**Package 3: internal/plugin (1 call site)**
+### T28-pkg4: World Service - Characters & Scenes (7 call sites)
 
-1. Update DI wiring in `cmd/holomush/main.go` to wire `*policy.Engine` for plugin package dependencies
-2. Update 1 production call site:
-   - `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`)
+**Atomic commit:** `refactor(world): migrate character and scene operations to AccessPolicyEngine`
+
+**Call sites - Characters (4):**
+
+- `GetCharacter` (`internal/world/service.go:452`)
+- `GetCharactersByLocation` (`internal/world/service.go:471`) — **NOTE:** Compound resource decomposition required
+- `MoveCharacter` (`internal/world/service.go:558`)
+- `ExamineCharacter` (`internal/world/service.go:768`)
+
+**Call sites - Scenes (3):**
+
+- `AddSceneParticipant` (`internal/world/service.go:488`)
+- `RemoveSceneParticipant` (`internal/world/service.go:509`)
+- `ListSceneParticipants` (`internal/world/service.go:527`)
+
+**Steps:**
+
+1. Update 7 call sites (4 characters + 3 scenes) in `internal/world/service.go`
+   - **CRITICAL:** `service.go:471` (`GetCharactersByLocation`) uses compound resource format `location:<id>:characters`. Decompose to `resource=location:<id>` with `action=list_characters` per ADR #76
+2. Update tests to mock `AccessPolicyEngine`
+3. **Per-package error-path tests:** Add tests verifying correct behavior for character and scene operations, including compound resource decomposition test
+4. Run `task test` — MUST PASS
+5. Run `task build` — MUST PASS
+6. Commit
+
+### T28-pkg5: Plugin Package & Final Wiring (1 call site + bootstrap)
+
+**Atomic commit:** `refactor(plugin): migrate plugin host functions and complete ABAC wiring`
+
+**Call sites (1):**
+
+- `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`)
+
+**Steps:**
+
+1. Update 1 production call site in `internal/plugin/hostfunc/commands.go`
    - Note: The `AccessControl` field is defined in `functions.go` but used in `commands.go`
-3. Update `internal/plugin/hostfunc/functions.go` to change field type from `AccessControl` to `*policy.Engine`
-4. Update `internal/plugin/hostfunc/commands.go` to change `AccessControl` interface declaration to use `*policy.Engine`
-5. Update `WithAccessControl()` option to accept `*policy.Engine` instead of `AccessControl` interface
-6. Update tests to mock `AccessPolicyEngine`
-7. Run `task test` — MUST PASS
-8. Run `task build` — MUST PASS
-9. Commit: `"refactor(plugin): migrate host functions to AccessPolicyEngine"`
-
-**Package 4: Final wiring (bootstrap and NOTIFY subscription)**
-
-1. Add `Bootstrap()` call at startup to seed policies
-2. Add `PolicyCache.Listen()` for NOTIFY subscription
-3. Run `task test` — MUST PASS
-4. Run `task build` — MUST PASS
-5. Commit: `"refactor(access): complete AccessPolicyEngine bootstrap and cache subscription"`
+2. Update `internal/plugin/hostfunc/functions.go` to change field type from `AccessControl` to `*policy.Engine`
+3. Update `internal/plugin/hostfunc/commands.go` to change `AccessControl` interface declaration to use `*policy.Engine`
+4. Update `WithAccessControl()` option to accept `*policy.Engine` instead of `AccessControl` interface
+5. Add `Bootstrap()` call at startup to seed policies
+6. Add `PolicyCache.Listen()` for NOTIFY subscription
+7. Update tests to mock `AccessPolicyEngine`
+8. **Per-package error-path tests:** Add tests verifying correct behavior for plugin command execution
+9. Run `task test` — MUST PASS
+10. Run `task build` — MUST PASS
+11. Commit
 
 **Call site migration pattern:**
 
