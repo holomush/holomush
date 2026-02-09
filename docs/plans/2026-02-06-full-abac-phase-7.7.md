@@ -15,6 +15,7 @@
 - [ ] testcontainers for PostgreSQL (pattern from `test/integration/world/`)
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
+- [ ] **Canary test (full ABAC evaluation path):** End-to-end test covering subject resolution, attribute resolution, policy evaluation, deny-overrides, and audit logging with seed policies → validates complete system integration
 - [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected ([01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), was spec lines 612-620, prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Cache invalidation: Policy UPDATE operations trigger pg_notify and cache invalidation (not just CREATE/DELETE). All three CRUD operations verified.
@@ -151,7 +152,8 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] When plugin reloaded, compare new schema against previous schema version
 - [ ] Attribute added → INFO log, no action required
 - [ ] Attribute type changed → WARN log, note existing policies may break
-- [ ] Attribute removed → WARN log, scan policies for references
+- [ ] Attribute removed → WARN log, scan policies for references, mark affected policies for review
+- [ ] Attribute removal handling: scan all enabled policies' `dsl_text` for removed attribute keys, log references at WARN level, mark affected policies with metadata flag for administrator review (soft-delete approach — attribute removal doesn't block reload, but triggers operator notification)
 - [ ] Namespace removed → ERROR log, scan policies for references, reject reload if policies reference it
 - [ ] Schema change detection: compare attribute keys, types, namespaces between old and new schemas
 - [ ] Policy reference scan: grep all enabled policies' `dsl_text` for removed namespace or attribute keys
@@ -166,7 +168,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 - Plugin reload with added attribute → INFO log, no error
 - Plugin reload with changed attribute type → WARN log, no error
-- Plugin reload with removed attribute → WARN log, scan policies
+- Plugin reload with removed attribute → WARN log, scan policies, mark affected policies for review
 - Plugin reload with removed namespace → ERROR, reject if policies reference it
 - Schema comparison detects all change types correctly
 - Policy scan correctly identifies references to removed attributes

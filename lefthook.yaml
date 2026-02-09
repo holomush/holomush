@@ -1,6 +1,10 @@
 # Lefthook configuration
 # https://github.com/evilmartians/lefthook
-
+#
+# Prerequisites:
+# - rumdl: Install via `cargo install rumdl` or download from GitHub Releases
+#   (Homebrew formula availability should be verified - run `brew search rumdl`)
+#
 # set because we chain through beads (bd) in spots
 no_auto_install: true
 
@@ -43,6 +47,8 @@ pre-commit:
     lint-markdown:
       glob: "*.md"
       exclude: "site/**"
+      # Double invocation pattern: root uses .rumdl.toml, site/ uses site/.rumdl.toml
+      # (different config files for different markdown dialects/rules)
       run: rumdl check {staged_files}
 
     lint-markdown-site:
@@ -52,6 +58,8 @@ pre-commit:
     fmt-markdown:
       glob: "*.md"
       exclude: "site/**"
+      # Double invocation pattern: root uses .rumdl.toml, site/ uses site/.rumdl.toml
+      # (different config files for different markdown dialects/rules)
       run: rumdl fmt --check {staged_files}
 
     fmt-markdown-site:

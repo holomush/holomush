@@ -1093,21 +1093,23 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 **Acceptance Criteria:**
 
-- [ ] `BenchmarkEvaluate_ColdCache` — p99 <10ms
-- [ ] `BenchmarkEvaluate_WarmCache` — p99 <5ms
-- [ ] `BenchmarkAttributeResolution_Cold` — <2ms
-- [ ] `BenchmarkAttributeResolution_Warm` — <100μs
-- [ ] `BenchmarkConditionEvaluation` — <1ms per policy
-- [ ] `BenchmarkCacheReload` — <50ms
-- [ ] `BenchmarkWorstCase_NestedIf` — 32-level nesting <5ms
-- [ ] `BenchmarkWorstCase_AllPoliciesMatch` — 50 policies <10ms
-- [ ] **`BenchmarkPropertyProvider_ParentLocation`** — recursive CTE with varying depths (1, 5, 10, 20 levels)
-- [ ] PropertyProvider benchmark validates 100ms timeout appropriateness
-- [ ] PropertyProvider benchmark verifies timeout behavior under load (circuit breaker logic tested in Task 34)
-- [ ] **`BenchmarkProviderStarvation`** — slow first provider consuming ~80ms of 100ms budget, verifies subsequent providers receive cancelled contexts (per spec fair-share timeout requirement)
-- [ ] Pure/no-IO microbenchmarks: single-policy evaluation <10μs
-- [ ] Pure/no-IO microbenchmarks: 50-policy set evaluation <100μs
-- [ ] Pure/no-IO microbenchmarks: attribute resolution <50μs
+- [ ] **DB-inclusive benchmarks** (with PostgreSQL queries):
+  - [ ] `BenchmarkEvaluate_ColdCache` — p99 <10ms
+  - [ ] `BenchmarkEvaluate_WarmCache` — p99 <5ms
+  - [ ] `BenchmarkAttributeResolution_Cold` — <2ms
+  - [ ] `BenchmarkAttributeResolution_Warm` — <100μs
+  - [ ] `BenchmarkCacheReload` — <50ms
+  - [ ] `BenchmarkPropertyProvider_ParentLocation` — recursive CTE with varying depths (1, 5, 10, 20 levels)
+  - [ ] PropertyProvider benchmark validates 100ms timeout appropriateness
+  - [ ] PropertyProvider benchmark verifies timeout behavior under load (circuit breaker logic tested in Task 34)
+  - [ ] `BenchmarkProviderStarvation` — slow first provider consuming ~80ms of 100ms budget, verifies subsequent providers receive cancelled contexts (per spec fair-share timeout requirement)
+- [ ] **Pure computation benchmarks** (no I/O, in-memory only):
+  - [ ] `BenchmarkConditionEvaluation` — <1ms per policy (pure computation)
+  - [ ] `BenchmarkWorstCase_NestedIf` — 32-level nesting <5ms (pure computation)
+  - [ ] `BenchmarkWorstCase_AllPoliciesMatch` — 50 policies <10ms (pure computation)
+  - [ ] Pure/no-IO microbenchmarks: single-policy evaluation <10μs
+  - [ ] Pure/no-IO microbenchmarks: 50-policy set evaluation <100μs
+  - [ ] Pure/no-IO microbenchmarks: attribute resolution <50μs
 - [ ] Setup: 50 active policies, 3 operators per condition avg, 10 attributes per entity
 - [ ] All benchmarks run without errors
 

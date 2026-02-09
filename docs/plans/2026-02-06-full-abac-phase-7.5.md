@@ -76,7 +76,8 @@ git commit -m "feat(access): add lock token registry"
 - [ ] `faction:rebels` → generates `permit` with faction check
 - [ ] `flag:storyteller` → generates `permit` with flag membership check
 - [ ] `level>5` → generates `permit` with level comparison
-- [ ] `faction:rebels & flag:storyteller` → compound (multiple permits)
+- [ ] `faction:rebels & flag:storyteller` → compound (multiple permits, AND operator)
+- [ ] `faction:rebels | flag:storyteller` → compound (OR operator — at least one condition satisfies)
 - [ ] `!faction:rebels` → negates faction check
 - [ ] Compiler output → valid DSL that `PolicyCompiler` accepts
 - [ ] Invalid lock expression → descriptive error
@@ -104,7 +105,8 @@ Lock syntax from spec:
 - `faction:rebels` → `permit(principal is character, action, resource == "<target>") when { principal.faction == "rebels" };`
 - `flag:storyteller` → `permit(principal is character, action, resource == "<target>") when { "storyteller" in principal.flags };`
 - `level>5` → `permit(principal is character, action, resource == "<target>") when { principal.level > 5 };`
-- `faction:rebels & flag:storyteller` → compound (both conditions as separate permits or combined)
+- `faction:rebels & flag:storyteller` → compound (both conditions as separate permits or combined, AND operator)
+- `faction:rebels | flag:storyteller` → compound (either condition satisfies, OR operator — generates single permit with OR condition)
 - `!faction:rebels` → negates faction check
 
 Compiler takes parsed lock expression + target resource string → DSL policy text. Then PolicyCompiler validates the generated DSL.
