@@ -13,11 +13,11 @@ graceful degradation on dual failure.
 
 **Decision:** Change denial audit writes to SHOULD (best-effort). If both the
 database and WAL file are unavailable, log to stderr and increment
-`abac_audit_write_failures_total`. Accept that some denial audit entries may be
-lost during catastrophic failures. Additionally, standardize the WAL file path
-to `$XDG_STATE_HOME/holomush/audit-wal.jsonl` (XDG_STATE_HOME is semantically
-correct for transient state) and consolidate the duplicate WAL descriptions in
-the spec into a single section.
+`abac_audit_failures_total{reason="db_write_failed"}`. Accept that some denial
+audit entries may be lost during catastrophic failures. Additionally,
+standardize the WAL file path to `$XDG_STATE_HOME/holomush/audit-wal.jsonl`
+(XDG_STATE_HOME is semantically correct for transient state) and consolidate
+the duplicate WAL descriptions in the spec into a single section.
 
 **Security requirement (S7 - holomush-5k1.353):** WAL fallback for denial and
 system_bypass audit events MUST be used when the primary write fails. The SHOULD

@@ -5,15 +5,15 @@
 
 > [Back to Decision Index](../README.md)
 
-**Question:** How do we migrate ~30 production call sites from the old
+**Question:** How do we migrate ~28 production call sites from the old
 `AccessControl` interface to the new `AccessPolicyEngine`?
 
 **Options considered:**
 
-| Option | Description                                 | Pros                                                  | Cons                                                                  |
-| ------ | ------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------- |
-| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~30 callers need error handling added at once |
-| B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                      |
+| Option | Description                                 | Pros                                                  | Cons                                                                             |
+| ------ | ------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| A      | Big-bang interface change                   | Clean, one-time effort                                | Large blast radius, all ~28 production callers need error handling added at once |
+| B      | New interface + adapter for backward compat | Incremental migration, preserves fail-closed behavior | Two interfaces exist temporarily                                                 |
 
 **Decision:** ~~**Option B — New `AccessPolicyEngine` interface with adapter.**~~
 

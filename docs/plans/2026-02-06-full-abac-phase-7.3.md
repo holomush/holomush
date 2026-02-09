@@ -692,8 +692,10 @@ func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.
         default:
         }
 
-        // Use pgx.Connect() instead of pool.Acquire() because LISTEN requires
-        // a persistent dedicated connection that cannot be recycled by the pool.
+        // Use pgx.Connect() for a dedicated persistent connection, not pool.Acquire().
+        // LISTEN/NOTIFY requires a persistent connection that stays open and receives
+        // notifications. Pool connections can be recycled by other goroutines, breaking
+        // the subscription. A dedicated connection ensures uninterrupted notification delivery.
         conn, err := pgx.Connect(ctx, connStr)
         if err != nil {
             time.Sleep(backoff)
@@ -703,17 +705,17 @@ func (c *PolicyCache) listenForNotifications(ctx context.Context, pool *pgxpool.
 
         _, err = conn.Exec(ctx, "LISTEN policy_changed")
         if err != nil {
-            conn.Release()
+            conn.Close(ctx)
             time.Sleep(backoff)
             backoff = min(backoff*2, maxBackoff)
             continue
         }
 
-        // Wait for NOTIFY
+        // Wait for NOTIFY on the dedicated connection
         for {
-            notification, err := conn.Conn().WaitForNotification(ctx)
+            notification, err := conn.WaitForNotification(ctx)
             if err != nil {
-                conn.Release()
+                conn.Close(ctx)
                 c.Reload(context.Background()) // Full reload on reconnect
                 time.Sleep(backoff)
                 backoff = min(backoff*2, maxBackoff)

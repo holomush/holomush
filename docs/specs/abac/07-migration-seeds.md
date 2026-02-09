@@ -112,13 +112,19 @@ forbid(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "restricted"
     && resource has excluded_from
     && principal.id in resource.excluded_from };
+
+// seed:player-exit-use
+// Exit usage: allow characters to use exits (target matching only)
+// Full exit attribute resolution deferred (see holomush-5k1.422)
+permit(principal is character, action in ["use"], resource is exit);
 ```
 
 The comment preceding each policy IS the deterministic name used during
 bootstrap (e.g., `seed:player-self-access`). Each name is prefixed with
 `seed:` to prevent collision with admin-created policies. Property visibility
 policies (`seed:property-*`) are also defined in [Visibility Seed Policies](03-property-model.md#visibility-seed-policies)
-with additional implementation context.
+with additional implementation context. Exit policies (`seed:player-exit-use`)
+use target matching only — full attribute resolution is deferred (see Decision #88).
 
 ### Bootstrap Sequence
 
@@ -294,6 +300,21 @@ when { resource.id == principal.id };`
 
 **Integration test requirement:** Tests MUST verify that `UpdateSeed` correctly
 skips customized seeds and logs the appropriate warning.
+
+### Wildcard Resource Mapping
+
+The static role system from Epic 3 used wildcard resource patterns to grant permissions across entire resource types (e.g., `location:*` granted access to all locations). The ABAC migration maps these wildcards to type-level target matching using the `resource is <type>` pattern.
+
+| Old Wildcard Pattern | ABAC Equivalent        | Seed Policy Reference                                                              | Explanation                                                                                                                                                                     |
+| -------------------- | ---------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `location:*`         | `resource is location` | `seed:player-location-read`, `seed:player-movement`, `seed:builder-location-write` | Type-level target matching: `resource is location` matches any location entity, regardless of ID                                                                                |
+| `exit:*`             | `resource is exit`     | `seed:player-exit-use`                                                             | Type-level target matching: `resource is exit` matches any exit entity                                                                                                          |
+| `object:*`           | `resource is object`   | `seed:player-object-colocation`, `seed:builder-object-write`                       | Type-level target matching: `resource is object` matches any object entity                                                                                                      |
+| `command:*`          | `resource is command`  | `seed:player-basic-commands`, `seed:builder-commands`                              | Type-level target matching: `resource is command` matches any command resource by name                                                                                          |
+| `stream:*`           | `resource is stream`   | `seed:player-stream-emit`                                                          | Type-level target matching: `resource is stream` matches any event stream; builder rules may further constrain by stream name pattern (e.g., `resource.name like "location:*"`) |
+| `*` (all resources)  | No target clause       | `seed:admin-full-access`                                                           | Omitting the target clause matches any resource type; combined with role conditions, grants global permissions                                                                  |
+
+**Migration principle:** Any static role policy that granted `action` on `<type>:*` becomes a seed policy with `action` on `resource is <type>`, plus additional conditions to replicate the old system's behavior (e.g., role checks for builder/admin permissions, location filters for player colocation rules).
 
 ### Implementation Sequence
 

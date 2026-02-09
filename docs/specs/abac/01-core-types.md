@@ -240,6 +240,13 @@ intervention.
 // Use NewDecision() to construct Decision instances with enforced invariants.
 // Use IsAllowed() to access the authorization result.
 //
+// TWO-PHASE CONSTRUCTION:
+// Decisions are constructed in two phases:
+// 1. NewDecision(effect, reason, policyID) creates the base decision with the core fields
+// 2. The engine sets Policies and Attributes fields after evaluation completes
+// Callers MUST NOT use a Decision that has nil Policies or Attributes fields, as these
+// are required by the audit logger and for debugging output.
+//
 // Value Semantics Safety:
 // The mixed visibility pattern (allowed unexported, Effect exported) is intentional and safe
 // due to Go's value semantics. Decision is always passed by value, never by pointer (see NewDecision
@@ -254,8 +261,8 @@ type Decision struct {
     Effect     Effect          // Allow, Deny, DefaultDeny (no policy matched), or SystemBypass
     Reason     string          // Human-readable explanation
     PolicyID   string          // ID of the determining policy ("" if default deny)
-    Policies   []PolicyMatch   // All policies that matched (for debugging)
-    Attributes *AttributeBags  // Snapshot of all resolved attributes
+    Policies   []PolicyMatch   // All policies that matched (for debugging) — set in phase 2
+    Attributes *AttributeBags  // Snapshot of all resolved attributes — set in phase 2
 }
 
 // IsAllowed returns whether the request is authorized.
@@ -266,6 +273,28 @@ func (d Decision) IsAllowed() bool {
 
 // NewDecision constructs a Decision with the Allowed/Effect invariant enforced.
 // Allowed is set to true if and only if effect is EffectAllow or EffectSystemBypass.
+//
+// TWO-PHASE CONSTRUCTION PATTERN:
+// Phase 1 (construction): NewDecision() creates the Decision with effect, reason, and policyID.
+// Phase 2 (evaluation): The engine MUST populate the Policies and Attributes fields after
+// construction, before passing the Decision to the audit logger or returning to callers.
+//
+// This two-phase pattern exists because:
+// - The decision effect is determined early (during policy matching)
+// - Policies field requires collection of all matching policies (computed during evaluation)
+// - Attributes field is the resolved attribute snapshot (computed by the attribute resolver)
+//
+// The engine MUST always set both Policies and Attributes before returning a Decision
+// or passing it to the audit logger. Callers rely on these fields for debugging and
+// audit trail generation.
+//
+// IMPLEMENTATION CONSIDERATION:
+// Future refactoring may introduce WithPolicies() and WithAttributes() builder methods
+// to enforce the two-phase pattern at compile time:
+//   decision := NewDecision(effect, reason, policyID).
+//     WithPolicies(matches).
+//     WithAttributes(bags)
+// However, the current implementation relies on convention and engine discipline.
 func NewDecision(effect Effect, reason string, policyID string) Decision {
     allowed := effect == EffectAllow || effect == EffectSystemBypass
     return Decision{
@@ -606,9 +635,6 @@ SHOULD use `resource.name like "policy*"` to match all subcommands, or
 
 **ExitProvider** (`exit` namespace) — **stub only** ([Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)):
 
-<!-- TODO: Implement full ExitProvider with exit attributes (direction, destination,
-     lock status, bidirectionality). See backlog bead holomush-5k1.422. -->
-
 Stub provider returns only type and ID — sufficient for target matching
 (`resource is exit`). Full attribute schema deferred to backlog.
 
@@ -617,10 +643,17 @@ Stub provider returns only type and ID — sufficient for target matching
 | `type`    | string | MUST        | Always `"exit"`  |
 | `id`      | string | MUST        | ULID of the exit |
 
-**SceneProvider** (`scene` namespace) — **stub only** ([Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)):
+<!-- TODO: Implement full ExitProvider with exit attributes (direction, destination,
+     lock status, bidirectionality, source/target locations). See backlog bead
+     holomush-5k1.422. Full implementation requires:
+     - direction: string (e.g., "north", "out", "portal")
+     - destination: string (ULID of target location)
+     - source: string (ULID of source location)
+     - locked: bool (whether exit is locked by lock expression)
+     - bidirectional: bool (whether exit has a return path)
+     Provider should query world.ExitRepository for these attributes. -->
 
-<!-- TODO: Implement full SceneProvider with scene attributes (privacy, participants,
-     creator, active status). See backlog bead holomush-5k1.424. -->
+**SceneProvider** (`scene` namespace) — **stub only** ([Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)):
 
 Stub provider returns only type and ID — sufficient for target matching
 (`resource is scene`). Full attribute schema deferred to backlog.
@@ -629,6 +662,16 @@ Stub provider returns only type and ID — sufficient for target matching
 | --------- | ------ | ----------- | ----------------- |
 | `type`    | string | MUST        | Always `"scene"`  |
 | `id`      | string | MUST        | ULID of the scene |
+
+<!-- TODO: Implement full SceneProvider with scene attributes (privacy, participants,
+     creator, active status). See backlog bead holomush-5k1.424. Full implementation
+     requires:
+     - privacy: string (e.g., "public", "private", "invite-only")
+     - participants: []string (ULIDs of characters in scene)
+     - creator: string (ULID of scene creator)
+     - active: bool (whether scene is currently active)
+     - location: string (ULID of location where scene takes place, if any)
+     Provider should query world.SceneRepository for these attributes. -->
 
 **Action bag** is constructed by the engine directly from the `AccessRequest` —
 see [Action bag construction](#attributebags) above.

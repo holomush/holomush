@@ -323,7 +323,7 @@ func TestMigrationEquivalence(t *testing.T) {
             name:     "command execution - admin",
             subject:  "character:admin-01ABC",
             action:   "execute",
-            resource: "command:@shutdown",
+            resource: "command:shutdown",
         },
         {
             name:     "command execution - player",

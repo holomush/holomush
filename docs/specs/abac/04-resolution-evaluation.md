@@ -262,18 +262,11 @@ provider:
 `abac_provider_errors_total{namespace="reputation",error_type="timeout"}`.
 This provides aggregate visibility into chronic provider failures that
 individual log entries cannot. Implementation **SHOULD** include a circuit
-breaker per provider with the following parameters:
+breaker per provider to detect systematic failures. Circuit breaker
+parameters and behavior are defined in the **Circuit Breaker Summary**
+table (see below).
 
-| Parameter          | Default | Description                              |
-| ------------------ | ------- | ---------------------------------------- |
-| Failure threshold  | 10      | Consecutive errors to open the circuit   |
-| Open duration      | 30s     | Time to skip provider while circuit open |
-| Half-open attempts | 1       | Single probe request to test recovery    |
-
-When the circuit opens, the engine logs at WARN level with the provider
-namespace and failure count. During the open period, the provider is
-skipped (attributes missing, conditions fail-safe). **Circuit breaker
-skip behavior:** Skipping a circuit-opened provider is an immediate
+**Circuit breaker skip behavior:** Skipping a circuit-opened provider is an immediate
 check with no I/O and does **NOT** consume evaluation time budget.
 The per-provider timeout fair-share calculation excludes circuit-opened
 providers from the remaining provider count. All active providers use
@@ -285,10 +278,6 @@ Each subsequent active provider receives its fair share using the same
 formula with updated remaining budget and provider counts. This ensures
 that functioning providers receive equitable time allocations and are
 not penalized by systematic failures in other providers.
-
-After the open duration, a single "half-open" probe request tests whether
-the provider has recovered. On success, the circuit closes (INFO log); on
-failure, it re-opens for another cycle.
 
 **Error classification:** All errors result in fail-closed (deny) behavior.
 No errors are retryable within a single `Evaluate()` call.
@@ -691,3 +680,30 @@ by the cache itself, since most commands do not modify and re-check.
 short-TTL cache (100ms) for read-only attributes like character roles. This
 requires careful invalidation and is deferred until profiling demonstrates the
 need.
+
+## Prometheus Metrics Reference
+
+The ABAC engine exports the following Prometheus metrics for monitoring and alerting:
+
+| Metric Name                                          | Type      | Labels                    | Description                                                                 | Defined In                 |
+| ---------------------------------------------------- | --------- | ------------------------- | --------------------------------------------------------------------------- | -------------------------- |
+| `abac_evaluate_duration_seconds`                     | Histogram | -                         | Evaluation latency distribution for `Evaluate()` calls                      | Performance Measurement    |
+| `abac_policy_evaluations_total`                      | Counter   | `name`, `effect`          | Total policy evaluations by policy name and effect                          | Performance Measurement    |
+| `abac_unregistered_attributes_total`                 | Counter   | `namespace`, `key`        | Attributes returned without registered schema                               | Runtime Behavior           |
+| `abac_provider_errors_total`                         | Counter   | `namespace`, `error_type` | Attribute provider failures by type (timeout, connection, etc.)             | Provider Health Monitoring |
+| `abac_provider_circuit_breaker_trips_total`          | Counter   | `provider`                | Circuit breaker trips for general attribute providers                       | Circuit Breaker Summary    |
+| `abac_property_provider_circuit_breaker_trips_total` | Counter   | -                         | Circuit breaker trips for PropertyProvider specifically                     | Circuit Breaker Summary    |
+| `abac_degraded_mode`                                 | Gauge     | -                         | Engine degraded mode status (0=normal, 1=degraded due to policy corruption) | Error Handling             |
+| `policy_cache_last_update`                           | Gauge     | -                         | Unix timestamp of last successful policy cache reload                       | Measurement Strategy       |
+
+**Additional audit metrics** are documented in [05-storage-audit.md](05-storage-audit.md#audit-metrics-reference):
+
+- `abac_audit_failures_total{reason}` - Audit write failures
+- `abac_audit_wal_entries` - Audit WAL backlog size
+
+**Alerting recommendations:**
+
+- Alert on `abac_degraded_mode == 1` - critical: engine is fail-closed for all subjects
+- Alert on `time.Now() - policy_cache_last_update > cache_staleness_threshold` - LISTEN/NOTIFY disconnected
+- Alert on `abac_evaluate_duration_seconds` p99 > 10ms - evaluation latency regression
+- Monitor `abac_provider_errors_total` rate - chronic provider failures may indicate infrastructure issues

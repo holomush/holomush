@@ -316,6 +316,27 @@ Prometheus gauge `abac_audit_wal_entries` to monitor backlog size. Operators
 **SHOULD** monitor WAL file size and alert if it exceeds the threshold,
 indicating prolonged database unavailability.
 
+### Audit Metrics Reference
+
+The ABAC audit system exports the following Prometheus metrics:
+
+| Metric Name                 | Type    | Labels   | Description                                                                      |
+| --------------------------- | ------- | -------- | -------------------------------------------------------------------------------- |
+| `abac_audit_failures_total` | Counter | `reason` | Total audit write failures by reason (channel_full, db_write_failed, wal_failed) |
+| `abac_audit_wal_entries`    | Gauge   | -        | Current number of entries in the audit WAL backlog                               |
+
+**Failure reason labels:**
+
+- `channel_full` - Async write channel was full, entry dropped (see ADR 052)
+- `db_write_failed` - Database write failed and WAL unavailable (see ADR 053)
+- `wal_failed` - Both database and WAL writes failed (catastrophic failure)
+
+**Operational guidance:**
+
+- Alert on `abac_audit_failures_total{reason="wal_failed"}` - indicates disk/filesystem issues
+- Alert on `abac_audit_wal_entries > 1000` - indicates prolonged database unavailability
+- Monitor `abac_audit_failures_total{reason="channel_full"}` rate - may indicate need for larger async buffer
+
 ### Audit Log Retention
 
 Audit records MUST be purged by a periodic Go background job. The purge
