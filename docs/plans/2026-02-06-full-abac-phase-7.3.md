@@ -13,7 +13,7 @@
 
 **Dependencies:**
 
-- Task 6 (Phase 7.1) — AttributeSchema and NamespaceSchema types must exist before schema registry
+- Task 5 (Phase 7.1) — AttributeSchema and NamespaceSchema types must exist before schema registry
 
 > **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `types.AccessRequest` and `types.AttributeBags`. Both import from `types` package.
 
