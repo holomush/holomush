@@ -531,7 +531,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 #### Task 17.1: System bypass + session resolution (Steps 1-2)
 
-**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 1-2, [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) (sync audit for system bypass)
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 1-2, [ADR 66](../specs/decisions/epic7/phase-7.3/066-sync-audit-system-bypass.md) (sync audit for system bypass)
 
 **Dependencies:**
 
@@ -547,7 +547,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] `AuditLogger` interface defined with `Log(entry AuditEntry)`
 - [ ] Step 1: System bypass — subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
   - [ ] System bypass decisions MUST be audited in ALL modes (including minimal), even though `Evaluate()` short-circuits at step 1
-  - [ ] System bypass audit writes MUST use sync write path (same as denials) per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) — guarantees audit trail for privileged operations
+  - [ ] System bypass audit writes MUST use sync write path (same as denials) per [ADR 66](../specs/decisions/epic7/phase-7.3/066-sync-audit-system-bypass.md) — guarantees audit trail for privileged operations
   - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
   - [ ] Test case: system bypass subject with audit mode=minimal still produces audit entry (via sync write)
   - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
@@ -1074,7 +1074,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 > **Note:** Denials elevated from spec SHOULD to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 >
-> **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
+> **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.3/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
 >
 > **Security requirement (S3):** The `minimal` audit mode logs system bypasses
 > and denials (deny and default_deny) but suppresses allows. Tests MUST verify

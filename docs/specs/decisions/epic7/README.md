@@ -76,7 +76,7 @@ options considered, and rationale for the chosen approach.
 | 58  | Provider Re-Entrance Goroutine Prohibition                         | 7.3     | [058](phase-7.3/058-provider-re-entrance-goroutine-prohibition.md)        |
 | 59  | Fair-Share Provider Timeout Scheduling                             | 7.3     | [059](phase-7.3/059-fair-share-provider-timeout-scheduling.md)            |
 | 65  | Git Revert as Migration Rollback Strategy                          | 7.6     | [065](phase-7.6/065-git-revert-migration-rollback.md)                     |
-| 66  | Sync Audit Writes for System Bypass                                | 7.5     | [066](phase-7.5/066-sync-audit-system-bypass.md)                          |
+| 66  | Sync Audit Writes for System Bypass                                | 7.3     | [066](phase-7.3/066-sync-audit-system-bypass.md)                          |
 | 74  | Unified Circuit Breaker via Task 34                                | 7.7     | [074](phase-7.7/074-unified-circuit-breaker-task-34.md)                   |
 | 75  | Dual-Use Resource Prefixes (exit:, scene:, character: as Resource) | General | [075](general/075-dual-use-resource-prefixes.md)                          |
 | 76  | Compound Resource Decomposition During Migration                   | 7.6     | [076](phase-7.6/076-compound-resource-decomposition.md)                   |
@@ -137,7 +137,7 @@ The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-fu
 | 39    | `EffectSystemBypass` as Fourth Effect Variant    | 7.1   | [039](phase-7.1/039-effect-system-bypass.md)                    |
 | 48    | Deterministic Seed Policy Names                  | 7.1   | [048](phase-7.1/048-deterministic-seed-policy-names.md)         |
 | 56    | Audit Minimal Mode Includes System Bypasses      | 7.1   | [056](phase-7.1/056-audit-off-mode-includes-system-bypasses.md) |
-| 66    | Sync Audit Writes for System Bypass              | 7.5   | [066](phase-7.5/066-sync-audit-system-bypass.md)                |
+| 66    | Sync Audit Writes for System Bypass              | 7.3   | [066](phase-7.3/066-sync-audit-system-bypass.md)                |
 | 76    | Compound Resource Decomposition During Migration | 7.6   | [076](phase-7.6/076-compound-resource-decomposition.md)         |
 | 82    | Core-First Provider Registration Order           | 7.3   | [082](phase-7.3/082-core-first-provider-registration-order.md)  |
 
