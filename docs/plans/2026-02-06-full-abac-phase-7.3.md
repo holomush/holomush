@@ -546,10 +546,10 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 - [ ] `SessionResolver` interface defined with `ResolveSession(ctx, sessionID) (characterID, error)`
 - [ ] `AuditLogger` interface defined with `Log(entry AuditEntry)`
 - [ ] Step 1: System bypass — subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
-  - [ ] System bypass decisions MUST be audited in ALL modes (including off), even though `Evaluate()` short-circuits at step 1
+  - [ ] System bypass decisions MUST be audited in ALL modes (including minimal), even though `Evaluate()` short-circuits at step 1
   - [ ] System bypass audit writes MUST use sync write path (same as denials) per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) — guarantees audit trail for privileged operations
   - [ ] Engine implementation MUST call audit logger synchronously before returning from step 1
-  - [ ] Test case: system bypass subject with audit mode=off still produces audit entry (via sync write)
+  - [ ] Test case: system bypass subject with audit mode=minimal still produces audit entry (via sync write)
   - [ ] Test case: system bypass audit write failure triggers WAL fallback (same flow as denials)
 - [ ] Step 2: Session resolution — subject `"session:web-123"` → resolved to `"character:01ABC"` via `SessionResolver`
   - [ ] Invalid session → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
@@ -573,7 +573,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 Table-driven tests:
 
 1. **System bypass:** Subject `"system"` → `types.NewDecision(SystemBypass, "system bypass", "")`
-2. **System bypass audit (mode=off):** Verify audit entry still written synchronously
+2. **System bypass audit (mode=minimal):** Verify audit entry still written synchronously
 3. **System bypass audit write failure:** Verify WAL fallback triggered
 4. **Session resolution:** Subject `"session:web-123"` → resolved to `"character:01ABC"`, returns `DefaultDeny` placeholder
 5. **Session invalid:** Subject `"session:expired"` → `types.NewDecision(DefaultDeny, "session invalid", "infra:session-invalid")`
@@ -628,7 +628,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
         if err := decision.Validate(); err != nil {
             return decision, err
         }
-        // Sync audit write (all modes, including off)
+        // Sync audit write (all modes, including minimal)
         e.auditLogger.LogSync(/* entry */)
         return decision, nil
     }
@@ -793,7 +793,7 @@ git commit -m "feat(access): add DSL condition evaluation for policies (T17.3)"
 - [ ] Step 7: Audit logger records the decision, matched policies, and attribute snapshot per configured mode
   - [ ] Denials (forbid + default deny) use sync audit write
   - [ ] Allows use async audit write
-  - [ ] Audit mode respected: `off` (system bypasses + denials), `denials_only`, `all`
+  - [ ] Audit mode respected: `minimal` (system bypasses + denials), `denials_only`, `all`
 - [ ] `combineDecisions()` helper implements deny-overrides algorithm
 - [ ] `Decision.Validate()` called on every return path (including error paths)
 - [ ] Per-request attribute cache verified: second `Evaluate()` call in same context reuses cached attributes
@@ -820,8 +820,8 @@ Table-driven tests:
 3. **Default deny:** No policies satisfied → `Decision{Allowed: false, Effect: DefaultDeny}`
 4. **Multiple forbid:** Two forbid policies satisfied → `Deny` (first forbid recorded as primary)
 5. **Multiple permit:** Two permit policies satisfied → `Allow`
-6. **Audit mode off + denial:** Denial audited (sync)
-7. **Audit mode off + allow:** Allow NOT audited
+6. **Audit mode minimal + denial:** Denial audited (sync)
+7. **Audit mode minimal + allow:** Allow NOT audited
 8. **Audit mode denials_only:** Denial audited, allow skipped
 9. **Audit mode all:** Both denial and allow audited
 10. **Validate() on every path:** Mock `Validate()` to track calls, verify called for system bypass, session error, deny, allow, default deny
@@ -1066,8 +1066,8 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 **Acceptance Criteria:**
 
-- [ ] Three audit modes: `off` (system bypasses + denials), `denials_only`, `all`
-- [ ] Mode `off`: system bypasses + denials logged
+- [ ] Three audit modes: `minimal` (system bypasses + denials), `denials_only`, `all`
+- [ ] Mode `minimal`: system bypasses + denials logged
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
@@ -1076,10 +1076,9 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 >
 > **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
 >
-> **Security requirement (S3):** If audit mode `off` is implemented to suppress
-> denial logging (creating a security blind spot), the mode name and
-> documentation MUST include clear warnings. Tests MUST verify denial logging
-> behavior matches documented semantics.
+> **Security requirement (S3):** The `minimal` audit mode logs system bypasses
+> and denials (deny and default_deny) but suppresses allows. Tests MUST verify
+> denial logging behavior matches documented semantics in all modes.
 
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
@@ -1104,10 +1103,10 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 **Step 1: Write failing tests**
 
-- Mode `off`: system bypasses + denials logged (per ADR #86)
-  - [ ] Test: off mode + system_bypass → written
-  - [ ] Test: off mode + allow → dropped
-  - [ ] Test: off mode + deny → written (denials logged even in off mode per ADR #86)
+- Mode `minimal`: system bypasses + denials logged (per ADR #86)
+  - [ ] Test: minimal mode + system_bypass → written
+  - [ ] Test: minimal mode + allow → dropped
+  - [ ] Test: minimal mode + deny → written (denials logged even in minimal mode per ADR #86)
 - Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - Mode `all`: everything logged
 - **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously, `Evaluate()` blocks until write completes
@@ -1128,7 +1127,7 @@ package audit
 type AuditMode string
 
 const (
-    AuditOff         AuditMode = "off"            // system bypasses + denials
+    AuditMinimal     AuditMode = "minimal"        // system bypasses + denials
     AuditDenialsOnly AuditMode = "denials_only"   // denials + default deny + system bypass
     AuditAll         AuditMode = "all"            // everything
 )

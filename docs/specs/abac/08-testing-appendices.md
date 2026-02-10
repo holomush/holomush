@@ -106,7 +106,7 @@ Describe("AccessPolicyEngine", func() {
     Describe("Audit logging", func() {
         It("logs denials in denials_only mode", func() { ... })
         It("logs all decisions in all mode", func() { ... })
-        It("logs system bypasses + denials in off mode", func() { ... })
+        It("logs system bypasses + denials in minimal mode", func() { ... })
     })
 
     Describe("Cache invalidation via LISTEN/NOTIFY", func() {
@@ -177,7 +177,7 @@ grows.
 - [ ] Policy DSL grammar specified with full expression language
 - [ ] Policy storage format designed (PostgreSQL schema with versioning)
 - [ ] Policy evaluation algorithm documented (deny-overrides, no priority)
-- [ ] Audit log with configurable modes (off, denials-only, all)
+- [ ] Audit log with configurable modes (minimal, denials-only, all)
 - [ ] Plugin attribute contribution interface designed (registration-based)
 - [ ] Admin commands documented for policy management
 - [ ] Player lock system designed with write-access verification

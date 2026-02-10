@@ -26,7 +26,7 @@ Players control access to their own properties through a simplified lock system.
 - Properties as first-class entities with per-property access control
 - Player-authored locks for owned resources (simplified policy syntax)
 - In-game admin commands for policy CRUD and debugging (`policy` command set)
-- Configurable audit logging with mode control (off, denials-only, all)
+- Configurable audit logging with mode control (minimal, denials-only, all)
 - Direct replacement of `AccessControl` with `AccessPolicyEngine` across ~28
   production call sites (greenfield deployment — no backward-compatibility adapter)
 - Default-deny posture with deny-overrides conflict resolution

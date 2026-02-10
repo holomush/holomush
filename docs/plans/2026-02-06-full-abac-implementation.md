@@ -532,7 +532,7 @@ The following milestones mark major integration checkpoints for progress trackin
 - Multi-policy evaluation with deny-overrides conflict resolution
 - Attribute provider integration (Subject, Resource, Environment, Stream, Command)
 - Cache invalidation via PostgreSQL LISTEN/NOTIFY (Task 18)
-- Audit logging in all three modes (off, deny-only, all-decisions)
+- Audit logging in all three modes (minimal, deny-only, all-decisions)
 - Performance benchmarks meet spec targets (<2ms p50, <25ms p99)
 
 **Coverage Threshold:**

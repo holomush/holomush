@@ -241,9 +241,9 @@ The audit logger supports three modes, configurable via server settings:
 type AuditMode string
 
 const (
-    AuditOff        AuditMode = "off"          // System bypasses + denials
+    AuditMinimal     AuditMode = "minimal"      // System bypasses + denials
     AuditDenialsOnly AuditMode = "denials_only" // Bypasses + denials (default)
-    AuditAll        AuditMode = "all"           // Log all decisions
+    AuditAll         AuditMode = "all"          // Log all decisions
 )
 
 type AuditConfig struct {
@@ -254,11 +254,11 @@ type AuditConfig struct {
 }
 ```
 
-| Mode           | What is logged                        | Typical use case                      |
-| -------------- | ------------------------------------- | ------------------------------------- |
-| `off`          | System bypasses + denials             | Development, performance (allows off) |
-| `denials_only` | System bypasses + deny + default_deny | Production default                    |
-| `all`          | All decisions incl. allow             | Debugging, compliance audit           |
+| Mode           | What is logged                        | Typical use case                              |
+| -------------- | ------------------------------------- | --------------------------------------------- |
+| `minimal`      | System bypasses + denials             | Development, minimal audit trail (allows off) |
+| `denials_only` | System bypasses + deny + default_deny | Production default                            |
+| `all`          | All decisions incl. allow             | Debugging, compliance audit                   |
 
 The default mode is `denials_only` — this balances operational visibility with
 storage efficiency.
@@ -275,12 +275,12 @@ unbounded growth.
 
 **System bypass auditing:** System subject bypasses **MUST** be logged with
 `effect = "system_bypass"` in **all** audit modes (`all`, `denials_only`, and
-`off`). This ensures bugs or compromised system contexts are never invisible in
+`minimal`). This ensures bugs or compromised system contexts are never invisible in
 the audit trail, regardless of the configured audit mode.
 
 **Security requirement (S3):** Denial records (`deny` and `default_deny`)
-MUST be logged regardless of the configured audit mode. All modes (`off`,
-`denials_only`, `all`) log denials. The `off` mode suppresses only `allow`
+MUST be logged regardless of the configured audit mode. All modes (`minimal`,
+`denials_only`, `all`) log denials. The `minimal` mode suppresses only `allow`
 records. Tests MUST verify that denial logging occurs in all modes.
 
 **Synchronous denial audits:** Denial events (`deny` and `default_deny`) **SHOULD**

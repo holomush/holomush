@@ -24,7 +24,7 @@
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Cache invalidation: Policy UPDATE operations trigger pg_notify and cache invalidation (not just CREATE/DELETE). All three CRUD operations verified.
 - [ ] Cache invalidation: Multi-step commands (e.g., "go north && look") invalidate cache between steps to prevent stale permission data from persisting across evaluations within same request
-- [ ] Audit logging: denials\_only mode, all mode, off mode
+- [ ] Audit logging: denials\_only mode, all mode, minimal mode
 - [ ] ~~Lock system: apply lock → permit policy, remove lock → allow~~ — deferred to Epic 8 (Phase 7.5 dependency)
 - [ ] All integration tests pass: `go test -race -v -tags=integration ./test/integration/access/...`
 
@@ -77,7 +77,7 @@ var _ = Describe("Access Policy Engine", func() {
     Describe("Audit logging", func() {
         It("logs denials in denials_only mode", func() { })
         It("logs everything in all mode", func() { })
-        It("only logs system bypasses in off mode", func() { })
+        It("only logs system bypasses in minimal mode", func() { })
     })
 
     // Lock system tests deferred to Epic 8 (Phase 7.5 dependency)

@@ -71,7 +71,7 @@ options considered, and rationale for the chosen approach.
 | 53  | Audit WAL Best-Effort Semantics                                    | 7.7     | [053](phase-7.7/053-audit-wal-best-effort-semantics.md)                   |
 | 54  | Property Location Resolution Eventual Consistency                  | 7.7     | [054](phase-7.7/054-property-location-resolution-eventual-consistency.md) |
 | 55  | Session Error Code Simplification                                  | 7.3     | [055](phase-7.3/055-session-error-code-simplification.md)                 |
-| 56  | Audit Off Mode Includes System Bypasses                            | 7.1     | [056](phase-7.1/056-audit-off-mode-includes-system-bypasses.md)           |
+| 56  | Audit Minimal Mode Includes System Bypasses                        | 7.1     | [056](phase-7.1/056-audit-off-mode-includes-system-bypasses.md)           |
 | 57  | ADR Format Evolution                                               | General | [057](general/057-adr-format-evolution.md)                                |
 | 58  | Provider Re-Entrance Goroutine Prohibition                         | 7.3     | [058](phase-7.3/058-provider-re-entrance-goroutine-prohibition.md)        |
 | 59  | Fair-Share Provider Timeout Scheduling                             | 7.3     | [059](phase-7.3/059-fair-share-provider-timeout-scheduling.md)            |
@@ -89,7 +89,7 @@ options considered, and rationale for the chosen approach.
 | 83  | Circuit Breaker Threshold Increase (3 to 5)                        | 7.3     | [083](phase-7.3/083-circuit-breaker-threshold-increase.md)                |
 | 84  | Goroutine Re-Entry Spec Clarification                              | 7.3     | [084](phase-7.3/084-goroutine-re-entry-spec-clarification.md)             |
 | 85  | PropertyProvider Not on Critical Path                              | 7.3     | [085](phase-7.3/085-property-provider-not-on-critical-path.md)            |
-| 86  | Audit Off Mode Logs Denials                                        | General | [086](general/086-audit-off-mode-logs-denials.md)                         |
+| 86  | Audit Minimal Mode Logs Denials                                    | General | [086](general/086-audit-off-mode-logs-denials.md)                         |
 | 87  | Remove seed:property-system-forbid Policy                          | 7.4     | [087](phase-7.4/087-remove-seed-property-system-forbid.md)                |
 | 88  | Add ExitProvider and SceneProvider Stubs                           | 7.3     | [088](phase-7.3/088-exit-scene-provider-stubs.md)                         |
 | 89  | Add original_subject Field to Audit Log Schema                     | 7.1     | [089](phase-7.1/089-original-subject-audit-field.md)                      |
@@ -136,7 +136,7 @@ The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-fu
 | 38    | Audit Log Configuration Modes                    | 7.1   | [038](phase-7.1/038-audit-log-configuration-modes.md)           |
 | 39    | `EffectSystemBypass` as Fourth Effect Variant    | 7.1   | [039](phase-7.1/039-effect-system-bypass.md)                    |
 | 48    | Deterministic Seed Policy Names                  | 7.1   | [048](phase-7.1/048-deterministic-seed-policy-names.md)         |
-| 56    | Audit Off Mode Includes System Bypasses          | 7.1   | [056](phase-7.1/056-audit-off-mode-includes-system-bypasses.md) |
+| 56    | Audit Minimal Mode Includes System Bypasses      | 7.1   | [056](phase-7.1/056-audit-off-mode-includes-system-bypasses.md) |
 | 66    | Sync Audit Writes for System Bypass              | 7.5   | [066](phase-7.5/066-sync-audit-system-bypass.md)                |
 | 76    | Compound Resource Decomposition During Migration | 7.6   | [076](phase-7.6/076-compound-resource-decomposition.md)         |
 | 82    | Core-First Provider Registration Order           | 7.3   | [082](phase-7.3/082-core-first-provider-registration-order.md)  |
