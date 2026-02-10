@@ -109,6 +109,7 @@ options considered, and rationale for the chosen approach.
 | 103 | Remove T7→T12 Dependency (PolicyStore → PolicyCompiler)            | General | [103](general/103-remove-t7-t12-dependency.md)                            |
 | 104 | Rename Audit Mode `off` to `minimal`                               | General | [104](general/104-rename-audit-off-to-minimal.md)                         |
 | 105 | LISTEN/NOTIFY Disconnection Recovery Strategy                      | 7.3     | [105](phase-7.3/105-listen-notify-disconnection-recovery.md)              |
+| 106 | `minimal` Audit Mode Is Alias for `denials_only`                  | General | [106](general/106-minimal-audit-mode-is-alias.md)                         |
 
 ## Spec ADR Reference Mapping
 
