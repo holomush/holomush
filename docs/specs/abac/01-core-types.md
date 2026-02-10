@@ -122,6 +122,18 @@ type AccessRequest struct {
 }
 ```
 
+**Action explanations:**
+
+| Action            | Description                                           |
+| ----------------- | ----------------------------------------------------- |
+| `read`            | View or retrieve resource data                        |
+| `write`           | Modify or update resource data                        |
+| `delete`          | Remove or destroy a resource                          |
+| `enter`           | Move a character into a location                      |
+| `execute`         | Run a command or trigger an action                    |
+| `emit`            | Send output to a stream or channel                    |
+| `list_characters` | View the list of characters present in a location     |
+
 The engine parses the prefixed string format to extract type and ID. The prefix
 mapping is:
 
