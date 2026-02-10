@@ -104,6 +104,8 @@ options considered, and rationale for the chosen approach.
 | 98  | Import Cycle Check for PropertyProvider (T4a)                | 7.1     | [098](phase-7.1/098-import-cycle-check-t4a.md)                            |
 | 99  | AccessPolicyEngine Contract Tests (Task 7b)                  | 7.1     | [099](phase-7.1/099-access-policy-engine-contract-tests.md)               |
 | 100 | Standardize Dependency Format Across Phase Files             | General | [100](general/100-standardize-dependency-format.md)                       |
+| 101 | ADR #65 Is Sufficient for Rollback Coverage                  | 7.6     | [101](phase-7.6/101-adr65-sufficient-for-rollback.md)                     |
+| 102 | Lefthook `fmt-markdown` Auto-Fix Is Intentional              | General | [102](general/102-lefthook-markdown-autofix-intentional.md)               |
 
 ## Spec ADR Reference Mapping
 
