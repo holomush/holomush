@@ -106,7 +106,7 @@ Describe("AccessPolicyEngine", func() {
     Describe("Audit logging", func() {
         It("logs denials in denials_only mode", func() { ... })
         It("logs all decisions in all mode", func() { ... })
-        It("logs system bypasses only in off mode", func() { ... })
+        It("logs system bypasses + denials in off mode", func() { ... })
     })
 
     Describe("Cache invalidation via LISTEN/NOTIFY", func() {

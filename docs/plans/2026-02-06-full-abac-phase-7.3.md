@@ -1022,8 +1022,8 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 **Acceptance Criteria:**
 
-- [ ] Three audit modes: `off` (system bypasses only), `denials_only`, `all`
-- [ ] Mode `off`: only system bypasses logged
+- [ ] Three audit modes: `off` (system bypasses + denials), `denials_only`, `all`
+- [ ] Mode `off`: system bypasses + denials logged
 - [ ] Mode `denials_only`: denials + default deny + system bypass logged, allows skipped
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
@@ -1060,7 +1060,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 **Step 1: Write failing tests**
 
-- Mode `off`: only system bypasses logged (denials + system bypasses still written per ADR #86)
+- Mode `off`: system bypasses + denials logged (per ADR #86)
   - [ ] Test: off mode + system_bypass → written
   - [ ] Test: off mode + allow → dropped
   - [ ] Test: off mode + deny → written (denials logged even in off mode per ADR #86)
@@ -1084,7 +1084,7 @@ package audit
 type AuditMode string
 
 const (
-    AuditOff         AuditMode = "off"            // system bypasses only
+    AuditOff         AuditMode = "off"            // system bypasses + denials
     AuditDenialsOnly AuditMode = "denials_only"   // denials + default deny + system bypass
     AuditAll         AuditMode = "all"            // everything
 )
