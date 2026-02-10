@@ -118,8 +118,8 @@ graph LR
     T17_3 --> T17_4([T17.4: Deny-<br/>Overrides<br/>M3 End])
 
     T17_4 --> T18([T18: Cache])
-    T17_4 --> T21a([T21a: Remove<br/>@-prefix])
     T18 --> T23([T23: Bootstrap<br/>M4 End])
+    T21a([T21a: Remove<br/>@-prefix])
     T21a --> T22([T22: Seeds])
     T22 --> T22b([T22b: Gap<br/>Resolution])
     T22b --> T23
