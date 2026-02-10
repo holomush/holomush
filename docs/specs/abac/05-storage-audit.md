@@ -177,9 +177,9 @@ configurable `cache_staleness_threshold` (default: 30s). When the time since
 the last successful cache update exceeds this threshold, the engine **MUST**
 fail-closed for all subjects by returning `EffectDefaultDeny` without
 evaluating policies. The engine **MUST** expose a Prometheus gauge
-`policy_cache_last_update` (Unix timestamp) that is updated on every successful
+`abac_policy_cache_last_update` (Unix timestamp) that is updated on every successful
 cache reload. Operators **SHOULD** configure alerting when
-`time.Now() - policy_cache_last_update > cache_staleness_threshold` to detect
+`time.Now() - abac_policy_cache_last_update > cache_staleness_threshold` to detect
 prolonged LISTEN/NOTIFY disconnections before access is denied. Once the
 LISTEN/NOTIFY connection is restored and a full reload completes, normal
 evaluation resumes automatically. Administrators needing immediate access during

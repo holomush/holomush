@@ -440,8 +440,8 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 | Metric                              | Target | Notes                             |
 | ----------------------------------- | ------ | --------------------------------- |
-| `Evaluate()` p99 latency (cached)   | <25ms  | Policy and attribute cache warm   |
-| `Evaluate()` p99 latency (cold)     | <10ms  | Cache miss, DB roundtrip required |
+| `Evaluate()` p99 latency (cached)   | <10ms  | Policy and attribute cache warm   |
+| `Evaluate()` p99 latency (cold)     | <25ms  | Cache miss, DB roundtrip required |
 | Attribute resolution (cold)         | <2ms   | All providers combined            |
 | Attribute resolution (warm, cached) | <100μs | Map lookup only                   |
 | DSL condition evaluation            | <1ms   | Per policy                        |
@@ -586,8 +586,8 @@ timeout rate, and circuit breaker status for operational visibility.
   (e.g., `abac_evaluate_duration_seconds`)
 - Add `BenchmarkEvaluate_*` tests with targets as failure thresholds (CI
   fails if benchmarks regress >10% from baseline). Specifically: CI MUST fail
-  if any benchmark exceeds 110% of its documented target value (e.g., cold
-  `Evaluate()` p99 must stay under 11ms, warm under 27.5ms). Benchmark
+  if any benchmark exceeds 110% of its documented target value (e.g., warm
+  `Evaluate()` p99 must stay under 11ms, cold under 27.5ms). Benchmark
   failures MUST be treated as build failures - PRs cannot merge with
   performance regressions exceeding the 10% headroom
 - Staging monitoring alerts on p99 > 10ms (2x target)

@@ -33,12 +33,12 @@ engine must handle the gap between disconnection and reconnection.
 
 **Alternatives considered:**
 
-| Alternative                     | Why rejected                                                    |
-| ------------------------------- | --------------------------------------------------------------- |
-| Immediate fail-closed on disconnect | Too aggressive for MUSH workloads; brief network blips would deny all access |
-| Polling fallback (periodic full reload) | Adds DB load and complexity; 30s stale window is acceptable |
+| Alternative                                  | Why rejected                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Immediate fail-closed on disconnect          | Too aggressive for MUSH workloads; brief network blips would deny all access           |
+| Polling fallback (periodic full reload)      | Adds DB load and complexity; 30s stale window is acceptable                            |
 | Incremental recovery (replay missed NOTIFYs) | PostgreSQL does not buffer missed LISTEN notifications; impossible without WAL tailing |
-| No recovery (require restart) | Unacceptable for operational availability |
+| No recovery (require restart)                | Unacceptable for operational availability                                              |
 
 **Rationale:**
 
