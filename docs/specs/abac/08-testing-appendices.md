@@ -115,7 +115,7 @@ Describe("AccessPolicyEngine", func() {
 })
 ```
 
-## Known Limitations
+## Known Limitations — Testing
 
 ### Property Location Resolution Transaction Consistency
 

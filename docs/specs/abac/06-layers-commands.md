@@ -369,6 +369,9 @@ policy test <subject> <action> <resource> [--verbose] [--json]
 policy reload
 policy history <name> [--limit=N]
 policy audit [--subject=X] [--action=Y] [--effect=denied] [--last=1h] [--limit=N]
+policy diff <name> [<version>]                           (deferred)
+policy export [--source=X]                               (deferred)
+policy import <file>                                     (deferred)
 ```
 
 **Naming conventions:** The `seed:` prefix is reserved for system use. The

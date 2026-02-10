@@ -693,7 +693,7 @@ short-TTL cache (100ms) for read-only attributes like character roles. This
 requires careful invalidation and is deferred until profiling demonstrates the
 need.
 
-## Known Limitations
+## Known Limitations — Resolution
 
 ### Admin Lockout Risk During CharacterProvider Failure
 
