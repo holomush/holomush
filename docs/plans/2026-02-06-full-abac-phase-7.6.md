@@ -7,7 +7,7 @@
 
 ## Task 28: Migrate to AccessPolicyEngine (atomic per-package migration)
 
-**Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence) (was lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence), ADR 0014 (Direct replacement, no adapter)
 
 **Migration Strategy:**
 
@@ -770,7 +770,7 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 
 ### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
-**Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence) (was lines 3230-3285), ADR 0014 (Direct replacement, no adapter)
+**Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence), ADR 0014 (Direct replacement, no adapter)
 
 **Acceptance Criteria:**
 

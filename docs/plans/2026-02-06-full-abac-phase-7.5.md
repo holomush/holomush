@@ -7,7 +7,7 @@
 
 ## Task 24: Lock token registry
 
-**Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners) (was lines 2448-2734), [06-layers-commands.md#lock-token-registry](../specs/abac/06-layers-commands.md#lock-token-registry) (was lines 2522-2618)
+**Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners), [06-layers-commands.md#lock-token-registry](../specs/abac/06-layers-commands.md#lock-token-registry)
 
 **Acceptance Criteria:**
 
@@ -69,7 +69,7 @@ git commit -m "feat(access): add lock token registry"
 
 ### Task 25: Lock expression parser and compiler
 
-**Spec References:** [06-layers-commands.md#lock-syntax](../specs/abac/06-layers-commands.md#lock-syntax) (was lines 2487-2521), [06-layers-commands.md#lock-compilation](../specs/abac/06-layers-commands.md#lock-compilation) (was lines 2619-2667), [06-layers-commands.md#lock-compilation](../specs/abac/06-layers-commands.md#lock-compilation) ownership and rate limits section (was lines 2647-2724)
+**Spec References:** [06-layers-commands.md#lock-syntax](../specs/abac/06-layers-commands.md#lock-syntax), [06-layers-commands.md#lock-compilation](../specs/abac/06-layers-commands.md#lock-compilation)
 
 **Acceptance Criteria:**
 
@@ -135,7 +135,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 ### Task 25b: Lock and unlock in-game command handlers
 
-**Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners) (was lines 2448-2734)
+**Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners)
 
 **Acceptance Criteria:**
 
@@ -178,7 +178,7 @@ Lock command workflow:
 9. Generate policy name: `lock:<type>:<resource_id>:<action>` (e.g., `lock:object:01ABC:read`)
 10. Store policy via PolicyStore with source="lock"
 
-> **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners) (was lines 2711-2717). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
+> **Design note:** Lock policy naming uses `lock:<type>:<resource_id>:<action>` format per [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners). The `<type>` is the bare resource type (object, property, location) without trailing colon. This format is safe because lockable resources use ULID identifiers (no colons/spaces). Rate limiting queries use `WHERE source = 'lock' AND created_by = <character_id>` instead of pattern matching on policy names, which is more efficient and clearer.
 
 Unlock command workflow:
 
@@ -200,7 +200,7 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 
 ### Task 26a: Admin commands — policy CRUD (create/list/show/edit/delete)
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management) (was lines 2750-2971) — CRUD commands
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
 **Acceptance Criteria:**
 
@@ -252,7 +252,7 @@ git commit -m "feat(command): add policy CRUD admin commands (create/list/show/e
 
 ### Task 26b: Admin commands — policy state management (enable/disable/history/rollback)
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management) (was lines 2750-2971) — state management commands
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
 **Cross-Phase Dependencies:** T7 (Phase 7.1), T17 (Phase 7.3), T18 (Phase 7.3)
 
@@ -303,7 +303,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 ### Task 27a: Admin command — policy test
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management) (was lines 2750-2971) — policy test command with verbose, JSON, suite modes
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
 > **Design note:** Task 27 split into 27a (policy test) and 27b (remaining admin commands) due to complexity. The `policy test` command has significant implementation scope (verbose mode, JSON mode, suite mode, builder redaction, audit logging) that warrants its own task for reviewability.
 
@@ -356,7 +356,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 > **Note:** Task 27b was split into three sub-tasks (27b-1, 27b-2, 27b-3) to achieve atomic commits per the plan's principle. The original Task 27b covered 11 distinct features spanning policy validation, cache management, attribute introspection, audit querying, seed inspection, and policy recompilation/repair — too many unrelated features for a single reviewable commit.
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management) (was lines 2750-2971) — policy validate, policy reload, policy attributes, [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning) (was lines 1001-1031)
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning)
 
 **Dependencies:** Task 27a (policy test command)
 
@@ -401,7 +401,7 @@ git commit -m "feat(command): add policy validate/reload/attributes/list --old-g
 
 ### Task 27b-2: Admin commands — audit and seed inspection (audit/seed verify/seed status)
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management) (was lines 2750-2971) — policy audit, [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) seed verification section (was lines 3132-3165)
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence)
 
 **Dependencies:** Task 27b-1 (core admin commands)
 
@@ -445,7 +445,7 @@ git commit -m "feat(command): add policy audit/seed verify/seed status commands"
 
 ### Task 27b-3: Admin commands — recompilation and repair (recompile-all/recompile/repair/clear-degraded-mode)
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management) (was lines 2750-2971), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors) degraded mode section (was lines 1660-1683), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning) (was lines 1001-1031)
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning)
 
 **Dependencies:** Task 27b-2 (audit/seed inspection commands)
 

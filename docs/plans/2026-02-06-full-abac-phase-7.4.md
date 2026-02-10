@@ -9,7 +9,7 @@
 
 ## Task 22: Define seed policy constants
 
-**Spec References:** [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2984-3061)
+**Spec References:** [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies)
 
 **Acceptance Criteria:**
 
@@ -18,7 +18,7 @@
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
 - [ ] No duplicate seed names
-- [ ] DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2990-3054)
+- [ ] DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies)
 - [ ] Default deny behavior provided by EffectDefaultDeny (no matching policy = denied), not an explicit forbid policy
 - [ ] Seed policy coverage validated against all 28 production call sites (see [Appendix A](#appendix-a-seed-policy-coverage-matrix))
 - [ ] All tests pass via `task test`
@@ -38,7 +38,7 @@
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
-- DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2990-3054)
+- DSL text matches spec exactly [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies)
 
 **Step 2: Implement**
 
@@ -186,7 +186,7 @@ git commit -m "feat(access): define seed policies"
 
 > **Note:** Elevated from a T22 acceptance criterion to a dedicated task per [Decision #94](../specs/decisions/epic7/phase-7.4/094-elevate-seed-policy-gap-resolution.md). With direct replacement (no adapter/shadow mode), unresolved gaps cause immediate functional regressions at T28 migration.
 
-**Spec References:** [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies) (was lines 2984-3061), [Appendix A](#appendix-a-seed-policy-coverage-matrix)
+**Spec References:** [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies), [Appendix A](#appendix-a-seed-policy-coverage-matrix)
 
 **Acceptance Criteria:**
 
@@ -239,7 +239,7 @@ git commit -m "feat(access): resolve seed policy coverage gaps G1-G4"
 
 ### Task 23: Bootstrap sequence
 
-**Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3062-3177), [07-migration-seeds.md#seed-policy-migrations](../specs/abac/07-migration-seeds.md#seed-policy-migrations) (was lines 3178-3229)
+**Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence), [07-migration-seeds.md#seed-policy-migrations](../specs/abac/07-migration-seeds.md#seed-policy-migrations)
 
 **ADR References:** [091-bootstrap-creates-initial-partitions.md](../specs/decisions/epic7/phase-7.4/091-bootstrap-creates-initial-partitions.md)
 
@@ -479,7 +479,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 > **Note:** This task was moved from Phase 7.7 (Task 36 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
 
-**Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence) (was lines 3132-3177, seed verification section)
+**Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence)
 
 **Acceptance Criteria:**
 
