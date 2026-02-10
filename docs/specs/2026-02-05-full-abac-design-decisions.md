@@ -7,7 +7,7 @@
 >
 > See: [docs/specs/decisions/epic7/](decisions/epic7/README.md)
 
-The 65 design decisions from this document have been reorganized into
+The 95 design decisions from this document have been reorganized into
 individual files under `docs/specs/decisions/epic7/`, organized by phase:
 
 - `general/` — Cross-cutting decisions (engine approach, format, performance)
