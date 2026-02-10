@@ -291,7 +291,6 @@ graph TD
     end
 
     %% Critical cross-phase dependencies
-    T0 --> T7
     T0 --> T8
     T5 --> T8
     T7 --> T18
