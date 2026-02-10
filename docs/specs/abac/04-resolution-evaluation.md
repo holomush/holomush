@@ -230,7 +230,7 @@ decision. Direct callers can distinguish "denied by policy" from "system
 failure":
 
 ```go
-return Decision{Allowed: false, Effect: EffectDefaultDeny}, err
+return NewDecision(EffectDefaultDeny, "core provider failure", ""), err
 ```
 
 Callers SHOULD log the error and treat the response as denied (fail-closed).
