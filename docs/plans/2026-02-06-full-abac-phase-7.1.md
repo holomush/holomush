@@ -145,6 +145,8 @@ If abandoning participle, the recommended fallback is **Alternative 2 (Custom JS
 
 **Spec References:** N/A (implementation infrastructure validation)
 
+**Dependencies:** Requires Task 0 completion (AST serialization spike validates storage model)
+
 **Acceptance Criteria:**
 
 - [ ] pgx/pgxpool version compatible with existing codebase
@@ -234,6 +236,8 @@ All dependencies ready for Phase 7.1-7.7 implementation."
 ### Task 1: Create access\_policies migration
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema)
+
+**Dependencies:** Requires Task 0.5 completion (dependency audit validates all required libraries)
 
 **Acceptance Criteria:**
 
@@ -465,6 +469,8 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 **Spec References:** [03-property-model.md](../specs/abac/03-property-model.md), ADR 0013 (Properties as first-class entities), ADR 0015 (Three-Layer Player Access Control)
 
+**Dependencies:** Requires Task 3 completion (entity_properties migration must exist before repository implementation)
+
 **Acceptance Criteria:**
 
 - [ ] `EntityProperty` struct: ID, ParentType, ParentID, Name, Value, Owner, Visibility, Flags, VisibleTo, ExcludedFrom, timestamps
@@ -553,6 +559,8 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties section discussing lifecycle
 
+**Dependencies:** Requires Task 4a completion (PropertyRepository must exist for cascade deletion integration in Task 4c)
+
 **Acceptance Criteria:**
 
 - [ ] `WorldService.DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error` method created
@@ -607,6 +615,8 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 > **Scope:** This task adds property cascade deletion to existing deletion methods. The orphan cleanup goroutine and startup integrity checks have been moved to Phase 7.7 as resilience features.
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties section discussing lifecycle
+
+**Dependencies:** Requires Task 4b completion (WorldService deletion methods must exist before adding property cascade logic)
 
 **Acceptance Criteria:**
 
@@ -1187,6 +1197,8 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), [05-storage-audit.md#cache-invalidation](../specs/abac/05-storage-audit.md#cache-invalidation)
 
 **ADR References:** [035-audit-log-source-column.md](../specs/decisions/epic7/phase-7.1/035-audit-log-source-column.md)
+
+**Dependencies:** Requires completion of Task 0 (AST serialization spike validates storage model), Task 1 (access_policies migration creates table), Task 2 (audit log migration for cross-table consistency), and Task 5 (core types define PolicyEffect and other required types)
 
 **Acceptance Criteria:**
 
