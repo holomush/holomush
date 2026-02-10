@@ -274,7 +274,12 @@ git commit -m "feat(access): resolve seed policy coverage gaps G1-G4"
 
 **Dependencies:**
 
-- Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store interface and PostgreSQL implementation) — provides `PolicyStore` interface for seed policy bootstrap operations
+- Task 6 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (subject/resource prefixes) — provides prefix constants needed for bootstrap subject/resource validation
+- Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) — provides `PolicyCompiler` for seed policy compilation during bootstrap
+- Task 16a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (stream + command providers) — seed policies reference streams and commands
+- Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (property provider) — seed policies reference property attributes
+- Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (policy cache) — bootstrap requires cache for policy retrieval
+- Task 22b (gap resolution) — seed policy coverage gaps resolved before bootstrap
 
 **Files:**
 
