@@ -38,7 +38,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/rumdl
-          key: rumdl-v0.1.15-x86_64-linux
+          key: rumdl-v0.1.15-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install tools
         run: |
