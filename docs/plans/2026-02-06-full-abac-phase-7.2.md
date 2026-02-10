@@ -11,7 +11,6 @@
 
 **Dependencies:**
 
-- Task 0 (Phase 7.1) — AST serialization spike validates storage approach for compiled policies
 - Task 5 (Phase 7.1) — core types must exist for AST node definitions
 
 **Acceptance Criteria:**
