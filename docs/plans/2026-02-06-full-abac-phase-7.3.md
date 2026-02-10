@@ -7,7 +7,7 @@
 
 ## Task 13: Attribute provider interface and schema registry
 
-**Spec References:** [01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers) (was lines 567-658), [04-resolution-evaluation.md#attribute-schema-registry](../specs/abac/04-resolution-evaluation.md#attribute-schema-registry) (was lines 1393-1436), [04-resolution-evaluation.md#provider-registration](../specs/abac/04-resolution-evaluation.md#provider-registration) (lines 37-49)
+**Spec References:** [01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), [04-resolution-evaluation.md#attribute-schema-registry](../specs/abac/04-resolution-evaluation.md#attribute-schema-registry), [04-resolution-evaluation.md#provider-registration](../specs/abac/04-resolution-evaluation.md#provider-registration)
 
 **ADR References:** [082-core-first-provider-registration-order.md](../specs/decisions/epic7/phase-7.3/082-core-first-provider-registration-order.md)
 
@@ -23,7 +23,7 @@
 - [ ] Empty namespace → error
 - [ ] Duplicate attribute key within namespace → error
 - [ ] Invalid attribute type → error
-- [ ] Providers MUST return all numeric attributes as `float64` (per spec [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785))
+- [ ] Providers MUST return all numeric attributes as `float64` (per spec [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema))
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -122,9 +122,9 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 
 ### Task 14: Attribute resolver with per-request caching
 
-**Spec References:** [04-resolution-evaluation.md#resolution-flow](../specs/abac/04-resolution-evaluation.md#resolution-flow) (was lines 1355-1381), [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) (was lines 1769-1945), [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1946-2025), ADR 0012 (Eager attribute resolution)
+**Spec References:** [04-resolution-evaluation.md#resolution-flow](../specs/abac/04-resolution-evaluation.md#resolution-flow), [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets), [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), ADR 0012 (Eager attribute resolution)
 
-> **Note (Bug I10):** [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1976-2006) explicitly specifies LRU eviction with `maxEntries` default of 100. Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
+> **Note (Bug I10):** [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) explicitly specifies LRU eviction with `maxEntries` default of 100. Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
 
 **Acceptance Criteria:**
 
@@ -141,7 +141,7 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] **Panic recovery:** Plugin provider panics → recovered with error logging, evaluation continues, error recorded in decision
 - [ ] **Security (S6):** Runtime namespace validation — provider return keys MUST match registered namespace, invalid keys rejected with error logging and metric emission
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
-- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) (was lines 1976-2006))
+- [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching))
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -260,7 +260,7 @@ git commit -m "feat(access): add AttributeResolver with fair-share timeouts and 
 
 ### Task 15: Core attribute providers (character, location, object)
 
-**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785) — character, location, and object attributes are in the table
+**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) — character, location, and object attributes are in the table
 
 **Acceptance Criteria:**
 
@@ -317,7 +317,7 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 
 ### Task 16a: Simple providers (environment, command, stream, exit stub, scene stub)
 
-**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) (was lines 659-785) — environment, command, stream attributes are in the table; [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md) — exit/scene stubs
+**Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) — environment, command, stream attributes are in the table; [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md) — exit/scene stubs
 
 **Acceptance Criteria:**
 
@@ -389,7 +389,7 @@ git commit -m "feat(access): add simple providers (environment, command, stream,
 
 > **Note:** This task depends on Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) — PropertyRepository (Task 4a) must exist before PropertyProvider (Task 16b).
 
-**Spec References:** [03-property-model.md#property-attributes](../specs/abac/03-property-model.md#property-attributes) (was lines 1188-1203), ADR 0013 (Properties as first-class entities)
+**Spec References:** [03-property-model.md#property-attributes](../specs/abac/03-property-model.md#property-attributes), ADR 0013 (Properties as first-class entities)
 
 **Acceptance Criteria:**
 
@@ -473,7 +473,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 > **This task has been split into 4 sub-tasks (T17.1–T17.4) for better progress tracking and isolated testing.** The sub-tasks implement the 7-step evaluation algorithm from the spec. Each sub-task has its own acceptance criteria, test suite, and files. The final engine integrates all components in the 7-step evaluation flow.
 
-**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) (was lines 1696-1745), Core Interfaces > Session Subject Resolution (was lines 348-414), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
 > **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
 
@@ -499,7 +499,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 - [ ] Implements the 7-step evaluation algorithm from the spec exactly
 - [ ] Engine MUST call `Decision.Validate()` before returning any Decision
-- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is `all` ([04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), was spec lines 1751-1757)
+- [ ] Full policy evaluation (no short-circuit) when policy test active or audit mode is `all` ([04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors))
 - [ ] Provider error → evaluation continues, error recorded in decision
 - [ ] Per-request cache → second call reuses cached attributes
 - [ ] Test verifies `Validate()` is called on every engine return path
@@ -510,7 +510,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 #### Task 17.1: System bypass + session resolution (Steps 1-2)
 
-**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 1-2 (was lines 1696-1710), Core Interfaces > Session Subject Resolution (was lines 348-414), [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) (sync audit for system bypass)
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 1-2, [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) (sync audit for system bypass)
 
 **Acceptance Criteria:**
 
@@ -637,7 +637,7 @@ git commit -m "feat(access): add engine scaffold with system bypass and session 
 
 #### Task 17.2: Target matching and policy filtering (Step 4)
 
-**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 4 (was lines 1718-1730)
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 4
 
 > **Depends on:** T17.1 (Engine struct and interfaces must exist)
 
@@ -691,7 +691,7 @@ git commit -m "feat(access): add target matching and policy filtering (T17.2)"
 
 #### Task 17.3: Condition evaluation via DSL (Step 5)
 
-**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 5 (was lines 1731-1736), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors) (was lines 1751-1757), ADR 0010 (Cedar-Aligned Missing Attribute Semantics)
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 5, [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), ADR 0010 (Cedar-Aligned Missing Attribute Semantics)
 
 > **Depends on:** T17.2 (target matching must produce candidate policies); also depends on Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) DSL evaluator
 
@@ -746,7 +746,7 @@ git commit -m "feat(access): add DSL condition evaluation for policies (T17.3)"
 
 #### Task 17.4: Deny-overrides combination + integration (Step 6 + glue)
 
-**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 6-7 (was lines 1737-1745), ADR 0011 (Deny-overrides conflict resolution), [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration) (was lines 2248-2325)
+**Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 6-7, ADR 0011 (Deny-overrides conflict resolution), [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration)
 
 > **Depends on:** T17.3 (condition evaluation must produce satisfied policy set)
 
@@ -816,7 +816,7 @@ git commit -m "feat(access): add deny-overrides combination and full engine inte
 
 ### Task 18: Policy cache with LISTEN/NOTIFY invalidation
 
-**Spec References:** Cache Invalidation (lines 2170-2215) — cache staleness threshold (lines 2191-2215), ADR 0016 (LISTEN/NOTIFY cache invalidation)
+**Spec References:** [05-storage-audit.md#cache-invalidation](../specs/abac/05-storage-audit.md#cache-invalidation), ADR 0016 (LISTEN/NOTIFY cache invalidation)
 
 **Acceptance Criteria:**
 
@@ -1018,7 +1018,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 ### Task 19: Audit logger
 
-**Spec References:** Audit Log Serialization (lines 2216-2234), Audit Log Configuration (lines 2248-2325), Audit Log Retention (lines 2326-2423)
+**Spec References:** [05-storage-audit.md#audit-log-serialization](../specs/abac/05-storage-audit.md#audit-log-serialization), [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration), [05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention)
 
 **Acceptance Criteria:**
 
@@ -1028,7 +1028,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 - [ ] Mode `all`: everything logged
 - [ ] **Sync write for denials and system bypasses:** `deny`, `default_deny`, and `system_bypass` events written synchronously to PostgreSQL before `Evaluate()` returns
 
-> **Note:** Denials elevated from spec SHOULD (line 2293) to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
+> **Note:** Denials elevated from spec SHOULD to MUST. Rationale: denial audit integrity is critical for security forensics. The ~1-2ms latency per denial is acceptable given denial events are uncommon in normal operation.
 >
 > **Note:** System bypasses use sync path per [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md). Rationale: Privileged operations require guaranteed audit trails. System bypasses are rare (server startup, admin maintenance) so sync write cost is negligible. Prevents gaps in audit trail for privilege escalation.
 >
@@ -1154,7 +1154,7 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 ### Task 19b: Audit log retention and partition management
 
-**Spec References:** Policy Storage > Audit Log Retention (lines 2326-2423)
+**Spec References:** [05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention)
 
 **Acceptance Criteria:**
 
@@ -1267,7 +1267,7 @@ func (pm *PartitionManager) HealthCheck(ctx context.Context) error {
 }
 ```
 
-Partition lifecycle ([05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention), was spec lines 2326-2373):
+Partition lifecycle ([05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention)):
 
 1. Pre-create partitions for next 3 months
 2. Detach partitions older than `RetainDenials` (90 days for denials, 7 days for allows)
@@ -1285,7 +1285,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 
 ### Task 20: Prometheus metrics for ABAC
 
-**Spec References:** Evaluation Algorithm > Performance Targets (lines 1769-1945) — observability metrics are part of the performance targets section
+**Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) — observability metrics are part of the performance targets section
 
 **Acceptance Criteria:**
 
@@ -1423,7 +1423,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 ### Task 21: Performance benchmarks
 
-**Spec References:** Evaluation Algorithm > Performance Targets (lines 1769-1945)
+**Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets)
 
 > **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
 
@@ -1453,7 +1453,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 - Create: `internal/access/policy/engine_bench_test.go`
 
-**Step 1: Write benchmarks per spec performance targets (lines 1769-1795)**
+**Step 1: Write benchmarks per spec performance targets**
 
 ```go
 func BenchmarkEvaluate_ColdCache(b *testing.B)         // target: <10ms p99
@@ -1497,7 +1497,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 > **Note:** This task depends on Task 21 — benchmarks must exist before CI can enforce regression limits.
 
-**Spec References:** Evaluation Algorithm > Performance Targets (lines 579-580) — "CI MUST fail if any benchmark exceeds 110% of its documented target value"
+**Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) — "CI MUST fail if any benchmark exceeds 110% of its documented target value"
 
 **Acceptance Criteria:**
 
@@ -1606,7 +1606,7 @@ git commit -m "ci(access): enforce benchmark regression limits in CI"
 
 > **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
 
-**Spec References:** Replacing Static Roles > Seed Policies (lines 2984-3061) — seed policies reference command names without @ prefix
+**Spec References:** Seed policies reference command names without @ prefix
 
 **Placement Justification:**
 
