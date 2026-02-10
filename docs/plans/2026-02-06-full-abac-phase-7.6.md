@@ -609,7 +609,7 @@ func TestMigrationEquivalence(t *testing.T) {
             resource: "object:01VWX",
         },
 
-        // === World service - Character operations (5 call sites) ===
+        // === World service - Character operations (4 call sites) ===
 
         // #21: GetCharacter (internal/world/service.go:452)
         {

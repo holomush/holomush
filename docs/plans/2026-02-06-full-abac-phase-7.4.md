@@ -754,7 +754,7 @@ This appendix maps each of the 28 production call sites (documented in Task 28.5
 | 19 | `service.go:401` — MoveObject    | `write`  | `object`      | `seed:builder-object-write`, `seed:admin-full-access`     | **NOTE**: Players cannot move objects unless builder/admin — may need `seed:player-object-move` if players should pick up/drop objects |
 | 20 | `service.go:713` — ExamineObject | `read`   | `object`      | `seed:player-object-colocation`, `seed:admin-full-access` | Player examines co-located object                                                                                                      |
 
-### World Service — Character Operations (5 call sites)
+### World Service — Character Operations (4 call sites)
 
 | #  | Call Site                                  | Action            | Resource Type | Applicable Seed Policies                                                                                   | Notes                                                                                                                           |
 | -- | ------------------------------------------ | ----------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |

@@ -547,7 +547,7 @@ expire regardless of what the current provider is doing.
 
 #### Circuit Breaker Summary
 
-The ABAC engine uses three distinct circuit breaker designs, each tuned for
+The ABAC engine uses two distinct circuit breaker designs, each tuned for
 different failure modes:
 
 | Component        | Trigger                                                 | Window | Behavior              | Metric                                               | Rationale                                                                                                                                                               |
@@ -709,7 +709,7 @@ effectively locks admins out during provider failures.
 2. Admin character attempts to perform an action
 3. Attribute resolution returns error from CharacterProvider
 4. Engine continues evaluation with partial attributes (role attribute missing)
-5. Policy `seed:admin-full-access` condition check: `subject.role == "admin"` evaluates to `false` (missing attribute)
+5. Policy `seed:admin-full-access` condition check: `principal.role == "admin"` evaluates to `false` (missing attribute)
 6. Admin is denied access (default deny behavior)
 
 **Mitigation:** The ABAC engine provides alternative access paths during
