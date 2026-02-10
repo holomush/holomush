@@ -232,8 +232,8 @@ graph TD
         T21b[Task 21b: CI benchmark enforcement]
         T21a[Task 21a: Remove @-prefix from permissions]
         T13 --> T14
-        T14 --> T15
-        T14 --> T16a
+        T13 --> T15
+        T13 --> T16a
         T15 --> T17_1
         T17_1 --> T17_2
         T17_2 --> T17_3
