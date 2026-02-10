@@ -25,6 +25,7 @@
 
 **Dependencies:**
 
+- Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) — acceptance criteria requires seed policies to compile without error via `PolicyCompiler`
 - Task 21a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (remove @ prefix from command names) — seed policies reference bare command names (e.g., `"say"`, `"dig"`) which require @-prefix removal first
 
 **Files:**
