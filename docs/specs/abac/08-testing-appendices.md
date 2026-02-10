@@ -143,7 +143,7 @@ appear to be in different locations during policy evaluation.
    location-hierarchy containment (e.g., "can access object if it's in your
    location") will fail-safe to deny when inconsistencies occur, erring on the
    side of security.
-4. **Circuit breaker protection:** The `PropertyProvider` circuit breaker (3
+4. **Circuit breaker protection:** The `PropertyProvider` circuit breaker (5
    timeouts in 60s) prevents systematic timeout issues from overwhelming the
    database, treating the operational symptom even if not the consistency root
    cause.
