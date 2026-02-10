@@ -671,6 +671,12 @@ in-game time (e.g., a day/night cycle), it SHOULD use a separate attribute
 need local-time semantics MUST account for the UTC offset explicitly (e.g.,
 `env.hour >= 22` for 10 PM UTC, not local time).
 
+**Why float64 for hour and minute:** While these values are typically whole
+numbers, they are typed as `float64` to support fractional values. This enables
+sub-minute precision (e.g., `env.minute < 30.5` for policies triggered at 30
+seconds past the minute) and fractional timezone offset calculations when
+converting between UTC and local time for policy evaluation.
+
 **Note:** `game_state` was considered but is not included — HoloMUSH does not
 currently have a game state management system. This attribute MAY be added in a
 future phase when game state is implemented.
