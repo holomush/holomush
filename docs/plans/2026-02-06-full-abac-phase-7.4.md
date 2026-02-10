@@ -481,13 +481,15 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 ---
 
-### Task 23b: CLI flag --validate-seeds
+### Task 23b: Seed policy integration test suite (CLI validation + smoke test gate)
 
-> **Note:** This task was moved from Phase 7.7 (Task 36 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))) to Phase 7.4 to enable CI validation during later phases. Only depends on Task 23 (compiler and seed definitions).
+> **Note:** This task combines CLI seed validation (moved from Phase 7.7 Task 36) with the smoke test gate. It gates the irreversible migration step (Task 28, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Positioned between T23 (bootstrap) and T28 (call site migration) to validate seed policy correctness and exercise common auth patterns with the full ABAC engine before replacing all production call sites.
 
 **Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence)
 
 **Acceptance Criteria:**
+
+**Part 1: CLI Validation**
 
 - [ ] CLI flag `--validate-seeds` added to server startup
 - [ ] Flag behavior: boot DSL compiler, validate all seed policy DSL text, exit with success/failure status
@@ -495,45 +497,8 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 - [ ] Exit code 0 on success, non-zero on failure
 - [ ] Logs validation results: "All N seed policies valid" or "Validation failed: {errors}"
 - [ ] Enables CI integration: `holomush --validate-seeds` in build pipeline
-- [ ] All tests pass via `task test`
 
-**Files:**
-
-- Modify: `cmd/holomush/main.go` (add flag and validation logic)
-- Test: `cmd/holomush/main_test.go`
-
-**TDD Test List:**
-
-- `--validate-seeds` flag present → validation mode activated
-- All valid seeds → exit 0, log success
-- Invalid seed DSL → exit non-zero, log errors with line/column
-- Validation mode → server does NOT start
-- CI integration test: run in build pipeline, verify exit codes
-
-**Step 1: Write failing tests**
-
-Test that `--validate-seeds` flag activates validation-only mode and exits with appropriate status codes.
-
-**Step 2: Implement**
-
-Add flag parsing and validation logic in `cmd/holomush/main.go`. Use the DSL compiler from Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) to validate all seed policy DSL text from Task 22.
-
-**Step 3: Run tests, commit**
-
-```bash
-git add cmd/holomush/main.go cmd/holomush/main_test.go
-git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
-```
-
----
-
-### Task 23c: Smoke Test Gate
-
-> **Note:** This task gates the irreversible migration step (Task 28, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Positioned between T23b (seed validation) and T28 (call site migration) to exercise common auth patterns with the ABAC engine before replacing all production call sites.
-
-**Purpose:** Verify that seed policies correctly authorize common player, builder, and admin operations using the full ABAC engine before committing to migration. This gate ensures no functional regressions are introduced by the transition from static role checks to policy-driven evaluation.
-
-**Acceptance Criteria:**
+**Part 2: Smoke Test Gate**
 
 - [ ] Smoke test implementation covers minimum scenarios (see below)
 - [ ] All smoke tests pass with expected permissions (Allow for authorized, Deny for unauthorized)
@@ -542,7 +507,7 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 - [ ] Tests validate that unauthorized operations are denied (negative cases)
 - [ ] All tests pass via `task test`
 
-**Minimum Scenarios:**
+**Smoke Test Minimum Scenarios:**
 
 | Scenario                             | Subject             | Action    | Resource                     | Expected Result |
 | ------------------------------------ | ------------------- | --------- | ---------------------------- | --------------- |
@@ -570,16 +535,26 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 
 **Dependencies:**
 
-- Task 23b ([CLI --validate-seeds](#task-23b-cli-flag---validate-seeds)) — seed policies are validated before smoke tests exercise them
+- Task 23 ([Bootstrap sequence](#task-23-bootstrap-sequence)) — bootstrap creates seed policies before tests can exercise them
 - Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) — AccessPolicyEngine is operational
 - Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) — policy cache is functional
 - Task 22b ([Resolve seed policy gaps](#task-22b-resolve-seed-policy-coverage-gaps)) — seed policies cover all required actions
 
 **Files:**
 
+- Modify: `cmd/holomush/main.go` (add flag and validation logic)
+- Test: `cmd/holomush/main_test.go`
 - Create: `test/integration/access/smoke_test.go`
 
 **Implementation Notes:**
+
+**Part 1: CLI Validation**
+
+- Add flag parsing and validation logic in `cmd/holomush/main.go`
+- Use the DSL compiler from Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) to validate all seed policy DSL text from Task 22
+- Exit with appropriate status codes
+
+**Part 2: Smoke Test Gate**
 
 - Use Ginkgo/Gomega for BDD-style test organization
 - Test server setup:
@@ -591,16 +566,32 @@ git commit -m "feat(cmd): add --validate-seeds CLI flag for CI integration"
 - Each test case verifies `Decision.Effect` matches expected Allow/Deny
 - Failures MUST block T28 migration start — smoke test gate is a hard dependency
 
-**Step 1: Write failing tests**
+**TDD Test List:**
+
+**Part 1: CLI Validation**
+
+- `--validate-seeds` flag present → validation mode activated
+- All valid seeds → exit 0, log success
+- Invalid seed DSL → exit non-zero, log errors with line/column
+- Validation mode → server does NOT start
+- CI integration test: run in build pipeline, verify exit codes
+
+**Part 2: Smoke Test Gate**
 
 - Test setup: bootstrap seeds, create test subjects (player/builder/admin characters), initialize engine
 - Each minimum scenario above as a separate `It()` block
 - Verify `Decision.Effect == EffectAllow` for authorized cases
 - Verify `Decision.Effect == EffectDeny` for unauthorized cases
 
+**Step 1: Write failing tests**
+
+Test both CLI validation mode and smoke test scenarios.
+
 **Step 2: Implement**
 
-Add test file `test/integration/access/smoke_test.go`:
+Add flag parsing and validation logic in `cmd/holomush/main.go` for Part 1.
+
+Add test file `test/integration/access/smoke_test.go` for Part 2:
 
 ```go
 //go:build integration
@@ -713,8 +704,8 @@ func TestABACSmoke(t *testing.T) {
 **Step 3: Run tests, commit**
 
 ```bash
-git add test/integration/access/smoke_test.go
-git commit -m "test(access): add smoke test gate for Phase 7.4→7.6 transition"
+git add cmd/holomush/main.go cmd/holomush/main_test.go test/integration/access/smoke_test.go
+git commit -m "feat(access): add seed policy integration test suite (CLI validation + smoke test gate)"
 ```
 
 ---

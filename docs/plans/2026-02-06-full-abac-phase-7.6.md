@@ -13,7 +13,7 @@
 
 - Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — AccessPolicyEngine must be fully operational before migrating call sites
 - Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (resolve seed policy gaps) — seed policy coverage gaps must be resolved before migration ([Decision #94](../specs/decisions/epic7/phase-7.4/094-seed-gap-resolution-before-migration.md))
-- Task 23c ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (smoke test gate) — smoke tests must validate seed policy behavior before migration proceeds
+- Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (seed policy integration test suite) — CLI validation and smoke tests must validate seed policy behavior before migration proceeds
 
 **Migration Strategy:**
 
