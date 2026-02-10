@@ -123,6 +123,7 @@ graph LR
     T21a --> T22([T22: Seeds])
     T22 --> T22b([T22b: Gap<br/>Resolution])
     T22b --> T23
+    T22b --> T28
     T23 --> T23b([T23b: Validate<br/>Seeds])
     T23b --> T23c([T23c: Smoke<br/>Test Gate])
     T23c --> T28([T28: Migration<br/>M5 End])
@@ -303,6 +304,7 @@ graph TD
     T23 --> T26a
     T23 --> T27a
     T17_4 --> T28
+    T22b --> T28
     T23c --> T28
     T23b --> T30
     T7 --> T26b
