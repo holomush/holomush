@@ -242,7 +242,7 @@ type AuditMode string
 
 const (
     AuditOff        AuditMode = "off"          // System bypasses + denials
-    AuditDenialsOnly AuditMode = "denials_only" // Log deny + default_deny only
+    AuditDenialsOnly AuditMode = "denials_only" // Bypasses + denials (default)
     AuditAll        AuditMode = "all"           // Log all decisions
 )
 
@@ -254,11 +254,11 @@ type AuditConfig struct {
 }
 ```
 
-| Mode           | What is logged            | Typical use case                      |
-| -------------- | ------------------------- | ------------------------------------- |
-| `off`          | System bypasses + denials | Development, performance (allows off) |
-| `denials_only` | Deny + default_deny       | Production default                    |
-| `all`          | All decisions incl. allow | Debugging, compliance audit           |
+| Mode           | What is logged                        | Typical use case                      |
+| -------------- | ------------------------------------- | ------------------------------------- |
+| `off`          | System bypasses + denials             | Development, performance (allows off) |
+| `denials_only` | System bypasses + deny + default_deny | Production default                    |
+| `all`          | All decisions incl. allow             | Debugging, compliance audit           |
 
 The default mode is `denials_only` — this balances operational visibility with
 storage efficiency.
