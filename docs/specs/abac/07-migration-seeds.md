@@ -124,7 +124,7 @@ bootstrap (e.g., `seed:player-self-access`). Each name is prefixed with
 `seed:` to prevent collision with admin-created policies. Property visibility
 policies (`seed:property-*`) are also defined in [Visibility Seed Policies](03-property-model.md#visibility-seed-policies)
 with additional implementation context. Exit policies (`seed:player-exit-use`)
-use target matching only — full attribute resolution is deferred (see Decision #88).
+use target matching only — full attribute resolution is deferred (see [Decision #88](../decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)).
 
 ### Bootstrap Sequence
 
@@ -326,7 +326,7 @@ The static role system from Epic 3 used wildcard resource patterns to grant perm
    `goyacc` (requires separate `.y` grammar file and manual AST mapping) and
    hand-rolled recursive descent (more code, harder to maintain) because its
    struct-tag approach generates Go AST structs directly from grammar
-   annotations, eliminating the mapping layer. **Note:** Decision #41 specifies
+   annotations, eliminating the mapping layer. **Note:** [Decision #41](../decisions/epic7/phase-7.2/041-ll1-parser-disambiguation.md) specifies
    LL(1) disambiguation as the grammar design intent (one-token lookahead to
    resolve ambiguities). Participle uses PEG-style ordered-choice semantics
    which achieve the same disambiguation effect — the first matching alternative

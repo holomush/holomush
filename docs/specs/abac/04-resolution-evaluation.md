@@ -325,7 +325,7 @@ persists until administratively cleared. In degraded mode:
   evaluating any policies (fail-closed for all subjects)
 - **Exception:** The system bypass check (Step 1 of the evaluation algorithm)
   occurs BEFORE the degraded mode check. Requests with `subject == "system"`
-  receive `EffectSystemBypass` even in degraded mode (see ADR #90). This
+  receive `EffectSystemBypass` even in degraded mode (see [ADR #90](../decisions/epic7/phase-7.3/090-system-bypass-precedence-over-degraded-mode.md)). This
   ensures system operations (bootstrap, recovery, health checks) continue
   functioning during degraded mode.
 - The CRITICAL log entry **MUST** include the policy name, effect, and
@@ -369,7 +369,7 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 ├─ 1. System bypass
 │    subject == "system" → return Decision{Allowed: true, Effect: SystemBypass}
 │    NOTE: This check occurs BEFORE degraded mode. System subject bypasses
-│    even when the engine is in degraded mode (see ADR #90).
+│    even when the engine is in degraded mode (see [ADR #90](../decisions/epic7/phase-7.3/090-system-bypass-precedence-over-degraded-mode.md)).
 │
 ├─ 2. Session resolution
 │    subject starts with "session:" → resolve to character ID

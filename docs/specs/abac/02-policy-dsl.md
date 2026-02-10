@@ -92,7 +92,7 @@ after parsing an `expr`, if the next token is a comparator (`==`, `!=`, `>`,
 `>=`, `<`, `<=`), `in`, `like`, `has`, or `.` followed by `containsAll`/
 `containsAny`, treat it as the corresponding compound condition; otherwise treat
 it as a bare boolean. This makes the grammar LL(1) at the logical design level.
-**Implementation note:** See Decision #41 for how participle's PEG ordered-choice
+**Implementation note:** See [Decision #41](../decisions/epic7/phase-7.2/041-ll1-parser-disambiguation.md) for how participle's PEG ordered-choice
 semantics achieve the same disambiguation effect.
 
 **Bare boolean restriction:** The compiler MUST reject bare boolean attribute
