@@ -311,7 +311,9 @@ func NewDecision(effect Effect, reason string, policyID string) Decision {
 func (d Decision) Validate() error {
     expectedAllowed := d.Effect == EffectAllow || d.Effect == EffectSystemBypass
     if d.allowed != expectedAllowed {
-        return fmt.Errorf("Decision invariant violated: allowed=%v but effect=%v", d.allowed, d.Effect)
+        return oops.Errorf("Decision invariant violated").
+            With("allowed", d.allowed).
+            With("effect", d.Effect)
     }
     return nil
 }
