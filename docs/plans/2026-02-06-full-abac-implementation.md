@@ -344,6 +344,8 @@ graph TD
 
 **Note:** T16b (PropertyProvider) is intentionally NOT a dependency of T17.1 (AccessPolicyEngine). The engine works using core providers (T15) and simple providers (T16a); PropertyProvider adds `property.*` namespace support but is not required for engine operation. See [Decision #85](../specs/decisions/epic7/phase-7.3/085-property-provider-not-on-critical-path.md).
 
+**⚠️ Latent Risk:** Although T16b is not on the critical path to the engine itself, it IS a hard blocker for **T23 (Bootstrap sequence)**. The cross-phase gate table below shows T16b→T23 as a required dependency because seed policies may reference `property.*` attributes. While the engine can function without property provider support (using only core/simple providers), the seed policy compilation step cannot proceed if T16b is delayed. If T16b completion drifts beyond the T22/T22b completion window, T23 cannot start, which blocks Phase 7.4 completion and downstream Phase 7.6 (migration) and Phase 7.5 (admin) work. Mitigation: Schedule T16b to complete in parallel with T14-T15 provider chain work, not as a tail task.
+
 **Note:** Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) depends on BOTH Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) and Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (core attribute providers). These chains can run in parallel after Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, but both must finish before Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) can start. Sub-tasks T17.1 through T17.4 are sequential within the engine implementation.
 
 **Parallel Work Opportunities:**
@@ -402,6 +404,7 @@ The following table lists all dependencies that cross phase boundaries. These ga
 - Phase 7.3 (Engine + Cache) is the critical path bottleneck — gates both Phase 7.4 (Bootstrap) and Phase 7.6 (Migration)
 - Phase 7.4 (Bootstrap) must complete before Phase 7.5 (Admin) and Phase 7.6 (Migration) can proceed
 - Phase 7.7 (Resilience) depends on completed bootstrap and engine infrastructure
+- **Latent Risk (T16b):** PropertyProvider (T16b) is not on the critical path to the engine, but it blocks T23 (Bootstrap). Must be scheduled in parallel with core provider chain (T14-T15), not deferred. If T16b slips, it becomes a blocking dependency for Phase 7.4 completion.
 
 ### Milestones
 
