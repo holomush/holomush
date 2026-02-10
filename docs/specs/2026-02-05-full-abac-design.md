@@ -2896,10 +2896,31 @@ Available to admins only. Use this when:
   needed to restore access
 - Verifying that a recent policy change has been applied to the cache
 
-**Note:** This command does NOT bypass cache staleness or degraded mode
-restrictions. During degraded mode or prolonged staleness, administrators
-**MUST** use direct CLI or database access to resolve system issues, as the
-policy engine fails closed for all subjects including admins.
+**Fail-closed behavior:** When the cache staleness threshold is exceeded, the
+policy engine enters fail-closed mode and denies all authorization checks
+(including the `policy reload` command itself). The `policy reload` command
+does NOT bypass cache staleness or degraded mode restrictions.
+
+**Policy reload during fail-closed:** Although the in-game `policy reload`
+command is blocked during fail-closed, administrators **MAY** still reload
+policies by directly modifying the database:
+
+1. Connect to PostgreSQL directly (via `psql` or database admin tools)
+2. Modify policies in the `access_policies` table as needed
+3. Once the LISTEN/NOTIFY connection recovers, the engine automatically
+   reloads policies and resumes normal evaluation
+
+Alternatively, if the cache is stale but the connection is still active,
+manually triggering a NOTIFY will force a reload:
+
+```sql
+NOTIFY policy_changed, 'manual_reload';
+```
+
+**Important:** Direct database access bypasses all policy validation and
+compilation checks. Administrators **SHOULD** verify policy syntax using
+`policy validate` before manual insertion, and **MUST** test thoroughly in a
+non-production environment first.
 
 ```text
 > policy reload
