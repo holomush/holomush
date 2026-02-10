@@ -32,6 +32,10 @@
 
 **Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners), [06-layers-commands.md#lock-token-registry](../specs/abac/06-layers-commands.md#lock-token-registry)
 
+**Dependencies (deferred scope — applies when Epic 8 work begins):**
+
+- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — engine must be operational before lock registry
+
 **Acceptance Criteria:**
 
 - [ ] Core lock tokens registered: `faction`, `flag`, `level`
@@ -93,6 +97,10 @@ git commit -m "feat(access): add lock token registry"
 ### Task 25: Lock expression parser and compiler
 
 **Spec References:** [06-layers-commands.md#lock-syntax](../specs/abac/06-layers-commands.md#lock-syntax), [06-layers-commands.md#lock-compilation](../specs/abac/06-layers-commands.md#lock-compilation)
+
+**Dependencies (deferred scope — applies when Epic 8 work begins):**
+
+- Task 24 (lock token registry) — lock tokens must be registered before parser can reference them
 
 **Acceptance Criteria:**
 
@@ -160,6 +168,11 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 **Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners)
 
+**Dependencies (deferred scope — applies when Epic 8 work begins):**
+
+- Task 25 (lock expression parser and compiler) — lock parser/compiler must exist before command handlers can use them
+- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — engine needed for ownership verification via `Evaluate()`
+
 **Acceptance Criteria:**
 
 - [ ] `lock <resource>/<action> = <expression>` → parses expression, validates ownership via `Evaluate()`, compiles to permit policy, stores via `PolicyStore`
@@ -225,6 +238,10 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
+**Dependencies (deferred scope — applies when Epic 8 work begins):**
+
+- Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (bootstrap sequence) — seeded policies must exist before admin CRUD commands operate on them
+
 **Acceptance Criteria:**
 
 - [ ] `policy create <name> <dsl>` → validates DSL, stores policy, triggers NOTIFY
@@ -276,6 +293,10 @@ git commit -m "feat(command): add policy CRUD admin commands (create/list/show/e
 ### Task 26b: Admin commands — policy state management (enable/disable/history/rollback)
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
+
+**Dependencies (deferred scope — applies when Epic 8 work begins):**
+
+- Task 26a (admin CRUD commands) — CRUD commands must exist before state management commands extend them
 
 **Cross-Phase Dependencies:** T7 (Phase 7.1), T17 (Phase 7.3), T18 (Phase 7.3)
 
@@ -329,6 +350,10 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
 > **Design note:** Task 27 split into 27a (policy test) and 27b (remaining admin commands) due to complexity. The `policy test` command has significant implementation scope (verbose mode, JSON mode, suite mode, builder redaction, audit logging) that warrants its own task for reviewability.
+
+**Dependencies (deferred scope — applies when Epic 8 work begins):**
+
+- Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (bootstrap sequence) — seeded policies must exist before policy test command can evaluate them
 
 **Acceptance Criteria:**
 

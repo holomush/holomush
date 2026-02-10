@@ -9,6 +9,10 @@
 
 **Spec References:** [Testing Strategy](../specs/abac/08-testing-appendices.md#testing-strategy), [Integration Tests](../specs/abac/08-testing-appendices.md#integration-tests-ginkgogomega), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 
+**Dependencies:**
+
+- Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (CLI --validate-seeds) — seed validation must be in place before integration tests exercise seed policy behavior
+
 **Acceptance Criteria:**
 
 - [ ] Ginkgo/Gomega BDD-style tests with `//go:build integration` tag
@@ -108,6 +112,10 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Spec References:** [Degraded Mode](../specs/abac/04-resolution-evaluation.md#error-handling) (Security note section)
 
+**Dependencies:**
+
+- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — engine must be operational before degraded mode can be added
+
 **Acceptance Criteria:**
 
 - [ ] Engine MUST enter degraded mode when corrupted forbid/deny policy detected
@@ -153,6 +161,10 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Spec References:** [Schema Evolution on Plugin Reload](../specs/abac/04-resolution-evaluation.md#schema-evolution-on-plugin-reload)
 
+**Dependencies:**
+
+- Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store) — PolicyStore interface needed for schema evolution policy scanning
+
 **Acceptance Criteria:**
 
 - [ ] When plugin reloaded, compare new schema against previous schema version
@@ -189,6 +201,10 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Spec References:** [Lock Token Discovery](../specs/abac/06-layers-commands.md#lock-token-discovery)
 
+**Dependencies:**
+
+- Task 24 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) (lock token registry) — lock registry must exist before discovery command can query it (deferred to Epic 8)
+
 **Acceptance Criteria:**
 
 - [ ] `lock tokens` command → lists all registered lock tokens (faction, flag, level, etc.)
@@ -217,6 +233,10 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 ### Task 34: General provider circuit breaker
 
 **Spec References:** [Provider Circuit Breaker](../specs/abac/04-resolution-evaluation.md#circuit-breaker-summary)
+
+**Dependencies:**
+
+- Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (attribute resolver cache) — resolver must exist before circuit breaker logic can be added to it
 
 > **Note:** This task's circuit breaker also covers PropertyProvider (formerly a
 > separate circuit breaker in Task 16b). See [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md).
@@ -263,6 +283,10 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties lifecycle section
 
 > **Note:** This task was moved from Phase 7.1 (Task 4c) because orphan cleanup is a resilience concern, not a core schema concern. Cascade deletion remains in Phase 7.1.
+
+**Dependencies:**
+
+- Task 4c ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (property cascade deletion and lifecycle) — cascade deletion logic must exist before orphan cleanup can build on it
 
 **Acceptance Criteria:**
 

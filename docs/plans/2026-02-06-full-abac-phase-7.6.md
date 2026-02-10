@@ -9,6 +9,12 @@
 
 **Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence), ADR 0014 (Direct replacement, no adapter)
 
+**Dependencies:**
+
+- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — AccessPolicyEngine must be fully operational before migrating call sites
+- Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (resolve seed policy gaps) — seed policy coverage gaps must be resolved before migration ([Decision #94](../specs/decisions/epic7/phase-7.4/094-seed-gap-resolution-before-migration.md))
+- Task 23c ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (smoke test gate) — smoke tests must validate seed policy behavior before migration proceeds
+
 **Migration Strategy:**
 
 This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering specific packages and call sites. Each commit compiles and passes `task build`. The world service package (24 call sites) is decomposed into 3 sub-commits by domain to reduce review complexity and blast radius.
@@ -343,6 +349,10 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 ### Task 28.5: Migration Equivalence Testing
 
 **Spec References:** Review Finding H5 (Architectural Recommendation) — No test validates identical authorization decisions between old StaticAccessControl and new ABAC engine
+
+**Dependencies:**
+
+- Task 28 (migrate to AccessPolicyEngine) — all call sites must be migrated before equivalence testing validates the migration
 
 **Acceptance Criteria:**
 
@@ -771,6 +781,10 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 ### Task 29: Remove StaticAccessControl, AccessControl interface, and capability.Enforcer
 
 **Spec References:** [07-migration-seeds.md#implementation-sequence](../specs/abac/07-migration-seeds.md#implementation-sequence), ADR 0014 (Direct replacement, no adapter)
+
+**Dependencies:**
+
+- Task 28.5 (migration equivalence tests) — equivalence tests must pass with zero unjustified divergences before old code is removed
 
 **Acceptance Criteria:**
 
