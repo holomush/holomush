@@ -78,7 +78,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 **For experienced implementers:** Start here to jump directly to critical tasks without reading the full plan.
 
-**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain→T17.1→T17.2→T17.3→T17.4→T18→T21a→T22→T22b→T23→T28→T28.5→T29
+**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain→T17.1→T17.2→T17.3→T17.4→(T18 + T21a→T22→T22b)→T23→T28→T28.5→T29
 
 **First 3 tasks:**
 
