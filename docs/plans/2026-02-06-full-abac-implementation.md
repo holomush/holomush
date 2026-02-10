@@ -637,7 +637,7 @@ T-shirt size estimates for sprint planning:
 | T34   | Circuit breaker                    | M    | Resilience pattern                   |
 | T35   | Property orphan cleanup            | M    | Background cleanup                   |
 
-**Summary (active):** 1 XS, 15 S, 23 M, 7 L, 1 XL = 46 active tasks
+**Summary (active):** 1 XS, 15 S, 22 M, 7 L, 1 XL = 46 active tasks
 **Deferred (Phase 7.5 → Epic 8):** 0 XS, 0 S, 6 M, 3 L, 0 XL = 9 deferred tasks
 **Total:** 55 tasks (46 active + 9 deferred)
 
