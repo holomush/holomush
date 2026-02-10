@@ -402,7 +402,19 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T23         | 7.4          | T27a        | ~~7.5~~ E8   | ~~Seeded policies before policy test~~ **Deferred to Epic 8**                                     |
 | T22b        | 7.4          | T28         | 7.6          | Seed policy gaps resolved before migration (Decision #94)                                         |
 | T23         | 7.4          | T28         | 7.6          | Bootstrap must complete before migration                                                          |
+| T23c        | 7.4          | T28         | 7.6          | Smoke test gate must pass before migration                                                        |
 | T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests                                                          |
+| T12         | 7.2          | T27b-1      | ~~7.5~~ E8   | ~~Compiler needed for policy validation~~ **Deferred to Epic 8**                                  |
+| T17.4       | 7.3          | T27b-1      | ~~7.5~~ E8   | ~~Engine needed for policy validation~~ **Deferred to Epic 8**                                    |
+| T18         | 7.3          | T27b-1      | ~~7.5~~ E8   | ~~Cache needed for policy reload~~ **Deferred to Epic 8**                                         |
+| T17.4       | 7.3          | T26b        | ~~7.5~~ E8   | ~~Engine needed for admin state commands~~ **Deferred to Epic 8**                                 |
+| T18         | 7.3          | T26b        | ~~7.5~~ E8   | ~~Cache needed for enable/disable cache reload~~ **Deferred to Epic 8**                           |
+| T7          | 7.1          | T27b-2      | ~~7.5~~ E8   | ~~Store needed for audit queries~~ **Deferred to Epic 8**                                         |
+| T22         | 7.4          | T27b-2      | ~~7.5~~ E8   | ~~Seed constants needed for seed verification~~ **Deferred to Epic 8**                            |
+| T23         | 7.4          | T27b-2      | ~~7.5~~ E8   | ~~Bootstrap needed for seed status inspection~~ **Deferred to Epic 8**                            |
+| T7          | 7.1          | T27b-3      | ~~7.5~~ E8   | ~~Store needed for policy recompilation~~ **Deferred to Epic 8**                                  |
+| T12         | 7.2          | T27b-3      | ~~7.5~~ E8   | ~~Compiler needed for policy recompilation~~ **Deferred to Epic 8**                               |
+| T17.4       | 7.3          | T27b-3      | ~~7.5~~ E8   | ~~Engine needed for degraded mode management~~ **Deferred to Epic 8**                             |
 | T24         | ~~7.5~~ E8   | T33         | 7.7          | ~~Lock registry needed for discovery command~~ **T24 deferred to Epic 8; T33 blocked until then** |
 
 **Key Insights:**
