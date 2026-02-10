@@ -106,6 +106,9 @@ options considered, and rationale for the chosen approach.
 | 100 | Standardize Dependency Format Across Phase Files                   | General | [100](general/100-standardize-dependency-format.md)                       |
 | 101 | ADR #65 Is Sufficient for Rollback Coverage                        | 7.6     | [101](phase-7.6/101-adr65-sufficient-for-rollback.md)                     |
 | 102 | Lefthook `fmt-markdown` Auto-Fix Is Intentional                    | General | [102](general/102-lefthook-markdown-autofix-intentional.md)               |
+| 103 | Remove T7→T12 Dependency (PolicyStore → PolicyCompiler)            | General | [103](general/103-remove-t7-t12-dependency.md)                            |
+| 104 | Rename Audit Mode `off` to `minimal`                               | General | [104](general/104-rename-audit-off-to-minimal.md)                         |
+| 105 | LISTEN/NOTIFY Disconnection Recovery Strategy                      | 7.3     | [105](phase-7.3/105-listen-notify-disconnection-recovery.md)              |
 
 ## Spec ADR Reference Mapping
 
