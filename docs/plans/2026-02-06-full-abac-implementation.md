@@ -294,7 +294,6 @@ graph TD
     T0 --> T7
     T0 --> T8
     T5 --> T8
-    T7 --> T12
     T7 --> T18
     T12 --> T17_1
     T4a --> T16b
@@ -370,7 +369,7 @@ graph TD
 
 - After Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit) completes, Task 1 gates Task 7, but Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (AST types) can proceed in parallel (Task 0 validated AST serialization)
 - After Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, two critical chains can run in parallel:
-  - DSL chain: Tasks 8-11 can start independently; only Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (PolicyCompiler) requires Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))
+  - DSL chain: Tasks 8-12 can start independently (Task 0 validated AST serialization)
   - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain
 - Task 16a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (simple providers) can proceed independently of Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (PropertyProvider)
 - Task 19b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (audit retention) can proceed in parallel with Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (metrics)
@@ -398,7 +397,6 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                                                              |
 | T16b        | 7.3          | T23         | 7.4          | PropertyProvider enables property.* attributes in seed policies                                   |
 | T2          | 7.1          | T19         | 7.3          | Audit schema needed by audit logger                                                               |
-| T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler                                                      |
 | T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                                                              |
 | T7          | 7.1          | T26b        | ~~7.5~~ E8   | ~~Store needed for admin state commands~~ **Deferred to Epic 8**                                  |
 | T7          | 7.1          | T32         | 7.7          | Store interface needed for schema evolution                                                       |
