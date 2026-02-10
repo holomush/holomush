@@ -368,6 +368,8 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T0          | 7.1          | T8          | 7.2          | AST serialization spike validates DSL design                    |
 | T4a         | 7.1          | T16b        | 7.3          | Property metadata enables PropertyProvider                      |
 | T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup                     |
+| T5          | 7.1          | T8          | 7.2          | Core types needed by AST node definitions                       |
+| T5          | 7.1          | T13         | 7.3          | Core types needed by attribute provider interface               |
 | T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                            |
 | T16b        | 7.3          | T23         | 7.4          | PropertyProvider enables property.* attributes in seed policies |
 | T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler                    |
