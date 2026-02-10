@@ -140,6 +140,8 @@ graph LR
     style T22 fill:#ffcccc
     style T22b fill:#ffcccc
     style T23 fill:#ffcccc
+    style T23b fill:#ffcccc
+    style T23c fill:#ffcccc
     style T28 fill:#ffe6cc
     style T29 fill:#ffcccc
 ```
@@ -329,6 +331,8 @@ graph TD
     style T17_4 fill:#ffcccc
     style T18 fill:#ffcccc
     style T23 fill:#ffcccc
+    style T23b fill:#ffcccc
+    style T23c fill:#ffcccc
     style T28 fill:#ffcccc
     style T29 fill:#ffcccc
     style T4a fill:#ffddaa
