@@ -2996,6 +2996,15 @@ when { resource.visibility == "private"
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
+
+// seed:property-owner-write
+// Property owners can write and delete their properties.
+// Failsafe: If a property has no owner (owner is nil/empty), this policy
+// denies access because the condition `resource.owner == principal.id`
+// can never match. This prevents non-admins from writing to ownerless
+// properties, ensuring unowned properties remain protected.
+permit(principal is character, action in ["write", "delete"], resource is property)
+when { resource.owner == principal.id };
 ```
 
 The comment preceding each policy IS the deterministic name used during
