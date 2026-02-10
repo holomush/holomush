@@ -100,7 +100,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ## Critical Path Overview
 
-The full dependency diagram below shows all 54 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
+The full dependency diagram below shows all 55 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
 
 ```mermaid
 graph LR
@@ -161,7 +161,7 @@ graph LR
 
 ## Phase Dependency Diagram
 
-The complete task dependency graph showing all 54 tasks:
+The complete task dependency graph showing all 55 tasks:
 
 ```mermaid
 graph TD
@@ -585,6 +585,7 @@ T-shirt size estimates for sprint planning:
 | T22b  | Resolve seed policy gaps      | M    | Gap analysis + new policies          |
 | T23   | Bootstrap sequence            | L    | Complex startup + idempotency        |
 | T23b  | CLI --validate-seeds          | S    | CLI flag + validation                |
+| T23c  | Smoke test gate               | M    | Auth pattern validation before T28   |
 | T24   | Lock token registry           | M    | Registry + parser                    |
 | T25   | Lock parser/compiler          | L    | Lock expression → DSL compilation    |
 | T25b  | Lock/unlock commands          | M    | Command implementation               |
@@ -604,13 +605,13 @@ T-shirt size estimates for sprint planning:
 | T34   | Circuit breaker               | M    | Resilience pattern                   |
 | T35   | Property orphan cleanup       | M    | Background cleanup                   |
 
-**Summary:** 1 XS, 15 S, 27 M, 10 L, 1 XL = 54 tasks
+**Summary:** 1 XS, 15 S, 28 M, 10 L, 1 XL = 55 tasks
 
 ---
 
 ## Phase Files
 
-This implementation consists of **54 tasks** split across **7 phases** for manageability:
+This implementation consists of **55 tasks** split across **7 phases** for manageability:
 
 - [Phase 7.1: Policy Schema (Database Tables + Policy Store)](./2026-02-06-full-abac-phase-7.1.md)
 - [Phase 7.2: DSL & Compiler](./2026-02-06-full-abac-phase-7.2.md)
