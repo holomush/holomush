@@ -483,6 +483,7 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 - [ ] Parent name uniqueness → error on duplicate `(parent_type, parent_id, name)`
 - [ ] `DeleteByParent(ctx, parentType, parentID)` deletes all properties for the given parent entity (for cascade deletion when parent entities are deleted)
 - [ ] Follows existing repository pattern from `internal/world/postgres/location_repo.go`
+- [ ] `go vet` confirms no import cycles between `internal/access/` and `PropertyProvider` (or any provider packages that import from `internal/world/` or `internal/store/`)
 - [ ] All tests pass via `task test`
 
 **Files:**

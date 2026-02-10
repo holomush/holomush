@@ -101,6 +101,7 @@ options considered, and rationale for the chosen approach.
 | 95 | M5 Milestone Gate Is T28 (Call-Site Migration)               | General | [095](general/095-m5-milestone-gate-is-t28.md)                            |
 | 96 | Defer Phase 7.5 (Locks & Admin) to Epic 8                    | General | [096](general/096-defer-phase-7-5-to-epic-8.md)                           |
 | 97 | P99 Performance Target Adjustment (5ms → 25ms)               | General | [097](general/097-p99-performance-target-25ms.md)                         |
+| 98 | Import Cycle Check for PropertyProvider (T4a)                | 7.1     | [098](phase-7.1/098-import-cycle-check-t4a.md)                            |
 
 ## Spec ADR Reference Mapping
 
