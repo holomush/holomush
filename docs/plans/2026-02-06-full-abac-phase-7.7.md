@@ -351,11 +351,9 @@ git commit -m "feat(world): add property orphan cleanup goroutine and startup in
 
 ---
 
-### Task 36: CLI flag --validate-seeds (MOVED to Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)))
+### Task 36: ~~CLI flag --validate-seeds~~ → See [Phase 7.4, Task 23b](./2026-02-06-full-abac-phase-7.4.md#task-23b-cli-flag---validate-seeds)
 
-> **Note:** This task was moved to Phase 7.4 (Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md))) to enable CI validation during later phases. See Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) for implementation details.
-
-**Rationale:** `--validate-seeds` only depends on the DSL compiler (Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) and seed policy definitions (Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md))), both available after Phase 7.4. Moving it earlier allows CI pipelines to validate seed policies during later phase development, catching compilation errors sooner.
+> **This task does not exist in Phase 7.7.** It was moved to Phase 7.4 as Task 23b to enable CI validation during later phases. Task 23b handles the complete implementation—there is no separate work needed here.
 
 ---
 
