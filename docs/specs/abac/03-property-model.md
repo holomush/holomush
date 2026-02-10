@@ -100,14 +100,17 @@ in `excluded_from` (deny-overrides means the `forbid` policy on
 Each visibility level is enforced by system-level seed policies (see
 [Seed Policies](07-migration-seeds.md#seed-policies) for the complete set). These property
 visibility policies are created during bootstrap alongside the role-based
-seed policies:
+seed policies. All seed policies are tracked with a `seed_version` field
+(initially version 1) for upgrade path management.
 
 ```text
+// seed:property-public-read (seed_version: 1)
 // Public properties: readable by characters in the same location as the parent
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "public"
     && principal.location == resource.parent_location };
 
+// seed:property-private-read (seed_version: 1)
 // Private properties: readable only by owner
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "private"
@@ -125,18 +128,19 @@ when { resource.visibility == "private"
 // 2. Default-deny still provides full audit attribution (effect=default_deny
 //    is logged), so an explicit forbid provides no additional value.
 
+// seed:property-admin-read (seed_version: 1)
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
 
-// seed:property-restricted-visible-to
+// seed:property-restricted-visible-to (seed_version: 1)
 // Restricted properties: readable by characters in the visible_to list
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "restricted"
     && resource has visible_to
     && principal.id in resource.visible_to };
 
-// seed:property-restricted-excluded
+// seed:property-restricted-excluded (seed_version: 1)
 // Restricted properties: denied to characters in the excluded_from list
 forbid(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "restricted"

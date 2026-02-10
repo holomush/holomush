@@ -19,67 +19,74 @@ The seed policies define the default permission model. They use the ABAC
 engine's full capabilities (attribute-based conditions, `enter` action for
 location control) rather than replicating the static system's limitations.
 
+**Seed version tracking:** Each seed policy is tracked with a `seed_version`
+field in the database (see [Policy Storage](05-storage-audit.md#schema)). The
+initial version is 1. Server upgrades that ship updated seed text with an
+incremented version number automatically update the corresponding seed policy
+during bootstrap. The DSL examples below represent version 1 of each seed
+policy.
+
 ```text
-// seed:player-self-access
+// seed:player-self-access (seed_version: 1)
 permit(principal is character, action in ["read", "write"], resource is character)
 when { resource.id == principal.id };
 
-// seed:player-location-read
+// seed:player-location-read (seed_version: 1)
 permit(principal is character, action in ["read"], resource is location)
 when { resource.id == principal.location };
 
-// seed:player-character-colocation
+// seed:player-character-colocation (seed_version: 1)
 permit(principal is character, action in ["read"], resource is character)
 when { resource.location == principal.location };
 
-// seed:player-object-colocation
+// seed:player-object-colocation (seed_version: 1)
 permit(principal is character, action in ["read"], resource is object)
 when { resource.location == principal.location };
 
-// seed:player-stream-emit
+// seed:player-stream-emit (seed_version: 1)
 permit(principal is character, action in ["emit"], resource is stream)
 when { resource.name like "location:*" && resource.location == principal.location };
 
-// seed:player-movement
+// seed:player-movement (seed_version: 1)
 // Intentionally unconditional — movement is allowed by default for all
 // characters. Admins restrict specific locations via forbid policies
 // (deny-overrides ensures forbid always wins over this permit).
 permit(principal is character, action in ["enter"], resource is location);
 
-// seed:player-basic-commands
+// seed:player-basic-commands (seed_version: 1)
 permit(principal is character, action in ["execute"], resource is command)
 when { resource.name in ["say", "pose", "look", "go"] };
 
-// seed:builder-location-write
+// seed:builder-location-write (seed_version: 1)
 permit(principal is character, action in ["write", "delete"], resource is location)
 when { principal.role in ["builder", "admin"] };
 
-// seed:builder-object-write
+// seed:builder-object-write (seed_version: 1)
 permit(principal is character, action in ["write", "delete"], resource is object)
 when { principal.role in ["builder", "admin"] };
 
-// seed:builder-commands
+// seed:builder-commands (seed_version: 1)
 permit(principal is character, action in ["execute"], resource is command)
 when { principal.role in ["builder", "admin"]
     && resource.name in ["dig", "create", "describe", "link"] };
 
-// seed:admin-full-access
+// seed:admin-full-access (seed_version: 1)
 permit(principal is character, action, resource)
 when { principal.role == "admin" };
 
-// seed:property-public-read
+// seed:property-public-read (seed_version: 1)
 // Public properties: readable by characters in the same location as the parent
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "public"
     && principal.location == resource.parent_location };
 
-// seed:property-private-read
+// seed:property-private-read (seed_version: 1)
 // Private properties: readable only by owner
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "private"
     && resource.owner == principal.id };
 
-// seed:property-admin-read
+// seed:property-admin-read (seed_version: 1)
 // Admin properties: readable only by admins
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "admin" && principal.role == "admin" };
@@ -94,26 +101,26 @@ when { resource.visibility == "admin" && principal.role == "admin" };
 // 2. Default-deny still provides full audit attribution (effect=default_deny
 //    is logged), so the forbid comment about "audit attribution" was incorrect.
 
-// seed:property-owner-write
+// seed:property-owner-write (seed_version: 1)
 // Property owners can write and delete their properties
 permit(principal is character, action in ["write", "delete"], resource is property)
 when { resource.owner == principal.id };
 
-// seed:property-restricted-visible-to
+// seed:property-restricted-visible-to (seed_version: 1)
 // Restricted properties: readable by characters in the visible_to list
 permit(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "restricted"
     && resource has visible_to
     && principal.id in resource.visible_to };
 
-// seed:property-restricted-excluded
+// seed:property-restricted-excluded (seed_version: 1)
 // Restricted properties: denied to characters in the excluded_from list
 forbid(principal is character, action in ["read"], resource is property)
 when { resource.visibility == "restricted"
     && resource has excluded_from
     && principal.id in resource.excluded_from };
 
-// seed:player-exit-use
+// seed:player-exit-use (seed_version: 1)
 // Exit usage: allow characters to use exits (target matching only)
 // Full exit attribute resolution deferred (see holomush-5k1.422)
 permit(principal is character, action in ["use"], resource is exit);
