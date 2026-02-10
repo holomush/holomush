@@ -596,12 +596,12 @@ timeout rate, and circuit breaker status for operational visibility.
   logging to enable performance profiling during development
 - Monitoring SHOULD export per-provider latency metrics (not just aggregate
   `Evaluate()` latency) to identify slow providers independently
-- Monitoring SHOULD export `policy_cache_last_update` gauge (Unix timestamp) to
+- Monitoring SHOULD export `abac_policy_cache_last_update` gauge (Unix timestamp) to
   verify the LISTEN/NOTIFY connection is alive and detect cache staleness
 - Monitoring SHOULD export per-policy evaluation counts
   (`abac_policy_evaluations_total{name, effect}`) to identify hot policies
 - Operators SHOULD configure alerting when
-  `time.Now() - policy_cache_last_update > cache_staleness_threshold` to detect
+  `time.Now() - abac_policy_cache_last_update > cache_staleness_threshold` to detect
   prolonged LISTEN/NOTIFY disconnections
 
 **`Decision.Policies` allocation note:** The `Policies []PolicyMatch` slice is
@@ -753,7 +753,7 @@ The ABAC engine exports the following Prometheus metrics for monitoring and aler
 | `abac_provider_circuit_breaker_trips_total`          | Counter   | `provider`                | Circuit breaker trips for general attribute providers                       | Circuit Breaker Summary    |
 | `abac_property_provider_circuit_breaker_trips_total` | Counter   | -                         | Circuit breaker trips for PropertyProvider specifically                     | Circuit Breaker Summary    |
 | `abac_degraded_mode`                                 | Gauge     | -                         | Engine degraded mode status (0=normal, 1=degraded due to policy corruption) | Error Handling             |
-| `policy_cache_last_update`                           | Gauge     | -                         | Unix timestamp of last successful policy cache reload                       | Measurement Strategy       |
+| `abac_policy_cache_last_update`                      | Gauge     | -                         | Unix timestamp of last successful policy cache reload                       | Measurement Strategy       |
 
 **Additional audit metrics** are documented in [05-storage-audit.md](05-storage-audit.md#audit-metrics-reference):
 
@@ -763,6 +763,6 @@ The ABAC engine exports the following Prometheus metrics for monitoring and aler
 **Alerting recommendations:**
 
 - Alert on `abac_degraded_mode == 1` - critical: engine is fail-closed for all subjects
-- Alert on `time.Now() - policy_cache_last_update > cache_staleness_threshold` - LISTEN/NOTIFY disconnected
+- Alert on `time.Now() - abac_policy_cache_last_update > cache_staleness_threshold` - LISTEN/NOTIFY disconnected
 - Alert on `abac_evaluate_duration_seconds` p99 > 10ms - evaluation latency regression
 - Monitor `abac_provider_errors_total` rate - chronic provider failures may indicate infrastructure issues
