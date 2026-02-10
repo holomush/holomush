@@ -42,11 +42,17 @@ jobs:
 
       - name: Install tools
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@latest
-          go install github.com/google/yamlfmt/cmd/yamlfmt@latest
-          # Pinned to specific version for CI reproducibility. Update periodically to match local dev.
-          # Note: Assumes x86_64 architecture on ubuntu-latest runners
+          # Pinned to specific versions for CI reproducibility. Update periodically to match local dev.
+          # To update actionlint:
+          # 1. Check for new releases: https://github.com/rhysd/actionlint/releases
+          # 2. Update version in go install command below
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
+          # To update yamlfmt:
+          # 1. Check for new releases: https://github.com/google/yamlfmt/releases
+          # 2. Update version in go install command below
+          go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
           # To update rumdl version:
+          # Note: Assumes x86_64 architecture on ubuntu-latest runners
           # 1. Check for new releases: https://github.com/rvben/rumdl/releases
           # 2. Update RUMDL_VERSION below to new version
           # 3. Update cache key in "Cache rumdl" step above to match new version
@@ -63,7 +69,11 @@ jobs:
             sudo tar xzf "${RUMDL_TARBALL}" -C /usr/local/bin
             rm "${RUMDL_TARBALL}"
           fi
-          curl -fsSL https://dprint.dev/install.sh | sh
+          # To update dprint:
+          # 1. Check for new releases: https://github.com/dprint/dprint/releases
+          # 2. Update DPRINT_VERSION below to new version
+          DPRINT_VERSION="0.51.1"
+          curl -fsSL https://dprint.dev/install.sh | sh -s "${DPRINT_VERSION}"
           echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
 
       - name: Verify schema is current
