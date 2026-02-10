@@ -788,7 +788,7 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 - [ ] `task lint` passes
 - [ ] Rollback test: git-revert of Task 29 commit produces compilable code (validates ADR #65 rollback strategy)
 - [ ] Rollback test: existing tests pass after git-revert of Task 29 (old AccessControl interfaces restored)
-- [ ] Cross-reference: rollback strategy documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-migration-rollback-strategy.md) (was ADR #65 — see Decision #36 for migration approach)
+- [ ] Cross-reference: rollback strategy documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md) (was ADR #65 — see Decision #36 for migration approach)
 
 **Files:**
 
