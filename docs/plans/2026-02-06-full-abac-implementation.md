@@ -371,7 +371,7 @@ graph TD
 - After Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit) completes, Task 1 gates Task 7, but Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (AST types) can proceed in parallel (Task 0 validated AST serialization)
 - After Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, two critical chains can run in parallel:
   - DSL chain: Tasks 8-12 can start independently (Task 0 validated AST serialization)
-  - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain
+  - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain. Within the provider chain, T14 and T15 both depend on T13 and can run in parallel; the longest path is T13→T14→T17.1
 - Task 16a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (simple providers) can proceed independently of Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (PropertyProvider)
 - Task 19b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (audit retention) can proceed in parallel with Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (metrics)
 - ~~Phase 7.5 (Locks & Admin) can proceed independently after Task 23~~ — **Deferred to Epic 8** ([Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md))
