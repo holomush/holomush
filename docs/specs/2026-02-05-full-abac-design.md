@@ -1714,14 +1714,14 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 ### Performance Targets
 
-| Metric                              | Target | Benchmark Test                 | Notes                             |
-| ----------------------------------- | ------ | ------------------------------ | --------------------------------- |
-| `Evaluate()` p99 latency (cold)     | <5ms   | `BenchmarkEvaluate_ColdCache`  | First call in request             |
-| `Evaluate()` p99 latency (warm)     | <3ms   | `BenchmarkEvaluate_WarmCache`  | Cached attributes from prior call |
-| Attribute resolution (cold)         | <2ms   | `BenchmarkAttributeResolution` | All providers combined            |
-| Attribute resolution (warm, cached) | <100μs | `BenchmarkAttributeCache_Lookup` | Map lookup only                   |
-| DSL condition evaluation            | <1ms   | `BenchmarkDSLEvaluation`       | Per policy                        |
-| Cache reload                        | <50ms  | `BenchmarkCacheReload`         | Full policy set reload on NOTIFY  |
+| Metric                              | Target | Notes                             |
+| ----------------------------------- | ------ | --------------------------------- |
+| `Evaluate()` p99 latency (cold)     | <5ms   | First call in request             |
+| `Evaluate()` p99 latency (warm)     | <3ms   | Cached attributes from prior call |
+| Attribute resolution (cold)         | <2ms   | All providers combined            |
+| Attribute resolution (warm, cached) | <100μs | Map lookup only                   |
+| DSL condition evaluation            | <1ms   | Per policy                        |
+| Cache reload                        | <50ms  | Full policy set reload on NOTIFY  |
 
 **Benchmark scenario:** Targets assume 50 active policies (25 permit, 25
 forbid), average condition complexity of 3 operators per policy, 10 attributes
@@ -3426,13 +3426,10 @@ grows.
 - [ ] Lock syntax compiles to scoped policies
 - [ ] Property model designed as first-class entities
 - [ ] Direct replacement of StaticAccessControl documented (no adapter)
-- [ ] Microbenchmarks (pure evaluator, no I/O):
-  - `BenchmarkEvaluate_SinglePolicy` <10μs (single policy, no I/O)
-  - `BenchmarkEvaluate_PolicySet50` <100μs (50 policies, no I/O)
-  - `BenchmarkAttributeResolution_Mocked` <50μs (attribute resolution with mocked providers)
-- [ ] Integration benchmarks (with real providers):
-  - `BenchmarkEvaluate_ColdCache` p99 <5ms (first call, no cached attributes)
-  - `BenchmarkEvaluate_WarmCache` p99 <3ms (subsequent calls with cached attributes)
+- [ ] Microbenchmarks (pure evaluator, no I/O): single-policy <10μs,
+      50-policy set <100μs, attribute resolution <50μs (via `go test -bench`)
+- [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <5ms cold,
+      <3ms warm, matching the performance targets in the spec
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented
