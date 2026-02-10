@@ -28,7 +28,7 @@ internal/access/policy/store/
   postgres_test.go      — CRUD, versioning, LISTEN/NOTIFY dispatch
 
 internal/access/policy/audit/
-  logger_test.go        — Mode control (off/denials/all), attribute snapshots
+  logger_test.go        — Mode control (minimal/denials_only/all), attribute snapshots
 ```
 
 ### DSL Evaluator Coverage

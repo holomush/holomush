@@ -31,7 +31,7 @@ condition    = expr comparator expr
              | "if" condition "then" condition "else" condition
              | expr                                  (* bare boolean literals only: true, false *)
 
-expr       = attribute_ref | literal
+expr       = attribute_ref | literal      (* union: expression is either an attribute reference or a literal value *)
 attribute_ref = ("principal" | "resource" | "action" | "env") "." identifier { "." identifier }
 
 attribute_root = "principal" | "resource" | "action" | "env"
