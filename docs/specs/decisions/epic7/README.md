@@ -102,6 +102,7 @@ options considered, and rationale for the chosen approach.
 | 96 | Defer Phase 7.5 (Locks & Admin) to Epic 8                    | General | [096](general/096-defer-phase-7-5-to-epic-8.md)                           |
 | 97 | P99 Performance Target Adjustment (5ms → 25ms)               | General | [097](general/097-p99-performance-target-25ms.md)                         |
 | 98 | Import Cycle Check for PropertyProvider (T4a)                | 7.1     | [098](phase-7.1/098-import-cycle-check-t4a.md)                            |
+| 99 | AccessPolicyEngine Contract Tests (Task 7b)                  | 7.1     | [099](phase-7.1/099-access-policy-engine-contract-tests.md)               |
 
 ## Spec ADR Reference Mapping
 

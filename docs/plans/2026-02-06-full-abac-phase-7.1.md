@@ -1324,6 +1324,194 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 
 ---
 
+### Task 7b: AccessPolicyEngine contract tests
+
+**Spec References:** [01-core-types.md#accesspolicyengine](../specs/abac/01-core-types.md#accesspolicyengine)
+
+**ADR References:** [099-access-policy-engine-contract-tests.md](../specs/decisions/epic7/phase-7.1/099-access-policy-engine-contract-tests.md)
+
+**Dependencies:** Requires Task 7 completion (PolicyStore interface and engine scaffold must exist before contract tests)
+
+**Acceptance Criteria:**
+
+- [ ] Contract test suite covers edge cases not exercised by integration tests
+- [ ] Malformed subject prefixes return `INVALID_ENTITY_REF` error code
+- [ ] Empty subject, action, or resource strings return appropriate error codes
+- [ ] Nil `AccessRequest` rejected with clear error
+- [ ] Context cancellation mid-evaluation returns `context.Canceled` error
+- [ ] Empty policy cache (no policies loaded) returns `EffectDefaultDeny`
+- [ ] Error wrapping preserves error code through entire call stack
+- [ ] All tests pass via `task test`
+
+**Purpose:** Contract tests validate the AccessPolicyEngine interface edge cases and error handling paths that are unlikely to be hit by integration tests or migration equivalence tests. These tests ensure robustness at API boundaries.
+
+**Files:**
+
+- Create: `internal/access/abac/engine_contract_test.go`
+
+**Step 1: Write failing contract tests**
+
+```go
+// internal/access/abac/engine_contract_test.go
+package abac_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/holomush/holomush/internal/access/abac"
+    "github.com/holomush/holomush/internal/access/policy/types"
+    "github.com/holomush/holomush/pkg/errutil"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+// TestAccessPolicyEngine_ContractEdgeCases validates edge cases at API boundaries
+func TestAccessPolicyEngine_ContractEdgeCases(t *testing.T) {
+    tests := []struct {
+        name      string
+        req       *types.AccessRequest
+        setupCtx  func() context.Context
+        wantEffect types.Effect
+        wantCode  string
+    }{
+        {
+            name:      "malformed subject prefix returns error",
+            req:       &types.AccessRequest{Subject: "bogus:123", Action: "read", Resource: "location:01ABC"},
+            setupCtx:  func() context.Context { return context.Background() },
+            wantEffect: types.EffectDefaultDeny,
+            wantCode:  "INVALID_ENTITY_REF",
+        },
+        {
+            name:      "empty subject returns error",
+            req:       &types.AccessRequest{Subject: "", Action: "read", Resource: "location:01ABC"},
+            setupCtx:  func() context.Context { return context.Background() },
+            wantEffect: types.EffectDefaultDeny,
+            wantCode:  "INVALID_ENTITY_REF",
+        },
+        {
+            name:      "empty action returns error",
+            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "", Resource: "location:01ABC"},
+            setupCtx:  func() context.Context { return context.Background() },
+            wantEffect: types.EffectDefaultDeny,
+            wantCode:  "INVALID_ACTION",
+        },
+        {
+            name:      "empty resource returns error",
+            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: ""},
+            setupCtx:  func() context.Context { return context.Background() },
+            wantEffect: types.EffectDefaultDeny,
+            wantCode:  "INVALID_ENTITY_REF",
+        },
+        {
+            name:      "context cancellation mid-evaluation",
+            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: "location:01ABC"},
+            setupCtx:  func() context.Context {
+                ctx, cancel := context.WithCancel(context.Background())
+                cancel() // cancel immediately
+                return ctx
+            },
+            wantEffect: types.EffectDefaultDeny,
+            wantCode:  "", // context.Canceled error, not oops code
+        },
+        {
+            name:      "empty policy cache returns default deny",
+            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: "location:01ABC"},
+            setupCtx:  func() context.Context { return context.Background() },
+            wantEffect: types.EffectDefaultDeny,
+            wantCode:  "",
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Setup engine with empty cache
+            engine := abac.NewAccessPolicyEngine(/* deps */)
+            ctx := tt.setupCtx()
+
+            decision, err := engine.Evaluate(ctx, tt.req)
+
+            if tt.wantCode != "" {
+                require.Error(t, err)
+                errutil.AssertErrorCode(t, err, tt.wantCode)
+            } else if ctx.Err() != nil {
+                require.ErrorIs(t, err, context.Canceled)
+            } else {
+                require.NoError(t, err)
+            }
+
+            assert.Equal(t, tt.wantEffect, decision.Effect)
+        })
+    }
+}
+
+// TestAccessPolicyEngine_NilRequest validates nil request handling
+func TestAccessPolicyEngine_NilRequest(t *testing.T) {
+    engine := abac.NewAccessPolicyEngine(/* deps */)
+    ctx := context.Background()
+
+    decision, err := engine.Evaluate(ctx, nil)
+
+    require.Error(t, err)
+    errutil.AssertErrorCode(t, err, "INVALID_REQUEST")
+    assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+}
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `task test`
+Expected: FAIL — engine not implemented yet
+
+**Step 3: Implement validation in AccessPolicyEngine**
+
+Add validation to `Evaluate()` method:
+
+```go
+func (e *AccessPolicyEngine) Evaluate(ctx context.Context, req *types.AccessRequest) (types.Decision, error) {
+    if req == nil {
+        return types.NewDecision(types.EffectDefaultDeny, "nil request", ""), oops.Code("INVALID_REQUEST").Errorf("AccessRequest cannot be nil")
+    }
+
+    if req.Subject == "" || req.Action == "" || req.Resource == "" {
+        code := "INVALID_ENTITY_REF"
+        if req.Action == "" {
+            code = "INVALID_ACTION"
+        }
+        return types.NewDecision(types.EffectDefaultDeny, "empty field", ""), oops.Code(code).Errorf("AccessRequest has empty required field")
+    }
+
+    // Parse subject prefix
+    _, _, err := policy.ParseEntityRef(req.Subject)
+    if err != nil {
+        return types.NewDecision(types.EffectDefaultDeny, "invalid subject", ""), err
+    }
+
+    // Check context cancellation
+    if ctx.Err() != nil {
+        return types.NewDecision(types.EffectDefaultDeny, "context cancelled", ""), ctx.Err()
+    }
+
+    // ... rest of evaluation logic
+}
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `task test`
+Expected: PASS
+
+**Step 5: Commit**
+
+```bash
+git add internal/access/abac/engine_contract_test.go internal/access/abac/engine.go
+git commit -m "test(access): add AccessPolicyEngine contract tests for edge cases"
+```
+
+**Note:** This task is NOT on the critical path. It runs in parallel with other Phase 7.2/7.3 work and ensures the engine handles malformed inputs gracefully.
+
+---
+
 ---
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Next: Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)**

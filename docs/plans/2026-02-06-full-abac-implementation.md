@@ -100,7 +100,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ## Critical Path Overview
 
-The full dependency diagram below shows all 46 active tasks (plus 9 deferred Phase 7.5 tasks). For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
+The full dependency diagram below shows all 47 active tasks (plus 9 deferred Phase 7.5 tasks). For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
 
 ```mermaid
 graph LR
@@ -192,6 +192,7 @@ graph TD
         T5[Task 5: Core types]
         T6[Task 6: Subject/resource prefixes]
         T7[Task 7: Policy store]
+        T7b[Task 7b: AccessPolicyEngine contract tests]
         T1 --> T7
         T2 --> T7
         T3 --> T4a
@@ -199,6 +200,7 @@ graph TD
         T4b --> T4c
         T5 --> T7
         T5 --> T6
+        T7 --> T7b
     end
 
     subgraph "Phase 7.2: DSL & Compiler"
@@ -582,73 +584,74 @@ The following milestones mark major integration checkpoints for progress trackin
 
 T-shirt size estimates for sprint planning:
 
-| Task  | Description                   | Size | Rationale                            |
-| ----- | ----------------------------- | ---- | ------------------------------------ |
-| T0    | AST serialization spike       | S    | Proof-of-concept, limited scope      |
-| T0.5  | Dependency audit              | XS   | Validation/documentation only        |
-| T1    | DB migration                  | S    | Standard migration, 2 tables         |
-| T2    | Audit log migration           | S    | Single table + partitioning          |
-| T3    | Property model migration      | S    | Standard migration                   |
-| T4a   | Property metadata columns     | S    | ALTER TABLE + repo methods           |
-| T4b   | WorldService property methods | M    | Multiple CRUD methods + tests        |
-| T4c   | Property cascade/orphan       | M    | Complex cleanup logic                |
-| T5    | Core interfaces               | S    | Type definitions                     |
-| T6    | Prefix parser                 | S    | Parsing + constants                  |
-| T7    | PolicyStore interface         | M    | Interface + PostgreSQL impl + tests  |
-| T8    | AST types                     | S    | Type definitions from spike          |
-| T9    | Parser/lexer                  | L    | Full DSL parser                      |
-| T10   | Fuzz tests                    | M    | Fuzzing infrastructure               |
-| T11   | Evaluator                     | L    | Expression evaluation engine         |
-| T12   | PolicyCompiler                | M    | Compilation + versioning             |
-| T13   | Schema registry               | M    | Provider registration system         |
-| T14   | Attribute resolver            | L    | Multi-provider resolution + timeouts |
-| T15   | Core attribute providers      | M    | 3 providers (subject, resource, env) |
-| T16a  | Simple providers              | S    | Thin provider wrappers               |
-| T16b  | PropertyProvider              | M    | Property-to-attribute mapping        |
-| T17.1 | System bypass + session       | M    | Engine scaffold, steps 1-2           |
-| T17.2 | Target matching               | M    | Policy filtering, step 4             |
-| T17.3 | Condition evaluation          | M    | DSL evaluation, step 5               |
-| T17.4 | Deny-overrides + integration  | L    | Combination logic, steps 6-7 + glue  |
-| T18   | Policy cache                  | M    | LRU cache + invalidation             |
-| T19   | Audit logger                  | M    | Structured logging + config          |
-| T19b  | Retention/partitions          | S    | PostgreSQL partition management      |
-| T20   | Metrics                       | S    | Prometheus counters/histograms       |
-| T21   | Benchmarks                    | M    | Performance test suite               |
-| T21a  | Remove @-prefix               | S    | Find/replace + migration             |
-| T21b  | CI benchmark enforcement      | S    | CI pipeline config                   |
-| T22   | Seed policy constants         | M    | Define all system policies           |
-| T22b  | Resolve seed policy gaps      | M    | Gap analysis + new policies          |
-| T23   | Bootstrap sequence            | L    | Complex startup + idempotency        |
-| T23b  | CLI --validate-seeds          | S    | CLI flag + validation                |
-| T23c  | Smoke test gate               | M    | Auth pattern validation before T28   |
-| T24   | Lock token registry           | M    | Registry + parser                    |
-| T25   | Lock parser/compiler          | L    | Lock expression → DSL compilation    |
-| T25b  | Lock/unlock commands          | M    | Command implementation               |
-| T26a  | Admin CRUD commands           | L    | Full CRUD for policies               |
-| T26b  | Admin state commands          | M    | State management commands            |
-| T27a  | policy test command           | L    | Test framework with modes            |
-| T27b1 | Core admin commands           | M    | validate/reload/attributes           |
-| T27b2 | Audit/seed inspection         | M    | Inspection commands                  |
-| T27b3 | Recompilation/repair          | M    | Grammar upgrade commands             |
-| T28   | Migrate call sites            | XL   | ~28 production call sites            |
-| T28.5 | Migration equivalence tests   | L    | Comprehensive equivalence suite      |
-| T29   | Remove old AccessControl      | M    | Deletion + verification              |
-| T30   | Integration tests             | L    | End-to-end test suite                |
-| T31   | Degraded mode                 | M    | Fallback behavior                    |
-| T32   | Schema evolution              | M    | Forward-compatible changes           |
-| T33   | Lock discovery command        | S    | Single command                       |
-| T34   | Circuit breaker               | M    | Resilience pattern                   |
-| T35   | Property orphan cleanup       | M    | Background cleanup                   |
+| Task  | Description                       | Size | Rationale                            |
+| ----- | --------------------------------- | ---- | ------------------------------------ |
+| T0    | AST serialization spike           | S    | Proof-of-concept, limited scope      |
+| T0.5  | Dependency audit                  | XS   | Validation/documentation only        |
+| T1    | DB migration                      | S    | Standard migration, 2 tables         |
+| T2    | Audit log migration               | S    | Single table + partitioning          |
+| T3    | Property model migration          | S    | Standard migration                   |
+| T4a   | Property metadata columns         | S    | ALTER TABLE + repo methods           |
+| T4b   | WorldService property methods     | M    | Multiple CRUD methods + tests        |
+| T4c   | Property cascade/orphan           | M    | Complex cleanup logic                |
+| T5    | Core interfaces                   | S    | Type definitions                     |
+| T6    | Prefix parser                     | S    | Parsing + constants                  |
+| T7    | PolicyStore interface             | M    | Interface + PostgreSQL impl + tests  |
+| T7b   | AccessPolicyEngine contract tests | S    | Edge case validation tests           |
+| T8    | AST types                         | S    | Type definitions from spike          |
+| T9    | Parser/lexer                      | L    | Full DSL parser                      |
+| T10   | Fuzz tests                        | M    | Fuzzing infrastructure               |
+| T11   | Evaluator                         | L    | Expression evaluation engine         |
+| T12   | PolicyCompiler                    | M    | Compilation + versioning             |
+| T13   | Schema registry                   | M    | Provider registration system         |
+| T14   | Attribute resolver                | L    | Multi-provider resolution + timeouts |
+| T15   | Core attribute providers          | M    | 3 providers (subject, resource, env) |
+| T16a  | Simple providers                  | S    | Thin provider wrappers               |
+| T16b  | PropertyProvider                  | M    | Property-to-attribute mapping        |
+| T17.1 | System bypass + session           | M    | Engine scaffold, steps 1-2           |
+| T17.2 | Target matching                   | M    | Policy filtering, step 4             |
+| T17.3 | Condition evaluation              | M    | DSL evaluation, step 5               |
+| T17.4 | Deny-overrides + integration      | L    | Combination logic, steps 6-7 + glue  |
+| T18   | Policy cache                      | M    | LRU cache + invalidation             |
+| T19   | Audit logger                      | M    | Structured logging + config          |
+| T19b  | Retention/partitions              | S    | PostgreSQL partition management      |
+| T20   | Metrics                           | S    | Prometheus counters/histograms       |
+| T21   | Benchmarks                        | M    | Performance test suite               |
+| T21a  | Remove @-prefix                   | S    | Find/replace + migration             |
+| T21b  | CI benchmark enforcement          | S    | CI pipeline config                   |
+| T22   | Seed policy constants             | M    | Define all system policies           |
+| T22b  | Resolve seed policy gaps          | M    | Gap analysis + new policies          |
+| T23   | Bootstrap sequence                | L    | Complex startup + idempotency        |
+| T23b  | CLI --validate-seeds              | S    | CLI flag + validation                |
+| T23c  | Smoke test gate                   | M    | Auth pattern validation before T28   |
+| T24   | Lock token registry               | M    | Registry + parser                    |
+| T25   | Lock parser/compiler              | L    | Lock expression → DSL compilation    |
+| T25b  | Lock/unlock commands              | M    | Command implementation               |
+| T26a  | Admin CRUD commands               | L    | Full CRUD for policies               |
+| T26b  | Admin state commands              | M    | State management commands            |
+| T27a  | policy test command               | L    | Test framework with modes            |
+| T27b1 | Core admin commands               | M    | validate/reload/attributes           |
+| T27b2 | Audit/seed inspection             | M    | Inspection commands                  |
+| T27b3 | Recompilation/repair              | M    | Grammar upgrade commands             |
+| T28   | Migrate call sites                | XL   | ~28 production call sites            |
+| T28.5 | Migration equivalence tests       | L    | Comprehensive equivalence suite      |
+| T29   | Remove old AccessControl          | M    | Deletion + verification              |
+| T30   | Integration tests                 | L    | End-to-end test suite                |
+| T31   | Degraded mode                     | M    | Fallback behavior                    |
+| T32   | Schema evolution                  | M    | Forward-compatible changes           |
+| T33   | Lock discovery command            | S    | Single command                       |
+| T34   | Circuit breaker                   | M    | Resilience pattern                   |
+| T35   | Property orphan cleanup           | M    | Background cleanup                   |
 
-**Summary (active):** 1 XS, 15 S, 22 M, 7 L, 1 XL = 46 active tasks
+**Summary (active):** 1 XS, 16 S, 22 M, 7 L, 1 XL = 47 active tasks
 **Deferred (Phase 7.5 → Epic 8):** 0 XS, 0 S, 6 M, 3 L, 0 XL = 9 deferred tasks
-**Total:** 55 tasks (46 active + 9 deferred)
+**Total:** 56 tasks (47 active + 9 deferred)
 
 ---
 
 ## Phase Files
 
-This implementation consists of **46 active tasks** split across **6 active phases** for manageability (9 Phase 7.5 tasks deferred to Epic 8):
+This implementation consists of **47 active tasks** split across **6 active phases** for manageability (9 Phase 7.5 tasks deferred to Epic 8):
 
 - [Phase 7.1: Policy Schema (Database Tables + Policy Store)](./2026-02-06-full-abac-phase-7.1.md)
 - [Phase 7.2: DSL & Compiler](./2026-02-06-full-abac-phase-7.2.md)
