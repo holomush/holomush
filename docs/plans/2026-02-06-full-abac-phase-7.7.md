@@ -21,7 +21,7 @@
 - [ ] Cache invalidation: Policy UPDATE operations trigger pg_notify and cache invalidation (not just CREATE/DELETE). All three CRUD operations verified.
 - [ ] Cache invalidation: Multi-step commands (e.g., "go north && look") invalidate cache between steps to prevent stale permission data from persisting across evaluations within same request
 - [ ] Audit logging: denials\_only mode, all mode, off mode
-- [ ] Lock system: apply lock → permit policy, remove lock → allow
+- [ ] ~~Lock system: apply lock → permit policy, remove lock → allow~~ — deferred to Epic 8 (Phase 7.5 dependency)
 - [ ] All integration tests pass: `go test -race -v -tags=integration ./test/integration/access/...`
 
 **Files:**
@@ -76,10 +76,11 @@ var _ = Describe("Access Policy Engine", func() {
         It("only logs system bypasses in off mode", func() { })
     })
 
-    Describe("Lock system", func() {
-        It("applies lock to resource via permit policy", func() { })
-        It("removes lock via unlock command", func() { })
-    })
+    // Lock system tests deferred to Epic 8 (Phase 7.5 dependency)
+    // Describe("Lock system", func() {
+    //     It("applies lock to resource via permit policy", func() { })
+    //     It("removes lock via unlock command", func() { })
+    // })
 
     Describe("Session resolution", func() {
         It("denies access when session is expired", func() { })
@@ -116,7 +117,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] In degraded mode: log CRITICAL level message on every evaluation attempt
 - [ ] Corrupted policy detection: unmarshal `compiled_ast` fails or structural invariants violated
 - [ ] Only forbid/deny policies trigger degraded mode (permit policies auto-disabled instead)
-- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation (implemented in Task 27b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)))
+- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation — **Note:** Task 27b-3 deferred to Epic 8 ([Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md)); until then, provide a temporary programmatic mechanism (e.g., direct DB flag reset or server restart) to clear degraded mode
 - [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)))
 - [ ] All tests pass via `task test`
 
@@ -180,7 +181,11 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ---
 
-### Task 33: Lock tokens discovery command
+### Task 33: Lock tokens discovery command — **BLOCKED: Deferred to Epic 8**
+
+> **Blocked:** This task depends on Task 24 (Lock token registry) which is part of Phase 7.5,
+> deferred to Epic 8 ([Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md)).
+> Task 33 cannot proceed until Task 24 is implemented in Epic 8.
 
 **Spec References:** [Lock Token Discovery](../specs/abac/06-layers-commands.md#lock-token-discovery)
 

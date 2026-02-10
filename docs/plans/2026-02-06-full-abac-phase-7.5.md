@@ -5,6 +5,29 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)** | **[Next: Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)**
 
+---
+
+> **DEFERRED TO EPIC 8**
+>
+> All 9 tasks in this phase (T24, T25, T25b, T26a, T26b, T27a, T27b-1, T27b-2, T27b-3) have been
+> deferred from Epic 7 to Epic 8. Lock/unlock commands and admin policy management tools are not
+> architecturally required for the ABAC core policy engine to function.
+>
+> **Rationale:** The core ABAC engine (Phases 7.1-7.4), call site migration (Phase 7.6), and
+> resilience/integration testing (Phase 7.7) deliver the full policy evaluation pipeline without
+> lock commands or admin tooling. These features enhance operability but do not gate the
+> architectural replacement of `StaticAccessControl` with `AccessPolicyEngine`.
+>
+> **Decision:** [#96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md)
+>
+> **Impact on other phases:**
+>
+> - Phase 7.7 Task 33 (Lock discovery command) is blocked until Phase 7.5 completes in Epic 8
+> - Phase 7.7 Task 31 references `policy clear-degraded-mode` (T27b-3) -- the degraded mode
+>   flag will need an alternative clearing mechanism until this command is implemented in Epic 8
+
+---
+
 ## Task 24: Lock token registry
 
 **Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners), [06-layers-commands.md#lock-token-registry](../specs/abac/06-layers-commands.md#lock-token-registry)

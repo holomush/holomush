@@ -99,6 +99,7 @@ options considered, and rationale for the chosen approach.
 | 93 | Pin CI Tool SHA256 Hashes as Literals                        | General | [093](general/093-pin-ci-tool-hashes.md)                                  |
 | 94 | Elevate Seed Policy Gap Resolution to Dedicated Task         | 7.4     | [094](phase-7.4/094-elevate-seed-policy-gap-resolution.md)                |
 | 95 | M5 Milestone Gate Is T28 (Call-Site Migration)               | General | [095](general/095-m5-milestone-gate-is-t28.md)                            |
+| 96 | Defer Phase 7.5 (Locks & Admin) to Epic 8                    | General | [096](general/096-defer-phase-7-5-to-epic-8.md)                           |
 
 ## Spec ADR Reference Mapping
 
