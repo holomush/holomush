@@ -40,6 +40,13 @@ jobs:
           path: /usr/local/bin/rumdl
           key: rumdl-v0.1.15-${{ runner.os }}-${{ runner.arch }}
 
+      - name: Cache dprint
+        id: cache-dprint
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/dprint
+          key: dprint-v0.51.1-${{ runner.os }}-${{ runner.arch }}
+
       - name: Install tools
         run: |
           # Pinned to specific versions for CI reproducibility. Update periodically to match local dev.
@@ -72,9 +79,20 @@ jobs:
           # To update dprint:
           # 1. Check for new releases: https://github.com/dprint/dprint/releases
           # 2. Update DPRINT_VERSION below to new version
-          DPRINT_VERSION="0.51.1"
-          curl -fsSL https://dprint.dev/install.sh | sh -s "${DPRINT_VERSION}"
-          echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
+          # 3. Update cache key in "Cache dprint" step above to match new version
+          # 4. Download the new .zip.sha256sum file and update DPRINT_SHA256 below with the new hash
+          # 5. Test locally: task lint
+          if [ "${{ steps.cache-dprint.outputs.cache-hit }}" != "true" ]; then
+            DPRINT_VERSION="0.51.1"
+            DPRINT_ZIP="dprint-x86_64-unknown-linux-gnu.zip"
+            DPRINT_URL="https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/${DPRINT_ZIP}"
+            # SHA256 hash pinned as literal to prevent compromised releases from providing matching checksums
+            DPRINT_SHA256="674c1f9fcdf8a564c26cc027e080d0c4758a40a566e04a776fc83c875ad51d45"  # dprint v0.51.1
+            curl -LsSfO "${DPRINT_URL}"
+            echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
+            unzip -q "${DPRINT_ZIP}" -d /usr/local/bin
+            rm "${DPRINT_ZIP}"
+          fi
 
       - name: Verify schema is current
         run: |
