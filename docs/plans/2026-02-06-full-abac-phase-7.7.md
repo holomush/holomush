@@ -7,7 +7,7 @@
 
 ## Task 30: Integration tests for full ABAC flow
 
-**Spec References:** Testing Strategy > Integration Tests (lines 3370-3405), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
+**Spec References:** [Testing Strategy](../specs/abac/08-testing-appendices.md#testing-strategy), [Integration Tests](../specs/abac/08-testing-appendices.md#integration-tests-ginkgogomega), ADR 0011 (Deny-overrides), ADR 0013 (Properties)
 
 **Acceptance Criteria:**
 
@@ -16,7 +16,7 @@
 - [ ] Seed policy behavior: self-access, location read, co-location, admin full access, deny-overrides, default deny
 - [ ] Property visibility: public co-located, private owner-only, admin-only, restricted with visible\_to
 - [ ] **Canary test (full ABAC evaluation path):** End-to-end test covering subject resolution, attribute resolution, policy evaluation, deny-overrides, and audit logging with seed policies → validates complete system integration
-- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected ([01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), was spec lines 612-620, prevented by convention)
+- [ ] Re-entrance guard: synchronous re-entry panics, goroutine-based re-entry NOT detected ([01-core-types.md#attribute-providers](../specs/abac/01-core-types.md#attribute-providers), prevented by convention)
 - [ ] Cache invalidation: NOTIFY after create, NOTIFY after delete → cache reloads
 - [ ] Cache invalidation: Policy UPDATE operations trigger pg_notify and cache invalidation (not just CREATE/DELETE). All three CRUD operations verified.
 - [ ] Cache invalidation: Multi-step commands (e.g., "go north && look") invalidate cache between steps to prevent stale permission data from persisting across evaluations within same request
@@ -58,7 +58,7 @@ var _ = Describe("Access Policy Engine", func() {
 
     Describe("Re-entrance guard", func() {
         It("panics when provider calls Evaluate() synchronously", func() { })
-        It("does NOT detect goroutine-based re-entry (01-core-types.md#attribute-providers, was spec lines 612-620: prevented by convention, not runtime checks)", func() { })
+        It("does NOT detect goroutine-based re-entry (prevented by convention, not runtime checks)", func() { })
     })
 
     Describe("Cache invalidation", func() {
@@ -105,7 +105,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 31: Degraded mode implementation
 
-**Spec References:** Degraded Mode (lines 1660-1683)
+**Spec References:** [Degraded Mode](../specs/abac/04-resolution-evaluation.md#error-handling) (Security note section)
 
 **Acceptance Criteria:**
 
@@ -150,7 +150,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 32: Schema evolution on plugin reload
 
-**Spec References:** Schema Evolution on Plugin Reload (lines 1497-1556)
+**Spec References:** [Schema Evolution on Plugin Reload](../specs/abac/04-resolution-evaluation.md#schema-evolution-on-plugin-reload)
 
 **Acceptance Criteria:**
 
@@ -182,7 +182,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 33: Lock tokens discovery command
 
-**Spec References:** Lock Token Discovery (lines 2668-2693)
+**Spec References:** [Lock Token Discovery](../specs/abac/06-layers-commands.md#lock-token-discovery)
 
 **Acceptance Criteria:**
 
@@ -211,12 +211,12 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 ### Task 34: General provider circuit breaker
 
-**Spec References:** Provider Circuit Breaker (lines 1594-1622, 1884-1900)
+**Spec References:** [Provider Circuit Breaker](../specs/abac/04-resolution-evaluation.md#circuit-breaker-summary)
 
 > **Note:** This task's circuit breaker also covers PropertyProvider (formerly a
 > separate circuit breaker in Task 16b). See [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md).
 >
-> **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (lines 1598-1602: 10 consecutive errors, 30s open) and a MUST-level budget-utilization version (lines 1884-1900: >80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters from lines 1598-1602 are subsumed by the budget-utilization approach.
+> **Note:** The spec defines two circuit breaker parameter sets: a SHOULD-level simpler version (10 consecutive errors, 30s open) and a MUST-level budget-utilization version (>80% budget in >50% of calls). This task implements the MUST-level version as it provides better detection of chronic performance degradation vs. hard failures. The simpler parameters are subsumed by the budget-utilization approach.
 
 **Acceptance Criteria:**
 
