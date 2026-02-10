@@ -21,4 +21,4 @@ lost under extreme load, which is preferable to blocking authorization.
 
 **Updated by:** Decision #53 (best-effort semantics), Decision #66 (sync writes for system bypass).
 
-**Cross-reference:** Main spec, Audit Log section.
+**Cross-reference:** [Storage & Audit - Audit Log Configuration](../../abac/05-storage-audit.md#audit-log-configuration).
