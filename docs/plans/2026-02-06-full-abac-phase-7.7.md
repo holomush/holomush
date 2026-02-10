@@ -11,7 +11,7 @@
 
 **Dependencies:**
 
-- Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (CLI --validate-seeds) — seed validation must be in place before integration tests exercise seed policy behavior
+- Task 23b (Phase 7.4) — seed validation must be in place before integration tests exercise seed policy behavior
 
 **Acceptance Criteria:**
 
@@ -114,7 +114,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Dependencies:**
 
-- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — engine must be operational before degraded mode can be added
+- Task 17.4 (Phase 7.3) — engine must be operational before degraded mode can be added
 
 **Acceptance Criteria:**
 
@@ -163,7 +163,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Dependencies:**
 
-- Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (policy store) — PolicyStore interface needed for schema evolution policy scanning
+- Task 7 (Phase 7.1) — PolicyStore interface needed for schema evolution policy scanning
 
 **Acceptance Criteria:**
 
@@ -203,7 +203,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Dependencies:**
 
-- Task 24 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)) (lock token registry) — lock registry must exist before discovery command can query it (deferred to Epic 8)
+- Task 24 (Phase 7.5) — lock registry must exist before discovery command can query it (deferred to Epic 8)
 
 **Acceptance Criteria:**
 
@@ -236,7 +236,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Dependencies:**
 
-- Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (attribute resolver cache) — resolver must exist before circuit breaker logic can be added to it
+- Task 14 (Phase 7.3) — resolver must exist before circuit breaker logic can be added to it
 
 > **Note:** This task's circuit breaker also covers PropertyProvider (formerly a
 > separate circuit breaker in Task 16b). See [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md).
@@ -286,7 +286,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 **Dependencies:**
 
-- Task 4c ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (property cascade deletion and lifecycle) — cascade deletion logic must exist before orphan cleanup can build on it
+- Task 4c (Phase 7.1) — cascade deletion logic must exist before orphan cleanup can build on it
 
 **Acceptance Criteria:**
 

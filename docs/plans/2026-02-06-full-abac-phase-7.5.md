@@ -32,9 +32,9 @@
 
 **Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners), [06-layers-commands.md#lock-token-registry](../specs/abac/06-layers-commands.md#lock-token-registry)
 
-**Dependencies (deferred scope — applies when Epic 8 work begins):**
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — engine must be operational before lock registry
+- Task 17.4 (Phase 7.3) — engine must be operational before lock registry
 
 **Acceptance Criteria:**
 
@@ -98,9 +98,9 @@ git commit -m "feat(access): add lock token registry"
 
 **Spec References:** [06-layers-commands.md#lock-syntax](../specs/abac/06-layers-commands.md#lock-syntax), [06-layers-commands.md#lock-compilation](../specs/abac/06-layers-commands.md#lock-compilation)
 
-**Dependencies (deferred scope — applies when Epic 8 work begins):**
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-- Task 24 (lock token registry) — lock tokens must be registered before parser can reference them
+- Task 24 (Phase 7.5) — lock tokens must be registered before parser can reference them
 
 **Acceptance Criteria:**
 
@@ -168,10 +168,10 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 
 **Spec References:** [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners)
 
-**Dependencies (deferred scope — applies when Epic 8 work begins):**
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-- Task 25 (lock expression parser and compiler) — lock parser/compiler must exist before command handlers can use them
-- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — engine needed for ownership verification via `Evaluate()`
+- Task 25 (Phase 7.5) — lock parser/compiler must exist before command handlers can use them
+- Task 17.4 (Phase 7.3) — engine needed for ownership verification via `Evaluate()`
 
 **Acceptance Criteria:**
 
@@ -238,9 +238,9 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
-**Dependencies (deferred scope — applies when Epic 8 work begins):**
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-- Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (bootstrap sequence) — seeded policies must exist before admin CRUD commands operate on them
+- Task 23 (Phase 7.4) — seeded policies must exist before admin CRUD commands operate on them
 
 **Acceptance Criteria:**
 
@@ -294,11 +294,12 @@ git commit -m "feat(command): add policy CRUD admin commands (create/list/show/e
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management)
 
-**Dependencies (deferred scope — applies when Epic 8 work begins):**
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-- Task 26a (admin CRUD commands) — CRUD commands must exist before state management commands extend them
-
-**Cross-Phase Dependencies:** T7 (Phase 7.1), T17 (Phase 7.3), T18 (Phase 7.3)
+- Task 26a (Phase 7.5) — CRUD commands must exist before state management commands extend them
+- Task 7 (Phase 7.1) — PolicyStore interface needed for state management operations
+- Task 17.4 (Phase 7.3) — engine needed for policy evaluation
+- Task 18 (Phase 7.3) — policy cache needed for reload triggers
 
 **Acceptance Criteria:**
 
@@ -351,9 +352,9 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 
 > **Design note:** Task 27 split into 27a (policy test) and 27b (remaining admin commands) due to complexity. The `policy test` command has significant implementation scope (verbose mode, JSON mode, suite mode, builder redaction, audit logging) that warrants its own task for reviewability.
 
-**Dependencies (deferred scope — applies when Epic 8 work begins):**
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-- Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (bootstrap sequence) — seeded policies must exist before policy test command can evaluate them
+- Task 23 (Phase 7.4) — seeded policies must exist before policy test command can evaluate them
 
 **Acceptance Criteria:**
 
@@ -406,9 +407,13 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning)
 
-**Dependencies:** Task 27a (policy test command)
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-**Cross-Phase Dependencies:** T7 (Phase 7.1), T12 (Phase 7.2), T17 (Phase 7.3), T18 (Phase 7.3)
+- Task 27a (Phase 7.5) — policy test command must exist before extending with validation commands
+- Task 7 (Phase 7.1) — PolicyStore interface needed
+- Task 12 (Phase 7.2) — PolicyCompiler needed for validation
+- Task 17.4 (Phase 7.3) — engine needed for evaluation
+- Task 18 (Phase 7.3) — policy cache needed for reload command
 
 **Acceptance Criteria:**
 
@@ -451,9 +456,12 @@ git commit -m "feat(command): add policy validate/reload/attributes/list --old-g
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence)
 
-**Dependencies:** Task 27b-1 (core admin commands)
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-**Cross-Phase Dependencies:** T7 (Phase 7.1), T22 (Phase 7.4), T23 (Phase 7.4)
+- Task 27b-1 (Phase 7.5) — core admin commands must exist before audit/seed inspection
+- Task 7 (Phase 7.1) — PolicyStore interface needed for seed verification
+- Task 22 (Phase 7.4) — seed policy constants needed for seed verify/status
+- Task 23 (Phase 7.4) — bootstrap sequence needed for seed installation context
 
 **Acceptance Criteria:**
 
@@ -495,9 +503,12 @@ git commit -m "feat(command): add policy audit/seed verify/seed status commands"
 
 **Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning)
 
-**Dependencies:** Task 27b-2 (audit/seed inspection commands)
+**Dependencies (deferred — applies when Epic 8 work begins):**
 
-**Cross-Phase Dependencies:** T7 (Phase 7.1), T12 (Phase 7.2), T17 (Phase 7.3)
+- Task 27b-2 (Phase 7.5) — audit/seed inspection commands must exist before recompilation commands
+- Task 7 (Phase 7.1) — PolicyStore interface needed for policy reads/writes
+- Task 12 (Phase 7.2) — PolicyCompiler needed for recompilation
+- Task 17.4 (Phase 7.3) — engine needed for degraded mode flag management
 
 **Acceptance Criteria:**
 

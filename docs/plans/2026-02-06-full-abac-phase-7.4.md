@@ -25,8 +25,8 @@
 
 **Dependencies:**
 
-- Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) — acceptance criteria requires seed policies to compile without error via `PolicyCompiler`
-- Task 21a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (remove @ prefix from command names) — seed policies reference bare command names (e.g., `"say"`, `"dig"`) which require @-prefix removal first
+- Task 12 (Phase 7.2) — DSL compiler needed; acceptance criteria requires seed policies to compile without error via `PolicyCompiler`
+- Task 21a (Phase 7.3) — seed policies reference bare command names (e.g., `"say"`, `"dig"`) which require @-prefix removal first
 
 **Files:**
 
@@ -204,7 +204,7 @@ git commit -m "feat(access): define seed policies"
 
 **Dependencies:**
 
-- Task 22 (seed policy constants) — gap resolution requires the base seed policies to exist first
+- Task 22 (Phase 7.4) — gap resolution requires the base seed policies to exist first
 
 **Files:**
 
@@ -275,12 +275,12 @@ git commit -m "feat(access): resolve seed policy coverage gaps G1-G4"
 
 **Dependencies:**
 
-- Task 6 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (subject/resource prefixes) — provides prefix constants needed for bootstrap subject/resource validation
-- Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) — provides `PolicyCompiler` for seed policy compilation during bootstrap
-- Task 16a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (stream + command providers) — seed policies reference streams and commands
-- Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (property provider) — seed policies reference property attributes
-- Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (policy cache) — bootstrap requires cache for policy retrieval
-- Task 22b (gap resolution) — seed policy coverage gaps resolved before bootstrap
+- Task 6 (Phase 7.1) — provides prefix constants needed for bootstrap subject/resource validation
+- Task 12 (Phase 7.2) — provides `PolicyCompiler` for seed policy compilation during bootstrap
+- Task 16a (Phase 7.3) — seed policies reference streams and commands
+- Task 16b (Phase 7.3) — seed policies reference property attributes
+- Task 18 (Phase 7.3) — bootstrap requires cache for policy retrieval
+- Task 22b (Phase 7.4) — seed policy coverage gaps resolved before bootstrap
 
 **Files:**
 
@@ -535,10 +535,10 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 **Dependencies:**
 
-- Task 23 ([Bootstrap sequence](#task-23-bootstrap-sequence)) — bootstrap creates seed policies before tests can exercise them
-- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) — AccessPolicyEngine is operational
-- Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) — policy cache is functional
-- Task 22b ([Resolve seed policy gaps](#task-22b-resolve-seed-policy-coverage-gaps)) — seed policies cover all required actions
+- Task 23 (Phase 7.4) — bootstrap creates seed policies before tests can exercise them
+- Task 17.4 (Phase 7.3) — AccessPolicyEngine must be operational
+- Task 18 (Phase 7.3) — policy cache must be functional
+- Task 22b (Phase 7.4) — seed policies must cover all required actions
 
 **Files:**
 

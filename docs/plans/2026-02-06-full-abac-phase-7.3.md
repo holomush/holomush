@@ -11,6 +11,10 @@
 
 **ADR References:** [082-core-first-provider-registration-order.md](../specs/decisions/epic7/phase-7.3/082-core-first-provider-registration-order.md)
 
+**Dependencies:**
+
+- Task 6 (Phase 7.1) — AttributeSchema and NamespaceSchema types must exist before schema registry
+
 > **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `types.AccessRequest` and `types.AttributeBags`. Both import from `types` package.
 
 **Acceptance Criteria:**
@@ -123,6 +127,10 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 ### Task 14: Attribute resolver with per-request caching
 
 **Spec References:** [04-resolution-evaluation.md#resolution-flow](../specs/abac/04-resolution-evaluation.md#resolution-flow), [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets), [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching), ADR 0012 (Eager attribute resolution)
+
+**Dependencies:**
+
+- Task 13 (Phase 7.3) — AttributeProvider interface and schema registry must exist before resolver
 
 > **Note (Bug I10):** [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching) explicitly specifies LRU eviction with `maxEntries` default of 100. Reviewer concern about missing LRU/size spec was incorrect — spec clearly defines both semantics and default value.
 
@@ -262,6 +270,10 @@ git commit -m "feat(access): add AttributeResolver with fair-share timeouts and 
 
 **Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) — character, location, and object attributes are in the table
 
+**Dependencies:**
+
+- Task 13 (Phase 7.3) — AttributeProvider interface must exist before implementing providers
+
 **Acceptance Criteria:**
 
 - [ ] CharacterProvider resolves: `type`, `id`, `name`, `role`, `faction`, `level`, `flags`, `location`
@@ -318,6 +330,10 @@ git commit -m "feat(access): add core attribute providers (character, location, 
 ### Task 16a: Simple providers (environment, command, stream, exit stub, scene stub)
 
 **Spec References:** [01-core-types.md#core-attribute-schema](../specs/abac/01-core-types.md#core-attribute-schema) — environment, command, stream attributes are in the table; [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md) — exit/scene stubs
+
+**Dependencies:**
+
+- Task 13 (Phase 7.3) — AttributeProvider/EnvironmentProvider interfaces must exist before implementing providers
 
 **Acceptance Criteria:**
 
@@ -390,6 +406,11 @@ git commit -m "feat(access): add simple providers (environment, command, stream,
 > **Note:** This task depends on Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) — PropertyRepository (Task 4a) must exist before PropertyProvider (Task 16b).
 
 **Spec References:** [03-property-model.md#property-attributes](../specs/abac/03-property-model.md#property-attributes), ADR 0013 (Properties as first-class entities)
+
+**Dependencies:**
+
+- Task 4a (Phase 7.1) — PropertyRepository must exist before PropertyProvider
+- Task 13 (Phase 7.3) — AttributeProvider interface must exist before implementing provider
 
 **Acceptance Criteria:**
 
@@ -511,6 +532,12 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 #### Task 17.1: System bypass + session resolution (Steps 1-2)
 
 **Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 1-2, [ADR 66](../specs/decisions/epic7/phase-7.5/066-sync-audit-system-bypass.md) (sync audit for system bypass)
+
+**Dependencies:**
+
+- Task 12 (Phase 7.2) — PolicyCompiler must exist for engine scaffold
+- Task 14 (Phase 7.3) — AttributeResolver must exist for engine construction
+- Task 6 (Phase 7.1) — prefix parser and system context helpers needed for subject parsing
 
 **Acceptance Criteria:**
 
@@ -639,7 +666,9 @@ git commit -m "feat(access): add engine scaffold with system bypass and session 
 
 **Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 4
 
-> **Depends on:** T17.1 (Engine struct and interfaces must exist)
+**Dependencies:**
+
+- Task 17.1 (Phase 7.3) — Engine struct and interfaces must exist
 
 **Acceptance Criteria:**
 
@@ -693,7 +722,10 @@ git commit -m "feat(access): add target matching and policy filtering (T17.2)"
 
 **Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Step 5, [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), ADR 0010 (Cedar-Aligned Missing Attribute Semantics)
 
-> **Depends on:** T17.2 (target matching must produce candidate policies); also depends on Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) DSL evaluator
+**Dependencies:**
+
+- Task 17.2 (Phase 7.3) — target matching must produce candidate policies
+- Task 11 (Phase 7.2) — DSL evaluator must exist for condition evaluation
 
 **Acceptance Criteria:**
 
@@ -748,7 +780,9 @@ git commit -m "feat(access): add DSL condition evaluation for policies (T17.3)"
 
 **Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm) Steps 6-7, ADR 0011 (Deny-overrides conflict resolution), [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration)
 
-> **Depends on:** T17.3 (condition evaluation must produce satisfied policy set)
+**Dependencies:**
+
+- Task 17.3 (Phase 7.3) — condition evaluation must produce satisfied policy set
 
 **Acceptance Criteria:**
 
@@ -817,6 +851,11 @@ git commit -m "feat(access): add deny-overrides combination and full engine inte
 ### Task 18: Policy cache with LISTEN/NOTIFY invalidation
 
 **Spec References:** [05-storage-audit.md#cache-invalidation](../specs/abac/05-storage-audit.md#cache-invalidation), ADR 0016 (LISTEN/NOTIFY cache invalidation)
+
+**Dependencies:**
+
+- Task 7 (Phase 7.1) — PolicyStore must exist for cache to fetch policies from
+- Task 12 (Phase 7.2) — PolicyCompiler must exist for cache to recompile policies on reload
 
 **Acceptance Criteria:**
 
@@ -1020,6 +1059,11 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 **Spec References:** [05-storage-audit.md#audit-log-serialization](../specs/abac/05-storage-audit.md#audit-log-serialization), [05-storage-audit.md#audit-log-configuration](../specs/abac/05-storage-audit.md#audit-log-configuration), [05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention)
 
+**Dependencies:**
+
+- Task 2 (Phase 7.1) — access_audit_log table must exist before audit writes
+- Task 5 (Phase 7.1) — core types (Effect, AttributeBags) needed for audit entries
+
 **Acceptance Criteria:**
 
 - [ ] Three audit modes: `off` (system bypasses + denials), `denials_only`, `all`
@@ -1156,6 +1200,10 @@ git commit -m "feat(access): add async audit logger with mode control"
 
 **Spec References:** [05-storage-audit.md#audit-log-retention](../specs/abac/05-storage-audit.md#audit-log-retention)
 
+**Dependencies:**
+
+- Task 19 (Phase 7.3) — audit logger must exist before retention management
+
 **Acceptance Criteria:**
 
 - [ ] `AuditConfig` struct with `RetainDenials` (90 days), `RetainAllows` (7 days), `PurgeInterval` (24h)
@@ -1286,6 +1334,10 @@ git commit -m "feat(access): add audit log retention and partition management"
 ### Task 20: Prometheus metrics for ABAC
 
 **Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) — observability metrics are part of the performance targets section
+
+**Dependencies:**
+
+- Task 17.4 (Phase 7.3) — engine must be operational before metrics can be wired into evaluation flow
 
 **Acceptance Criteria:**
 
@@ -1425,6 +1477,10 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 **Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets)
 
+**Dependencies:**
+
+- Task 17.4 (Phase 7.3) — engine must be fully operational before benchmarks can measure performance
+
 > **Performance Targets (Decision #23):** Evaluate() p99 <25ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
 
 **Acceptance Criteria:**
@@ -1495,9 +1551,11 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 
 ### Task 21b: CI benchmark enforcement
 
-> **Note:** This task depends on Task 21 — benchmarks must exist before CI can enforce regression limits.
-
 **Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets) — "CI MUST fail if any benchmark exceeds 110% of its documented target value"
+
+**Dependencies:**
+
+- Task 21 (Phase 7.3) — benchmarks must exist before CI can enforce regression limits
 
 **Acceptance Criteria:**
 
@@ -1607,6 +1665,8 @@ git commit -m "ci(access): enforce benchmark regression limits in CI"
 > **Note:** The @-prefix exists only in access control permission strings (e.g., `"execute:command:@dig"`), not in actual command registrations. Command validation explicitly rejects `@` as a leading character.
 
 **Spec References:** Seed policies reference command names without @ prefix
+
+**Dependencies:** None (standalone codebase-wide rename, can be submitted as independent PR)
 
 **Placement Justification:**
 

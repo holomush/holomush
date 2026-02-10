@@ -9,6 +9,10 @@
 
 **Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar)
 
+**Dependencies:**
+
+- Task 5 (Phase 7.1) — core types must exist for AST node definitions
+
 **Acceptance Criteria:**
 
 - [ ] AST nodes defined for: `Policy`, `Target`, `PrincipalClause`, `ActionClause`, `ResourceClause`, `ConditionBlock`, `Disjunction`, `Conjunction`, `Condition`, `Expr`, `AttrRef`, `Literal`, `ListExpr`
@@ -58,6 +62,10 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 ### Task 9: Build DSL parser
 
 **Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), [02-policy-dsl.md#supported-operators](../specs/abac/02-policy-dsl.md#supported-operators), [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies)
+
+**Dependencies:**
+
+- Task 8 (Phase 7.2) — AST node types must exist before parser can produce them
 
 **Acceptance Criteria:**
 
@@ -174,6 +182,10 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 **Spec References:** [08-testing-appendices.md#fuzz-testing](../specs/abac/08-testing-appendices.md#fuzz-testing), [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar)
 
+**Dependencies:**
+
+- Task 9 (Phase 7.2) — parser must exist before fuzz tests can exercise it
+
 **Acceptance Criteria:**
 
 - [ ] `FuzzParse` function defined with seed corpus containing all valid policy forms
@@ -234,6 +246,11 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 ### Task 11: Build DSL condition evaluator
 
 **Spec References:** [02-policy-dsl.md#supported-operators](../specs/abac/02-policy-dsl.md#supported-operators), [04-resolution-evaluation.md#error-handling](../specs/abac/04-resolution-evaluation.md#error-handling), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [08-testing-appendices.md#fuzz-testing](../specs/abac/08-testing-appendices.md#fuzz-testing), ADR 0010 (Cedar-Aligned Fail-Safe Type Semantics)
+
+**Dependencies:**
+
+- Task 8 (Phase 7.2) — AST node types required for condition evaluation
+- Task 5 (Phase 7.1) — core types (AttributeBags) required for evaluation context
 
 **Acceptance Criteria:**
 
@@ -394,6 +411,12 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 ### Task 12: Build PolicyCompiler
 
 **Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar) (compilation is part of the grammar section)
+
+**Dependencies:**
+
+- Task 9 (Phase 7.2) — DSL parser must exist for policy compilation
+- Task 11 (Phase 7.2) — condition evaluator must exist for compilation validation
+- Task 6 (Phase 7.1) — AttributeSchema extensions needed for schema validation
 
 **Risk Note:** `CompiledPolicy` embeds `*dsl.ConditionBlock` which contains participle-generated AST nodes. These may include unexported fields or types that don't serialize cleanly to JSON. Early validation of AST serialization round-tripping is required (write the serialization test first). If participle ASTs don't serialize cleanly, implement custom `MarshalJSON`/`UnmarshalJSON` methods or store a different representation in `compiled_ast` JSONB.
 

@@ -11,9 +11,9 @@
 
 **Dependencies:**
 
-- Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (deny-overrides + integration) — AccessPolicyEngine must be fully operational before migrating call sites
-- Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (resolve seed policy gaps) — seed policy coverage gaps must be resolved before migration ([Decision #94](../specs/decisions/epic7/phase-7.4/094-seed-gap-resolution-before-migration.md))
-- Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) (seed policy integration test suite) — CLI validation and smoke tests must validate seed policy behavior before migration proceeds
+- Task 17.4 (Phase 7.3) — AccessPolicyEngine must be fully operational before migrating call sites
+- Task 22b (Phase 7.4) — seed policy coverage gaps must be resolved before migration (Decision #94)
+- Task 23b (Phase 7.4) — CLI validation and smoke tests must validate seed policy behavior before migration proceeds
 
 **Migration Strategy:**
 
@@ -352,7 +352,7 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 
 **Dependencies:**
 
-- Task 28 (migrate to AccessPolicyEngine) — all call sites must be migrated before equivalence testing validates the migration
+- Task 28 (Phase 7.6) — all call sites must be migrated before equivalence testing validates the migration
 
 **Acceptance Criteria:**
 
@@ -784,7 +784,7 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 
 **Dependencies:**
 
-- Task 28.5 (migration equivalence tests) — equivalence tests must pass with zero unjustified divergences before old code is removed
+- Task 28.5 (Phase 7.6) — equivalence tests must pass with zero unjustified divergences before old code is removed
 
 **Acceptance Criteria:**
 

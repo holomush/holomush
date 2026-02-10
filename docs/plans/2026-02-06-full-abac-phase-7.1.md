@@ -15,6 +15,8 @@
 
 **Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema)
 
+**Dependencies:** None (first task in the plan)
+
 **Acceptance Criteria:**
 
 - [ ] Parse sample policy DSL string into participle AST
@@ -145,7 +147,9 @@ If abandoning participle, the recommended fallback is **Alternative 2 (Custom JS
 
 **Spec References:** N/A (implementation infrastructure validation)
 
-**Dependencies:** Requires Task 0 completion (AST serialization spike validates storage model)
+**Dependencies:**
+
+- Task 0 (Phase 7.1) — AST serialization spike validates storage model
 
 **Acceptance Criteria:**
 
@@ -237,7 +241,9 @@ All dependencies ready for Phase 7.1-7.7 implementation."
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema)
 
-**Dependencies:** Requires Task 0.5 completion (dependency audit validates all required libraries)
+**Dependencies:**
+
+- Task 0.5 (Phase 7.1) — dependency audit validates all required libraries
 
 **Acceptance Criteria:**
 
@@ -311,6 +317,10 @@ git commit -m "feat(access): add access_policies and access_policy_versions tabl
 ### Task 2: Create access\_audit\_log migration
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), [05-storage-audit.md#audit-log-serialization](../specs/abac/05-storage-audit.md#audit-log-serialization)
+
+**Dependencies:**
+
+- Task 0.5 (Phase 7.1) — dependency audit validates all required libraries
 
 **Acceptance Criteria:**
 
@@ -398,6 +408,10 @@ git commit -m "feat(access): add access_audit_log table with monthly range parti
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema), ADR 0013 (Properties as first-class entities)
 
+**Dependencies:**
+
+- Task 0.5 (Phase 7.1) — dependency audit validates all required libraries
+
 **Acceptance Criteria:**
 
 - [ ] `entity_properties` table matches spec schema (all columns, types, constraints)
@@ -469,7 +483,9 @@ git commit -m "feat(access): add entity_properties table for first-class propert
 
 **Spec References:** [03-property-model.md](../specs/abac/03-property-model.md), ADR 0013 (Properties as first-class entities), ADR 0015 (Three-Layer Player Access Control)
 
-**Dependencies:** Requires Task 3 completion (entity_properties migration must exist before repository implementation)
+**Dependencies:**
+
+- Task 3 (Phase 7.1) — entity_properties migration must exist before repository implementation
 
 **Acceptance Criteria:**
 
@@ -560,7 +576,9 @@ git commit -m "feat(world): add EntityProperty type and PostgreSQL repository"
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties section discussing lifecycle
 
-**Dependencies:** Requires Task 4a completion (PropertyRepository must exist for cascade deletion integration in Task 4c)
+**Dependencies:**
+
+- Task 4a (Phase 7.1) — PropertyRepository must exist for cascade deletion integration in Task 4c
 
 **Acceptance Criteria:**
 
@@ -617,7 +635,9 @@ git commit -m "feat(world): add DeleteCharacter method to WorldService"
 
 **Spec References:** [05-storage-audit.md#schema](../specs/abac/05-storage-audit.md#schema) — entity_properties section discussing lifecycle
 
-**Dependencies:** Requires Task 4b completion (WorldService deletion methods must exist before adding property cascade logic)
+**Dependencies:**
+
+- Task 4b (Phase 7.1) — WorldService deletion methods must exist before adding property cascade logic
 
 **Acceptance Criteria:**
 
@@ -676,6 +696,8 @@ git commit -m "feat(world): add property cascade deletion"
 ### Task 5: Define core types (AccessRequest, Decision, Effect, PolicyMatch, AttributeBags)
 
 **Spec References:** [01-core-types.md](../specs/abac/01-core-types.md) — AccessRequest, Decision, Effect, PolicyMatch, AttributeBags
+
+**Dependencies:** None (can start immediately)
 
 **Acceptance Criteria:**
 
@@ -922,7 +944,9 @@ git commit -m "feat(access): add core ABAC types (AccessRequest, Decision, Effec
 - Create: `internal/access/context.go` (system context helpers)
 - Test: `internal/access/context_test.go`
 
-**Dependencies:** Requires Task 5 completion (core types must exist before extending)
+**Dependencies:**
+
+- Task 5 (Phase 7.1) — core types must exist before extending
 
 **Step 1: Extend shared types (NamespaceSchema, AttributeSchema methods)**
 
@@ -1199,7 +1223,12 @@ git commit -m "feat(access): extend types package, add prefix parser and system 
 
 **ADR References:** [035-audit-log-source-column.md](../specs/decisions/epic7/phase-7.1/035-audit-log-source-column.md)
 
-**Dependencies:** Requires completion of Task 0 (AST serialization spike validates storage model), Task 1 (access_policies migration creates table), Task 2 (audit log migration for cross-table consistency), and Task 5 (core types define PolicyEffect and other required types)
+**Dependencies:**
+
+- Task 0 (Phase 7.1) — AST serialization spike validates storage model
+- Task 1 (Phase 7.1) — access_policies migration creates table
+- Task 2 (Phase 7.1) — audit log migration for cross-table consistency
+- Task 5 (Phase 7.1) — core types define PolicyEffect and other required types
 
 **Acceptance Criteria:**
 
@@ -1330,7 +1359,9 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 
 **ADR References:** [099-access-policy-engine-contract-tests.md](../specs/decisions/epic7/phase-7.1/099-access-policy-engine-contract-tests.md)
 
-**Dependencies:** Requires Task 7 completion (PolicyStore interface and engine scaffold must exist before contract tests)
+**Dependencies:**
+
+- Task 7 (Phase 7.1) — PolicyStore interface and engine scaffold must exist before contract tests
 
 **Acceptance Criteria:**
 
