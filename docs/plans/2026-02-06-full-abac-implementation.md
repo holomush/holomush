@@ -299,9 +299,13 @@ graph TD
     T12 --> T17_1
     T4a --> T16b
     T5 --> T13
+    T5 --> T19
+    T2 --> T19
     T12 --> T22
     T12 --> T23
     T21a --> T22
+    T6 --> T13
+    T6 --> T17_1
     T6 --> T23
     T16a --> T23
     T16b --> T23
@@ -388,8 +392,12 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup                                                       |
 | T5          | 7.1          | T8          | 7.2          | Core types needed by AST node definitions                                                         |
 | T5          | 7.1          | T13         | 7.3          | Core types needed by attribute provider interface                                                 |
+| T5          | 7.1          | T19         | 7.3          | Policy types needed by audit logger                                                               |
+| T6          | 7.1          | T13         | 7.3          | Prefix parser defines identifier format needed by provider interface                              |
+| T6          | 7.1          | T17.1       | 7.3          | Prefix parser needed for prefixed identifiers in policy evaluation                                |
 | T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                                                              |
 | T16b        | 7.3          | T23         | 7.4          | PropertyProvider enables property.* attributes in seed policies                                   |
+| T2          | 7.1          | T19         | 7.3          | Audit schema needed by audit logger                                                               |
 | T7          | 7.1          | T12         | 7.2          | PolicyStore interface needed by DSL compiler                                                      |
 | T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                                                              |
 | T7          | 7.1          | T26b        | ~~7.5~~ E8   | ~~Store needed for admin state commands~~ **Deferred to Epic 8**                                  |
