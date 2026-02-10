@@ -12,7 +12,7 @@ impossible to detect regressions or know when optimization is needed.
 
 | Metric                   | Target |
 | ------------------------ | ------ |
-| `Evaluate()` p99 latency | <5ms   |
+| `Evaluate()` p99 latency | <25ms  |
 | Attribute resolution     | <2ms   |
 | DSL condition evaluation | <1ms   |
 | Cache reload             | <50ms  |
@@ -21,6 +21,7 @@ All targets assume 200 concurrent users. Implementation SHOULD add
 `slog.Debug()` timers for profiling.
 
 **Rationale:** Concrete targets enable CI-based performance regression detection
-and give implementers a clear "good enough" threshold. The 5ms target leaves
+and give implementers a clear "good enough" threshold. The 25ms target leaves
 headroom for the full request path while keeping authorization invisible to
-players.
+players. Originally set to 5ms, but revised to 25ms to account for SQL JOIN
+overhead in PropertyProvider (see Decision #097).

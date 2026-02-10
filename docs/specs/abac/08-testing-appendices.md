@@ -186,7 +186,7 @@ grows.
 - [ ] Direct replacement of StaticAccessControl documented (no adapter)
 - [ ] Microbenchmarks (pure evaluator, no I/O): single-policy <10μs,
       50-policy set <100μs, attribute resolution <50μs (via `go test -bench`)
-- [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <5ms cached,
+- [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <25ms cached,
       <10ms cold, matching the performance targets in the spec
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation

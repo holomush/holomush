@@ -536,7 +536,7 @@ The following milestones mark major integration checkpoints for progress trackin
 - Attribute provider integration (Subject, Resource, Environment, Stream, Command)
 - Cache invalidation via PostgreSQL LISTEN/NOTIFY (Task 18)
 - Audit logging in all three modes (off, deny-only, all-decisions)
-- Performance benchmarks meet spec targets (<2ms p50, <5ms p99)
+- Performance benchmarks meet spec targets (<2ms p50, <25ms p99)
 
 **Coverage Threshold:**
 
@@ -574,7 +574,7 @@ The following milestones mark major integration checkpoints for progress trackin
 
 - All integration tests pass in CI with PostgreSQL testcontainer
 - Cache invalidation triggers within 100ms of policy update
-- Benchmarks meet spec targets (p50 <2ms, p99 <5ms)
+- Benchmarks meet spec targets (p50 <2ms, p99 <25ms)
 - Audit log correctly records denials in deny-only mode
 - No panics or deadlocks under concurrent evaluation (100 goroutines, 1000 requests)
 

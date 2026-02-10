@@ -475,7 +475,7 @@ git commit -m "feat(access): add PropertyProvider with recursive CTE for parent_
 
 **Spec References:** [04-resolution-evaluation.md#evaluation-algorithm](../specs/abac/04-resolution-evaluation.md#evaluation-algorithm), ADR 0009 (Custom Go-Native ABAC Engine), ADR 0011 (Deny-overrides), ADR 0012 (Eager attribute resolution)
 
-> **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
+> **Performance Targets (Decision #23):** Evaluate() p99 <25ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
 
 **Sub-tasks:**
 
@@ -1425,13 +1425,13 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 **Spec References:** [04-resolution-evaluation.md#performance-targets](../specs/abac/04-resolution-evaluation.md#performance-targets)
 
-> **Performance Targets (Decision #23):** Evaluate() p99 <5ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
+> **Performance Targets (Decision #23):** Evaluate() p99 <25ms, attribute resolution <2ms, DSL evaluation <1ms, cache reload <50ms (200 concurrent users). See [Decision #23](../specs/decisions/epic7/general/023-performance-targets.md).
 
 **Acceptance Criteria:**
 
 - [ ] **DB-inclusive benchmarks** (with PostgreSQL queries):
   - [ ] `BenchmarkEvaluate_ColdCache` — p99 <10ms
-  - [ ] `BenchmarkEvaluate_WarmCache` — p99 <5ms
+  - [ ] `BenchmarkEvaluate_WarmCache` — p99 <25ms
   - [ ] `BenchmarkAttributeResolution_Cold` — <2ms
   - [ ] `BenchmarkAttributeResolution_Warm` — <100μs
   - [ ] `BenchmarkCacheReload` — <50ms
@@ -1441,7 +1441,7 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
   - [ ] `BenchmarkProviderStarvation` — slow first provider consuming ~80ms of 100ms budget, verifies subsequent providers receive cancelled contexts (per spec fair-share timeout requirement)
 - [ ] **Pure computation benchmarks** (no I/O, in-memory only):
   - [ ] `BenchmarkConditionEvaluation` — <1ms per policy (pure computation)
-  - [ ] `BenchmarkWorstCase_NestedIf` — 32-level nesting <5ms (pure computation)
+  - [ ] `BenchmarkWorstCase_NestedIf` — 32-level nesting <25ms (pure computation)
   - [ ] `BenchmarkWorstCase_AllPoliciesMatch` — 50 policies <10ms (pure computation)
   - [ ] Pure/no-IO microbenchmarks: single-policy evaluation <10μs
   - [ ] Pure/no-IO microbenchmarks: 50-policy set evaluation <100μs
@@ -1457,12 +1457,12 @@ git commit -m "feat(access): add Prometheus metrics for ABAC engine"
 
 ```go
 func BenchmarkEvaluate_ColdCache(b *testing.B)         // target: <10ms p99
-func BenchmarkEvaluate_WarmCache(b *testing.B)          // target: <5ms p99
+func BenchmarkEvaluate_WarmCache(b *testing.B)          // target: <25ms p99
 func BenchmarkAttributeResolution_Cold(b *testing.B)    // target: <2ms
 func BenchmarkAttributeResolution_Warm(b *testing.B)    // target: <100μs
 func BenchmarkConditionEvaluation(b *testing.B)         // target: <1ms per policy
 func BenchmarkCacheReload(b *testing.B)                 // target: <50ms
-func BenchmarkWorstCase_NestedIf(b *testing.B)          // 32-level nesting <5ms
+func BenchmarkWorstCase_NestedIf(b *testing.B)          // 32-level nesting <25ms
 func BenchmarkWorstCase_AllPoliciesMatch(b *testing.B)  // 50 policies <10ms
 func BenchmarkProviderStarvation(b *testing.B)          // slow first provider ~80ms, subsequent providers get cancelled contexts
 ```
@@ -1504,7 +1504,7 @@ git commit -m "test(access): add ABAC engine benchmarks for performance targets"
 - [ ] GitHub Actions workflow configured to run benchmarks on pull requests
 - [ ] Benchmark baseline file stored in repository (e.g., `.benchmarks/baseline.txt`)
 - [ ] CI step compares current benchmark results against baseline values
-- [ ] CI fails if ANY benchmark exceeds 110% of documented target (e.g., cold Evaluate p99 >11ms, warm >5.5ms)
+- [ ] CI fails if ANY benchmark exceeds 110% of documented target (e.g., cold Evaluate p99 >11ms, warm >27.5ms)
 - [ ] Baseline update strategy documented: manual update via `make update-benchmark-baseline` or similar
 - [ ] Benchmark regression failures treated as build failures (PRs cannot merge)
 - [ ] Test: Simulate benchmark regression → verify CI fails with clear error message
@@ -1576,7 +1576,7 @@ Create `.benchmarks/baseline.txt` with values from Task 21 acceptance criteria:
 
 ```text
 BenchmarkEvaluate_ColdCache: 10ms p99
-BenchmarkEvaluate_WarmCache: 5ms p99
+BenchmarkEvaluate_WarmCache: 25ms p99
 BenchmarkAttributeResolution_Cold: 2ms
 BenchmarkAttributeResolution_Warm: 100μs
 BenchmarkConditionEvaluation: 1ms

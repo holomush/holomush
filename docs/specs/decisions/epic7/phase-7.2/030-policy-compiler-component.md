@@ -7,8 +7,8 @@
 
 **Review finding:** The spec jumped from "DSL text stored in PostgreSQL" to
 "engine evaluates conditions" without defining the compilation pipeline.
-Without this, every `Evaluate()` would re-parse DSL text, violating the <5ms
-p99 target.
+Without this, every `Evaluate()` would re-parse DSL text, violating the <25ms
+p99 target (see Decision #97).
 
 **Decision:** Add a `PolicyCompiler` component responsible for parsing DSL text
 to AST, validating attribute references, pre-compiling glob patterns for `like`

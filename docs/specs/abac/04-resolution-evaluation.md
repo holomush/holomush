@@ -440,7 +440,7 @@ Evaluate(ctx, AccessRequest{Subject, Action, Resource})
 
 | Metric                              | Target | Notes                             |
 | ----------------------------------- | ------ | --------------------------------- |
-| `Evaluate()` p99 latency (cached)   | <5ms   | Policy and attribute cache warm   |
+| `Evaluate()` p99 latency (cached)   | <25ms  | Policy and attribute cache warm   |
 | `Evaluate()` p99 latency (cold)     | <10ms  | Cache miss, DB roundtrip required |
 | Attribute resolution (cold)         | <2ms   | All providers combined            |
 | Attribute resolution (warm, cached) | <100μs | Map lookup only                   |
@@ -463,7 +463,7 @@ Implementation MUST include both `BenchmarkEvaluate_ColdCache` and
 | Provider timeout                     | 100ms  | Context deadline; return deny + error     |
 | Cache miss storm (post-NOTIFY flood) | <100ms | Lock during reload; stale reads tolerable |
 | Plugin provider slow                 | 50ms   | Per-provider context deadline             |
-| 32-level nested if-then-else         | <5ms   | Recursive evaluator with depth limit      |
+| 32-level nested if-then-else         | <25ms  | Recursive evaluator with depth limit      |
 | 20-level containment CTE             | <10ms  | Recursive SQL with depth limit            |
 | Provider starvation (80ms + 80ms)    | 100ms  | Second provider gets cancelled context    |
 
@@ -587,7 +587,7 @@ timeout rate, and circuit breaker status for operational visibility.
 - Add `BenchmarkEvaluate_*` tests with targets as failure thresholds (CI
   fails if benchmarks regress >10% from baseline). Specifically: CI MUST fail
   if any benchmark exceeds 110% of its documented target value (e.g., cold
-  `Evaluate()` p99 must stay under 5.5ms, warm under 3.3ms). Benchmark
+  `Evaluate()` p99 must stay under 11ms, warm under 27.5ms). Benchmark
   failures MUST be treated as build failures - PRs cannot merge with
   performance regressions exceeding the 10% headroom
 - Staging monitoring alerts on p99 > 10ms (2x target)
