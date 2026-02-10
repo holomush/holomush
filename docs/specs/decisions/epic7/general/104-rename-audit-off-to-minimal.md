@@ -11,17 +11,21 @@ misleading. Users expect `off` to mean "no logging at all."
 
 **Decision:** Rename the `off` audit mode to `minimal`.
 
-**Previous behavior (unchanged):**
+**Updated by:** [Decision #106](./106-minimal-audit-mode-is-alias.md) — `minimal` is now
+documented as an alias for `denials_only`
 
-| Mode           | Logs                                  |
-| -------------- | ------------------------------------- |
-| `minimal`      | System bypasses + denials             |
-| `denials_only` | System bypasses + deny + default_deny |
-| `all`          | All decisions incl. allow             |
+**Audit modes:**
 
-The functional distinction between `minimal` and `denials_only` is that
-`minimal` omits `default_deny` (system-failure denial) entries. Both modes
-always log system bypass events (per Decision #56).
+| Mode           | Logs                                  | Notes                    |
+| -------------- | ------------------------------------- | ------------------------ |
+| `minimal`      | System bypasses + deny + default_deny | Alias for `denials_only` |
+| `denials_only` | System bypasses + deny + default_deny | Canonical name           |
+| `all`          | All decisions incl. allow             |                          |
+
+The `minimal` mode was originally intended to omit `default_deny` entries,
+but after Decision #56 (system bypasses) and Decision #86 (denials), both
+modes log identical events. Decision #106 documents `minimal` as an alias
+for `denials_only`, reserved for future differentiation.
 
 **Rationale:**
 

@@ -254,11 +254,11 @@ type AuditConfig struct {
 }
 ```
 
-| Mode           | What is logged                        | Typical use case                              |
-| -------------- | ------------------------------------- | --------------------------------------------- |
-| `minimal`      | System bypasses + denials             | Development, minimal audit trail (allows off) |
-| `denials_only` | System bypasses + deny + default_deny | Production default                            |
-| `all`          | All decisions incl. allow             | Debugging, compliance audit                   |
+| Mode           | What is logged                        | Typical use case                              | Notes                    |
+| -------------- | ------------------------------------- | --------------------------------------------- | ------------------------ |
+| `minimal`      | System bypasses + deny + default_deny | Development, minimal audit trail (allows off) | Alias for `denials_only` |
+| `denials_only` | System bypasses + deny + default_deny | Production default                            | Canonical name           |
+| `all`          | All decisions incl. allow             | Debugging, compliance audit                   |                          |
 
 The default mode is `denials_only` — this balances operational visibility with
 storage efficiency.
