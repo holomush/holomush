@@ -78,7 +78,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 **For experienced implementers:** Start here to jump directly to critical tasks without reading the full plan.
 
-**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain→T17.1→T17.2→T17.3→T17.4→(T18 + T21a→T22→T22b)→T23→T23b→T28→T28.5→T29
+**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain (T13→(T14||T15)→T17.1)→T17.2→T17.3→T17.4→(T18 + T21a→T22→T22b)→T23→T23b→T28→T28.5→T29
 
 **First 3 tasks:**
 
@@ -295,6 +295,7 @@ graph TD
     T0 --> T8
     T5 --> T8
     T7 --> T18
+    T12 --> T18
     T12 --> T17_1
     T4a --> T16b
     T5 --> T13
@@ -355,7 +356,7 @@ graph TD
     style T28_5 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow) → Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → (DSL chain: Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17.1 → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
+**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow) → Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → (DSL chain: Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → (Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) || Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17.1) → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
 
 **Parallel PropertyProvider chain (highlighted in orange):** Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)). Tasks 3, 4b, 4c are a side chain (property cascade) off Task 3/4a and do not gate downstream work.
 
@@ -403,6 +404,7 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T12         | 7.2          | T17.1       | 7.3          | DSL compiler needed by policy engine                                                              |
 | T12         | 7.2          | T22         | 7.4          | Compiler validates seed policy DSL                                                                |
 | T12         | 7.2          | T23         | 7.4          | Compiler needed for bootstrap compilation                                                         |
+| T12         | 7.2          | T18         | 7.3          | PolicyCache needs PolicyCompiler for cache warming                                                |
 | T14         | 7.3          | T34         | 7.7          | Resolver needed for circuit breaker                                                               |
 | T16a        | 7.3          | T23         | 7.4          | Simple providers (Stream, Command) needed for seed policy eval                                    |
 | T17.4       | 7.3          | T24         | ~~7.5~~ E8   | ~~Engine needed before lock registry~~ **Deferred to Epic 8**                                     |
