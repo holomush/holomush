@@ -54,18 +54,18 @@ This criterion is checked at code review time and must pass before the task is m
 
 ## Alternatives Considered
 
-**Alternative 1: No explicit criterion, rely on CI**
+### Alternative 1: No explicit criterion, rely on CI
 
 - Con: Developers might not realize cycles are a problem until code review
 - Con: Less clear to Task 4a implementer what the architectural constraint is
 - Rejected: Explicit criteria improve communication and reduce rework
 
-**Alternative 2: Add a separate architectural review checklist**
+### Alternative 2: Add a separate architectural review checklist
 
 - Con: Orthogonal to the task itself; harder to enforce
 - Rejected: Acceptance criteria are the right place for hard constraints
 
-**Alternative 3: Use a code generation tool to prevent cycles**
+### Alternative 3: Use a code generation tool to prevent cycles
 
 - Con: Over-engineering for a constraint already enforced by Go's toolchain
 - Rejected: `go vet` is sufficient
@@ -82,7 +82,7 @@ When implementing Task 4a, after creating the PropertyRepository interface:
 ## Related Decisions
 
 - **ADR 018** ([018-property-package-ownership.md](018-property-package-ownership.md)): Establishes that PropertyRepository belongs in `internal/world/`, not `internal/access/`
-- **ADR 003** ([../../general/003-attribute-resolution-strategy.md](../../general/003-attribute-resolution-strategy.md)): Documents the overall attribute resolution design, which PropertyProvider is part of
+- **ADR 003** ([../general/003-attribute-resolution-strategy.md](../general/003-attribute-resolution-strategy.md)): Documents the overall attribute resolution design, which PropertyProvider is part of
 - **ADR 027** ([../phase-7.3/027-unified-attribute-provider-interface.md](../phase-7.3/027-unified-attribute-provider-interface.md)): Defines the unified AttributeProvider interface that PropertyProvider will implement
 
 ## Acceptance Criteria

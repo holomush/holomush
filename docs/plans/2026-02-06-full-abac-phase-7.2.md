@@ -26,11 +26,11 @@
 - Create: `internal/access/policy/dsl/ast.go`
 - Test: `internal/access/policy/dsl/ast_test.go`
 
-**Step 1: Write tests for AST node String() methods**
+### Task 8 Step 1: Write tests for AST node String() methods
 
 Test that AST nodes render back to readable DSL text (useful for debugging and `policy show`).
 
-**Step 2: Implement AST types using participle struct tags**
+### Task 8 Step 2: Implement AST types using participle struct tags
 
 Map the EBNF grammar from [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar) to participle annotations. Key AST nodes:
 
@@ -50,7 +50,7 @@ Map the EBNF grammar from [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl
 
 Enforce reserved word restrictions: `permit`, `forbid`, `when`, `principal`, `resource`, `action`, `env`, `is`, `in`, `has`, `like`, `true`, `false`, `if`, `then`, `else`, `containsAll`, `containsAny` MUST NOT appear as attribute names.
 
-**Step 3: Commit**
+### Task 8 Step 3: Commit
 
 ```bash
 git add internal/access/policy/dsl/
@@ -84,7 +84,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 - Create: `internal/access/policy/dsl/parser.go`
 - Test: `internal/access/policy/dsl/parser_test.go`
 
-**Step 1: Write failing parser tests**
+### Task 9 Step 1: Write failing parser tests
 
 Table-driven tests MUST cover:
 
@@ -133,7 +133,7 @@ forbid(principal is character, action in ["read"], resource is property) when { 
 - Malformed conditions
 - Entity reference using Type::"value" syntax ([02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar) (was monolithic spec lines 993-999), requires parser MUST reject this form)
 
-**Step 2: Implement parser using participle**
+### Task 9 Step 2: Implement parser using participle
 
 ```go
 // internal/access/policy/dsl/parser.go
@@ -164,12 +164,12 @@ func Parse(dslText string) (*Policy, error) {
 }
 ```
 
-**Step 3: Run tests**
+### Task 9 Step 3: Run tests
 
 Run: `task test`
 Expected: PASS for all valid policies, descriptive errors for invalid ones
 
-**Step 4: Commit**
+### Task 9 Step 4: Commit
 
 ```bash
 git add internal/access/policy/dsl/
@@ -197,7 +197,7 @@ git commit -m "feat(access): add participle-based DSL parser"
 
 - Create: `internal/access/policy/dsl/parser_fuzz_test.go`
 
-**Step 1: Write fuzz tests**
+### Task 10 Step 1: Write fuzz tests
 
 ```go
 // internal/access/policy/dsl/parser_fuzz_test.go
@@ -227,14 +227,14 @@ func FuzzParse(f *testing.F) {
 }
 ```
 
-**Step 2: Run fuzz tests to verify they work**
+### Task 10 Step 2: Run fuzz tests to verify they work
 
 Run: `go test -fuzz=FuzzParse -fuzztime=60s ./internal/access/policy/dsl/`
 Expected: No panics
 
 **Note:** Direct `go test` is intentional here — fuzz testing is not covered by `task test` runner.
 
-**Step 3: Commit**
+### Task 10 Step 3: Commit
 
 ```bash
 git add internal/access/policy/dsl/parser_fuzz_test.go
@@ -278,7 +278,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 - Create: `internal/access/policy/dsl/evaluator.go`
 - Test: `internal/access/policy/dsl/evaluator_test.go`
 
-**Step 1: Write failing evaluator tests**
+### Task 11 Step 1: Write failing evaluator tests
 
 Table-driven tests covering EVERY operator (spec requirement). Each operator needs test cases for:
 
@@ -304,7 +304,7 @@ Operators to cover:
 | `\|\|`               | `a \|\| b`                                                         |
 | `if-then-else`       | `if principal has faction then principal.faction == "x" else true` |
 
-**Step 2: Implement evaluator**
+### Task 11 Step 2: Implement evaluator
 
 ```go
 // internal/access/policy/dsl/evaluator.go
@@ -332,12 +332,12 @@ Key behaviors:
 - **Glob matching:** use `github.com/gobwas/glob` for `like` operator, pre-compiled in `GlobCache`
 - **Type assertions for numeric comparisons (Bug TD3):** `map[string]any` means providers returning `int` instead of `float64` will silently break numeric `>`, `>=`, `<`, `<=` comparisons. Implementation MUST either: (1) perform type coercion in evaluator (e.g., convert `int` → `float64`), or (2) provide a type-checked `SetAttribute` helper that normalizes numeric types at insertion time. Evaluator tests MUST cover mixed numeric types (int/float64) to ensure comparisons work correctly.
 
-**Step 3: Run tests**
+### Task 11 Step 3: Run tests
 
 Run: `task test`
 Expected: PASS
 
-**Step 4: Add fuzz test for evaluator**
+### Task 11 Step 4: Add fuzz test for evaluator
 
 Create `internal/access/policy/dsl/evaluator_fuzz_test.go`:
 
@@ -399,7 +399,7 @@ Expected: No panics
 
 **Note:** CI runs fuzz tests for 60s per build. Nightly extended runs use `-fuzztime=10m`.
 
-**Step 5: Commit**
+### Task 11 Step 5: Commit
 
 ```bash
 git add internal/access/policy/dsl/evaluator.go internal/access/policy/dsl/evaluator_test.go internal/access/policy/dsl/evaluator_fuzz_test.go
@@ -441,7 +441,7 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 - Create: `internal/access/policy/compiler.go`
 - Test: `internal/access/policy/compiler_test.go`
 
-**Step 1: Write failing tests**
+### Task 12 Step 1: Write failing tests
 
 - Compile valid DSL → returns CompiledPolicy with correct Effect, Target, Conditions
 - Compile invalid DSL → returns error with line/column info
@@ -453,7 +453,7 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 - Verify glob patterns are pre-compiled in `GlobCache`
 - Verify `compiled_ast` JSONB serialization round-trips correctly
 
-**Step 2: Implement PolicyCompiler**
+### Task 12 Step 2: Implement PolicyCompiler
 
 ```go
 // internal/access/policy/compiler.go
@@ -500,12 +500,12 @@ type CompiledTarget struct {
 func (c *PolicyCompiler) Compile(dslText string) (*CompiledPolicy, []ValidationWarning, error)
 ```
 
-**Step 3: Run tests**
+### Task 12 Step 3: Run tests
 
 Run: `task test`
 Expected: PASS
 
-**Step 4: Commit**
+### Task 12 Step 4: Commit
 
 ```bash
 git add internal/access/policy/compiler.go internal/access/policy/compiler_test.go

@@ -1,12 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Access Control Layers
+# Access Control Layers
 
 HoloMUSH provides three layers of access control, offering progressive
 complexity for different user roles.
 
-### Layer 1: Property Metadata (All Characters)
+## Layer 1: Property Metadata (All Characters)
 
 Characters set visibility and access lists on properties they own. No policy
 authoring required — the character configures data that existing system-level

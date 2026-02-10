@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Policy Storage
+# Policy Storage
 
-### Schema
+## Schema
 
 All `id` columns use ULID format, consistent with project conventions.
 

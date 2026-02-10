@@ -39,9 +39,8 @@ The change from check-only to auto-fix mode for the `fmt-markdown` hook is
    quality is a reasonable split.
 
 5. **Documentation precedent:** HoloMUSH documentation guidelines
-   ([docs/CLAUDE.md](../../CLAUDE.md)) recommend running `task fmt` to align
-   tables. Auto-fixing in the commit hook aligns with this guidance — the hook
-   performs what the guidelines recommend.
+recommend running `task fmt` to align tables. Auto-fixing in the commit hook
+aligns with this guidance — the hook performs what the guidelines recommend.
 
 6. **Consistency with project goals:** The full ABAC specification and all
    implementation plans use standardized table formatting for requirements,
@@ -59,6 +58,5 @@ The change from check-only to auto-fix mode for the `fmt-markdown` hook is
 
 ## Cross-references
 
-- [Documentation Guidelines](../../CLAUDE.md) — Markdown standards and `task fmt`
-  recommendation
+- **Documentation Guidelines** — Markdown standards and `task fmt` recommendation
 - Lefthook configuration — `.lefthook.yaml` and `.lefthook-local.yaml`

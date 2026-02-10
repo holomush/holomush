@@ -52,14 +52,14 @@
 - Create: `internal/access/policy/lock/registry.go`
 - Test: `internal/access/policy/lock/registry_test.go`
 
-**Step 1: Write failing tests**
+### Task 24 Step 1: Write failing tests
 
 - Register core lock tokens (faction, flag, level)
 - Register plugin lock tokens (must be namespace-prefixed)
 - Duplicate token → error
 - Lookup token → returns definition with DSL expansion info
 
-**Step 2: Implement**
+### Task 24 Step 2: Implement
 
 ```go
 // internal/access/policy/lock/registry.go
@@ -85,7 +85,7 @@ func (r *LockTokenRegistry) Lookup(token string) (TokenDef, bool)
 func (r *LockTokenRegistry) All() []TokenDef
 ```
 
-**Step 3: Run tests, commit**
+### Task 24 Step 3: Run tests, commit
 
 ```bash
 git add internal/access/policy/lock/
@@ -128,7 +128,7 @@ git commit -m "feat(access): add lock token registry"
 - Test: `internal/access/policy/lock/parser_test.go`
 - Test: `internal/access/policy/lock/compiler_test.go`
 
-**Step 1: Write failing tests**
+### Task 25 Step 1: Write failing tests
 
 Lock syntax from spec:
 
@@ -141,11 +141,11 @@ Lock syntax from spec:
 
 Compiler takes parsed lock expression + target resource string → DSL policy text. Then PolicyCompiler validates the generated DSL.
 
-**Step 2: Implement parser and compiler**
+### Task 25 Step 2: Implement parser and compiler
 
 Lock expression compilation converts lock syntax into valid DSL permit policies. The compiled policy MUST include the ownership check requirement: `resource.owner == principal.id`.
 
-**Implementation Note: Configurable Lock Rate Limit**
+### Task 25 Implementation Note: Configurable Lock Rate Limit
 
 The lock rate limit (default 50 lock policies per character per minute) SHOULD be configurable via server settings to allow operators to adjust based on their server's scale and player behavior patterns. The default value remains 50/character for backward compatibility and reasonable protection against policy storage exhaustion.
 
@@ -155,7 +155,7 @@ Configuration approach:
 - Expose via environment variable `HOLOMUSH_LOCK_RATE_LIMIT` (optional override)
 - Document in operator documentation under access control configuration
 
-**Step 3: Run tests, commit**
+### Task 25 Step 3: Run tests, commit
 
 ```bash
 git add internal/access/policy/lock/
@@ -190,7 +190,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - Create: `internal/command/handlers/lock.go`
 - Test: `internal/command/handlers/lock_test.go`
 
-**Step 1: Write failing tests**
+### Task 25b Step 1: Write failing tests
 
 - `lock <resource>/<action> = <expression>` → parses expression, validates ownership, compiles policy, stores in DB
 - `unlock <resource>/<action>` → removes action-specific lock policy
@@ -199,7 +199,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - Ownership check: character must own target resource
 - Rate limiting: max 50 lock policies per character
 
-**Step 2: Implement lock and unlock commands**
+### Task 25b Step 2: Implement lock and unlock commands
 
 Lock command workflow:
 
@@ -225,7 +225,7 @@ Unlock command workflow:
 5. If action specified: delete policy named `lock:<type>:<resource_id>:<action>`
 6. If no action: delete all policies matching pattern `lock:<type>:<resource_id>:%` (using PolicyStore query)
 
-**Step 3: Run tests, commit**
+### Task 25b Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/lock.go internal/command/handlers/lock_test.go
@@ -262,7 +262,7 @@ git commit -m "feat(command): add lock/unlock in-game commands for ABAC lock exp
 - Create: `internal/command/handlers/policy.go`
 - Test: `internal/command/handlers/policy_test.go`
 
-**Step 1: Write failing tests**
+### Task 26a Step 1: Write failing tests
 
 For each command, test:
 
@@ -277,11 +277,11 @@ For each command, test:
 - `policy edit <name> <new_dsl>` → validates new DSL, increments version
 - `policy delete <name>` → removes policy (seed policies cannot be deleted)
 
-**Step 2: Implement CRUD commands**
+### Task 26a Step 2: Implement CRUD commands
 
 Register commands in the command registry following existing handler patterns in `internal/command/handlers/`.
 
-**Step 3: Run tests, commit**
+### Task 26a Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
@@ -316,7 +316,7 @@ git commit -m "feat(command): add policy CRUD admin commands (create/list/show/e
 - Modify: `internal/command/handlers/policy.go`
 - Test: `internal/command/handlers/policy_test.go`
 
-**Step 1: Write failing tests**
+### Task 26b Step 1: Write failing tests
 
 For each command, test:
 
@@ -327,11 +327,11 @@ For each command, test:
 - `policy history <name>` → shows version history from `access_policy_versions` table
 - `policy rollback <name> <version>` → restores policy to previous version, creates new version entry
 
-**Step 2: Implement state management commands**
+### Task 26b Step 2: Implement state management commands
 
 Register commands in the command registry following existing handler patterns in `internal/command/handlers/`.
 
-**Step 3: Run tests, commit**
+### Task 26b Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
@@ -374,7 +374,7 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - Modify: `internal/command/handlers/policy.go`
 - Test: `internal/command/handlers/policy_test.go`
 
-**Step 1: Write failing tests**
+### Task 27a Step 1: Write failing tests
 
 - `policy test <subject> <action> <resource>` → returns decision, matched policies
 - `policy test --verbose` → shows all candidate policies with why each did/didn't match
@@ -382,11 +382,11 @@ git commit -m "feat(command): add policy state management commands (enable/disab
 - `policy test --suite <file>` → batch YAML scenario testing
 - Builder attribute redaction: test with characters/resources the builder doesn't own
 
-**Step 2: Implement**
+### Task 27a Step 2: Implement
 
 Implement the `policy test` command with all variants (verbose, JSON, suite mode) and builder attribute redaction. Ensure all invocations are logged to the audit log per spec requirements.
 
-**Step 3: Run tests, commit**
+### Task 27a Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
@@ -429,7 +429,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 - Modify: `internal/command/handlers/policy.go`
 - Test: `internal/command/handlers/policy_test.go`
 
-**Step 1: Write failing tests**
+### Task 27b-1 Step 1: Write failing tests
 
 - `policy validate <dsl>` → success or error with line/column
 - `policy reload` → forces cache reload from DB
@@ -437,13 +437,13 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 - `policy attributes --namespace reputation` → filters to specific namespace
 - `policy list --old-grammar` → shows only policies with outdated grammar_version in compiled_ast JSONB
 
-**Step 2: Implement**
+### Task 27b-1 Step 2: Implement
 
 `policy list --old-grammar` filter: query `compiled_ast->>'grammar_version' < current_version`.
 
 **Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
 
-**Step 3: Run tests, commit**
+### Task 27b-1 Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
@@ -478,7 +478,7 @@ git commit -m "feat(command): add policy validate/reload/attributes/list --old-g
 - Modify: `internal/command/handlers/policy.go`
 - Test: `internal/command/handlers/policy_test.go`
 
-**Step 1: Write failing tests**
+### Task 27b-2 Step 1: Write failing tests
 
 - `policy audit --since 1h --subject character:01ABC` → queries audit log with filters
 - `policy audit --decision permit` → shows only permit decisions
@@ -486,11 +486,11 @@ git commit -m "feat(command): add policy validate/reload/attributes/list --old-g
 - `policy seed verify` → compares installed vs. shipped seed policies
 - `policy seed status` → shows seed versions and customization flags
 
-**Step 2: Implement**
+### Task 27b-2 Step 2: Implement
 
 Audit log query with filter support. Seed verify compares stored DSL against `SeedPolicies()` function from Task 22 (Phase 7.4). Seed status shows seed_version field and detects customization by comparing stored DSL against shipped seed text.
 
-**Step 3: Run tests, commit**
+### Task 27b-2 Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
@@ -525,7 +525,7 @@ git commit -m "feat(command): add policy audit/seed verify/seed status commands"
 - Modify: `internal/command/handlers/policy.go`
 - Test: `internal/command/handlers/policy_test.go`
 
-**Step 1: Write failing tests**
+### Task 27b-3 Step 1: Write failing tests
 
 - `policy recompile-all` → recompiles all policies, updates grammar_version within compiled_ast JSONB
 - `policy recompile <name>` → recompiles single policy, updates grammar_version within compiled_ast JSONB
@@ -533,7 +533,7 @@ git commit -m "feat(command): add policy audit/seed verify/seed status commands"
 - `policy repair <name>` → re-compiles corrupted policy from DSL text, fixing invalid compiled_ast
 - `policy clear-degraded-mode` → clears degraded mode flag
 
-**Step 2: Implement**
+### Task 27b-3 Step 2: Implement
 
 Policy recompile commands ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1001-1031):
 
@@ -547,7 +547,7 @@ Each policy's `CompiledPolicy` includes `GrammarVersion` field ([02-policy-dsl.m
 
 **Failed recompilation handling** ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 
-**Step 3: Run tests, commit**
+### Task 27b-3 Step 3: Run tests, commit
 
 ```bash
 git add internal/command/handlers/policy.go internal/command/handlers/policy_test.go
