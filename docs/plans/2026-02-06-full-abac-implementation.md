@@ -409,7 +409,7 @@ The following milestones mark major integration checkpoints for progress trackin
 | M2        | T12       | Policy DSL compiles and evaluates correctly         | 7.2   |
 | M3        | T17.4     | AccessPolicyEngine evaluates real policies          | 7.3   |
 | M4        | T23       | Bootstrap inserts seed policies successfully        | 7.4   |
-| M5        | T27b3     | All admin commands functional                       | 7.5   |
+| M5        | T28       | Legacy adapter migrated                             | 7.6   |
 | M6        | T29       | Old AccessControl removed, engine is sole authority | 7.6   |
 
 **Notes:**
@@ -418,7 +418,7 @@ The following milestones mark major integration checkpoints for progress trackin
 - **M2 (DSL Functional)** unblocks policy definition and seed creation
 - **M3 (Engine Operational)** is the critical path milestone — gates bootstrap, migration, and admin
 - **M4 (Policies Seeded)** enables real-world testing and admin tooling
-- **M5 (Admin Ready)** completes operator tooling for policy management
+- **M5 (Adapter Migrated)** completes migration to engine for all production call sites
 - **M6 (Migration Complete)** marks full ABAC cutover and old system removal
 
 #### M1 Integration Test Gate Requirements
