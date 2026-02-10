@@ -108,10 +108,13 @@ graph LR
     T0_5 --> T1([T1: Migration])
     T1 --> T7([T7: PolicyStore<br/>M1 End])
 
-    T7 --> T8_12([T8-T12:<br/>DSL Chain<br/>M2 End])
+    T7 --> T8([T8: AST<br/>Types])
     T7 --> T13_15([T13-T15:<br/>Provider Chain])
 
-    T8_12 --> T17_1([T17.1: Bypass<br/>+ Session])
+    T8 --> T9([T9: DSL<br/>Parser])
+    T9 --> T11([T11: DSL<br/>Evaluator])
+    T11 --> T12([T12: Policy<br/>Compiler<br/>M2 End])
+    T12 --> T17_1([T17.1: Bypass<br/>+ Session])
     T13_15 --> T17_1
     T17_1 --> T17_2([T17.2: Target<br/>Matching])
     T17_2 --> T17_3([T17.3: Condition<br/>Evaluation])
@@ -131,18 +134,22 @@ graph LR
     T28_5 --> T29([T29: Cleanup<br/>M6 End])
 
     style T7 fill:#ffcccc
-    style T8_12 fill:#ffe6cc
+    style T8 fill:#ffcccc
+    style T9 fill:#ffcccc
+    style T11 fill:#ffcccc
+    style T12 fill:#ffcccc
     style T17_1 fill:#ffcccc
     style T17_2 fill:#ffcccc
     style T17_3 fill:#ffcccc
     style T17_4 fill:#ffcccc
+    style T18 fill:#ffcccc
     style T21a fill:#ffcccc
     style T22 fill:#ffcccc
     style T22b fill:#ffcccc
     style T23 fill:#ffcccc
     style T23b fill:#ffcccc
     style T23c fill:#ffcccc
-    style T28 fill:#ffe6cc
+    style T28 fill:#ffcccc
     style T29 fill:#ffcccc
 ```
 
@@ -324,6 +331,9 @@ graph TD
     style T0 fill:#ffffcc
     style T0_5 fill:#ffffcc
     style T7 fill:#ffcccc
+    style T8 fill:#ffcccc
+    style T9 fill:#ffcccc
+    style T11 fill:#ffcccc
     style T12 fill:#ffcccc
     style T13 fill:#ffcccc
     style T14 fill:#ffcccc
