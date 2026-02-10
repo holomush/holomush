@@ -120,8 +120,8 @@ permit(principal, action in ["debug"], resource)
 ```
 
 **Migration:** Existing policies with bare boolean attributes can be automatically
-fixed using `policy lint --fix`, which rewrites bare attributes as
-`<attribute> == true` while preserving all other formatting.
+fixed using `policy lint --fix` (deferred to Phase 2), which rewrites bare
+attributes as `<attribute> == true` while preserving all other formatting.
 
 **Operator precedence** (highest to lowest):
 
