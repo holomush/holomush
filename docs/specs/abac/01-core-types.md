@@ -109,7 +109,7 @@ Node types: `attr_ref` (root + path), `literal` (string/number/bool),
 The policy store calls `Compile()` on every `Create` and `Edit` operation,
 rejecting invalid DSL before persisting. The in-memory policy cache holds
 `CompiledPolicy` instances — `Evaluate()` never re-parses DSL text, ensuring
-the <25ms p99 latency target for cached requests is achievable.
+the <10ms p99 latency target for cached requests is achievable.
 
 ### AccessRequest
 
