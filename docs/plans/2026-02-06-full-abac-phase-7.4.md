@@ -3,7 +3,7 @@
 
 # Phase 7.4: Seed Policies & Bootstrap
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5 (Deferred to Epic 8)](./2026-02-06-full-abac-phase-7.5.md)**
 >
 > **Prerequisites:** Task 16a, Task 16b, and Task 18 from Phase 7.3 must complete before Phase 7.4 tasks begin (T16a→T23, T16b→T23, and T18→T23 dependencies). T16a provides StreamProvider and CommandProvider, which are referenced by seed policies `seed:player-stream-emit` and `seed:player-basic-commands`. T16b provides PropertyProvider, which enables `property.*` attribute resolution for seed policies `seed:property-public-read`, `seed:property-private-read`, `seed:property-admin-read`, `seed:property-system-forbid`, `seed:property-owner-write`, `seed:property-restricted-visible-to`, and `seed:property-restricted-excluded`.
 
