@@ -60,6 +60,10 @@ uses the resolved ULID, not the display name.
 
 #### Lock Syntax
 
+> **DEFERRED (Phase 7.5):** The lock system documented in this subsection is
+> part of Phase 7.5 (Locks & Admin), which is deferred. Implementation should
+> not begin until Phase 7.5 is scheduled.
+
 The lock expression language has two kinds of primitives: **core primitives**
 built into the parser, and **token predicates** registered by attribute
 providers.
