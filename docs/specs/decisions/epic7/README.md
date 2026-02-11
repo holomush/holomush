@@ -110,6 +110,10 @@ options considered, and rationale for the chosen approach.
 | 104 | Rename Audit Mode `off` to `minimal`                               | General | [104](general/104-rename-audit-off-to-minimal.md)                         |
 | 105 | LISTEN/NOTIFY Disconnection Recovery Strategy                      | 7.3     | [105](phase-7.3/105-listen-notify-disconnection-recovery.md)              |
 | 106 | `minimal` Audit Mode Is Alias for `denials_only`                  | General | [106](general/106-minimal-audit-mode-is-alias.md)                         |
+| 107 | Policy Reload Bypass Acceptance Criterion in T31                   | 7.4     | [107](phase-7.4/107-policy-reload-bypass-in-t31.md)                       |
+| 108 | Elevate T16b to Mandatory Phase 7.3 Milestone Gate                 | General | [108](general/108-t16b-mandatory-milestone-gate.md)                       |
+| 109 | Dedicated Policy for `list_characters` Action                      | 7.4     | [109](phase-7.4/109-dedicated-list-characters-policy.md)                  |
+| 110 | Add `grammar_version` to CompiledPolicy in T12                     | 7.2     | [110](phase-7.2/110-grammar-version-in-t12.md)                           |
 
 ## Spec ADR Reference Mapping
 
