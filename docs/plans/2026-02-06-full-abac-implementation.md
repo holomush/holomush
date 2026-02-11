@@ -78,7 +78,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 **For experienced implementers:** Start here to jump directly to critical tasks without reading the full plan.
 
-**Critical path:** T0→T0.5→T1→T7→DSL chain→Provider chain (T13→(T14||T15)→T17.1)→T17.2→T17.3→T17.4→(T18 + T21a→T22→T22b)→T23→T23b→T28→T28.5→T29
+**Critical path:** T0→T0.5→(T1→T7→T18) + (T5→DSL chain) + (T5→Provider chain (T13→(T14||T15)→T17.1))→T17.2→T17.3→T17.4→(T21a→T22→T22b)→T23→T23b→T28→T28.5→T29
 
 **First 3 tasks:**
 
@@ -86,7 +86,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 2. **Task 0.5** — Dependency audit (validates go module compatibility, 30 min)
 3. **Task 1** — Database migration (creates `access_policies` + `audit_log` tables)
 
-**Key directories to create:** `internal/access/policy/`, `internal/access/abac/`
+**Key directories to create:** `internal/access/policy/` (Phase 7.1-7.2), `internal/access/abac/` (Phase 7.3+)
 
 **Essential reading:**
 
@@ -106,10 +106,11 @@ The full dependency diagram below shows all 46 active tasks (plus 9 deferred Pha
 graph LR
     T0([T0: Spike<br/>M1 Start]) --> T0_5([T0.5: Dep Audit])
     T0_5 --> T1([T1: Migration])
-    T1 --> T7([T7: PolicyStore<br/>M1 End])
+    T5([T5: Core<br/>Types])
+    T5 --> T7([T7: PolicyStore<br/>M1 End])
 
-    T7 --> T8([T8: AST<br/>Types])
-    T7 --> T13_15([T13-T15:<br/>Provider Chain])
+    T5 --> T8([T8: AST<br/>Types])
+    T5 --> T13_15([T13-T15:<br/>Provider Chain])
 
     T8 --> T9([T9: DSL<br/>Parser])
     T9 --> T11([T11: DSL<br/>Evaluator])
@@ -133,6 +134,7 @@ graph LR
     T28_5 --> T29([T29: Cleanup<br/>M6 End])
 
     style T7 fill:#ffcccc
+    style T5 fill:#ffcccc
     style T8 fill:#ffcccc
     style T9 fill:#ffcccc
     style T11 fill:#ffcccc
@@ -198,7 +200,6 @@ graph TD
         T4b --> T4c
         T5 --> T7
         T5 --> T6
-        T5 --> T13
         T7 --> T7b
     end
 
@@ -293,6 +294,7 @@ graph TD
     %% Critical cross-phase dependencies
     T0 --> T8
     T5 --> T8
+    T5 --> T11
     T7 --> T18
     T12 --> T18
     T12 --> T17_1
@@ -303,12 +305,14 @@ graph TD
     T12 --> T22
     T12 --> T23
     T21a --> T22
+    T6 --> T12
     T6 --> T13
     T6 --> T17_1
     T6 --> T23
     T16a --> T23
     T16b --> T23
     T18 --> T23
+    T11 --> T17_3
     T14 --> T17_1
     %% Phase 7.5 dependencies (deferred to Epic 8)
     T17_4 -.-> T24
@@ -355,7 +359,7 @@ graph TD
     style T28_5 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow) → Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → (DSL chain: Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain: Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → (Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) || Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17.1) → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
+**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow), then three required chains converge: (PolicyStore path: Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) + (DSL chain from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)): Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)): Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → (Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) || Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17.1) → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
 
 **Parallel PropertyProvider chain (highlighted in orange):** Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)). Tasks 3, 4b, 4c are a side chain (property cascade) off Task 3/4a and do not gate downstream work.
 
@@ -367,8 +371,8 @@ graph TD
 
 **Parallel Work Opportunities:**
 
-- After Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit) completes, Task 1 gates Task 7, but Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (AST types) can proceed in parallel (Task 0 validated AST serialization)
-- After Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, two critical chains can run in parallel:
+- After Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit) completes, Task 1→Task 7 (PolicyStore path) and Task 5→Task 8 (DSL path) can proceed in parallel
+- After Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, two critical chains can run in parallel:
   - DSL chain: Tasks 8-12 can start independently (Task 0 validated AST serialization)
   - Provider chain: Tasks 13-15 (attribute providers) can run in parallel with the DSL chain. Within the provider chain, T14 and T15 both depend on T13 and can run in parallel; the longest path is T13→T14→T17.1
 - Task 16a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (simple providers) can proceed independently of Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (PropertyProvider)
@@ -390,17 +394,20 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T4a         | 7.1          | T16b        | 7.3          | Property metadata enables PropertyProvider                                                        |
 | T4c         | 7.1          | T35         | 7.7          | Property cascades needed for orphan cleanup                                                       |
 | T5          | 7.1          | T8          | 7.2          | Core types needed by AST node definitions                                                         |
+| T5          | 7.1          | T11         | 7.2          | Core types (ExpressionValue/typed attributes) needed by evaluator                                 |
 | T5          | 7.1          | T13         | 7.3          | Core types needed by attribute provider interface                                                 |
 | T5          | 7.1          | T19         | 7.3          | Policy types needed by audit logger                                                               |
+| T6          | 7.1          | T12         | 7.2          | Prefix parser defines identifier format needed by compiler                                        |
 | T6          | 7.1          | T13         | 7.3          | Prefix parser defines identifier format needed by provider interface                              |
 | T6          | 7.1          | T17.1       | 7.3          | Prefix parser needed for prefixed identifiers in policy evaluation                                |
 | T6          | 7.1          | T23         | 7.4          | Prefix constants needed by bootstrap                                                              |
-| T16b        | 7.3          | T23         | 7.4          | PropertyProvider enables property.* attributes in seed policies                                   |
+| T16b        | 7.3          | T23         | 7.4          | **Mandatory start gate for Phase 7.4**: property.* seed policies require PropertyProvider (Decision #85 context: not on T17.1 critical path, but required for bootstrap) |
 | T2          | 7.1          | T19         | 7.3          | Audit schema needed by audit logger                                                               |
 | T7          | 7.1          | T18         | 7.3          | PolicyStore needed for cache warming                                                              |
 | T7          | 7.1          | T26b        | ~~7.5~~ E8   | ~~Store needed for admin state commands~~ **Deferred to Epic 8**                                  |
 | T7          | 7.1          | T32         | 7.7          | Store interface needed for schema evolution                                                       |
 | T12         | 7.2          | T17.1       | 7.3          | DSL compiler needed by policy engine                                                              |
+| T11         | 7.2          | T17.3       | 7.3          | Engine condition evaluation step reuses DSL evaluator semantics                                   |
 | T12         | 7.2          | T22         | 7.4          | Compiler validates seed policy DSL                                                                |
 | T12         | 7.2          | T23         | 7.4          | Compiler needed for bootstrap compilation                                                         |
 | T12         | 7.2          | T18         | 7.3          | PolicyCache needs PolicyCompiler for cache warming                                                |
@@ -415,7 +422,6 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T23         | 7.4          | T26a        | ~~7.5~~ E8   | ~~Seeded policies before admin CRUD~~ **Deferred to Epic 8**                                      |
 | T23         | 7.4          | T27a        | ~~7.5~~ E8   | ~~Seeded policies before policy test~~ **Deferred to Epic 8**                                     |
 | T22b        | 7.4          | T28         | 7.6          | Seed policy gaps resolved before migration (Decision #94)                                         |
-| T23         | 7.4          | T28         | 7.6          | Bootstrap must complete before migration                                                          |
 | T23b        | 7.4          | T28         | 7.6          | Integration test suite must pass before migration                                                 |
 | T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests                                                          |
 | T12         | 7.2          | T27b-1      | ~~7.5~~ E8   | ~~Compiler needed for policy validation~~ **Deferred to Epic 8**                                  |
@@ -436,6 +442,8 @@ The following table lists all dependencies that cross phase boundaries. These ga
 - Phase 7.1 (PolicyStore interface) is the foundation for all downstream phases
 - Phase 7.3 (Engine + Cache) is the critical path bottleneck — gates both Phase 7.4 (Bootstrap) and Phase 7.6 (Migration)
 - Phase 7.4 (Bootstrap) must complete before Phase 7.6 (Migration) can proceed
+- **Mandatory Phase 7.4 gate:** T16b (PropertyProvider) MUST complete before Phase 7.4 starts via T16b→T23. This is intentional even though T16b is not on the T17.1 engine critical path ([Decision #85](../specs/decisions/epic7/phase-7.3/085-property-provider-not-on-critical-path.md)).
+- Migration gating is T23→T23b→T28 (no direct T23→T28 gate)
 - ~~Phase 7.5 (Locks & Admin) depends on Phase 7.4~~ — **Deferred to Epic 8** ([Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md))
 - Phase 7.7 (Resilience) depends on completed bootstrap and engine infrastructure; Task 33 (Lock discovery) blocked until Phase 7.5 completes in Epic 8
 - **Latent Risk (T16b):** PropertyProvider (T16b) is not on the critical path to the engine, but it blocks T23 (Bootstrap). Must be scheduled in parallel with core provider chain (T14-T15), not deferred. If T16b slips, it becomes a blocking dependency for Phase 7.4 completion.
@@ -620,11 +628,11 @@ T-shirt size estimates for sprint planning:
 | T20   | Metrics                            | S    | Prometheus counters/histograms       |
 | T21   | Benchmarks                         | M    | Performance test suite               |
 | T21a  | Remove @-prefix                    | S    | Find/replace + migration             |
-| T21b  | CI benchmark enforcement           | S    | CI pipeline config                   |
+| T21b  | CI benchmark enforcement           | S    | CI pipeline benchmark gate + config tracking |
 | T22   | Seed policy constants              | M    | Define all system policies           |
 | T22b  | Resolve seed policy gaps           | M    | Gap analysis + new policies          |
 | T23   | Bootstrap sequence                 | L    | Complex startup + idempotency        |
-| T23b  | Seed policy integration test suite | M    | CLI validation + smoke test gate     |
+| T23b  | Seed policy integration test suite | M    | CLI validation + smoke gate + CI seed-validation wiring |
 | T24   | Lock token registry                | M    | Registry + parser                    |
 | T25   | Lock parser/compiler               | L    | Lock expression → DSL compilation    |
 | T25b  | Lock/unlock commands               | M    | Command implementation               |
@@ -666,6 +674,8 @@ This implementation consists of **46 active tasks** split across **6 active phas
 
 ## Post-Implementation Checklist
 
+**Note:** CI workflow changes for ABAC implementation are explicitly tracked in Task 21b (benchmark enforcement pipeline) and Task 23b (seed validation/smoke gate pipeline), including dprint, rumdl, and linting configuration updates required by those tasks.
+
 - [ ] All unit tests pass: `task test`
 - [ ] All integration tests pass: `go test -tags=integration ./test/integration/...`
 - [ ] All linters pass: `task lint`
@@ -702,6 +712,7 @@ This matrix maps major sections of the design spec to implementing tasks, ensuri
 | **Grammar Versioning**                | Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)), ~~Task 27b1, Task 27b3 ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md))~~ _deferred_                                                                                                                                                                                                                                                                                                                                                  | PolicyCompiler version tracking, ~~core admin commands, recompilation/repair~~ _deferred_ |
 | **Replacing Static Roles**            | Task 21a ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)), Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)), Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)), Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) | Remove @-prefix, seed policy constants, gap resolution, bootstrap, validation, migration  |
 | **Testing Strategy**                  | Task 10 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)), Task 21 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)), Task 30 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                                                                                                                                                                                       | Fuzz tests, benchmarks, CI enforcement, migration equivalence tests, integration tests    |
+| **CI Workflow Changes**               | Task 21b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md))                                                                                                                                                                                                                                                                                                                                                                               | Benchmark enforcement + `--validate-seeds` smoke gate wiring in CI                        |
 | **Known Limitations / Resilience**    | Task 31 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md)), Task 34 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                                                                                                                                                                                                                                                                                                                                                                              | Degraded mode, circuit breaker                                                            |
 | **Future Commands (Deferred)**        | _N/A_                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Documented in Deferred Features section; not implemented in this plan                     |
 | **Performance Targets/Observability** | Task 17 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 20 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)), Task 21b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))                                                                                                                                                                                                                                                     | Engine implementation includes profiling, metrics, benchmarks, CI checks                  |
@@ -735,6 +746,7 @@ Intentional deviations from the design spec, tracked here for discoverability an
 | Lock naming uses `lock:<type>:<id>:<action>` format              | [06-layers-commands.md#layer-2-object-locks-owners](../specs/abac/06-layers-commands.md#layer-2-object-locks-owners) | ~~Task 25b ([Phase 7.5](./2026-02-06-full-abac-phase-7.5.md))~~ _deferred to Epic 8_ | Explicit resource type prefix improves discoverability and query filtering                                                                              |
 | Policy compilation moved from PolicyStore to caller              | [01-core-types.md#policycompiler](../specs/abac/01-core-types.md#policycompiler)                                     | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))                            | Keeps store as pure data access layer; PolicyService wrapper considered but deferred for simplicity; caller validates before persisting                 |
 | Policy version records on enable/disable (not just DSL changes)  | [05-storage-audit.md#policy-version-records](../specs/abac/05-storage-audit.md#policy-version-records)               | Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))                            | Enable/disable affects authorization behavior and SHOULD be tracked; spec's narrower scope (DSL changes only) leaves a gap in policy lifecycle auditing |
+| Reverse index replaced with on-demand `grep` policy scans        | [04-resolution-evaluation.md#schema-validation-and-evolution](../specs/abac/04-resolution-evaluation.md#schema-validation-and-evolution) | Task 32 ([Phase 7.7](./2026-02-06-full-abac-phase-7.7.md))                           | The spec says reverse index SHOULD be maintained; for current scope we use simpler `grep`-based scans to reduce runtime state complexity and maintenance burden |
 
 ## Deferred Features
 
@@ -748,6 +760,7 @@ The following features are intentionally deferred from this implementation plan.
 | `policy import <file>`                        | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred)                                                     | Deferred | Bulk policy import from file; useful for backup/restore workflows                                                                                               |
 | `policy diff <id1> <id2>`                     | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred)                                                     | Deferred | Compare two policy versions; shows DSL text diff                                                                                                                |
 | `policy export [--format=json]`               | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred)                                                     | Deferred | Export all policies to stdout for backup/migration                                                                                                              |
+| `policy seed status` / `policy seed verify`   | [08-testing-appendices.md#future-commands-deferred](../specs/abac/08-testing-appendices.md#future-commands-deferred)                                                     | Deferred | **MUST-level** seed bootstrap verification/inspection commands deferred with Phase 7.5 admin tooling to Epic 8                                                 |
 | `exit:` and `scene:` full attribute providers | [01-core-types.md](../specs/abac/01-core-types.md), [Decision #88](../specs/decisions/epic7/phase-7.3/088-exit-scene-provider-stubs.md)                                  | Partial  | Stub providers (type/id only) added in T16a; full attribute schemas deferred (holomush-5k1.422, holomush-5k1.424)                                               |
 | Entity references in policy DSL               | [02-policy-dsl.md](../specs/abac/02-policy-dsl.md)                                                                                                                       | Deferred | References like `subject.owns(resource)` require entity relationship model not yet built                                                                        |
 | Cross-resource policy conditions              | [04-resolution-evaluation.md](../specs/abac/04-resolution-evaluation.md)                                                                                                 | Deferred | Conditions spanning multiple resources (e.g., "if owner of parent location"); single-resource evaluation only                                                   |

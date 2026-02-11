@@ -70,7 +70,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 **Acceptance Criteria:**
 
-- [ ] All 18 seed policy DSL strings parse successfully
+- [ ] All 18 seed policy DSL strings parse successfully — Note: Count may change after T22b gap analysis
 - [ ] All operators parse correctly: `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `like`, `has`, `containsAll`, `containsAny`, `!`, `&&`, `||`, `if-then-else`
 - [ ] `resource == "location:01XYZ"` (exact match) parses correctly
 - [ ] Missing semicolon → descriptive error with position info
@@ -89,7 +89,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 Table-driven tests MUST cover:
 
-**Valid policies (18 seed policies):**
+**Valid policies (18 seed policies, count may change after T22b gap analysis):**
 
 ```text
 permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };

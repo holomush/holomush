@@ -37,7 +37,9 @@
 
 **Step 1: Write Ginkgo/Gomega integration tests**
 
-Use testcontainers for PostgreSQL (pattern from `test/integration/world/world_suite_test.go`):
+Use testcontainers for PostgreSQL (pattern from `test/integration/world/world_suite_test.go`).
+
+**Benchmark scenario:** Include a cache thrashing test case with high-cardinality policy sets (e.g., 10,000 unique policy sets rotating through a 256-entry LRU cache) to verify performance under cache pressure.
 
 ```go
 //go:build integration

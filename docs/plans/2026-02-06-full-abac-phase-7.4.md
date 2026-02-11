@@ -5,7 +5,7 @@
 
 > **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5 (Deferred to Epic 8)](./2026-02-06-full-abac-phase-7.5.md)**
 >
-> **Prerequisites:** Task 16a, Task 16b, and Task 18 from Phase 7.3 must complete before Phase 7.4 tasks begin (T16a→T23, T16b→T23, and T18→T23 dependencies). T16a provides StreamProvider and CommandProvider, which are referenced by seed policies `seed:player-stream-emit` and `seed:player-basic-commands`. T16b provides PropertyProvider, which enables `property.*` attribute resolution for seed policies `seed:property-public-read`, `seed:property-private-read`, `seed:property-admin-read`, `seed:property-system-forbid`, `seed:property-owner-write`, `seed:property-restricted-visible-to`, and `seed:property-restricted-excluded`.
+> **Prerequisites:** Tasks 12, 21a, 16a, 16b, and 18 must complete before Phase 7.4 tasks begin (T12→T22/T23, T21a→T22, T16a→T23, T16b→T23, and T18→T23 dependencies). T16a provides StreamProvider and CommandProvider, which are referenced by seed policies `seed:player-stream-emit` and `seed:player-basic-commands`. T16b provides PropertyProvider, which enables `property.*` attribute resolution for seed policies `seed:property-public-read`, `seed:property-private-read`, `seed:property-admin-read`, `seed:property-owner-write`, `seed:property-restricted-visible-to`, and `seed:property-restricted-excluded`.
 
 ## Task 22: Define seed policy constants
 
@@ -13,7 +13,7 @@
 
 **Acceptance Criteria:**
 
-- [ ] All 18 seed policies defined as `SeedPolicy` structs (17 permit, 1 forbid)
+- [ ] All 18 seed policies defined as `SeedPolicy` structs (17 permit, 1 forbid) — Note: Count may change after T22b gap analysis
 - [ ] All seed policies compile without error via `PolicyCompiler`
 - [ ] Each seed policy name starts with `seed:`
 - [ ] Each seed policy has `SeedVersion: 1` field for upgrade tracking
@@ -35,7 +35,7 @@
 
 **Step 1: Write failing tests**
 
-- All 18 seed policies compile without error via `PolicyCompiler` (17 permit, 1 forbid)
+- All 18 seed policies compile without error via `PolicyCompiler` (17 permit, 1 forbid) — Note: Count may change after T22b gap analysis
 - Each seed policy name starts with `seed:`
 - Each seed policy source is `"seed"`
 - No duplicate seed names
@@ -56,6 +56,7 @@ type SeedPolicy struct {
 }
 
 // SeedPolicies returns the complete set of 18 seed policies (17 permit, 1 forbid).
+// Note: Count may change after T22b gap analysis resolves coverage gaps.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 func SeedPolicies() []SeedPolicy {
@@ -172,7 +173,7 @@ func SeedPolicies() []SeedPolicy {
 }
 ```
 
-(Note: 18 seed policies listed above: 17 permit policies for standard access patterns, plus 1 forbid policy (seed:property-restricted-excluded for restricted property exclusion). System properties are protected by default-deny instead of an explicit forbid (see ADR 087 - under deny-overrides conflict resolution, a forbid would block seed:admin-full-access, locking admins out permanently).)
+(Note: 18 seed policies listed above (count may change after T22b gap analysis): 17 permit policies for standard access patterns, plus 1 forbid policy (seed:property-restricted-excluded for restricted property exclusion). System properties are protected by default-deny instead of an explicit forbid (see ADR 087 - under deny-overrides conflict resolution, a forbid would block seed:admin-full-access, locking admins out permanently).)
 
 **Step 3: Run tests, commit**
 
@@ -193,7 +194,7 @@ git commit -m "feat(access): define seed policies"
 
 - [ ] **G1 resolved:** `seed:player-exit-read` policy added — players can read exits in their current location (covers call site #10 GetExit)
 - [ ] **G2 resolved:** `seed:builder-exit-write` policy added — builders can create/update/delete exits (covers call sites #11-#13 CreateExit, UpdateExit, DeleteExit)
-- [ ] **G3 resolved:** `list_characters` action covered by expanding `seed:player-location-read` to include `list_characters`, OR a dedicated `seed:player-location-list-characters` policy added (covers call site #22 GetCharactersByLocation)
+- [ ] **G3 resolved:** Dedicated `seed:player-location-list-characters` policy added (covers call site #22 GetCharactersByLocation, per ADR #109)
 - [ ] **G4 resolved:** Scene access policies added — `seed:player-scene-participant` (read+write own scenes) and/or `seed:player-scene-read` (read scenes in current location) (covers call sites #25-#27)
 - [ ] **G5 documented:** Plugin command gap documented as intentional — plugins MUST define their own ABAC policies at install time; default-deny is correct baseline
 - [ ] **G6 documented:** MoveObject gap evaluated against game design requirements — either `seed:player-object-move` policy added or documented as intentional builder-only behavior
@@ -802,4 +803,4 @@ The following call sites have no player/builder-level seed policy and rely solel
 
 ---
 
-> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5](./2026-02-06-full-abac-phase-7.5.md)**
+> **[Back to Overview](./2026-02-06-full-abac-implementation.md)** | **[Previous: Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)** | **[Next: Phase 7.5 (Deferred to Epic 8)](./2026-02-06-full-abac-phase-7.5.md)**
