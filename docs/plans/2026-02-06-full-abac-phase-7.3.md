@@ -1352,7 +1352,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_audit_failures_total` counter with `reason` label (see spec Evaluation Algorithm > Performance Targets) (Task 20 ownership)
 - [ ] `abac_audit_wal_entries` gauge for current WAL entry count (Task 20 ownership - registered here, updated by Task 19 audit logger)
 - [ ] `abac_degraded_mode` gauge (0=normal, 1=degraded) (see spec Attribute Resolution > Error Handling for degraded mode) (Task 20 ownership)
-- [ ] **Degraded mode alerting (Review Finding I3):** Alert configuration documented for `abac_degraded_mode == 1` with critical severity, includes recovery procedure reference to `policy clear-degraded-mode` command (Task 33, Phase 7.7)
+- [ ] **Degraded mode alerting (Review Finding I3):** Alert configuration documented for `abac_degraded_mode == 1` with critical severity, includes recovery procedure reference to Task 31 degraded-mode runbook and [Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md) temporary recovery path (DB flag reset or server restart)
 - [ ] Alert fires when `abac_degraded_mode` gauge equals 1 for >1 minute, indicating prolonged degraded state
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label (registered here, tripped by Task 34's general circuit breaker — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
@@ -1449,11 +1449,11 @@ The `abac_policy_cache_last_update` gauge tracks LISTEN/NOTIFY connection health
   description: "Policy cache last updated {{ $value | humanizeDuration }} ago. Check LISTEN/NOTIFY connection health."
 ```
 
-**Recovery procedure:** Task 17's LISTEN/NOTIFY goroutine automatically reconnects with exponential backoff (initial 100ms, max 30s) and triggers full cache reload on reconnect. Manual intervention: restart server or trigger cache reload via admin API (future Task 37, Phase 7.7).
+**Recovery procedure:** Task 17's LISTEN/NOTIFY goroutine automatically reconnects with exponential backoff (initial 100ms, max 30s) and triggers full cache reload on reconnect. Manual intervention: restart server or use the local/system-only policy reload path defined in Task 31 (Phase 7.7).
 
 **Degraded Mode Alerting (Review Finding I3):**
 
-The `abac_degraded_mode` gauge tracks engine degraded mode state (0=normal, 1=degraded). When a corrupted forbid/deny policy is detected (Task 33, Phase 7.7), the engine enters degraded mode and returns system-wide denials to prevent security bypass. Alert configuration:
+The `abac_degraded_mode` gauge tracks engine degraded mode state (0=normal, 1=degraded). When a corrupted forbid/deny policy is detected (Task 31, Phase 7.7), the engine enters degraded mode and returns system-wide denials to prevent security bypass. Alert configuration:
 
 ```yaml
 # Prometheus alert rule (example)
@@ -1462,10 +1462,10 @@ The `abac_degraded_mode` gauge tracks engine degraded mode state (0=normal, 1=de
   for: 1m
   severity: critical
   summary: "ABAC engine in degraded mode (system-wide deny active)"
-  description: "ABAC engine detected corrupted deny/forbid policy and entered degraded mode. All requests are being denied. Use policy clear-degraded-mode command to recover after fixing the corrupted policy."
+  description: "ABAC engine detected corrupted deny/forbid policy and entered degraded mode. All requests are being denied. Follow the degraded-mode recovery runbook (Decision #96 workaround: DB flag reset or server restart) after fixing the corrupted policy."
 ```
 
-**Recovery procedure:** Task 33 (Phase 7.7) implements degraded mode behavior and the `policy clear-degraded-mode` command. Operator workflow: 1) Identify and fix/disable the corrupted policy, 2) Run `policy clear-degraded-mode` to restore normal operation, 3) Verify `abac_degraded_mode` gauge returns to 0.
+**Recovery procedure:** Task 31 (Phase 7.7) implements degraded mode behavior. Operator workflow for Epic 7: 1) Identify and fix/disable the corrupted policy, 2) Clear degraded mode via [Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md) workaround (DB flag reset or server restart), 3) Verify `abac_degraded_mode` gauge returns to 0. The `policy clear-degraded-mode` command remains deferred to Epic 8 (Task 27b-3).
 
 **Step 3: Run tests, commit**
 

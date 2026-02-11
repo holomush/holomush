@@ -78,7 +78,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 **For experienced implementers:** Start here to jump directly to critical tasks without reading the full plan.
 
-**Critical path:** T0→T0.5→(T1→T7→T18) + (T5→DSL chain) + (T5→Provider chain (T13→(T14||T15)→T17.1))→T17.2→T17.3→T17.4→(T21a→T22→T22b)→T23→T23b→T28→T28.5→T29
+**Critical path:** T0→T0.5→(T1→T7→T18) + (T5→DSL chain) + (T5→Provider chain (T13→T14→T17.1))→T17.2→T17.3→T17.4→(T21a→T22→T22b)→T23→T23b→T28→T28.5→T29
 
 **First 3 tasks:**
 
@@ -110,13 +110,14 @@ graph LR
     T5 --> T7([T7: PolicyStore<br/>M1 End])
 
     T5 --> T8([T8: AST<br/>Types])
-    T5 --> T13_15([T13-T15:<br/>Provider Chain])
+    T5 --> T13_14([T13-T14:<br/>Provider Chain])
+    T5 --> T15([T15: Core<br/>Providers])
 
     T8 --> T9([T9: DSL<br/>Parser])
     T9 --> T11([T11: DSL<br/>Evaluator])
     T11 --> T12([T12: Policy<br/>Compiler<br/>M2 End])
     T12 --> T17_1([T17.1: Bypass<br/>+ Session])
-    T13_15 --> T17_1
+    T13_14 --> T17_1
     T17_1 --> T17_2([T17.2: Target<br/>Matching])
     T17_2 --> T17_3([T17.3: Condition<br/>Evaluation])
     T17_3 --> T17_4([T17.4: Deny-<br/>Overrides<br/>M3 End])
@@ -359,7 +360,7 @@ graph TD
     style T28_5 fill:#ffcccc
 ```
 
-**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow), then three required chains converge: (PolicyStore path: Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) + (DSL chain from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)): Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)): Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → (Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) || Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) → Task 17.1) → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
+**Critical Path (highlighted in red):** Task 0 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (spike, yellow) → Task 0.5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) (dependency audit, yellow), then three required chains converge: (PolicyStore path: Task 1 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 18 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md))) + (DSL chain from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)): Task 8 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 9 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 11 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) → Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md))) + (Provider chain from Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)): Task 13 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 17.1) → Task 17.2 → Task 17.3 → Task 17.4 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) → Task 22 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 22b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23 ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 23b ([Phase 7.4](./2026-02-06-full-abac-phase-7.4.md)) → Task 28 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 28.5 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)) → Task 29 ([Phase 7.6](./2026-02-06-full-abac-phase-7.6.md))
 
 **Parallel PropertyProvider chain (highlighted in orange):** Task 4a ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) → Task 16b ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)). Tasks 3, 4b, 4c are a side chain (property cascade) off Task 3/4a and do not gate downstream work.
 
@@ -367,7 +368,7 @@ graph TD
 
 **⚠️ Latent Risk:** Although T16b is not on the critical path to the engine itself, it IS a hard blocker for **T23 (Bootstrap sequence)**. The cross-phase gate table below shows T16b→T23 as a required dependency because seed policies may reference `property.*` attributes. While the engine can function without property provider support (using only core/simple providers), the seed policy compilation step cannot proceed if T16b is delayed. If T16b completion drifts beyond the T22/T22b completion window, T23 cannot start, which blocks Phase 7.4 completion and downstream Phase 7.6 (migration) work. Mitigation: Schedule T16b to complete in parallel with T14-T15 provider chain work, not as a tail task.
 
-**Note:** Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) depends on BOTH Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) and Task 15 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (core attribute providers). These chains can run in parallel after Task 7 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md)) completes, but both must finish before Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) can start. Sub-tasks T17.1 through T17.4 are sequential within the engine implementation.
+**Note:** Task 17.1 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) depends on BOTH Task 12 ([Phase 7.2](./2026-02-06-full-abac-phase-7.2.md)) (DSL compiler) and Task 14 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)) (attribute resolver). Task 15 (core providers) can proceed in parallel and is not a hard start gate for T17.1. Sub-tasks T17.1 through T17.4 are sequential within the engine implementation.
 
 **Parallel Work Opportunities:**
 

@@ -127,7 +127,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] In degraded mode: log CRITICAL level message on every evaluation attempt
 - [ ] Corrupted policy detection: unmarshal `compiled_ast` fails or structural invariants violated
 - [ ] Only forbid/deny policies trigger degraded mode (permit policies auto-disabled instead)
-- [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation — **Note:** Task 27b-3 deferred to Epic 8 ([Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md)); until then, use the `policy clear-degraded-mode` command defined in the spec ([06-layers-commands.md](../specs/abac/06-layers-commands.md)) as the concrete clearing mechanism
+- [ ] Degraded mode clearing in Epic 7 follows [Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md): use temporary operational recovery (direct DB flag reset or server restart) until `policy clear-degraded-mode` ships in Epic 8 (Task 27b-3)
 - [ ] Policy reload command MUST bypass ABAC, restricted to local/system callers, with test for stale cache recovery (references ADR #107 and security requirement S5 from holomush-5k1.346)
 - [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)))
 - [ ] All tests pass via `task test`
@@ -136,9 +136,9 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 
 | Trigger                          | Cause                                                | Recovery                                                             |
 | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
-| Compile-time corruption (forbid) | `compiled_ast` unmarshal fails on forbid policy load | Disable corrupted policy, run `policy clear-degraded-mode`           |
+| Compile-time corruption (forbid) | `compiled_ast` unmarshal fails on forbid policy load | Disable corrupted policy, then clear degraded mode via DB flag reset or server restart |
 | Compile-time corruption (permit) | `compiled_ast` unmarshal fails on permit policy load | Policy auto-disabled, normal evaluation continues (no degraded mode) |
-| Runtime evaluation error         | AST structural invariants violated during evaluation | Disable corrupted policy, run `policy clear-degraded-mode` if forbid |
+| Runtime evaluation error         | AST structural invariants violated during evaluation | Disable corrupted policy; if forbid/deny, clear degraded mode via DB flag reset or server restart |
 | Transient database error         | PostgreSQL unavailable during policy load            | Fix DB connectivity, restart server or reload policies               |
 
 **Files:**
@@ -155,7 +155,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - In degraded mode → CRITICAL log on every evaluation
 - In degraded mode → audit entry written with reason='degraded_mode' and effect default_deny
 - Auto-disabled permit policy → subsequent loads skip disabled policy, normal evaluation continues
-- Clear degraded mode → normal evaluation resumes
+- Clear degraded mode via DB flag reset or server restart (Decision #96 workaround) → normal evaluation resumes
 - Degraded mode gauge metric → 0 when normal, 1 when degraded
 
 ---
