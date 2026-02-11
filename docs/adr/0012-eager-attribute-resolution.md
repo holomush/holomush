@@ -136,5 +136,5 @@ request cycle is an edge case that resolves on the next request.
 ## References
 
 - [Full ABAC Architecture Design — Attribute Resolution](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #3: Attribute Resolution Strategy](../specs/2026-02-05-full-abac-design-decisions.md#3-attribute-resolution-strategy)
-- [Design Decision #26: Per-Request Attribute Caching](../specs/2026-02-05-full-abac-design-decisions.md#26-per-request-attribute-caching)
+- [Design Decision #3: Attribute Resolution Strategy](../specs/decisions/epic7/general/003-attribute-resolution-strategy.md)
+- [Design Decision #26: Per-Request Attribute Caching](../specs/decisions/epic7/phase-7.3/026-per-request-attribute-caching.md)

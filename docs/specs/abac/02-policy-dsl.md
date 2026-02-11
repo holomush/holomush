@@ -1,12 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Policy DSL
+# Policy DSL
 
 The DSL is Cedar-inspired with a full expression language. Policies have a
 **target** (what they apply to) and optional **conditions** (when they apply).
 
-### Grammar
+## Grammar
 
 ````text
 policy     = effect "(" target ")" [ "when" "{" conditions "}" ] ";"

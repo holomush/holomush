@@ -1,13 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Attribute Resolution
+# Attribute Resolution
 
 The engine uses eager resolution: all attributes are collected before any policy
 is evaluated. This provides a complete attribute snapshot for every decision,
 which powers audit logging and the `policy test` debugging command.
 
-### Resolution Flow
+## Resolution Flow
 
 ```text
 Evaluate(ctx, AccessRequest{Subject: "character:01ABC", Action: "enter", Resource: "location:01XYZ"})

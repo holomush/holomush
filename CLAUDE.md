@@ -489,7 +489,6 @@ Default deny - explicit permission required for all operations.
 - Events are immutable and ordered
 - State is derived from event replay
 
-
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
 
