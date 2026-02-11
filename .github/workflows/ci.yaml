@@ -30,16 +30,70 @@ jobs:
 
       - name: Install golangci-lint v2
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.1.6/install.sh \
             | sh -s -- -b "$(go env GOPATH)/bin" v2.1.6
+
+      - name: Cache rumdl
+        id: cache-rumdl
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/rumdl
+          key: rumdl-v0.1.15-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Cache dprint
+        id: cache-dprint
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/dprint
+          key: dprint-v0.51.1-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install tools
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@latest
-          go install github.com/google/yamlfmt/cmd/yamlfmt@latest
-          curl -LsSf https://github.com/rvben/rumdl/releases/download/v0.1.15/rumdl-v0.1.15-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C /usr/local/bin
-          curl -fsSL https://dprint.dev/install.sh | sh
-          echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
+          # Pinned to specific versions for CI reproducibility. Update periodically to match local dev.
+          # To update actionlint:
+          # 1. Check for new releases: https://github.com/rhysd/actionlint/releases
+          # 2. Update version in go install command below
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
+          # To update yamlfmt:
+          # 1. Check for new releases: https://github.com/google/yamlfmt/releases
+          # 2. Update version in go install command below
+          go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
+          # To update rumdl version:
+          # Note: Assumes x86_64 architecture on ubuntu-latest runners
+          # 1. Check for new releases: https://github.com/rvben/rumdl/releases
+          # 2. Update RUMDL_VERSION below to new version
+          # 3. Update cache key in "Cache rumdl" step above to match new version
+          # 4. Download the new .sha256 file and update RUMDL_SHA256 below with the new hash
+          # 5. Test locally: task lint:markdown
+          if [ "${{ steps.cache-rumdl.outputs.cache-hit }}" != "true" ]; then
+            RUMDL_VERSION="v0.1.15"
+            RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+            RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
+            # SHA256 hash pinned as literal to prevent compromised releases from providing matching checksums
+            RUMDL_SHA256="b1c9fc9174f1b27bbd33de17c6e84105d8393598f7f24f564cc109ecb4ac23d8"  # rumdl v0.1.15
+            curl -LsSfO "${RUMDL_URL}"
+            echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
+            sudo tar xzf "${RUMDL_TARBALL}" -C /usr/local/bin
+            rm "${RUMDL_TARBALL}"
+          fi
+          # To update dprint:
+          # 1. Check for new releases: https://github.com/dprint/dprint/releases
+          # 2. Update DPRINT_VERSION below to new version (NO v prefix - use "0.51.1" not "v0.51.1")
+          # 3. Update cache key in "Cache dprint" step above to match new version
+          # 4. Download the new .zip.sha256sum file and update DPRINT_SHA256 below with the new hash
+          # 5. Test locally: task lint
+          # Note: dprint release URLs use version WITHOUT v prefix (e.g., /0.51.1/, not /v0.51.1/)
+          if [ "${{ steps.cache-dprint.outputs.cache-hit }}" != "true" ]; then
+            DPRINT_VERSION="0.51.1"
+            DPRINT_ZIP="dprint-x86_64-unknown-linux-gnu.zip"
+            DPRINT_URL="https://github.com/dprint/dprint/releases/download/${DPRINT_VERSION}/${DPRINT_ZIP}"
+            # SHA256 hash pinned as literal to prevent compromised releases from providing matching checksums
+            DPRINT_SHA256="674c1f9fcdf8a564c26cc027e080d0c4758a40a566e04a776fc83c875ad51d45"  # dprint v0.51.1
+            curl -LsSfO "${DPRINT_URL}"
+            echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
+            sudo unzip -q "${DPRINT_ZIP}" -d /usr/local/bin
+            rm "${DPRINT_ZIP}"
+          fi
 
       - name: Verify schema is current
         run: |

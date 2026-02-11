@@ -1,5 +1,8 @@
 # rumdl configuration for documentation site (zensical/MkDocs)
 # Extends root rules with MkDocs-specific adjustments
+#
+# NOTE: MD040 (fenced-code-language) and MD041 (first-line-h1) are enabled by
+# default in rumdl. All rules are enabled unless explicitly disabled below.
 
 [global]
 flavor = "mkdocs"
