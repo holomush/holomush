@@ -62,7 +62,7 @@ git commit -m "feat(access): add DSL AST node types with participle annotations"
 
 ### Task 9: Build DSL parser
 
-**Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), [02-policy-dsl.md#supported-operators](../specs/abac/02-policy-dsl.md#supported-operators), [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies)
+**Spec References:** [02-policy-dsl.md#grammar](../specs/abac/02-policy-dsl.md#grammar), [02-policy-dsl.md](../specs/abac/02-policy-dsl.md), [07-migration-seeds.md#seed-policies](../specs/abac/07-migration-seeds.md#seed-policies)
 
 **Dependencies:**
 
@@ -246,7 +246,7 @@ git commit -m "test(access): add fuzz tests for DSL parser"
 
 ### Task 11: Build DSL condition evaluator
 
-**Spec References:** [02-policy-dsl.md#supported-operators](../specs/abac/02-policy-dsl.md#supported-operators), [04-resolution-evaluation.md#error-handling](../specs/abac/04-resolution-evaluation.md#error-handling), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [08-testing-appendices.md#fuzz-testing](../specs/abac/08-testing-appendices.md#fuzz-testing), ADR 0010 (Cedar-Aligned Fail-Safe Type Semantics)
+**Spec References:** [02-policy-dsl.md](../specs/abac/02-policy-dsl.md), [04-resolution-evaluation.md#error-handling](../specs/abac/04-resolution-evaluation.md#error-handling), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [08-testing-appendices.md#fuzz-testing](../specs/abac/08-testing-appendices.md#fuzz-testing), ADR 0010 (Cedar-Aligned Fail-Safe Type Semantics)
 
 **Dependencies:**
 

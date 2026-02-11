@@ -484,7 +484,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 ### Task 23b: Seed policy integration test suite (CLI validation + smoke test gate)
 
-> **Note:** This task combines CLI seed validation (moved from Phase 7.7 Task 36) with the smoke test gate. It gates the irreversible migration step (Task 28, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Positioned between T23 (bootstrap) and T28 (call site migration) to validate seed policy correctness and exercise common auth patterns with the full ABAC engine before replacing all production call sites.
+> **Note:** This task combines CLI seed validation (moved from an earlier Phase 7.7 validation task) with the smoke test gate. It gates the irreversible migration step (Task 28, [Phase 7.6](./2026-02-06-full-abac-phase-7.6.md)). Positioned between T23 (bootstrap) and T28 (call site migration) to validate seed policy correctness and exercise common auth patterns with the full ABAC engine before replacing all production call sites.
 
 **Spec References:** [07-migration-seeds.md#bootstrap-sequence](../specs/abac/07-migration-seeds.md#bootstrap-sequence)
 

@@ -91,7 +91,7 @@ jobs:
             DPRINT_SHA256="674c1f9fcdf8a564c26cc027e080d0c4758a40a566e04a776fc83c875ad51d45"  # dprint v0.51.1
             curl -LsSfO "${DPRINT_URL}"
             echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
-            unzip -q "${DPRINT_ZIP}" -d /usr/local/bin
+            sudo unzip -q "${DPRINT_ZIP}" -d /usr/local/bin
             rm "${DPRINT_ZIP}"
           fi
 

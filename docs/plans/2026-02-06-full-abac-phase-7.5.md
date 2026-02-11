@@ -405,7 +405,7 @@ git commit -m "feat(command): add policy test command with verbose/JSON/suite mo
 
 > **Note:** Task 27b was split into three sub-tasks (27b-1, 27b-2, 27b-3) to achieve atomic commits per the plan's principle. The original Task 27b covered 11 distinct features spanning policy validation, cache management, attribute introspection, audit querying, seed inspection, and policy recompilation/repair — too many unrelated features for a single reviewable commit.
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning)
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [02-policy-dsl.md](../specs/abac/02-policy-dsl.md)
 
 **Dependencies (deferred — applies when Epic 8 work begins):**
 
@@ -501,7 +501,7 @@ git commit -m "feat(command): add policy audit/seed verify/seed status commands"
 
 ### Task 27b-3: Admin commands — recompilation and repair (recompile-all/recompile/repair/clear-degraded-mode)
 
-**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning)
+**Spec References:** [06-layers-commands.md#policy-management](../specs/abac/06-layers-commands.md#policy-management), [04-resolution-evaluation.md#key-behaviors](../specs/abac/04-resolution-evaluation.md#key-behaviors), [02-policy-dsl.md](../specs/abac/02-policy-dsl.md)
 
 **Dependencies (deferred — applies when Epic 8 work begins):**
 
@@ -535,7 +535,7 @@ git commit -m "feat(command): add policy audit/seed verify/seed status commands"
 
 ### Task 27b-3 Step 2: Implement
 
-Policy recompile commands ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1001-1031):
+Policy recompile commands ([02-policy-dsl.md](../specs/abac/02-policy-dsl.md), was spec lines 1001-1031):
 
 - `policy recompile-all` — fetches all policies, recompiles with current grammar, updates compiled_ast and grammar_version within compiled_ast JSONB
 - `policy recompile <name>` — fetches single policy by name, recompiles, updates compiled_ast JSONB
@@ -543,9 +543,9 @@ Policy recompile commands ([02-policy-dsl.md#grammar-versioning](../specs/abac/0
 
 **Note:** `grammar_version` is stored within the `compiled_ast` JSONB column, not as a separate top-level column. Access via `compiled_ast->>'grammar_version'`.
 
-Each policy's `CompiledPolicy` includes `GrammarVersion` field ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1003-1004). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
+Each policy's `CompiledPolicy` includes `GrammarVersion` field ([02-policy-dsl.md](../specs/abac/02-policy-dsl.md), was spec lines 1003-1004). Recompile commands update this field to the current grammar version after successful recompilation, which updates the grammar_version within the compiled_ast JSONB.
 
-**Failed recompilation handling** ([02-policy-dsl.md#grammar-versioning](../specs/abac/02-policy-dsl.md#grammar-versioning), was spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
+**Failed recompilation handling** ([02-policy-dsl.md](../specs/abac/02-policy-dsl.md), was spec lines 1012-1015): Policies that fail recompilation are logged at ERROR level with policy name, policy ID, and compilation error message, then left at their original grammar version. A failed recompilation does NOT disable the policy — it continues to evaluate using its existing AST with the old grammar version.
 
 ### Task 27b-3 Step 3: Run tests, commit
 
