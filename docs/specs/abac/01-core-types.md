@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Core Interfaces
+# Core Interfaces
 
-### AccessPolicyEngine
+## AccessPolicyEngine
 
 ```go
 // AccessPolicyEngine is the main entry point for policy-based authorization.

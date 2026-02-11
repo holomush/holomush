@@ -142,5 +142,5 @@ think "narrow the deny condition itself so the unwanted cases no longer match."
 ## References
 
 - [Full ABAC Architecture Design — Evaluation Algorithm](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #4: Conflict Resolution](../specs/2026-02-05-full-abac-design-decisions.md#4-conflict-resolution)
+- [Design Decision #4: Conflict Resolution](../specs/decisions/epic7/general/004-conflict-resolution.md)
 - [Cedar Language Specification — Policy Evaluation](https://docs.cedarpolicy.com/)

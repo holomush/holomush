@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Replacing Static Roles
+# Replacing Static Roles
 
 **Design decision:** HoloMUSH has no production releases. The static
 `AccessControl` system from Epic 3 is replaced entirely by `AccessPolicyEngine`.
@@ -13,7 +13,7 @@ migration adapters, shadow mode metrics, cutover criteria). See
 and [decision #37](../decisions/epic7/phase-7.6/037-no-shadow-mode.md)
 in the decisions log.
 
-### Seed Policies
+## Seed Policies
 
 The seed policies define the default permission model. They use the ABAC
 engine's full capabilities (attribute-based conditions, `enter` action for

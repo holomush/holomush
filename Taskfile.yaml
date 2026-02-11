@@ -178,7 +178,7 @@ tasks:
   lint:markdown:
     desc: Lint Markdown files
     cmds:
-      - rumdl check --exclude site .
+      - rumdl check --exclude 'site,.git,.beads,.serena' .
       - rumdl check --config site/.rumdl.toml site/
 
   lint:yaml:
@@ -203,7 +203,7 @@ tasks:
   fmt:markdown:
     desc: Format Markdown files
     cmds:
-      - rumdl fmt --exclude site .
+      - rumdl fmt --exclude 'site,.git,.beads,.serena' .
       - rumdl fmt --config site/.rumdl.toml site/
 
   fmt:go:
@@ -225,7 +225,7 @@ tasks:
     desc: Check formatting without modifying
     cmds:
       - dprint check
-      - rumdl fmt --check --exclude site .
+      - rumdl fmt --check --exclude 'site,.git,.beads,.serena' .
       - rumdl fmt --check --config site/.rumdl.toml site/
 
   # Dependencies

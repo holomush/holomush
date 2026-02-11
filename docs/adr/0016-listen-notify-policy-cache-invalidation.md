@@ -185,5 +185,5 @@ for the current single-server architecture.
 ## References
 
 - [Full ABAC Architecture Design — Cache Invalidation](../specs/2026-02-05-full-abac-design.md)
-- [Design Decision #11: Cache Invalidation](../specs/2026-02-05-full-abac-design-decisions.md#11-cache-invalidation)
+- [Design Decision #11: Cache Invalidation](../specs/decisions/epic7/phase-7.3/011-cache-invalidation.md)
 - [PostgreSQL LISTEN/NOTIFY Documentation](https://www.postgresql.org/docs/current/sql-notify.html)

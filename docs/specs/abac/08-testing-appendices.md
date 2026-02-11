@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Testing Strategy
+# Testing Strategy
 
-### Unit Tests
+## Unit Tests
 
 ```text
 internal/access/policy/dsl/

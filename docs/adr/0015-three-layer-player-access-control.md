@@ -194,9 +194,8 @@ plugin tokens require a dot prefix).
 
 ## References
 
-- [Full ABAC Architecture Design — Access Control Layers](../specs/2026-02-05-full-abac-design.md#access-control-layers)
-- [Full ABAC Architecture Design — Lock Token Registry](../specs/2026-02-05-full-abac-design.md#layer-2-object-locks-owners)
-- [Design Decision #12: Player Access Control Layers](../specs/2026-02-05-full-abac-design-decisions.md#12-player-access-control-layers)
-- [Design Decision #19: Lock Policies Are Not Versioned](../specs/2026-02-05-full-abac-design-decisions.md#19-lock-policies-are-not-versioned)
-- [Design Decision #33: Plugin Lock Tokens MUST Be Namespaced](../specs/2026-02-05-full-abac-design-decisions.md#33-plugin-lock-tokens-must-be-namespaced)
+- [Full ABAC Architecture Design — Layers & Commands](../specs/abac/06-layers-commands.md)
+- [Design Decision #12: Player Access Control Layers](../specs/decisions/epic7/phase-7.1/012-player-access-control-layers.md)
+- [Design Decision #19: Lock Policies Are Not Versioned](../specs/decisions/epic7/phase-7.5/019-lock-policies-are-not-versioned.md)
+- [Design Decision #33: Plugin Lock Tokens MUST Be Namespaced](../specs/decisions/epic7/phase-7.5/033-plugin-lock-tokens-must-be-namespaced.md)
 - [ADR 0011: Deny-Overrides Without Priority](0011-deny-overrides-without-priority.md)

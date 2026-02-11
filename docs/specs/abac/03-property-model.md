@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-## Property Model
+# Property Model
 
 Properties are first-class entities with their own identity, ownership, and
 access control attributes. This provides conceptual uniformity — characters,
@@ -38,7 +38,7 @@ This prevents a circular dependency:
 `Engine → PropertyProvider → PropertyRepository` (no callback to Engine).
 `PropertyProvider` MUST NOT depend on `WorldService` or `AccessPolicyEngine`.
 
-### Property Attributes
+## Property Attributes
 
 | Attribute         | Type     | Description                                                                   |
 | ----------------- | -------- | ----------------------------------------------------------------------------- |
