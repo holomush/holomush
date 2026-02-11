@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# 56. Audit Off Mode Includes System Bypasses
+# 56. Audit Minimal Mode Includes System Bypasses
 
 > [Back to Decision Index](../README.md)
 

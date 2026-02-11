@@ -3,6 +3,8 @@
 
 # 100. Standardize Dependency Format Across Phase Files
 
+> [Back to Decision Index](../README.md)
+
 **Date:** 2026-02-10
 **Phase:** General (all phases)
 **Status:** Accepted

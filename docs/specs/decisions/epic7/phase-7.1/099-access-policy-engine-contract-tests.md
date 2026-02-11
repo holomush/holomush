@@ -3,6 +3,8 @@
 
 # 99. AccessPolicyEngine Contract Tests (Task 7b)
 
+> [Back to Decision Index](../README.md)
+
 **Status:** Accepted
 
 **Date:** 2026-02-10

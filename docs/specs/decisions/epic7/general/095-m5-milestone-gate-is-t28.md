@@ -5,6 +5,8 @@
 
 > [Back to Decision Index](../README.md)
 
+**Status:** Accepted
+
 **Question:** Should milestone M5 gate on T27b3 (admin command recompilation,
 Phase 7.5) or T28 (call-site migration, Phase 7.6)?
 
@@ -29,8 +31,6 @@ existing task dependency chain.
   plan uses milestones for critical path gates, not phase completion markers
 - Sprint planning uses the cross-phase gate table for phase transitions, not
   milestones
-
-**Status:** Accepted
 
 **References:**
 

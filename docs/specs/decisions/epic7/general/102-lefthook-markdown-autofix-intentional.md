@@ -3,6 +3,8 @@
 
 # 102. Lefthook `fmt-markdown` Auto-Fix Is Intentional
 
+> [Back to Decision Index](../README.md)
+
 **Date:** 2026-02-10
 **Phase:** General (infrastructure)
 **Status:** Accepted

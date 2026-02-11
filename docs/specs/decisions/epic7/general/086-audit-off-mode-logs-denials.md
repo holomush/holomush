@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# 86. Audit Off Mode Logs Denials
+# 86. Audit Minimal Mode Logs Denials
 
 > [Back to Decision Index](../README.md)
 

@@ -146,6 +146,10 @@ The main ABAC specification ([Full ABAC Architecture Design](../../2026-02-05-fu
 | 76    | Compound Resource Decomposition During Migration | 7.6   | [076](phase-7.6/076-compound-resource-decomposition.md)         |
 | 82    | Core-First Provider Registration Order           | 7.3   | [082](phase-7.3/082-core-first-provider-registration-order.md)  |
 
+## Format Evolution
+
+ADRs 98-110 use a more formal structure with explicit Status, Date, Context, Decision, Rationale, Alternatives Considered, Consequences, and Related sections. Earlier ADRs (001-097) use a lighter "Question > Options > Decision > Rationale" format. This evolution reflects increased rigor in late-stage design decisions while preserving the streamlined format for earlier rapid exploration. See [ADR 057](general/057-adr-format-evolution.md) for details.
+
 ## Numbering Gaps
 
 The ADR numbering has intentional gaps (60-64, 67-73) that reflect decision slots reserved during the initial design phases but not all utilized. These are **not** deleted decisions — they are unused reserved numbers. The gaps exist to maintain stable numbering should additional decisions be needed in those ranges during future design iterations or maintenance.

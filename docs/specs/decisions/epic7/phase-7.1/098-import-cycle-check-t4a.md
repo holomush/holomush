@@ -3,6 +3,8 @@
 
 # 98. Import Cycle Check for PropertyProvider (T4a)
 
+> [Back to Decision Index](../README.md)
+
 **Date:** 2026-02-10
 **Status:** Accepted
 **Phase:** 7.1

@@ -78,10 +78,11 @@ jobs:
           fi
           # To update dprint:
           # 1. Check for new releases: https://github.com/dprint/dprint/releases
-          # 2. Update DPRINT_VERSION below to new version
+          # 2. Update DPRINT_VERSION below to new version (NO v prefix - use "0.51.1" not "v0.51.1")
           # 3. Update cache key in "Cache dprint" step above to match new version
           # 4. Download the new .zip.sha256sum file and update DPRINT_SHA256 below with the new hash
           # 5. Test locally: task lint
+          # Note: dprint release URLs use version WITHOUT v prefix (e.g., /0.51.1/, not /v0.51.1/)
           if [ "${{ steps.cache-dprint.outputs.cache-hit }}" != "true" ]; then
             DPRINT_VERSION="0.51.1"
             DPRINT_ZIP="dprint-x86_64-unknown-linux-gnu.zip"

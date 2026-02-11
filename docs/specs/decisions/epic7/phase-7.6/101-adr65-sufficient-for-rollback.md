@@ -3,6 +3,8 @@
 
 # 101. ADR #65 Is Sufficient for Rollback Coverage
 
+> [Back to Decision Index](../README.md)
+
 **Date:** 2026-02-10
 **Phase:** 7.6 (Migration & Cutover)
 **Status:** Accepted
