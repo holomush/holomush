@@ -1082,7 +1082,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
-- [ ] **WAL fallback:** If sync write fails, denial entry written to WAL path from `internal/xdg` package (append-only, O_SYNC)
+- [ ] **WAL fallback (S7 requirement from holomush-5k1.353):** If sync write fails, denial entry MUST be written to WAL path from `internal/xdg` package (append-only, O_SYNC)
 - [ ] **ReplayWAL():** Method reads WAL entries, batch-inserts to PostgreSQL, truncates file on success
 - [ ] Catastrophic failure (DB + WAL fail) → log to stderr at ERROR, increment `abac_audit_failures_total{reason="wal_failed"}`, drop entry
 - [ ] Entry includes: subject, action, resource, effect, policy\_id, policy\_name, attributes snapshot, duration\_us

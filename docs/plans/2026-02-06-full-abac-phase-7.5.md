@@ -179,7 +179,7 @@ git commit -m "feat(access): add lock expression parser and DSL compiler"
 - [ ] `unlock <resource>/<action>` → removes action-specific lock policy for the resource
 - [ ] `unlock <resource>` → removes all lock policies for the resource
 - [ ] Resource target resolution: resolve object/exit by name in current location
-- [ ] Ownership verification: character must own the target resource (checked via `Evaluate()`)
+- [ ] Ownership verification: character must own the target resource (checked via `Evaluate()`); lock ownership MUST be re-verified per operation (S4 requirement from holomush-5k1.344)
 - [ ] Rate limiting: max 50 lock policies per character → error on create if exceeded (SHOULD be configurable via server settings; default: 50)
 - [ ] Lock policy naming: `lock:<type>:<resource_id>:<action>` format (per spec: `<type>` is bare resource type like `object`, `property`, `location`)
 - [ ] Commands registered in command registry following existing handler patterns

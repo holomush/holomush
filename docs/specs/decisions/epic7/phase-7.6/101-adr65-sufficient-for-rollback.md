@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# Decision #101: ADR #65 Is Sufficient for Rollback Coverage
+# 101. ADR #65 Is Sufficient for Rollback Coverage
 
 **Date:** 2026-02-10
 **Phase:** 7.6 (Migration & Cutover)

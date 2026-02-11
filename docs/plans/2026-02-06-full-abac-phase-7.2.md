@@ -330,6 +330,7 @@ Key behaviors:
 - **Missing attribute → `false`** for ALL comparisons (Cedar-aligned fail-safe)
 - **Depth limit:** enforce `MaxDepth` (default 32), return `false` if exceeded
 - **Glob matching:** use `github.com/gobwas/glob` for `like` operator, pre-compiled in `GlobCache`
+- **Glob colon separator (CRITICAL):** MUST use `glob.Compile(pattern, ':')` colon separator for namespace isolation. Without it, patterns like `resource:*` could match both `resource:foo` AND `resource_type:bar`, bypassing namespace boundaries. This is a security requirement for attribute isolation.
 - **Type assertions for numeric comparisons (Bug TD3):** `map[string]any` means providers returning `int` instead of `float64` will silently break numeric `>`, `>=`, `<`, `<=` comparisons. Implementation MUST either: (1) perform type coercion in evaluator (e.g., convert `int` → `float64`), or (2) provide a type-checked `SetAttribute` helper that normalizes numeric types at insertion time. Evaluator tests MUST cover mixed numeric types (int/float64) to ensure comparisons work correctly.
 
 ### Task 11 Step 3: Run tests

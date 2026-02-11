@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# Decision #100: Standardize Dependency Format Across Phase Files
+# 100. Standardize Dependency Format Across Phase Files
 
 **Date:** 2026-02-10
 **Phase:** General (all phases)

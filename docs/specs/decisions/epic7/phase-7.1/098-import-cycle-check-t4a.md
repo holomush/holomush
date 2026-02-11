@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# ADR 98: Import Cycle Check for PropertyProvider (T4a)
+# 98. Import Cycle Check for PropertyProvider (T4a)
 
 **Date:** 2026-02-10
 **Status:** Accepted

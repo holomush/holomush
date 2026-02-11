@@ -210,7 +210,8 @@ graph TD
         T12[Task 12: PolicyCompiler]
         T8 --> T9
         T9 --> T10
-        T9 --> T11
+        T8 --> T11
+        T5 --> T11
         T11 --> T12
     end
 

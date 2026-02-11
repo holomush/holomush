@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# Decision #102: Lefthook `fmt-markdown` Auto-Fix Is Intentional
+# 102. Lefthook `fmt-markdown` Auto-Fix Is Intentional
 
 **Date:** 2026-02-10
 **Phase:** General (infrastructure)

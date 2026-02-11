@@ -126,6 +126,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Corrupted policy detection: unmarshal `compiled_ast` fails or structural invariants violated
 - [ ] Only forbid/deny policies trigger degraded mode (permit policies auto-disabled instead)
 - [ ] `policy clear-degraded-mode` command clears flag and resumes normal evaluation — **Note:** Task 27b-3 deferred to Epic 8 ([Decision #96](../specs/decisions/epic7/general/096-defer-phase-7-5-to-epic-8.md)); until then, provide a temporary programmatic mechanism (e.g., direct DB flag reset or server restart) to clear degraded mode
+- [ ] Policy reload command MUST bypass ABAC, restricted to local/system callers, with test for stale cache recovery (references ADR #107 and security requirement S5 from holomush-5k1.346)
 - [ ] Prometheus gauge `abac_degraded_mode` (0=normal, 1=degraded) exported (already added to Task 19 ([Phase 7.3](./2026-02-06-full-abac-phase-7.3.md)))
 - [ ] All tests pass via `task test`
 

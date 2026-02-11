@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# ADR 099: AccessPolicyEngine Contract Tests (Task 7b)
+# 99. AccessPolicyEngine Contract Tests (Task 7b)
 
 **Status:** Accepted
 
