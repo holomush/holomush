@@ -14,6 +14,7 @@
 **Dependencies:**
 
 - Task 5 (Phase 7.1) — AttributeSchema and NamespaceSchema types must exist before schema registry
+- Task 6 (Phase 7.1) — Prefix parser defines identifier format needed by provider interface
 
 > **Design note:** `AttributeSchema` and `AttrType` are defined in `internal/access/policy/types/` (Task 5 ([Phase 7.1](./2026-02-06-full-abac-phase-7.1.md))) to prevent circular imports. The `policy` package (compiler) needs `AttributeSchema`, and the `attribute` package (resolver) needs `types.AccessRequest` and `types.AttributeBags`. Both import from `types` package.
 
@@ -150,6 +151,8 @@ git commit -m "feat(access): add AttributeProvider interface and schema registry
 - [ ] **Security (S6):** Runtime namespace validation — provider return keys MUST match registered namespace, invalid keys rejected with error logging and metric emission
 - [ ] **Panic recovery test case:** Provider `ResolveSubject()` panics → evaluator catches panic via `defer func() { if r := recover()... }`, logs error, continues with next provider
 - [ ] `AttributeCache` is LRU with max 100 entries, attached to context (per [04-resolution-evaluation.md#attribute-caching](../specs/abac/04-resolution-evaluation.md#attribute-caching))
+- [ ] LRU rate limiter capacity of 256 entries for per-request attribute cache
+- [ ] Provider timeout fair-share formula: per-provider timeout = max(remaining_budget / remaining_providers, configurable_floor_ms) (per ADR #59)
 - [ ] All tests pass via `task test`
 
 **Files:**
@@ -873,7 +876,7 @@ git commit -m "feat(access): add deny-overrides combination and full engine inte
 - [ ] Reload latency <50ms (benchmark test)
 - [ ] Cache staleness threshold: configurable limit (default 30s) on time since last successful reload
 - [ ] When staleness threshold exceeded → fail-closed (return `EffectDefaultDeny`) without evaluating policies
-- [ ] Prometheus gauge `policy_cache_last_update` (Unix timestamp) updated on every successful reload
+- [ ] Prometheus gauge `abac_policy_cache_last_update` (Unix timestamp) updated on every successful reload
 - [ ] **Graceful shutdown:** LISTEN/NOTIFY goroutine stops via context cancellation; shutdown test verifies goroutine exits cleanly
 - [ ] **pg_notify semantics MUST be transactional:** policy write and cache invalidation notification MUST occur in the same database transaction (prevents race conditions where cache invalidates before write commits). All policy store mutations (PolicyStore interface) MUST include pg_notify call within the transaction.
 - [ ] All tests pass via `task test`
@@ -1080,6 +1083,7 @@ git commit -m "feat(access): add policy cache with LISTEN/NOTIFY invalidation"
 > and denials (deny and default_deny) but suppresses allows. Tests MUST verify
 > denial logging behavior matches documented semantics in all modes.
 
+- [ ] **Denials MUST be logged in ALL modes (S3):** Denials (deny and default_deny effects) logged in minimal, denials_only, and all modes (citing spec S3 requirement)
 - [ ] **Async write for regular allows:** `allow` events (non-system-bypass) written asynchronously via buffered channel
 - [ ] Channel full → entry dropped, `abac_audit_channel_full_total` metric incremented
 - [ ] **WAL fallback (S7 requirement from holomush-5k1.353):** If sync write fails, denial entry MUST be written to WAL path from `internal/xdg` package (append-only, O_SYNC)
@@ -1353,7 +1357,7 @@ git commit -m "feat(access): add audit log retention and partition management"
 - [ ] `abac_provider_circuit_breaker_trips_total` counter with `provider` label (registered here, tripped by Task 34's general circuit breaker — see [Decision #74](../specs/decisions/epic7/phase-7.7/074-unified-circuit-breaker-task-34.md))
 - [ ] `abac_provider_errors_total` counter with `namespace` and `error_type` labels
 - [ ] `abac_policy_cache_last_update` gauge with Unix timestamp (updated on every successful cache reload — tracks LISTEN/NOTIFY connection freshness)
-- [ ] **LISTEN/NOTIFY staleness monitoring (Review Finding H1):** Alert threshold for LISTEN/NOTIFY connection health documented (alert if `time.Now() - policy_cache_last_update > 5 minutes` indicates prolonged disconnection)
+- [ ] **LISTEN/NOTIFY staleness monitoring (Review Finding H1):** Alert threshold for LISTEN/NOTIFY connection health documented (alert if `time.Now() - abac_policy_cache_last_update > 5 minutes` indicates prolonged disconnection)
 - [ ] Staleness monitoring rationale: LISTEN/NOTIFY connection drop causes silent cache staleness without indication — gauge enables alerting on prolonged disconnection before cache becomes dangerously outdated
 - [ ] Recovery procedure reference: On prolonged disconnection, manual cache reload triggers full policy refresh (see Task 17 LISTEN/NOTIFY reconnect logic with exponential backoff)
 - [ ] `abac_unregistered_attributes_total` counter vec with `namespace` and `key` labels (schema drift indicator)
@@ -1433,7 +1437,7 @@ func RegisterMetrics(reg prometheus.Registerer) {
 
 **LISTEN/NOTIFY Staleness Monitoring (Review Finding H1):**
 
-The `policy_cache_last_update` gauge tracks LISTEN/NOTIFY connection health. If the LISTEN connection drops silently, the cache becomes stale without indication. Alert configuration:
+The `abac_policy_cache_last_update` gauge tracks LISTEN/NOTIFY connection health. If the LISTEN connection drops silently, the cache becomes stale without indication. Alert configuration:
 
 ```yaml
 # Prometheus alert rule (example)

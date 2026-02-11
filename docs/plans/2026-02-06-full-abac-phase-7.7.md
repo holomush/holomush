@@ -297,6 +297,7 @@ git commit -m "test(access): add ABAC integration tests with seed policies and p
 - [ ] Orphan cleanup: orphans persisting across two consecutive runs are actively deleted with batch `DELETE` and logged at INFO level with count
 - [ ] Startup integrity check: count orphaned properties on server startup
 - [ ] Startup integrity check: if orphan count exceeds configurable threshold (default: 100), log at ERROR level but continue starting (not fail-fast)
+- [ ] Integration tests with real database: entity deletion (character/location/object) cascades to entity_properties table (verifies Task 4c cascade deletion with PostgreSQL)
 - [ ] All tests pass via `task test`
 
 **Files:**

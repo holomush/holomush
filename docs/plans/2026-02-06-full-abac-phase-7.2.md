@@ -11,6 +11,7 @@
 
 **Dependencies:**
 
+- Task 0 (Phase 7.1) — AST serialization spike validated storage model
 - Task 5 (Phase 7.1) — core types must exist for AST node definitions
 
 **Acceptance Criteria:**
@@ -432,6 +433,8 @@ git commit -m "feat(access): add DSL condition evaluator with fail-safe semantic
 - [ ] Unreachable condition (`false && ...`) → warning
 - [ ] Always-true condition → warning
 - [ ] Glob patterns pre-compiled in `GlobCache`
+- [ ] Glob bracket/brace/globstar rejection: compiler MUST reject patterns containing `[`, `{`, or `**` at compile time (security requirement)
+- [ ] `CompiledPolicy` includes `grammar_version` field for future DSL evolution tracking (per ADR #110)
 - [ ] `compiled_ast` JSONB serialization round-trips correctly (participle AST nodes serialize/deserialize without data loss)
 - [ ] Serialization test written FIRST to validate participle AST JSON compatibility
 - [ ] PolicyCompiler MUST be safe for concurrent use (immutable AttributeSchema ensures safety)
