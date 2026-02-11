@@ -28,8 +28,9 @@ type ServiceConfig struct {
 	ExitRepo      ExitRepository
 	ObjectRepo    ObjectRepository
 	SceneRepo     SceneRepository
-	CharacterRepo CharacterRepository
-	AccessControl AccessControl
+	CharacterRepo  CharacterRepository
+	PropertyRepo   PropertyRepository
+	AccessControl  AccessControl
 	EventEmitter  EventEmitter
 }
 
@@ -41,6 +42,7 @@ type Service struct {
 	objectRepo    ObjectRepository
 	sceneRepo     SceneRepository
 	characterRepo CharacterRepository
+	propertyRepo  PropertyRepository
 	accessControl AccessControl
 	eventEmitter  EventEmitter
 }
@@ -60,6 +62,7 @@ func NewService(cfg ServiceConfig) *Service {
 		objectRepo:    cfg.ObjectRepo,
 		sceneRepo:     cfg.SceneRepo,
 		characterRepo: cfg.CharacterRepo,
+		propertyRepo:  cfg.PropertyRepo,
 		accessControl: cfg.AccessControl,
 		eventEmitter:  cfg.EventEmitter,
 	}
@@ -143,6 +146,12 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	resource := fmt.Sprintf("location:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	if s.propertyRepo != nil {
+		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
+			return oops.Code("LOCATION_DELETE_FAILED").
+				With("operation", "delete_location_properties").Wrapf(err, "delete properties for location %s", id)
+		}
 	}
 	if err := s.locationRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -371,6 +380,12 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
+	if s.propertyRepo != nil {
+		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
+			return oops.Code("OBJECT_DELETE_FAILED").
+				With("operation", "delete_object_properties").Wrapf(err, "delete properties for object %s", id)
+		}
+	}
 	if err := s.objectRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
@@ -440,6 +455,30 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 			Wrapf(err, "move completed but event emission failed")
 	}
 
+	return nil
+}
+
+// DeleteCharacter deletes a character after checking delete authorization.
+func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
+	}
+	resource := fmt.Sprintf("character:%s", id.String())
+	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
+		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	if s.propertyRepo != nil {
+		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
+			return oops.Code("CHARACTER_DELETE_FAILED").
+				With("operation", "delete_character_properties").Wrapf(err, "delete properties for character %s", id)
+		}
+	}
+	if err := s.characterRepo.Delete(ctx, id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+		}
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
+	}
 	return nil
 }
 
