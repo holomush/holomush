@@ -564,7 +564,7 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
   3. Create test characters with player/builder/admin roles
   4. Initialize AccessPolicyEngine with full provider chain
 - Tests MUST call `AccessPolicyEngine.Evaluate()` directly (not via service layer wrappers)
-- Each test case verifies `Decision.Effect` matches expected Allow/Deny
+- Each test case verifies `Decision.Effect` matches expected `types.EffectAllow`/`types.EffectDeny`
 - Failures MUST block T28 migration start — smoke test gate is a hard dependency
 
 **TDD Test List:**
@@ -581,8 +581,8 @@ git commit -m "feat(access): add seed policy bootstrap with version upgrades"
 
 - Test setup: bootstrap seeds, create test subjects (player/builder/admin characters), initialize engine
 - Each minimum scenario above as a separate `It()` block
-- Verify `Decision.Effect == EffectAllow` for authorized cases
-- Verify `Decision.Effect == EffectDeny` for unauthorized cases
+- Verify `Decision.Effect == types.EffectAllow` for authorized cases
+- Verify `Decision.Effect == types.EffectDeny` for unauthorized cases
 
 **Step 1: Write failing tests**
 
@@ -606,8 +606,8 @@ import (
     . "github.com/onsi/ginkgo/v2"
     . "github.com/onsi/gomega"
 
-    "github.com/holomush/holomush/internal/access"
-    "github.com/holomush/holomush/internal/access/abac"
+    "github.com/holomush/holomush/internal/access/policy"
+    "github.com/holomush/holomush/internal/access/policy/types"
     policystore "github.com/holomush/holomush/internal/access/policy/store"
     // ... other imports
 )
@@ -615,7 +615,7 @@ import (
 var _ = Describe("ABAC Smoke Test Gate", func() {
     var (
         ctx    context.Context
-        engine *abac.AccessPolicyEngine
+        engine policy.AccessPolicyEngine
         player, builder, admin *world.Character
     )
 
@@ -626,25 +626,25 @@ var _ = Describe("ABAC Smoke Test Gate", func() {
 
     Describe("Basic Player Commands", func() {
         It("player executes 'say'", func() {
-            req := access.AccessRequest{
+            req := types.AccessRequest{
                 Subject:  "character:" + player.ID.String(),
                 Action:   "execute",
                 Resource: "command:say",
             }
             decision, err := engine.Evaluate(ctx, req)
             Expect(err).NotTo(HaveOccurred())
-            Expect(decision.Effect).To(Equal(access.EffectAllow))
+            Expect(decision.Effect).To(Equal(types.EffectAllow))
         })
 
         It("player executes 'dig' (unauthorized)", func() {
-            req := access.AccessRequest{
+            req := types.AccessRequest{
                 Subject:  "character:" + player.ID.String(),
                 Action:   "execute",
                 Resource: "command:dig",
             }
             decision, err := engine.Evaluate(ctx, req)
             Expect(err).NotTo(HaveOccurred())
-            Expect(decision.Effect).To(Equal(access.EffectDeny))
+            Expect(decision.Effect).To(Equal(types.EffectDeny))
         })
 
         // ... remaining player scenarios
@@ -652,14 +652,14 @@ var _ = Describe("ABAC Smoke Test Gate", func() {
 
     Describe("Builder Operations", func() {
         It("builder executes 'dig'", func() {
-            req := access.AccessRequest{
+            req := types.AccessRequest{
                 Subject:  "character:" + builder.ID.String(),
                 Action:   "execute",
                 Resource: "command:dig",
             }
             decision, err := engine.Evaluate(ctx, req)
             Expect(err).NotTo(HaveOccurred())
-            Expect(decision.Effect).To(Equal(access.EffectAllow))
+            Expect(decision.Effect).To(Equal(types.EffectAllow))
         })
 
         // ... remaining builder scenarios
@@ -667,14 +667,14 @@ var _ = Describe("ABAC Smoke Test Gate", func() {
 
     Describe("Admin Operations", func() {
         It("admin executes 'shutdown'", func() {
-            req := access.AccessRequest{
+            req := types.AccessRequest{
                 Subject:  "character:" + admin.ID.String(),
                 Action:   "execute",
                 Resource: "command:shutdown",
             }
             decision, err := engine.Evaluate(ctx, req)
             Expect(err).NotTo(HaveOccurred())
-            Expect(decision.Effect).To(Equal(access.EffectAllow))
+            Expect(decision.Effect).To(Equal(types.EffectAllow))
         })
 
         // ... remaining admin scenarios
@@ -682,14 +682,14 @@ var _ = Describe("ABAC Smoke Test Gate", func() {
 
     Describe("Negative Cases (Deny Expected)", func() {
         It("player deletes location", func() {
-            req := access.AccessRequest{
+            req := types.AccessRequest{
                 Subject:  "character:" + player.ID.String(),
                 Action:   "delete",
                 Resource: "location:" + testLocationID.String(),
             }
             decision, err := engine.Evaluate(ctx, req)
             Expect(err).NotTo(HaveOccurred())
-            Expect(decision.Effect).To(Equal(access.EffectDeny))
+            Expect(decision.Effect).To(Equal(types.EffectDeny))
         })
 
         // ... remaining negative cases

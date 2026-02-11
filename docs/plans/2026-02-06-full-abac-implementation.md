@@ -86,7 +86,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 2. **Task 0.5** — Dependency audit (validates go module compatibility, 30 min)
 3. **Task 1** — Database migration (creates `access_policies` + `audit_log` tables)
 
-**Key directories to create:** `internal/access/policy/` (Phase 7.1-7.2), `internal/access/abac/` (Phase 7.3+)
+**Key directories to create:** `internal/access/policy/` (all active phases), including `internal/access/policy/dsl/`, `internal/access/policy/attribute/`, and `internal/access/policy/store/`
 
 **Essential reading:**
 
@@ -100,7 +100,7 @@ All new `.go` files MUST include SPDX license headers. Run `task license:add` af
 
 ## Critical Path Overview
 
-The full dependency diagram below shows all 46 active tasks (plus 9 deferred Phase 7.5 tasks). For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
+The full dependency diagram below shows all 46 active tasks (45 executable in Epic 7 + 1 blocked active task) plus 9 deferred Phase 7.5 tasks. For quick orientation, here's the critical path showing only the tasks that directly gate project completion:
 
 ```mermaid
 graph LR
@@ -121,8 +121,8 @@ graph LR
     T17_1 --> T17_2([T17.2: Target<br/>Matching])
     T17_2 --> T17_3([T17.3: Condition<br/>Evaluation])
     T17_3 --> T17_4([T17.4: Deny-<br/>Overrides<br/>M3 End])
-
-    T17_4 --> T18([T18: Cache])
+    T7 --> T18([T18: Cache])
+    T12 --> T18
     T18 --> T23([T23: Bootstrap<br/>M4 End])
     T21a([T21a: Remove<br/>@-prefix])
     T21a --> T22([T22: Seeds])
@@ -172,7 +172,7 @@ graph LR
 
 ## Phase Dependency Diagram
 
-The complete task dependency graph showing all 46 active tasks (9 Phase 7.5 tasks deferred to Epic 8, shown in grey):
+The complete task dependency graph showing all 46 active tasks (45 executable in Epic 7, 1 blocked by deferred dependency; 9 Phase 7.5 tasks deferred to Epic 8 and shown in grey):
 
 ```mermaid
 graph TD
@@ -240,7 +240,6 @@ graph TD
         T17_1 --> T17_2
         T17_2 --> T17_3
         T17_3 --> T17_4
-        T17_4 --> T18
         T19 --> T19b
         T17_4 --> T20
         T17_4 --> T21
@@ -320,9 +319,14 @@ graph TD
     T23 -.-> T26a
     T23 -.-> T27a
     T7 -.-> T26b
+    T7 -.-> T27b1
     T17_4 -.-> T25b
     T24 -.-> T33
     %% Active cross-phase dependencies
+    T17_4 --> T7b
+    T18 --> T7b
+    T17_4 --> T23b
+    T18 --> T23b
     T17_4 --> T28
     T22b --> T28
     T23b --> T28
@@ -387,7 +391,7 @@ graph TD
 
 ### Cross-Phase Gate Summary
 
-The following table lists all dependencies that cross phase boundaries. These gates determine when downstream phases can start:
+The following table lists all dependencies that cross phase boundaries. Most are forward phase-start gates; a small subset are explicit post-engine verification edges (for example, `T7b`):
 
 | Source Task | Source Phase | Target Task | Target Phase | Gate Rationale                                                                                    |
 | ----------- | ------------ | ----------- | ------------ | ------------------------------------------------------------------------------------------------- |
@@ -416,15 +420,20 @@ The following table lists all dependencies that cross phase boundaries. These ga
 | T16a        | 7.3          | T23         | 7.4          | Simple providers (Stream, Command) needed for seed policy eval                                    |
 | T17.4       | 7.3          | T24         | ~~7.5~~ E8   | ~~Engine needed before lock registry~~ **Deferred to Epic 8**                                     |
 | T17.4       | 7.3          | T25b        | ~~7.5~~ E8   | ~~Engine needed for lock/unlock commands~~ **Deferred to Epic 8**                                 |
+| T17.4       | 7.3          | T7b         | 7.1          | Post-engine contract verification requires completed Evaluate flow                                |
+| T17.4       | 7.3          | T23b        | 7.4          | Engine must be operational before bootstrap smoke-gate integration tests                           |
 | T17.4       | 7.3          | T28         | 7.6          | Engine must exist before migration                                                                |
 | T17.4       | 7.3          | T31         | 7.7          | Engine needed for degraded mode                                                                   |
 | T18         | 7.3          | T23         | 7.4          | Cached policies for bootstrap sequence                                                            |
+| T18         | 7.3          | T7b         | 7.1          | Contract tests include empty-cache behavior boundary assertions                                   |
+| T18         | 7.3          | T23b        | 7.4          | Cache behavior must be functional before bootstrap smoke-gate integration tests                   |
 | T21a        | 7.3          | T22         | 7.4          | @-prefix removal before seed policies use bare names                                              |
 | T23         | 7.4          | T26a        | ~~7.5~~ E8   | ~~Seeded policies before admin CRUD~~ **Deferred to Epic 8**                                      |
 | T23         | 7.4          | T27a        | ~~7.5~~ E8   | ~~Seeded policies before policy test~~ **Deferred to Epic 8**                                     |
 | T22b        | 7.4          | T28         | 7.6          | Seed policy gaps resolved before migration (Decision #94)                                         |
 | T23b        | 7.4          | T28         | 7.6          | Integration test suite must pass before migration                                                 |
 | T23b        | 7.4          | T30         | 7.7          | Seed validation before integration tests                                                          |
+| T7          | 7.1          | T27b-1      | ~~7.5~~ E8   | ~~Store needed for core admin policy management commands~~ **Deferred to Epic 8**                |
 | T12         | 7.2          | T27b-1      | ~~7.5~~ E8   | ~~Compiler needed for policy validation~~ **Deferred to Epic 8**                                  |
 | T17.4       | 7.3          | T27b-1      | ~~7.5~~ E8   | ~~Engine needed for policy validation~~ **Deferred to Epic 8**                                    |
 | T18         | 7.3          | T27b-1      | ~~7.5~~ E8   | ~~Cache needed for policy reload~~ **Deferred to Epic 8**                                         |
@@ -442,6 +451,7 @@ The following table lists all dependencies that cross phase boundaries. These ga
 
 - Phase 7.1 (PolicyStore interface) is the foundation for all downstream phases
 - Phase 7.3 (Engine + Cache) is the critical path bottleneck — gates both Phase 7.4 (Bootstrap) and Phase 7.6 (Migration)
+- Task 7b is intentionally a post-engine contract verification pass (`T17.4` + `T18` → `T7b`) even though the task ID remains in Phase 7.1 for traceability
 - Phase 7.4 (Bootstrap) must complete before Phase 7.6 (Migration) can proceed
 - **Mandatory Phase 7.4 gate:** T16b (PropertyProvider) MUST complete before Phase 7.4 starts via T16b→T23. This is intentional even though T16b is not on the T17.1 engine critical path ([Decision #85](../specs/decisions/epic7/phase-7.3/085-property-provider-not-on-critical-path.md)).
 - Migration gating is T23→T23b→T28 (no direct T23→T28 gate)
@@ -554,7 +564,7 @@ The following milestones mark major integration checkpoints for progress trackin
 **Coverage Threshold:**
 
 - Integration test coverage: ≥90% of AccessPolicyEngine and AttributeResolver
-- Unit test coverage: ≥85% for all `internal/access/abac/` packages
+- Unit test coverage: ≥85% for all `internal/access/policy/` packages
 - Benchmark coverage: All critical paths benchmarked (evaluation, resolution, cache hits)
 
 **Cross-Phase Integration:**
@@ -570,7 +580,7 @@ The following milestones mark major integration checkpoints for progress trackin
 - `test/integration/access/engine_cache_test.go` — Cache invalidation via LISTEN/NOTIFY
 - `test/integration/access/attribute_resolution_test.go` — Multi-provider resolution
 - `test/integration/access/audit_logging_test.go` — Audit log persistence in all modes
-- `internal/access/abac/engine_bench_test.go` — Performance benchmarks
+- `internal/access/policy/engine_bench_test.go` — Performance benchmarks
 
 **Cross-Phase Integration Test Matrix:**
 
@@ -653,15 +663,16 @@ T-shirt size estimates for sprint planning:
 | T34   | Circuit breaker                    | M    | Resilience pattern                   |
 | T35   | Property orphan cleanup            | M    | Background cleanup                   |
 
-**Summary (active):** 1 XS, 15 S, 22 M, 7 L, 1 XL = 46 active tasks
+**Summary (active):** 1 XS, 15 S, 22 M, 7 L, 1 XL = 46 active tasks (45 executable in Epic 7 + 1 blocked active task)
+**Blocked Active Task:** T33 (`lock discover`) — blocked because dependency T24 is deferred to Epic 8
 **Deferred (Phase 7.5 → Epic 8):** 0 XS, 0 S, 6 M, 3 L, 0 XL = 9 deferred tasks
-**Total:** 55 tasks (46 active + 9 deferred)
+**Total:** 55 tasks (45 executable active + 1 blocked active + 9 deferred)
 
 ---
 
 ## Phase Files
 
-This implementation consists of **46 active tasks** split across **6 active phases** for manageability (9 Phase 7.5 tasks deferred to Epic 8):
+This implementation consists of **46 active tasks** split across **6 active phases** for manageability (9 Phase 7.5 tasks deferred to Epic 8). Of the 46 active tasks, **45 are executable in Epic 7** and **1 is blocked** (T33 depends on deferred T24):
 
 - [Phase 7.1: Policy Schema (Database Tables + Policy Store)](./2026-02-06-full-abac-phase-7.1.md)
 - [Phase 7.2: DSL & Compiler](./2026-02-06-full-abac-phase-7.2.md)

@@ -1353,7 +1353,7 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 
 ---
 
-### Task 7b: AccessPolicyEngine contract tests
+### Task 7b: AccessPolicyEngine contract tests (post-engine verification)
 
 **Spec References:** [01-core-types.md#accesspolicyengine](../specs/abac/01-core-types.md#accesspolicyengine)
 
@@ -1361,107 +1361,83 @@ git commit -m "feat(access): add PolicyStore interface and PostgreSQL implementa
 
 **Dependencies:**
 
-- Task 7 (Phase 7.1) — PolicyStore interface and engine scaffold must exist before contract tests
+- Task 7 (Phase 7.1) — PolicyStore and persisted policy contracts must exist
+- Task 17.4 (Phase 7.3) — full `Evaluate()` flow (steps 1-7) must be implemented
+- Task 18 (Phase 7.3) — policy cache behavior must exist for empty-cache boundary assertions
+
+**Execution Timing:** Task ID remains `7b` for traceability with Phase 7.1 review findings, but this verification task executes after Phase 7.3 completes (`T17.4` + `T18`).
 
 **Acceptance Criteria:**
 
 - [ ] Contract test suite covers edge cases not exercised by integration tests
+- [ ] `AccessPolicyEngine` contract uses value semantics: `Evaluate(ctx, AccessRequest)`
 - [ ] Malformed subject prefixes return `INVALID_ENTITY_REF` error code
 - [ ] Empty subject, action, or resource strings return appropriate error codes
-- [ ] Nil `AccessRequest` rejected with clear error
+- [ ] Zero-value `AccessRequest{}` is rejected with clear `INVALID_REQUEST` error
 - [ ] Context cancellation mid-evaluation returns `context.Canceled` error
 - [ ] Empty policy cache (no policies loaded) returns `EffectDefaultDeny`
-- [ ] Error wrapping preserves error code through entire call stack
+- [ ] Error wrapping preserves error code through the call stack
 - [ ] All tests pass via `task test`
 
-**Purpose:** Contract tests validate the AccessPolicyEngine interface edge cases and error handling paths that are unlikely to be hit by integration tests or migration equivalence tests. These tests ensure robustness at API boundaries.
+**Purpose:** Contract tests validate API-boundary edge cases and error handling on the canonical engine contract (`internal/access/policy`). These checks intentionally run after engine implementation tasks to prevent out-of-sequence churn.
 
 **Files:**
 
-- Create: `internal/access/abac/engine_contract_test.go`
+- Create: `internal/access/policy/engine_contract_test.go`
 
 **Step 1: Write failing contract tests**
 
 ```go
-// internal/access/abac/engine_contract_test.go
-package abac_test
+// internal/access/policy/engine_contract_test.go
+package policy_test
 
 import (
     "context"
     "testing"
 
-    "github.com/holomush/holomush/internal/access/abac"
+    "github.com/holomush/holomush/internal/access/policy"
     "github.com/holomush/holomush/internal/access/policy/types"
     "github.com/holomush/holomush/pkg/errutil"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
 
-// TestAccessPolicyEngine_ContractEdgeCases validates edge cases at API boundaries
 func TestAccessPolicyEngine_ContractEdgeCases(t *testing.T) {
     tests := []struct {
-        name      string
-        req       *types.AccessRequest
-        setupCtx  func() context.Context
+        name       string
+        req        types.AccessRequest
+        setupCtx   func() context.Context
         wantEffect types.Effect
-        wantCode  string
+        wantCode   string
     }{
         {
-            name:      "malformed subject prefix returns error",
-            req:       &types.AccessRequest{Subject: "bogus:123", Action: "read", Resource: "location:01ABC"},
-            setupCtx:  func() context.Context { return context.Background() },
+            name:       "malformed subject prefix returns error",
+            req:        types.AccessRequest{Subject: "bogus:123", Action: "read", Resource: "location:01ABC"},
+            setupCtx:   func() context.Context { return context.Background() },
             wantEffect: types.EffectDefaultDeny,
-            wantCode:  "INVALID_ENTITY_REF",
+            wantCode:   "INVALID_ENTITY_REF",
         },
         {
-            name:      "empty subject returns error",
-            req:       &types.AccessRequest{Subject: "", Action: "read", Resource: "location:01ABC"},
-            setupCtx:  func() context.Context { return context.Background() },
+            name:       "zero-value request returns invalid request",
+            req:        types.AccessRequest{},
+            setupCtx:   func() context.Context { return context.Background() },
             wantEffect: types.EffectDefaultDeny,
-            wantCode:  "INVALID_ENTITY_REF",
+            wantCode:   "INVALID_REQUEST",
         },
         {
-            name:      "empty action returns error",
-            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "", Resource: "location:01ABC"},
-            setupCtx:  func() context.Context { return context.Background() },
+            name:       "context cancellation mid-evaluation",
+            req:        types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: "location:01ABC"},
+            setupCtx:   func() context.Context { ctx, cancel := context.WithCancel(context.Background()); cancel(); return ctx },
             wantEffect: types.EffectDefaultDeny,
-            wantCode:  "INVALID_ACTION",
-        },
-        {
-            name:      "empty resource returns error",
-            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: ""},
-            setupCtx:  func() context.Context { return context.Background() },
-            wantEffect: types.EffectDefaultDeny,
-            wantCode:  "INVALID_ENTITY_REF",
-        },
-        {
-            name:      "context cancellation mid-evaluation",
-            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: "location:01ABC"},
-            setupCtx:  func() context.Context {
-                ctx, cancel := context.WithCancel(context.Background())
-                cancel() // cancel immediately
-                return ctx
-            },
-            wantEffect: types.EffectDefaultDeny,
-            wantCode:  "", // context.Canceled error, not oops code
-        },
-        {
-            name:      "empty policy cache returns default deny",
-            req:       &types.AccessRequest{Subject: "character:01XYZ", Action: "read", Resource: "location:01ABC"},
-            setupCtx:  func() context.Context { return context.Background() },
-            wantEffect: types.EffectDefaultDeny,
-            wantCode:  "",
+            wantCode:   "",
         },
     }
 
+    engine := policy.NewEngine(/* deps */)
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Setup engine with empty cache
-            engine := abac.NewAccessPolicyEngine(/* deps */)
             ctx := tt.setupCtx()
-
             decision, err := engine.Evaluate(ctx, tt.req)
-
             if tt.wantCode != "" {
                 require.Error(t, err)
                 errutil.AssertErrorCode(t, err, tt.wantCode)
@@ -1470,62 +1446,25 @@ func TestAccessPolicyEngine_ContractEdgeCases(t *testing.T) {
             } else {
                 require.NoError(t, err)
             }
-
             assert.Equal(t, tt.wantEffect, decision.Effect)
         })
     }
-}
-
-// TestAccessPolicyEngine_NilRequest validates nil request handling
-func TestAccessPolicyEngine_NilRequest(t *testing.T) {
-    engine := abac.NewAccessPolicyEngine(/* deps */)
-    ctx := context.Background()
-
-    decision, err := engine.Evaluate(ctx, nil)
-
-    require.Error(t, err)
-    errutil.AssertErrorCode(t, err, "INVALID_REQUEST")
-    assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
 }
 ```
 
 **Step 2: Run tests to verify they fail**
 
 Run: `task test`
-Expected: FAIL — engine not implemented yet
+Expected: FAIL — contract boundary assertions missing or incomplete
 
-**Step 3: Implement validation in AccessPolicyEngine**
+**Step 3: Implement missing contract guards in engine**
 
-Add validation to `Evaluate()` method:
+Add request validation and boundary-condition handling in `internal/access/policy/engine.go`:
 
-```go
-func (e *AccessPolicyEngine) Evaluate(ctx context.Context, req *types.AccessRequest) (types.Decision, error) {
-    if req == nil {
-        return types.NewDecision(types.EffectDefaultDeny, "nil request", ""), oops.Code("INVALID_REQUEST").Errorf("AccessRequest cannot be nil")
-    }
-
-    if req.Subject == "" || req.Action == "" || req.Resource == "" {
-        code := "INVALID_ENTITY_REF"
-        if req.Action == "" {
-            code = "INVALID_ACTION"
-        }
-        return types.NewDecision(types.EffectDefaultDeny, "empty field", ""), oops.Code(code).Errorf("AccessRequest has empty required field")
-    }
-
-    // Parse subject prefix
-    _, _, err := policy.ParseEntityRef(req.Subject)
-    if err != nil {
-        return types.NewDecision(types.EffectDefaultDeny, "invalid subject", ""), err
-    }
-
-    // Check context cancellation
-    if ctx.Err() != nil {
-        return types.NewDecision(types.EffectDefaultDeny, "context cancelled", ""), ctx.Err()
-    }
-
-    // ... rest of evaluation logic
-}
-```
+- Reject zero-value request (`INVALID_REQUEST`)
+- Reject malformed subject prefix (`INVALID_ENTITY_REF`)
+- Return `context.Canceled` when context is already canceled
+- Return `EffectDefaultDeny` when cache snapshot is empty
 
 **Step 4: Run tests to verify they pass**
 
@@ -1535,11 +1474,11 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add internal/access/abac/engine_contract_test.go internal/access/abac/engine.go
+git add internal/access/policy/engine_contract_test.go internal/access/policy/engine.go
 git commit -m "test(access): add AccessPolicyEngine contract tests for edge cases"
 ```
 
-**Note:** This task is NOT on the critical path. It runs in parallel with other Phase 7.2/7.3 work and ensures the engine handles malformed inputs gracefully.
+**Note:** This task is NOT on the critical path and should run as a post-engine validation pass after `T17.4` and `T18`.
 
 ---
 
