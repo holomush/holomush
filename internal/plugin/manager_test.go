@@ -47,7 +47,7 @@ events:
 lua-plugin:
   entry: main.lua
 `
-	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(manifest))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
 
 	mgr := plugins.NewManager(filepath.Join(dir, "plugins"))
@@ -71,13 +71,13 @@ version: 1.0.0
 type: lua
 lua-plugin:
   entry: main.lua`
-	writeFile(t, filepath.Join(validDir, "plugins.yaml"), []byte(validManifest))
+	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte(validManifest))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
 	// Create invalid plugin (bad YAML)
 	invalidDir := filepath.Join(pluginsDir, "invalid")
 	mkdirAll(t, invalidDir)
-	writeFile(t, filepath.Join(invalidDir, "plugins.yaml"), []byte("invalid: ["))
+	writeFile(t, filepath.Join(invalidDir, "plugin.yaml"), []byte("invalid: ["))
 
 	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
@@ -123,7 +123,7 @@ version: 1.0.0
 type: lua
 lua-plugin:
   entry: main.lua`
-	writeFile(t, filepath.Join(validDir, "plugins.yaml"), []byte(validManifest))
+	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte(validManifest))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
 	mgr := plugins.NewManager(pluginsDir)
@@ -136,10 +136,10 @@ func TestManager_Discover_SkipsDirWithoutManifest(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
-	// Create directory without plugins.yaml
+	// Create directory without plugin.yaml
 	noManifestDir := filepath.Join(pluginsDir, "no-manifest")
 	mkdirAll(t, noManifestDir)
-	// Only create a lua file, no plugins.yaml
+	// Only create a lua file, no plugin.yaml
 	writeFile(t, filepath.Join(noManifestDir, "main.lua"), []byte(""))
 
 	mgr := plugins.NewManager(pluginsDir)
@@ -165,7 +165,7 @@ func TestManager_Discover_MultiplePlugins(t *testing.T) {
 		pluginDir := filepath.Join(pluginsDir, p.name)
 		mkdirAll(t, pluginDir)
 		manifest := "name: " + p.name + "\nversion: " + p.version + "\ntype: lua\nlua-plugin:\n  entry: main.lua"
-		writeFile(t, filepath.Join(pluginDir, "plugins.yaml"), []byte(manifest))
+		writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(manifest))
 		writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte(""))
 	}
 
@@ -197,7 +197,7 @@ version: 1.0.0
 type: binary
 binary-plugin:
   executable: plugin-${os}-${arch}`
-	writeFile(t, filepath.Join(binaryDir, "plugins.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(binaryDir, "plugin.yaml"), []byte(manifest))
 
 	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
@@ -228,7 +228,7 @@ version: 1.0.0
 type: lua
 lua-plugin:
   entry: main.lua`
-	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(manifest))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
 
 	luaHost := pluginlua.NewHost()
@@ -250,13 +250,13 @@ func TestManager_LoadAll_SkipsInvalidManifests(t *testing.T) {
 	// Create valid plugin
 	validDir := filepath.Join(pluginsDir, "valid")
 	mkdirAll(t, validDir)
-	writeFile(t, filepath.Join(validDir, "plugins.yaml"), []byte("name: valid\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte("name: valid\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
 	// Create invalid plugin
 	invalidDir := filepath.Join(pluginsDir, "invalid")
 	mkdirAll(t, invalidDir)
-	writeFile(t, filepath.Join(invalidDir, "plugins.yaml"), []byte("invalid yaml ["))
+	writeFile(t, filepath.Join(invalidDir, "plugin.yaml"), []byte("invalid yaml ["))
 
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
@@ -276,7 +276,7 @@ func TestManager_LoadAll_SkipsLuaPluginsWithoutHost(t *testing.T) {
 	// Create a Lua plugin
 	luaDir := filepath.Join(pluginsDir, "lua-plugin")
 	mkdirAll(t, luaDir)
-	writeFile(t, filepath.Join(luaDir, "plugins.yaml"), []byte("name: lua-plugin\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(luaDir, "plugin.yaml"), []byte("name: lua-plugin\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(luaDir, "main.lua"), []byte(""))
 
 	// Create manager without LuaHost - Lua plugins should be skipped
@@ -296,7 +296,7 @@ func TestManager_LoadAll_SkipsBinaryPlugins(t *testing.T) {
 	// Create a binary plugin
 	binaryDir := filepath.Join(pluginsDir, "binary-plugin")
 	mkdirAll(t, binaryDir)
-	writeFile(t, filepath.Join(binaryDir, "plugins.yaml"), []byte("name: binary-plugin\nversion: 1.0.0\ntype: binary\nbinary-plugin:\n  executable: plugin"))
+	writeFile(t, filepath.Join(binaryDir, "plugin.yaml"), []byte("name: binary-plugin\nversion: 1.0.0\ntype: binary\nbinary-plugin:\n  executable: plugin"))
 
 	mgr := plugins.NewManager(pluginsDir)
 	err := mgr.LoadAll(context.Background())
@@ -314,7 +314,7 @@ func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
 	// Create a Lua plugin with syntax error
 	luaDir := filepath.Join(pluginsDir, "bad-lua")
 	mkdirAll(t, luaDir)
-	writeFile(t, filepath.Join(luaDir, "plugins.yaml"), []byte("name: bad-lua\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(luaDir, "plugin.yaml"), []byte("name: bad-lua\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(luaDir, "main.lua"), []byte("function broken"))
 
 	luaHost := pluginlua.NewHost()
@@ -347,7 +347,7 @@ func TestManager_Close(t *testing.T) {
 	// Create a plugin
 	echoDir := filepath.Join(pluginsDir, "echo-bot")
 	mkdirAll(t, echoDir)
-	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
 
 	luaHost := pluginlua.NewHost()
@@ -371,7 +371,7 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 	// Create a plugin
 	echoDir := filepath.Join(pluginsDir, "echo-bot")
 	mkdirAll(t, echoDir)
-	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
 
 	hostErr := errors.New("cleanup failed")
