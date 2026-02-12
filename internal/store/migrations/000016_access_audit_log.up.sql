@@ -15,10 +15,9 @@ CREATE TABLE access_audit_log (
     error_message    TEXT,
     provider_errors  JSONB,
     duration_us      INTEGER,
-    -- DEVIATION FROM SPEC: Composite PK required because PostgreSQL partitioned
-    -- tables MUST include the partition key (timestamp) in the primary key.
-    -- Spec 05-storage-audit.md#schema defines "id TEXT PRIMARY KEY" which is technically
-    -- incorrect for partitioned tables. This needs to be corrected in the spec.
+    -- Composite PK required for partitioned tables (ADR #111).
+    -- PostgreSQL requires the partition key (timestamp) in any primary key.
+    -- See: docs/specs/decisions/epic7/phase-7.1/111-audit-log-composite-pk-partitioning.md
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
