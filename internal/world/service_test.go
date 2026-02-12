@@ -29,6 +29,17 @@ func (m *mockAccessControl) Check(ctx context.Context, subject, action, resource
 	return args.Bool(0)
 }
 
+// mockTransactor is a test mock that records whether InTransaction was called
+// and executes the function directly (simulating a transaction).
+type mockTransactor struct {
+	called bool
+}
+
+func (m *mockTransactor) InTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	m.called = true
+	return fn(ctx)
+}
+
 func TestWorldService_GetLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
@@ -4811,4 +4822,108 @@ func TestWorldService_DeleteCharacter_PropertyCleanupFailsAfterParentDelete(t *t
 	err := svc.DeleteCharacter(ctx, subjectID, charID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
+}
+
+func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockLocRepo := worldtest.NewMockLocationRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	tx := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo:  mockLocRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+		Transactor:    tx,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
+
+	err := svc.DeleteLocation(ctx, subjectID, locID)
+	require.NoError(t, err)
+	assert.True(t, tx.called, "expected InTransaction to be called")
+}
+
+func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockObjRepo := worldtest.NewMockObjectRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	tx := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo:    mockObjRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+		Transactor:    tx,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+	mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
+
+	err := svc.DeleteObject(ctx, subjectID, objID)
+	require.NoError(t, err)
+	assert.True(t, tx.called, "expected InTransaction to be called")
+}
+
+func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	tx := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+		Transactor:    tx,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+	mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
+
+	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	require.NoError(t, err)
+	assert.True(t, tx.called, "expected InTransaction to be called")
+}
+
+func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockLocRepo := worldtest.NewMockLocationRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	tx := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo:  mockLocRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+		Transactor:    tx,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(errors.New("db error"))
+
+	err := svc.DeleteLocation(ctx, subjectID, locID)
+	require.Error(t, err)
+	assert.True(t, tx.called, "expected InTransaction to be called")
 }

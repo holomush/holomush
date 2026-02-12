@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
@@ -17,6 +18,22 @@ import (
 // This allows helper methods to work within or outside of transactions.
 type querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// execer abstracts Exec for both *pgxpool.Pool and pgx.Tx.
+type execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// txKey is the context key for an active pgx.Tx.
+type txKey struct{}
+
+// execerFromCtx returns the active transaction from context, or falls back to the pool.
+func execerFromCtx(ctx context.Context, pool execer) execer {
+	if tx, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
+		return tx
+	}
+	return pool
 }
 
 // maxCTERecursionDepth limits recursion in CTEs to prevent infinite loops.

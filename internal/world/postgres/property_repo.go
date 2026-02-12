@@ -158,7 +158,7 @@ func (r *PropertyRepository) Delete(ctx context.Context, id ulid.ULID) error {
 
 // DeleteByParent removes all properties for the given parent entity.
 func (r *PropertyRepository) DeleteByParent(ctx context.Context, parentType string, parentID ulid.ULID) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		DELETE FROM entity_properties WHERE parent_type = $1 AND parent_id = $2
 	`, parentType, parentID.String())
 	if err != nil {

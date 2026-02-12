@@ -73,7 +73,7 @@ func (r *CharacterRepository) Update(ctx context.Context, char *world.Character)
 
 // Delete removes a character by ID.
 func (r *CharacterRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, id.String())
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM characters WHERE id = $1`, id.String())
 	if err != nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").With("id", id.String()).Wrap(err)
 	}

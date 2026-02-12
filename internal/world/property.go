@@ -32,7 +32,7 @@ type EntityProperty struct {
 type PropertyRepository interface {
 	// Create persists a new entity property.
 	// Enforces visibility defaults: when visibility is "restricted" and VisibleTo
-	// is nil, auto-populates VisibleTo with [owner] and ExcludedFrom with [].
+	// is nil, auto-populates VisibleTo with [parent_id] and ExcludedFrom with [].
 	Create(ctx context.Context, p *EntityProperty) error
 
 	// Get retrieves an entity property by ID.
@@ -52,5 +52,13 @@ type PropertyRepository interface {
 
 	// DeleteByParent removes all properties for the given parent entity.
 	// Returns nil even if no properties exist for the parent.
+	// Transaction-aware: participates in an active transaction from context if present.
 	DeleteByParent(ctx context.Context, parentType string, parentID ulid.ULID) error
+}
+
+// Transactor executes a function within a database transaction.
+// Repository methods called within fn that support transaction propagation
+// will participate in the same transaction.
+type Transactor interface {
+	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }

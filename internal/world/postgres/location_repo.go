@@ -75,7 +75,7 @@ func (r *LocationRepository) Update(ctx context.Context, loc *world.Location) er
 
 // Delete removes a location by ID.
 func (r *LocationRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, id.String())
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM locations WHERE id = $1`, id.String())
 	if err != nil {
 		return oops.With("operation", "delete location").With("id", id.String()).Wrap(err)
 	}

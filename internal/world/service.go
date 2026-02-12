@@ -32,6 +32,7 @@ type ServiceConfig struct {
 	PropertyRepo  PropertyRepository
 	AccessControl AccessControl
 	EventEmitter  EventEmitter
+	Transactor    Transactor
 }
 
 // Service provides authorized access to world model operations.
@@ -45,6 +46,7 @@ type Service struct {
 	propertyRepo  PropertyRepository
 	accessControl AccessControl
 	eventEmitter  EventEmitter
+	transactor    Transactor
 }
 
 // NewService creates a new Service with the given configuration.
@@ -65,6 +67,7 @@ func NewService(cfg ServiceConfig) *Service {
 		propertyRepo:  cfg.PropertyRepo,
 		accessControl: cfg.AccessControl,
 		eventEmitter:  cfg.EventEmitter,
+		transactor:    cfg.Transactor,
 	}
 }
 
@@ -138,9 +141,9 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	return nil
 }
 
-// DeleteLocation deletes a location after checking delete authorization.
-// Deletes parent first, then cascades to properties. If property cleanup fails after parent
-// deletion, orphaned properties are recovered by Phase 7.7 orphan cleanup.
+// DeleteLocation deletes a location and its properties after checking delete authorization.
+// When a Transactor is configured, both deletions occur in the same database transaction
+// per spec (05-storage-audit.md). Without a Transactor, falls back to sequential deletion.
 func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
@@ -149,19 +152,29 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if err := s.locationRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+	deleteFn := func(ctx context.Context) error {
+		if err := s.locationRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+			}
+			return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
 		}
-		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
-	}
-	if s.propertyRepo != nil {
-		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
-			return oops.Code("LOCATION_DELETE_FAILED").
-				With("operation", "delete_location_properties").Wrapf(err, "delete properties for location %s", id)
+		if s.propertyRepo != nil {
+			if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
+				return oops.Code("LOCATION_DELETE_FAILED").
+					With("operation", "delete_location_properties").
+					Wrapf(err, "delete properties for location %s", id)
+			}
 		}
+		return nil
 	}
-	return nil
+	if s.transactor != nil {
+		if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+			return oops.Wrap(err)
+		}
+		return nil
+	}
+	return deleteFn(ctx)
 }
 
 // GetExit retrieves an exit by ID after checking read authorization.
@@ -373,9 +386,9 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	return nil
 }
 
-// DeleteObject deletes an object after checking delete authorization.
-// Deletes parent first, then cascades to properties. If property cleanup fails after parent
-// deletion, orphaned properties are recovered by Phase 7.7 orphan cleanup.
+// DeleteObject deletes an object and its properties after checking delete authorization.
+// When a Transactor is configured, both deletions occur in the same database transaction
+// per spec (05-storage-audit.md). Without a Transactor, falls back to sequential deletion.
 func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
@@ -384,19 +397,29 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if err := s.objectRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+	deleteFn := func(ctx context.Context) error {
+		if err := s.objectRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+			}
+			return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
 		}
-		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
-	}
-	if s.propertyRepo != nil {
-		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
-			return oops.Code("OBJECT_DELETE_FAILED").
-				With("operation", "delete_object_properties").Wrapf(err, "delete properties for object %s", id)
+		if s.propertyRepo != nil {
+			if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
+				return oops.Code("OBJECT_DELETE_FAILED").
+					With("operation", "delete_object_properties").
+					Wrapf(err, "delete properties for object %s", id)
+			}
 		}
+		return nil
 	}
-	return nil
+	if s.transactor != nil {
+		if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+			return oops.Wrap(err)
+		}
+		return nil
+	}
+	return deleteFn(ctx)
 }
 
 // MoveObject moves an object to a new containment (location, character inventory, or another object).
@@ -462,9 +485,9 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	return nil
 }
 
-// DeleteCharacter deletes a character after checking delete authorization.
-// Deletes parent first, then cascades to properties. If property cleanup fails after parent
-// deletion, orphaned properties are recovered by Phase 7.7 orphan cleanup.
+// DeleteCharacter deletes a character and its properties after checking delete authorization.
+// When a Transactor is configured, both deletions occur in the same database transaction
+// per spec (05-storage-audit.md). Without a Transactor, falls back to sequential deletion.
 func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
@@ -473,19 +496,29 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if err := s.characterRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+	deleteFn := func(ctx context.Context) error {
+		if err := s.characterRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+			}
+			return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
 		}
-		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
-	}
-	if s.propertyRepo != nil {
-		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
-			return oops.Code("CHARACTER_DELETE_FAILED").
-				With("operation", "delete_character_properties").Wrapf(err, "delete properties for character %s", id)
+		if s.propertyRepo != nil {
+			if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
+				return oops.Code("CHARACTER_DELETE_FAILED").
+					With("operation", "delete_character_properties").
+					Wrapf(err, "delete properties for character %s", id)
+			}
 		}
+		return nil
 	}
-	return nil
+	if s.transactor != nil {
+		if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+			return oops.Wrap(err)
+		}
+		return nil
+	}
+	return deleteFn(ctx)
 }
 
 // GetCharacter retrieves a character by ID after checking read authorization.
