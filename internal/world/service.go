@@ -161,18 +161,18 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 			Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md)")
 	}
 	deleteFn := func(ctx context.Context) error {
-		if err := s.locationRepo.Delete(ctx, id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
-			}
-			return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
-		}
 		if s.propertyRepo != nil {
 			if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
 				return oops.Code("LOCATION_DELETE_FAILED").
 					With("operation", "delete_location_properties").
 					Wrapf(err, "delete properties for location %s", id)
 			}
+		}
+		if err := s.locationRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+			}
+			return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
 		}
 		return nil
 	}
@@ -411,18 +411,18 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 			Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md)")
 	}
 	deleteFn := func(ctx context.Context) error {
-		if err := s.objectRepo.Delete(ctx, id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
-			}
-			return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
-		}
 		if s.propertyRepo != nil {
 			if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
 				return oops.Code("OBJECT_DELETE_FAILED").
 					With("operation", "delete_object_properties").
 					Wrapf(err, "delete properties for object %s", id)
 			}
+		}
+		if err := s.objectRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+			}
+			return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
 		}
 		return nil
 	}
@@ -515,18 +515,18 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 			Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md)")
 	}
 	deleteFn := func(ctx context.Context) error {
-		if err := s.characterRepo.Delete(ctx, id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
-			}
-			return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
-		}
 		if s.propertyRepo != nil {
 			if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
 				return oops.Code("CHARACTER_DELETE_FAILED").
 					With("operation", "delete_character_properties").
 					Wrapf(err, "delete properties for character %s", id)
 			}
+		}
+		if err := s.characterRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+			}
+			return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
 		}
 		return nil
 	}

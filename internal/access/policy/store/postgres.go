@@ -79,7 +79,7 @@ func scanPolicies(rows pgx.Rows) ([]*StoredPolicy, error) {
 // as required by spec (02-policy-dsl.md). This ensures forward-compatible AST evolution.
 func ValidateGrammarVersion(ast json.RawMessage) error {
 	if len(ast) == 0 {
-		return nil // empty AST is allowed (e.g., placeholder policies)
+		return oops.Code("POLICY_INVALID_AST").Errorf("compiled_ast is required (spec: 02-policy-dsl.md, 05-storage-audit.md)")
 	}
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(ast, &parsed); err != nil {

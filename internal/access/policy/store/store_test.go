@@ -106,8 +106,10 @@ func TestValidateGrammarVersion(t *testing.T) {
 			ast:  json.RawMessage(`{"type":"policy","grammar_version":1}`),
 		},
 		{
-			name: "empty AST is allowed",
-			ast:  nil,
+			name:      "empty AST is rejected",
+			ast:       nil,
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
 		},
 		{
 			name:      "AST missing grammar_version",
