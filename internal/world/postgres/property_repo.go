@@ -171,16 +171,13 @@ func (r *PropertyRepository) DeleteByParent(ctx context.Context, parentType stri
 }
 
 // applyVisibilityDefaults sets default visible_to and excluded_from for restricted visibility.
+// Per spec (03-property-model.md), visible_to defaults to [parent_id] to prevent "nobody can see it".
 func applyVisibilityDefaults(p *world.EntityProperty) error {
 	if p.Visibility != "restricted" {
 		return nil
 	}
 	if p.VisibleTo == nil {
-		if p.Owner != nil {
-			p.VisibleTo = []string{*p.Owner}
-		} else {
-			p.VisibleTo = []string{}
-		}
+		p.VisibleTo = []string{p.ParentID.String()}
 	}
 	if p.ExcludedFrom == nil {
 		p.ExcludedFrom = []string{}

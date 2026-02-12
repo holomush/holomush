@@ -4737,3 +4737,75 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 	})
 }
+
+func TestWorldService_DeleteLocation_ParentFailsAfterPropertyDelete(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockLocRepo := worldtest.NewMockLocationRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo:  mockLocRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
+	mockLocRepo.EXPECT().Delete(ctx, locID).Return(errors.New("db error"))
+
+	err := svc.DeleteLocation(ctx, subjectID, locID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
+}
+
+func TestWorldService_DeleteObject_ParentFailsAfterPropertyDelete(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockObjRepo := worldtest.NewMockObjectRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo:    mockObjRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
+	mockObjRepo.EXPECT().Delete(ctx, objID).Return(errors.New("db error"))
+
+	err := svc.DeleteObject(ctx, subjectID, objID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
+}
+
+func TestWorldService_DeleteCharacter_ParentFailsAfterPropertyDelete(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := "char:" + ulid.Make().String()
+
+	mockAC := &mockAccessControl{}
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		PropertyRepo:  mockPropRepo,
+		AccessControl: mockAC,
+	})
+
+	mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
+	mockCharRepo.EXPECT().Delete(ctx, charID).Return(errors.New("db error"))
+
+	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CHARACTER_DELETE_FAILED")
+}

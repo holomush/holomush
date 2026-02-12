@@ -14,12 +14,12 @@ import (
 
 func TestParseEntityRef(t *testing.T) {
 	tests := []struct {
-		name         string
-		input        string
-		wantType     string
-		wantID       string
-		wantErr      bool
-		wantErrCode  string
+		name        string
+		input       string
+		wantType    string
+		wantID      string
+		wantErr     bool
+		wantErrCode string
 	}{
 		// Subject prefixes
 		{
@@ -107,6 +107,18 @@ func TestParseEntityRef(t *testing.T) {
 		{
 			name:        "legacy char prefix",
 			input:       "char:01ABC",
+			wantErr:     true,
+			wantErrCode: "INVALID_ENTITY_REF",
+		},
+		{
+			name:        "empty ID after character prefix",
+			input:       "character:",
+			wantErr:     true,
+			wantErrCode: "INVALID_ENTITY_REF",
+		},
+		{
+			name:        "empty ID after location prefix",
+			input:       "location:",
 			wantErr:     true,
 			wantErrCode: "INVALID_ENTITY_REF",
 		},

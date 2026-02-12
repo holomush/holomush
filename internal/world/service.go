@@ -28,9 +28,9 @@ type ServiceConfig struct {
 	ExitRepo      ExitRepository
 	ObjectRepo    ObjectRepository
 	SceneRepo     SceneRepository
-	CharacterRepo  CharacterRepository
-	PropertyRepo   PropertyRepository
-	AccessControl  AccessControl
+	CharacterRepo CharacterRepository
+	PropertyRepo  PropertyRepository
+	AccessControl AccessControl
 	EventEmitter  EventEmitter
 }
 
@@ -139,6 +139,8 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 }
 
 // DeleteLocation deletes a location after checking delete authorization.
+// Property cascade and entity deletion are sequential but not in the same DB transaction.
+// If entity deletion fails after properties are deleted, orphan cleanup (Phase 7.7) recovers.
 func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
@@ -372,6 +374,8 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 }
 
 // DeleteObject deletes an object after checking delete authorization.
+// Property cascade and entity deletion are sequential but not in the same DB transaction.
+// If entity deletion fails after properties are deleted, orphan cleanup (Phase 7.7) recovers.
 func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
@@ -459,6 +463,8 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 }
 
 // DeleteCharacter deletes a character after checking delete authorization.
+// Property cascade and entity deletion are sequential but not in the same DB transaction.
+// If entity deletion fails after properties are deleted, orphan cleanup (Phase 7.7) recovers.
 func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")

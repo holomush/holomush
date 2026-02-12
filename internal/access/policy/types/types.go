@@ -25,7 +25,7 @@ var effectStrings = [...]string{
 }
 
 func (e Effect) String() string {
-	if int(e) < len(effectStrings) {
+	if e >= 0 && int(e) < len(effectStrings) {
 		return effectStrings[e]
 	}
 	return fmt.Sprintf("unknown(%d)", int(e))
@@ -157,7 +157,7 @@ var attrTypeStrings = [...]string{
 }
 
 func (at AttrType) String() string {
-	if int(at) < len(attrTypeStrings) {
+	if at >= 0 && int(at) < len(attrTypeStrings) {
 		return attrTypeStrings[at]
 	}
 	return fmt.Sprintf("unknown(%d)", int(at))

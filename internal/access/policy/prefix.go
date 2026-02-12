@@ -67,6 +67,12 @@ func ParseEntityRef(ref string) (typeName, id string, err error) {
 		if strings.HasPrefix(ref, prefix) {
 			typeName = strings.TrimSuffix(prefix, ":")
 			id = ref[len(prefix):]
+			if id == "" {
+				return "", "", oops.
+					Code("INVALID_ENTITY_REF").
+					With("ref", ref).
+					Errorf("empty ID in entity reference")
+			}
 			return typeName, id, nil
 		}
 	}

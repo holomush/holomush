@@ -29,6 +29,16 @@ func TestEffect_String(t *testing.T) {
 	}
 }
 
+func TestEffect_String_NegativeValue(t *testing.T) {
+	assert.Equal(t, "unknown(-1)", Effect(-1).String())
+	assert.Equal(t, "unknown(-42)", Effect(-42).String())
+}
+
+func TestAttrType_String_NegativeValue(t *testing.T) {
+	assert.Equal(t, "unknown(-1)", AttrType(-1).String())
+	assert.Equal(t, "unknown(-42)", AttrType(-42).String())
+}
+
 func TestNewDecision_Invariant(t *testing.T) {
 	tests := []struct {
 		name            string
