@@ -351,6 +351,57 @@ func TestPropertyRepository_Visibility_OverlapError(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "PROPERTY_VISIBILITY_OVERLAP")
 }
 
+func TestPropertyRepository_Visibility_PublicRejectsVisibleTo(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPropertyRepository(testPool)
+
+	locationID := createTestLocation(ctx, t)
+
+	prop := newTestProperty("location", locationID)
+	prop.Visibility = "public"
+	prop.VisibleTo = []string{"alice"}
+
+	err := repo.Create(ctx, prop)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PROPERTY_INVALID_VISIBILITY")
+}
+
+func TestPropertyRepository_Visibility_PrivateRejectsExcludedFrom(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPropertyRepository(testPool)
+
+	locationID := createTestLocation(ctx, t)
+
+	prop := newTestProperty("location", locationID)
+	prop.Visibility = "private"
+	prop.ExcludedFrom = []string{"bob"}
+
+	err := repo.Create(ctx, prop)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PROPERTY_INVALID_VISIBILITY")
+}
+
+func TestPropertyRepository_Update_PublicRejectsVisibleTo(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPropertyRepository(testPool)
+
+	locationID := createTestLocation(ctx, t)
+
+	prop := newTestProperty("location", locationID)
+	require.NoError(t, repo.Create(ctx, prop))
+
+	t.Cleanup(func() {
+		_ = repo.Delete(ctx, prop.ID)
+	})
+
+	prop.Visibility = "public"
+	prop.VisibleTo = []string{"alice"}
+
+	err := repo.Update(ctx, prop)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "PROPERTY_INVALID_VISIBILITY")
+}
+
 func TestPropertyRepository_ParentNameUniqueness(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewPropertyRepository(testPool)

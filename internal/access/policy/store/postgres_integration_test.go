@@ -245,7 +245,7 @@ var _ = Describe("PostgresStore", func() {
 
 			p.Description = "Updated"
 			p.DSLText = `permit(principal, action == "say", resource);`
-			p.CompiledAST = json.RawMessage(`{"type":"policy","effect":"permit","updated":true}`)
+			p.CompiledAST = json.RawMessage(`{"type":"policy","effect":"permit","updated":true,"grammar_version":1}`)
 			p.ChangeNote = "refined scope"
 			p.CreatedBy = "admin-user"
 			Expect(ps.Update(ctx, p)).To(Succeed())

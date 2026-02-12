@@ -96,6 +96,24 @@ type Literal struct {
 	Value string         `parser:"@String" json:"value"`
 }
 
+// GrammarVersion is the current version of the DSL grammar.
+// This must be included in compiled_ast for forward-compatible evolution.
+const GrammarVersion = 1
+
+// WrapAST wraps a parsed Policy AST with grammar_version for storage.
+// The spec requires compiled_ast to include grammar_version (02-policy-dsl.md:224).
+func WrapAST(ast map[string]any) map[string]any {
+	if ast == nil {
+		return map[string]any{"grammar_version": GrammarVersion}
+	}
+	result := make(map[string]any, len(ast)+1)
+	for k, v := range ast {
+		result[k] = v
+	}
+	result["grammar_version"] = GrammarVersion
+	return result
+}
+
 // NewParser constructs a participle parser for the Policy grammar.
 func NewParser() (*participle.Parser[Policy], error) {
 	return participle.Build[Policy](

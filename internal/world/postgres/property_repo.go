@@ -146,7 +146,7 @@ func (r *PropertyRepository) Update(ctx context.Context, p *world.EntityProperty
 
 // Delete removes an entity property by ID.
 func (r *PropertyRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `DELETE FROM entity_properties WHERE id = $1`, id.String())
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM entity_properties WHERE id = $1`, id.String())
 	if err != nil {
 		return oops.Code("PROPERTY_DELETE_FAILED").With("id", id.String()).Wrap(err)
 	}
@@ -188,6 +188,18 @@ func applyVisibilityDefaults(p *world.EntityProperty) error {
 // validateVisibilityLists checks visibility list constraints.
 func validateVisibilityLists(p *world.EntityProperty) error {
 	if p.Visibility != "restricted" {
+		if len(p.VisibleTo) > 0 {
+			return oops.Code("PROPERTY_INVALID_VISIBILITY").
+				With("visibility", p.Visibility).
+				With("field", "visible_to").
+				Errorf("visible_to must be empty for non-restricted visibility")
+		}
+		if len(p.ExcludedFrom) > 0 {
+			return oops.Code("PROPERTY_INVALID_VISIBILITY").
+				With("visibility", p.Visibility).
+				With("field", "excluded_from").
+				Errorf("excluded_from must be empty for non-restricted visibility")
+		}
 		return nil
 	}
 	if len(p.VisibleTo) > maxVisibilityListSize {
