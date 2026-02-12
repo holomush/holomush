@@ -95,6 +95,14 @@ tasks:
     cmds:
       - ginkgo -r -p --randomize-all ./test/integration/...
 
+  test:fuzz:
+    desc: Run fuzz tests
+    cmds:
+      - go test -fuzz=FuzzParse -fuzztime={{.FUZZ_TIME}} {{.FUZZ_PACKAGE}}
+    vars:
+      FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
+      FUZZ_PACKAGE: '{{default "./internal/access/policy/dsl/" .FUZZ_PACKAGE}}'
+
   mocks:generate:
     desc: Generate mocks with mockery
     cmds:
