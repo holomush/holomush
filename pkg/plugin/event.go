@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package plugin provides the public API for HoloMUSH plugins.
+// Package pluginsdk provides the public API for HoloMUSH plugins.
 //
 // This package serves two purposes:
 //   - Shared types (Event, EmitEvent, EventType, ActorKind) used by all plugin hosts
 //   - SDK for building binary plugins (Handler, Serve, ServeConfig)
-package plugin
+package pluginsdk
 
 // EventType identifies the kind of event.
 type EventType string

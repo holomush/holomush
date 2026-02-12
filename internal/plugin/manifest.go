@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package plugin provides plugin management and lifecycle control.
-package plugin
+// Package plugins provides plugin management and lifecycle control.
+package plugins
 
 import (
 	"regexp"

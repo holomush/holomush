@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
-	holomushtls "github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -1028,17 +1028,17 @@ func TestNewGRPCServer(t *testing.T) {
 	gameID := "test-game-grpc"
 
 	// Generate certificates
-	ca, err := holomushtls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "GenerateCA() error")
 
-	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "GenerateServerCert() error")
 
-	err = holomushtls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "SaveCertificates() error")
 
 	// Load TLS config
-	tlsConfig, err := holomushtls.LoadServerTLS(tmpDir, "core")
+	tlsConfig, err := tlscerts.LoadServerTLS(tmpDir, "core")
 	require.NoError(t, err, "LoadServerTLS() error")
 
 	// Create gRPC server with TLS

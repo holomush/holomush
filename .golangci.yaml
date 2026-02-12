@@ -59,6 +59,12 @@ linters:
         linters:
           - wrapcheck
 
+      # Package name "types" triggers var-naming but matches spec directory structure
+      - path: internal/access/policy/types/
+        linters:
+          - revive
+        text: var-naming
+
   settings:
     errcheck:
       check-type-assertions: true

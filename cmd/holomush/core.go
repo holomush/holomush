@@ -25,7 +25,7 @@ import (
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/store"
-	"github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -364,7 +364,7 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	// If loading fails (corruption, permission issues, etc.), return the error
 	// rather than silently regenerating certificates
 	if certExists || keyExists || caExists {
-		existingConfig, err := tls.LoadServerTLS(certsDir, "core")
+		existingConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
 		if err != nil {
 			return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load existing TLS certificates").With("certs_dir", certsDir).Wrap(err)
 		}
@@ -380,30 +380,30 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	}
 
 	// Generate CA
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	if err != nil {
 		return nil, oops.Code("CA_GENERATE_FAILED").With("operation", "generate CA").With("game_id", gameID).Wrap(err)
 	}
 
 	// Generate server certificate
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	if err != nil {
 		return nil, oops.Code("SERVER_CERT_GENERATE_FAILED").With("operation", "generate server certificate").With("component", "core").Wrap(err)
 	}
 
 	// Save certificates
-	err = tls.SaveCertificates(certsDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(certsDir, ca, serverCert)
 	if err != nil {
 		return nil, oops.Code("CERTS_SAVE_FAILED").With("operation", "save certificates").With("certs_dir", certsDir).Wrap(err)
 	}
 
 	// Generate gateway client certificate
-	gatewayCert, err := tls.GenerateClientCert(ca, "gateway")
+	gatewayCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 	if err != nil {
 		return nil, oops.Code("CLIENT_CERT_GENERATE_FAILED").With("operation", "generate gateway certificate").With("component", "gateway").Wrap(err)
 	}
 
-	err = tls.SaveClientCert(certsDir, gatewayCert)
+	err = tlscerts.SaveClientCert(certsDir, gatewayCert)
 	if err != nil {
 		return nil, oops.Code("CLIENT_CERT_SAVE_FAILED").With("operation", "save gateway certificate").With("component", "gateway").Wrap(err)
 	}
@@ -411,7 +411,7 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	slog.Info("TLS certificates generated")
 
 	// Load the newly generated certificates
-	config, err := tls.LoadServerTLS(certsDir, "core")
+	config, err := tlscerts.LoadServerTLS(certsDir, "core")
 	if err != nil {
 		return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load generated certificates").With("certs_dir", certsDir).Wrap(err)
 	}

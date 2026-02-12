@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package plugin_test
+package plugins_test
 
 import (
 	"context"
@@ -12,24 +12,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/holomush/holomush/internal/plugin"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // subscriberHost is a mock Host for subscriber tests.
 type subscriberHost struct {
-	delivered []pluginpkg.Event
-	response  []pluginpkg.EmitEvent
+	delivered []pluginsdk.Event
+	response  []pluginsdk.EmitEvent
 	err       error
 	mu        sync.Mutex
 }
 
-func (h *subscriberHost) Load(context.Context, *plugin.Manifest, string) error { return nil }
+func (h *subscriberHost) Load(context.Context, *plugins.Manifest, string) error { return nil }
 func (h *subscriberHost) Unload(context.Context, string) error                 { return nil }
 func (h *subscriberHost) Plugins() []string                                    { return []string{"test"} }
 func (h *subscriberHost) Close(context.Context) error                          { return nil }
 
-func (h *subscriberHost) DeliverEvent(_ context.Context, _ string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
+func (h *subscriberHost) DeliverEvent(_ context.Context, _ string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.delivered = append(h.delivered, event)
@@ -44,12 +44,12 @@ func (h *subscriberHost) deliveredCount() int {
 
 // subscriberEmitter is a mock EventEmitter for subscriber tests.
 type subscriberEmitter struct {
-	emitted []pluginpkg.EmitEvent
+	emitted []pluginsdk.EmitEvent
 	err     error
 	mu      sync.Mutex
 }
 
-func (e *subscriberEmitter) EmitPluginEvent(_ context.Context, _ string, event pluginpkg.EmitEvent) error {
+func (e *subscriberEmitter) EmitPluginEvent(_ context.Context, _ string, event pluginsdk.EmitEvent) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.emitted = append(e.emitted, event)
@@ -66,19 +66,19 @@ func TestSubscriber_DeliversEvents(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{
+	events <- pluginsdk.Event{
 		ID:     "01ABC",
 		Stream: "location:123",
-		Type:   pluginpkg.EventTypeSay,
+		Type:   pluginsdk.EventTypeSay,
 	}
 
 	// Wait for delivery
@@ -91,17 +91,17 @@ func TestSubscriber_FiltersEventTypes(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"}) // Only say events
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 2)
+	events := make(chan pluginsdk.Event, 2)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
-	events <- pluginpkg.Event{ID: "2", Stream: "location:123", Type: pluginpkg.EventTypePose} // Should be filtered
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypePose} // Should be filtered
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -112,17 +112,17 @@ func TestSubscriber_FiltersStreams(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 2)
+	events := make(chan pluginsdk.Event, 2)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
-	events <- pluginpkg.Event{ID: "2", Stream: "location:456", Type: pluginpkg.EventTypeSay} // Different stream
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:456", Type: pluginsdk.EventTypeSay} // Different stream
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -133,18 +133,18 @@ func TestSubscriber_SubscribeAllEventTypes(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", nil) // nil = all event types
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 3)
+	events := make(chan pluginsdk.Event, 3)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
-	events <- pluginpkg.Event{ID: "2", Stream: "location:123", Type: pluginpkg.EventTypePose}
-	events <- pluginpkg.Event{ID: "3", Stream: "location:123", Type: pluginpkg.EventTypeArrive}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypePose}
+	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventTypeArrive}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -153,22 +153,22 @@ func TestSubscriber_SubscribeAllEventTypes(t *testing.T) {
 
 func TestSubscriber_EmitsResponseEvents(t *testing.T) {
 	host := &subscriberHost{
-		response: []pluginpkg.EmitEvent{
-			{Stream: "location:123", Type: pluginpkg.EventTypeSay, Payload: `{"text":"hello"}`},
+		response: []pluginsdk.EmitEvent{
+			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
 		},
 	}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -181,17 +181,17 @@ func TestSubscriber_HandlesHostError(t *testing.T) {
 	}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
 	// Should not panic on error
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -205,17 +205,17 @@ func TestSubscriber_MultiplePlugins(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("plugin-a", "location:123", []string{"say"})
 	sub.Subscribe("plugin-b", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -227,15 +227,15 @@ func TestSubscriber_StopWaitsForCompletion(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
 
 	// Cancel context and stop
 	cancel()
@@ -259,10 +259,10 @@ func TestSubscriber_ChannelClose(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 
 	ctx := context.Background()
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
 	// Close channel should cause graceful exit
@@ -285,23 +285,23 @@ func TestSubscriber_ChannelClose(t *testing.T) {
 
 func TestSubscriber_HandlesEmitterError(t *testing.T) {
 	host := &subscriberHost{
-		response: []pluginpkg.EmitEvent{
-			{Stream: "location:123", Type: pluginpkg.EventTypeSay, Payload: `{"text":"hello"}`},
+		response: []pluginsdk.EmitEvent{
+			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
 		},
 	}
 	emitter := &subscriberEmitter{err: errors.New("emit failed")}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
 	// Should not panic on emitter error
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -315,18 +315,18 @@ func TestSubscriber_EmptyEventTypesSliceReceivesAll(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{}) // empty slice = all event types
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	events := make(chan pluginpkg.Event, 3)
+	events := make(chan pluginsdk.Event, 3)
 	sub.Start(ctx, events)
 
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
-	events <- pluginpkg.Event{ID: "2", Stream: "location:123", Type: pluginpkg.EventTypePose}
-	events <- pluginpkg.Event{ID: "3", Stream: "location:123", Type: pluginpkg.EventTypeArrive}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypePose}
+	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventTypeArrive}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -341,16 +341,16 @@ func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
 	}
 	emitter := &subscriberEmitter{}
 
-	sub := plugin.NewSubscriber(host, emitter)
+	sub := plugins.NewSubscriber(host, emitter)
 	sub.Subscribe("test-plugin", "location:123", []string{"say"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	events := make(chan pluginpkg.Event, 1)
+	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
 	// Send event that will block in delivery
-	events <- pluginpkg.Event{ID: "1", Stream: "location:123", Type: pluginpkg.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
 
 	// Give time for the async delivery to start
 	time.Sleep(20 * time.Millisecond)
@@ -390,17 +390,17 @@ func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
 
 // slowSubscriberHost blocks DeliverEvent until blockCh is closed.
 type slowSubscriberHost struct {
-	delivered []pluginpkg.Event
+	delivered []pluginsdk.Event
 	blockCh   chan struct{}
 	mu        sync.Mutex
 }
 
-func (h *slowSubscriberHost) Load(context.Context, *plugin.Manifest, string) error { return nil }
+func (h *slowSubscriberHost) Load(context.Context, *plugins.Manifest, string) error { return nil }
 func (h *slowSubscriberHost) Unload(context.Context, string) error                 { return nil }
 func (h *slowSubscriberHost) Plugins() []string                                    { return []string{"test"} }
 func (h *slowSubscriberHost) Close(context.Context) error                          { return nil }
 
-func (h *slowSubscriberHost) DeliverEvent(_ context.Context, _ string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
+func (h *slowSubscriberHost) DeliverEvent(_ context.Context, _ string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	<-h.blockCh // Block until closed
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package plugin_test
+package plugins_test
 
 import (
 	"strings"
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
 func TestParseManifest_LuaPlugin(t *testing.T) {
@@ -26,12 +26,12 @@ capabilities:
 lua-plugin:
   entry: main.lua
 `
-	m, err := plugin.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
 
 	assert.Equal(t, "echo-bot", m.Name)
 	assert.Equal(t, "1.0.0", m.Version)
-	assert.Equal(t, plugin.TypeLua, m.Type)
+	assert.Equal(t, plugins.TypeLua, m.Type)
 	assert.Len(t, m.Events, 2)
 	assert.Len(t, m.Capabilities, 1)
 	require.NotNil(t, m.LuaPlugin)
@@ -51,10 +51,10 @@ capabilities:
 binary-plugin:
   executable: combat-${os}-${arch}
 `
-	m, err := plugin.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
 
-	assert.Equal(t, plugin.TypeBinary, m.Type)
+	assert.Equal(t, plugins.TypeBinary, m.Type)
 	require.NotNil(t, m.BinaryPlugin)
 	assert.Equal(t, "combat-${os}-${arch}", m.BinaryPlugin.Executable)
 }
@@ -157,7 +157,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugin.ParseManifest([]byte(tt.yaml))
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
 			require.Error(t, err, "expected error for invalid name")
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -186,7 +186,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 `
-			m, err := plugin.ParseManifest([]byte(yaml))
+			m, err := plugins.ParseManifest([]byte(yaml))
 			require.NoError(t, err, "ParseManifest() error for name %q", tt.plugName)
 			require.NotNil(t, m)
 			assert.Equal(t, tt.plugName, m.Name)
@@ -245,7 +245,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugin.ParseManifest([]byte(tt.yaml))
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
 			require.Error(t, err, "expected error for %s", tt.name)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -315,7 +315,7 @@ binary-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugin.ParseManifest([]byte(tt.yaml))
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
 			assert.Error(t, err, "expected error for %s", tt.name)
 		})
 	}
@@ -325,17 +325,17 @@ func TestParseManifest_InvalidYAML(t *testing.T) {
 	yaml := `name: test
 version: 1.0.0
 type: [invalid`
-	_, err := plugin.ParseManifest([]byte(yaml))
+	_, err := plugins.ParseManifest([]byte(yaml))
 	assert.Error(t, err, "expected error for invalid YAML")
 }
 
 func TestManifest_Validate(t *testing.T) {
 	// Test Validate() method directly
-	m := &plugin.Manifest{
+	m := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{
+		Type:    plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{
 			Entry: "main.lua",
 		},
 	}
@@ -343,11 +343,11 @@ func TestManifest_Validate(t *testing.T) {
 }
 
 func TestManifest_Validate_EmptyEntry(t *testing.T) {
-	m := &plugin.Manifest{
+	m := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{
+		Type:    plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{
 			Entry: "",
 		},
 	}
@@ -355,11 +355,11 @@ func TestManifest_Validate_EmptyEntry(t *testing.T) {
 }
 
 func TestManifest_Validate_EmptyExecutable(t *testing.T) {
-	m := &plugin.Manifest{
+	m := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "",
 		},
 	}
@@ -378,7 +378,7 @@ func TestParseManifest_EmptyInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugin.ParseManifest(tt.input)
+			_, err := plugins.ParseManifest(tt.input)
 			assert.Error(t, err, "ParseManifest() should return error for empty input")
 		})
 	}
@@ -407,7 +407,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 `
-			_, err := plugin.ParseManifest([]byte(yaml))
+			_, err := plugins.ParseManifest([]byte(yaml))
 			require.Error(t, err, "expected error for version %q", tt.version)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -437,7 +437,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 `
-			m, err := plugin.ParseManifest([]byte(yaml))
+			m, err := plugins.ParseManifest([]byte(yaml))
 			require.NoError(t, err, "ParseManifest() error for version %q", tt.version)
 			require.NotNil(t, m)
 			assert.Equal(t, tt.version, m.Version)
@@ -482,7 +482,7 @@ lua-plugin:
   entry: main.lua
 `
 			}
-			m, err := plugin.ParseManifest([]byte(yaml))
+			m, err := plugins.ParseManifest([]byte(yaml))
 			if tt.wantErr {
 				require.Error(t, err, "expected error for engine %q", tt.engine)
 				return
@@ -572,7 +572,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m, err := plugin.ParseManifest([]byte(tt.yaml))
+			m, err := plugins.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
 				require.Error(t, err, "expected error")
 				return
@@ -634,7 +634,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugin.ParseManifest([]byte(tt.yaml))
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -683,7 +683,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m, err := plugin.ParseManifest([]byte(tt.yaml))
+			m, err := plugins.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -712,7 +712,7 @@ capabilities:
 lua-plugin:
   entry: main.lua
 `
-	m, err := plugin.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
 	assert.Len(t, m.Capabilities, 4)
 	assert.Contains(t, m.Capabilities, "events.emit.*")
@@ -724,7 +724,7 @@ lua-plugin:
 func TestManifest_HasEvent(t *testing.T) {
 	// Test that Events slice correctly stores event subscriptions
 	events := []string{"say", "pose"}
-	m := &plugin.Manifest{
+	m := &plugins.Manifest{
 		Events: events,
 	}
 
@@ -743,7 +743,7 @@ type:   lua
 lua-plugin:
   entry:   main.lua
 `
-	m, err := plugin.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
 	// YAML should trim whitespace
 	assert.True(t, strings.TrimSpace(m.Name) == "test-plugin" || m.Name == "test-plugin")
@@ -893,7 +893,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m, err := plugin.ParseManifest([]byte(tt.yaml))
+			m, err := plugins.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
 				require.Error(t, err, "expected error")
 				assert.Contains(t, err.Error(), tt.wantErrMsg)
@@ -926,7 +926,7 @@ commands:
 lua-plugin:
   entry: main.lua
 `
-	m, err := plugin.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
 	require.Len(t, m.Commands, 1)
 
@@ -952,7 +952,7 @@ commands:
 lua-plugin:
   entry: main.lua
 `
-	m, err := plugin.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
 	require.Len(t, m.Commands, 1)
 
@@ -965,20 +965,20 @@ lua-plugin:
 func TestCommandSpec_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		cmd     plugin.CommandSpec
+		cmd     plugins.CommandSpec
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name: "valid command minimal",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "say",
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid command full inline help",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name:         "teleport",
 				Capabilities: []string{"world.write"},
 				Help:         "Teleport to a location",
@@ -989,7 +989,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "valid command with helpFile",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name:     "combat",
 				Help:     "Combat system",
 				HelpFile: "help/combat.md",
@@ -998,7 +998,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "empty name",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "",
 				Help: "Some help",
 			},
@@ -1007,7 +1007,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "whitespace-only name",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "   ",
 				Help: "Some help",
 			},
@@ -1016,7 +1016,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "name too long",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "thisisaverylongcommandname",
 				Help: "Some help",
 			},
@@ -1025,7 +1025,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "name starts with number",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "1say",
 				Help: "Some help",
 			},
@@ -1034,7 +1034,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "name with invalid characters",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "say*command",
 				Help: "Some help",
 			},
@@ -1043,7 +1043,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 		},
 		{
 			name: "both helpText and helpFile",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name:     "bad",
 				HelpText: "inline help",
 				HelpFile: "help/bad.md",
@@ -1069,13 +1069,13 @@ func TestCommandSpec_Validate(t *testing.T) {
 func TestCommandSpec_Validate_HelpTextHelpFileMutualExclusivity(t *testing.T) {
 	tests := []struct {
 		name    string
-		cmd     plugin.CommandSpec
+		cmd     plugins.CommandSpec
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name: "both helpText and helpFile rejects with error",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name:     "bad",
 				HelpText: "Some inline help text",
 				HelpFile: "help/bad.md",
@@ -1085,7 +1085,7 @@ func TestCommandSpec_Validate_HelpTextHelpFileMutualExclusivity(t *testing.T) {
 		},
 		{
 			name: "helpText only passes validation",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name:     "say",
 				HelpText: "Detailed inline help for the say command.",
 			},
@@ -1093,7 +1093,7 @@ func TestCommandSpec_Validate_HelpTextHelpFileMutualExclusivity(t *testing.T) {
 		},
 		{
 			name: "helpFile only passes validation",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name:     "combat",
 				HelpFile: "help/combat.md",
 			},
@@ -1101,7 +1101,7 @@ func TestCommandSpec_Validate_HelpTextHelpFileMutualExclusivity(t *testing.T) {
 		},
 		{
 			name: "neither helpText nor helpFile passes validation",
-			cmd: plugin.CommandSpec{
+			cmd: plugins.CommandSpec{
 				Name: "look",
 			},
 			wantErr: false,
@@ -1183,7 +1183,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugin.ParseManifest([]byte(tt.yaml))
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
 func TestStatus_Properties(t *testing.T) {
@@ -250,11 +250,11 @@ func TestQueryProcessStatusGRPC_ValidCANoClientCert(t *testing.T) {
 
 	// Generate valid CA
 	gameID := "test-status-game-id"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
 	// Save only the CA certificate (no client cert)
-	require.NoError(t, tls.SaveCertificates(certsDir, ca, nil), "failed to save CA")
+	require.NoError(t, tlscerts.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -273,20 +273,20 @@ func TestQueryProcessStatusGRPC_ConnectionFailure(t *testing.T) {
 
 	// Generate valid CA and server/client certs
 	gameID := "test-conn-refused"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
 	// Generate server cert (for the core server we'd be connecting to)
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
 	// Generate client cert (for our status query client)
-	clientCert, err := tls.GenerateClientCert(ca, "core")
+	clientCert, err := tlscerts.GenerateClientCert(ca, "core")
 	require.NoError(t, err, "failed to generate client cert")
 
 	// Save all certs
-	require.NoError(t, tls.SaveCertificates(certsDir, ca, serverCert), "failed to save certs")
-	require.NoError(t, tls.SaveClientCert(certsDir, clientCert), "failed to save client cert")
+	require.NoError(t, tlscerts.SaveCertificates(certsDir, ca, serverCert), "failed to save certs")
+	require.NoError(t, tlscerts.SaveClientCert(certsDir, clientCert), "failed to save client cert")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 

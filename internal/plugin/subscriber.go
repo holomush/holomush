@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package plugin provides plugin management and lifecycle control.
-package plugin
+// Package plugins provides plugin management and lifecycle control.
+package plugins
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // EventEmitter publishes events from plugins.
 type EventEmitter interface {
-	EmitPluginEvent(ctx context.Context, pluginName string, event pluginpkg.EmitEvent) error
+	EmitPluginEvent(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error
 }
 
 // subscription tracks which events a plugin wants.
@@ -61,7 +61,7 @@ func (s *Subscriber) Subscribe(pluginName, stream string, eventTypes []string) {
 }
 
 // Start begins processing events from the channel.
-func (s *Subscriber) Start(ctx context.Context, events <-chan pluginpkg.Event) {
+func (s *Subscriber) Start(ctx context.Context, events <-chan pluginsdk.Event) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -84,7 +84,7 @@ func (s *Subscriber) Stop() {
 	s.wg.Wait()
 }
 
-func (s *Subscriber) dispatch(ctx context.Context, event pluginpkg.Event) {
+func (s *Subscriber) dispatch(ctx context.Context, event pluginsdk.Event) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -100,7 +100,7 @@ func (s *Subscriber) dispatch(ctx context.Context, event pluginpkg.Event) {
 	}
 }
 
-func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event pluginpkg.Event) {
+func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event pluginsdk.Event) {
 	// Use timeout for plugin execution
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 

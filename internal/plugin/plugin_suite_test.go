@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package plugin_test
+package plugins_test
 
 import (
 	"testing"

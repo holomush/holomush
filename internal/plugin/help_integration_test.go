@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package plugin_test
+package plugins_test
 
 import (
 	"context"
@@ -18,14 +18,14 @@ import (
 
 	"github.com/holomush/holomush/internal/access/accesstest"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-// mockHelpCommandRegistry provides test commands for the help plugin.
+// mockHelpCommandRegistry provides test commands for the help plugins.
 type mockHelpCommandRegistry struct{}
 
 func (m *mockHelpCommandRegistry) All() []command.CommandEntry {
@@ -70,11 +70,11 @@ func (m *mockHelpCommandRegistry) Get(name string) (command.CommandEntry, bool) 
 type helpFixture struct {
 	LuaHost  *pluginlua.Host
 	Enforcer *capability.Enforcer
-	Plugin   *plugin.DiscoveredPlugin
+	Plugin   *plugins.DiscoveredPlugin
 	Cleanup  func()
 }
 
-// setupHelpTest creates all components needed to test the help plugin.
+// setupHelpTest creates all components needed to test the help plugins.
 func setupHelpTest() (*helpFixture, error) {
 	pluginsDir, err := findPluginsDir()
 	if err != nil {
@@ -95,7 +95,7 @@ func setupHelpTest() (*helpFixture, error) {
 	)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)
@@ -104,7 +104,7 @@ func setupHelpTest() (*helpFixture, error) {
 		return nil, err
 	}
 
-	var helpPlugin *plugin.DiscoveredPlugin
+	var helpPlugin *plugins.DiscoveredPlugin
 	for _, dp := range discovered {
 		if dp.Manifest.Name == "help" {
 			helpPlugin = dp
@@ -177,12 +177,12 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "01HTEST",
 				Stream:    "char:01HTEST000000000000000CHAR",
-				Type:      pluginpkg.EventType("command"),
+				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginpkg.ActorCharacter,
+				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "01HTEST000000000000000CHAR",
 				Payload:   makeCommandPayload("help", ""),
 			}
@@ -194,7 +194,7 @@ var _ = Describe("Help Plugin Integration", func() {
 
 			// Verify events were emitted
 			outputEvent := result[0]
-			Expect(outputEvent.Type).To(Equal(pluginpkg.EventType("help")))
+			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("help")))
 
 			// Check that the output contains command names
 			payload := parsePayload(outputEvent.Payload)
@@ -211,12 +211,12 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "01HTEST",
 				Stream:    "char:01HTEST000000000000000CHAR",
-				Type:      pluginpkg.EventType("command"),
+				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginpkg.ActorCharacter,
+				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "01HTEST000000000000000CHAR",
 				Payload:   makeCommandPayload("help", "say"),
 			}
@@ -240,12 +240,12 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "01HTEST",
 				Stream:    "char:01HTEST000000000000000CHAR",
-				Type:      pluginpkg.EventType("command"),
+				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginpkg.ActorCharacter,
+				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "01HTEST000000000000000CHAR",
 				Payload:   makeCommandPayload("help", "nonexistent"),
 			}
@@ -256,7 +256,7 @@ var _ = Describe("Help Plugin Integration", func() {
 			Expect(len(result)).To(BeNumerically(">=", 1))
 
 			outputEvent := result[0]
-			Expect(outputEvent.Type).To(Equal(pluginpkg.EventType("error")))
+			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("error")))
 
 			payload := parsePayload(outputEvent.Payload)
 			message := payload["message"].(string)
@@ -268,12 +268,12 @@ var _ = Describe("Help Plugin Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "01HTEST",
 				Stream:    "char:01HTEST000000000000000CHAR",
-				Type:      pluginpkg.EventType("command"),
+				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginpkg.ActorCharacter,
+				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "01HTEST000000000000000CHAR",
 				Payload:   makeCommandPayload("help", "search room"),
 			}
@@ -297,12 +297,12 @@ var _ = Describe("Help Plugin Integration", func() {
 			defer cancel()
 
 			// Search for "message" which only appears in usage: "say <message>"
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "01HTEST",
 				Stream:    "char:01HTEST000000000000000CHAR",
-				Type:      pluginpkg.EventType("command"),
+				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginpkg.ActorCharacter,
+				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "01HTEST000000000000000CHAR",
 				Payload:   makeCommandPayload("help", "search message"),
 			}

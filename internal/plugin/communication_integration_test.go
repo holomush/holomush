@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package plugin_test
+package plugins_test
 
 import (
 	"context"
@@ -15,22 +15,22 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // communicationFixture contains all components needed for communication plugin integration tests.
 type communicationFixture struct {
 	LuaHost  *pluginlua.Host
 	Enforcer *capability.Enforcer
-	Plugin   *plugin.DiscoveredPlugin
+	Plugin   *plugins.DiscoveredPlugin
 	Cleanup  func()
 }
 
-// setupCommunicationTest creates all components needed to test the communication plugin.
+// setupCommunicationTest creates all components needed to test the communication plugins.
 func setupCommunicationTest() (*communicationFixture, error) {
 	pluginsDir, err := findPluginsDir()
 	if err != nil {
@@ -46,7 +46,7 @@ func setupCommunicationTest() (*communicationFixture, error) {
 	hostFuncs := hostfunc.New(nil, enforcer)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)
@@ -55,7 +55,7 @@ func setupCommunicationTest() (*communicationFixture, error) {
 		return nil, err
 	}
 
-	var commPlugin *plugin.DiscoveredPlugin
+	var commPlugin *plugins.DiscoveredPlugin
 	for _, dp := range discovered {
 		if dp.Manifest.Name == "communication" {
 			commPlugin = dp
@@ -103,7 +103,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 
 	Describe("Plugin Discovery and Loading", func() {
 		It("has correct manifest type", func() {
-			Expect(fixture.Plugin.Manifest.Type).To(Equal(plugin.TypeLua))
+			Expect(fixture.Plugin.Manifest.Type).To(Equal(plugins.TypeLua))
 		})
 
 		It("has correct version", func() {
@@ -119,7 +119,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 
 		It("declares say command with comms.say capability", func() {
-			var sayCmd *plugin.CommandSpec
+			var sayCmd *plugins.CommandSpec
 			for i := range fixture.Plugin.Manifest.Commands {
 				if fixture.Plugin.Manifest.Commands[i].Name == "say" {
 					sayCmd = &fixture.Plugin.Manifest.Commands[i]
@@ -133,7 +133,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 
 		It("declares pose command with comms.pose capability", func() {
-			var poseCmd *plugin.CommandSpec
+			var poseCmd *plugins.CommandSpec
 			for i := range fixture.Plugin.Manifest.Commands {
 				if fixture.Plugin.Manifest.Commands[i].Name == "pose" {
 					poseCmd = &fixture.Plugin.Manifest.Commands[i]
@@ -146,7 +146,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 		})
 
 		It("declares emit command with comms.emit capability", func() {
-			var emitCmd *plugin.CommandSpec
+			var emitCmd *plugins.CommandSpec
 			for i := range fixture.Plugin.Manifest.Commands {
 				if fixture.Plugin.Manifest.Commands[i].Name == "emit" {
 					emitCmd = &fixture.Plugin.Manifest.Commands[i]
@@ -163,12 +163,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when receiving say command event", func() {
 			It("emits say event to location stream with double quotes by default", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01ABC",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"say","args":"Hello everyone!","character_name":"Alice","location_id":"loc456"}`,
 				}
@@ -177,7 +177,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginpkg.EventTypeSay))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypeSay))
 				Expect(emits[0].Payload).To(ContainSubstring(`Alice says, \"Hello everyone!\"`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"speaker":"Alice"`))
 			})
@@ -186,12 +186,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when say command has empty message", func() {
 			It("returns error message to character", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01DEF",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"say","args":"","character_name":"Alice","location_id":"loc456","character_id":"char123"}`,
 				}
@@ -210,12 +210,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when receiving pose command event", func() {
 			It("emits pose event with character name and space prepended", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":"waves hello.","character_name":"Bob","location_id":"loc456"}`,
 				}
@@ -224,7 +224,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginpkg.EventTypePose))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypePose))
 				Expect(emits[0].Payload).To(ContainSubstring(`Bob waves hello.`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"actor":"Bob"`))
 			})
@@ -233,12 +233,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when pose command uses : variant", func() {
 			It("includes space before action (same as regular pose)", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI1",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":":smiles warmly.","character_name":"Bob","location_id":"loc456"}`,
 				}
@@ -254,12 +254,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when pose command uses ; variant (no-space/possessive)", func() {
 			It("omits space before action for possessives", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI2A",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":";'s eyes widen.","character_name":"Bob","location_id":"loc456"}`,
 				}
@@ -276,12 +276,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 			It("uses invoked_as=; for no-space variant", func() {
 				ctx := context.Background()
 				// Tests primary path: prefix alias sets invoked_as, args has no prefix marker
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI3",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":"'s sword gleams.","character_name":"Conan","location_id":"loc456","invoked_as":";"}`,
 				}
@@ -295,12 +295,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 
 			It("uses invoked_as=: for space variant", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI4",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":"draws their blade.","character_name":"Conan","location_id":"loc456","invoked_as":":"}`,
 				}
@@ -316,12 +316,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when pose command has empty action", func() {
 			It("returns error message to character", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI2",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":"","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
@@ -338,12 +338,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when pose uses prefix marker with no action after it", func() {
 			It("returns error message when only : is provided in args", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI5",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":":","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
@@ -358,12 +358,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 
 			It("returns error message when only ; is provided in args", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI6",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"pose","args":";","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
@@ -382,12 +382,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when receiving emit command event", func() {
 			It("emits raw text without prefix", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01JKL",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"emit","args":"The room shakes!","character_name":"Admin","location_id":"loc456"}`,
 				}
@@ -404,12 +404,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when emit command has empty text", func() {
 			It("returns error message to character", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01JKL2",
 					Stream:    "char:char123",
-					Type:      pluginpkg.EventType("command"),
+					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char123",
 					Payload:   `{"name":"emit","args":"","character_name":"Admin","location_id":"loc456","character_id":"char123"}`,
 				}
@@ -428,12 +428,12 @@ var _ = Describe("Communication Plugin Integration", func() {
 		Context("when receiving non-command events", func() {
 			It("ignores them", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01MNO",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypeSay,
+					Type:      pluginsdk.EventTypeSay,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   `{"message":"Hello"}`,
 				}

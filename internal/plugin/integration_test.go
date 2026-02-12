@@ -3,7 +3,7 @@
 
 //go:build integration
 
-package plugin_test
+package plugins_test
 
 import (
 	"context"
@@ -19,23 +19,23 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/stretchr/testify/mock"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // echoBotFixture contains all components needed for echo-bot integration tests.
 type echoBotFixture struct {
 	LuaHost  *pluginlua.Host
 	Enforcer *capability.Enforcer
-	Plugin   *plugin.DiscoveredPlugin
+	Plugin   *plugins.DiscoveredPlugin
 	Cleanup  func()
 }
 
-// setupEchoBotTest creates all components needed to test the echo-bot plugin.
+// setupEchoBotTest creates all components needed to test the echo-bot plugins.
 func setupEchoBotTest() (*echoBotFixture, error) {
 	pluginsDir, err := findPluginsDir()
 	if err != nil {
@@ -51,7 +51,7 @@ func setupEchoBotTest() (*echoBotFixture, error) {
 	hostFuncs := hostfunc.New(nil, enforcer)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)
@@ -60,7 +60,7 @@ func setupEchoBotTest() (*echoBotFixture, error) {
 		return nil, err
 	}
 
-	var echoBotPlugin *plugin.DiscoveredPlugin
+	var echoBotPlugin *plugins.DiscoveredPlugin
 	for _, dp := range discovered {
 		if dp.Manifest.Name == "echo-bot" {
 			echoBotPlugin = dp
@@ -137,7 +137,7 @@ var _ = Describe("Echo Bot Integration", func() {
 
 	Describe("Plugin Discovery and Loading", func() {
 		It("has correct manifest type", func() {
-			Expect(fixture.Plugin.Manifest.Type).To(Equal(plugin.TypeLua))
+			Expect(fixture.Plugin.Manifest.Type).To(Equal(plugins.TypeLua))
 		})
 
 		It("has correct version", func() {
@@ -157,12 +157,12 @@ var _ = Describe("Echo Bot Integration", func() {
 		Context("when receiving say events from characters", func() {
 			It("responds with echo message", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01ABC",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypeSay,
+					Type:      pluginsdk.EventTypeSay,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   `{"message":"Hello, world!"}`,
 				}
@@ -172,7 +172,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				Expect(emits).To(HaveLen(1))
 
 				Expect(emits[0].Stream).To(Equal("location:123"))
-				Expect(emits[0].Type).To(Equal(pluginpkg.EventTypeSay))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypeSay))
 
 				var payload map[string]string
 				err = json.Unmarshal([]byte(emits[0].Payload), &payload)
@@ -186,12 +186,12 @@ var _ = Describe("Echo Bot Integration", func() {
 		Context("when receiving events from plugins", func() {
 			It("ignores them to prevent loops", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01DEF",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypeSay,
+					Type:      pluginsdk.EventTypeSay,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorPlugin,
+					ActorKind: pluginsdk.ActorPlugin,
 					ActorID:   "some-plugin",
 					Payload:   `{"message":"Echo: something"}`,
 				}
@@ -205,12 +205,12 @@ var _ = Describe("Echo Bot Integration", func() {
 		Context("when receiving non-say events", func() {
 			It("ignores them", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01GHI",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypePose,
+					Type:      pluginsdk.EventTypePose,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   `{"message":"waves hello"}`,
 				}
@@ -224,12 +224,12 @@ var _ = Describe("Echo Bot Integration", func() {
 		Context("when receiving empty messages", func() {
 			It("ignores them", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01JKL",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypeSay,
+					Type:      pluginsdk.EventTypeSay,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   `{"message":""}`,
 				}
@@ -243,12 +243,12 @@ var _ = Describe("Echo Bot Integration", func() {
 		Context("when payload has no message key", func() {
 			It("handles gracefully", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01MNO",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypeSay,
+					Type:      pluginsdk.EventTypeSay,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   `{"text":"wrong key"}`,
 				}
@@ -262,12 +262,12 @@ var _ = Describe("Echo Bot Integration", func() {
 		Context("when payload is empty", func() {
 			It("handles gracefully", func() {
 				ctx := context.Background()
-				event := pluginpkg.Event{
+				event := pluginsdk.Event{
 					ID:        "01PQR",
 					Stream:    "location:123",
-					Type:      pluginpkg.EventTypeSay,
+					Type:      pluginsdk.EventTypeSay,
 					Timestamp: time.Now().UnixMilli(),
-					ActorKind: pluginpkg.ActorCharacter,
+					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
 					Payload:   "",
 				}
@@ -283,11 +283,11 @@ var _ = Describe("Echo Bot Integration", func() {
 		It("processes events through the full subscriber flow", func() {
 			// Create mock emitter to capture emitted events with thread-safe storage
 			var mu sync.Mutex
-			var emitted []pluginpkg.EmitEvent
+			var emitted []pluginsdk.EmitEvent
 
 			emitter := mocks.NewMockEventEmitter(GinkgoT())
 			emitter.EXPECT().EmitPluginEvent(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
-				func(_ context.Context, _ string, event pluginpkg.EmitEvent) error {
+				func(_ context.Context, _ string, event pluginsdk.EmitEvent) error {
 					mu.Lock()
 					defer mu.Unlock()
 					emitted = append(emitted, event)
@@ -296,23 +296,23 @@ var _ = Describe("Echo Bot Integration", func() {
 			)
 
 			// Create subscriber
-			subscriber := plugin.NewSubscriber(fixture.LuaHost, emitter)
+			subscriber := plugins.NewSubscriber(fixture.LuaHost, emitter)
 			subscriber.Subscribe("echo-bot", "location:123", fixture.Plugin.Manifest.Events)
 
 			// Start subscriber with event channel
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			events := make(chan pluginpkg.Event, 10)
+			events := make(chan pluginsdk.Event, 10)
 			subscriber.Start(ctx, events)
 
 			// Send a say event
-			events <- pluginpkg.Event{
+			events <- pluginsdk.Event{
 				ID:        "01STU",
 				Stream:    "location:123",
-				Type:      pluginpkg.EventTypeSay,
+				Type:      pluginsdk.EventTypeSay,
 				Timestamp: time.Now().UnixMilli(),
-				ActorKind: pluginpkg.ActorCharacter,
+				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "char_1",
 				Payload:   `{"message":"Test message"}`,
 			}
@@ -330,7 +330,7 @@ var _ = Describe("Echo Bot Integration", func() {
 
 			// Verify emitted event
 			mu.Lock()
-			emittedCopy := make([]pluginpkg.EmitEvent, len(emitted))
+			emittedCopy := make([]pluginsdk.EmitEvent, len(emitted))
 			copy(emittedCopy, emitted)
 			mu.Unlock()
 

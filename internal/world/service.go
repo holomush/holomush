@@ -29,8 +29,10 @@ type ServiceConfig struct {
 	ObjectRepo    ObjectRepository
 	SceneRepo     SceneRepository
 	CharacterRepo CharacterRepository
+	PropertyRepo  PropertyRepository
 	AccessControl AccessControl
 	EventEmitter  EventEmitter
+	Transactor    Transactor
 }
 
 // Service provides authorized access to world model operations.
@@ -41,8 +43,10 @@ type Service struct {
 	objectRepo    ObjectRepository
 	sceneRepo     SceneRepository
 	characterRepo CharacterRepository
+	propertyRepo  PropertyRepository
 	accessControl AccessControl
 	eventEmitter  EventEmitter
+	transactor    Transactor
 }
 
 // NewService creates a new Service with the given configuration.
@@ -54,14 +58,19 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.EventEmitter == nil {
 		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
 	}
+	if cfg.PropertyRepo == nil || cfg.Transactor == nil {
+		slog.Warn("world.NewService: PropertyRepo and Transactor not configured, delete operations will fail (spec: 05-storage-audit.md §108-119 requires transactional cascade)")
+	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
 		exitRepo:      cfg.ExitRepo,
 		objectRepo:    cfg.ObjectRepo,
 		sceneRepo:     cfg.SceneRepo,
 		characterRepo: cfg.CharacterRepo,
+		propertyRepo:  cfg.PropertyRepo,
 		accessControl: cfg.AccessControl,
 		eventEmitter:  cfg.EventEmitter,
+		transactor:    cfg.Transactor,
 	}
 }
 
@@ -135,20 +144,39 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	return nil
 }
 
-// DeleteLocation deletes a location after checking delete authorization.
+// DeleteLocation deletes a location and its properties after checking delete authorization.
+// Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
+// Returns an error if PropertyRepo or Transactor are not configured.
 func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
+	}
+	if s.propertyRepo == nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Errorf("property repository required for cascade delete (spec: 05-storage-audit.md §108-119)")
+	}
+	if s.transactor == nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := fmt.Sprintf("location:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if err := s.locationRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+	deleteFn := func(ctx context.Context) error {
+		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
+			return oops.Code("LOCATION_DELETE_FAILED").
+				With("operation", "delete_location_properties").
+				Wrapf(err, "delete properties for location %s", id)
 		}
-		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
+		if err := s.locationRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
+			}
+			return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
+		}
+		return nil
+	}
+	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Wrap(err)
 	}
 	return nil
 }
@@ -362,20 +390,39 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	return nil
 }
 
-// DeleteObject deletes an object after checking delete authorization.
+// DeleteObject deletes an object and its properties after checking delete authorization.
+// Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
+// Returns an error if PropertyRepo or Transactor are not configured.
 func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
+	}
+	if s.propertyRepo == nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Errorf("property repository required for cascade delete (spec: 05-storage-audit.md §108-119)")
+	}
+	if s.transactor == nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
 	resource := fmt.Sprintf("object:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if err := s.objectRepo.Delete(ctx, id); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+	deleteFn := func(ctx context.Context) error {
+		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
+			return oops.Code("OBJECT_DELETE_FAILED").
+				With("operation", "delete_object_properties").
+				Wrapf(err, "delete properties for object %s", id)
 		}
-		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
+		if err := s.objectRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
+			}
+			return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
+		}
+		return nil
+	}
+	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Wrap(err)
 	}
 	return nil
 }
@@ -440,6 +487,43 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 			Wrapf(err, "move completed but event emission failed")
 	}
 
+	return nil
+}
+
+// DeleteCharacter deletes a character and its properties after checking delete authorization.
+// Both deletions occur in the same database transaction per spec (05-storage-audit.md §110-119).
+// Returns an error if PropertyRepo or Transactor are not configured.
+func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
+	}
+	if s.propertyRepo == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("property repository required for cascade delete (spec: 05-storage-audit.md §108-119)")
+	}
+	if s.transactor == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
+	}
+	resource := fmt.Sprintf("character:%s", id.String())
+	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
+		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	deleteFn := func(ctx context.Context) error {
+		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
+			return oops.Code("CHARACTER_DELETE_FAILED").
+				With("operation", "delete_character_properties").
+				Wrapf(err, "delete properties for character %s", id)
+		}
+		if err := s.characterRepo.Delete(ctx, id); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
+			}
+			return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
+		}
+		return nil
+	}
+	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrap(err)
+	}
 	return nil
 }
 

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
 func TestGatewayCommand_Flags(t *testing.T) {
@@ -256,11 +256,11 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 
 	// Generate a valid CA
 	gameID := "test-gateway-tls-fail"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
 	// Save CA only (no gateway certificate)
-	require.NoError(t, tls.SaveCertificates(certsDir, ca, nil), "failed to save CA")
+	require.NoError(t, tlscerts.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 

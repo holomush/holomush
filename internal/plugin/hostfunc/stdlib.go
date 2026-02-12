@@ -9,7 +9,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/pkg/holo"
-	"github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // RegisterStdlib registers the holo.* standard library functions in the Lua state.
@@ -291,7 +291,7 @@ func emitLocation(ls *lua.LState) int {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	emitter.Location(locationID, plugin.EventType(eventType), luaTableToPayload(payload))
+	emitter.Location(locationID, pluginsdk.EventType(eventType), luaTableToPayload(payload))
 
 	return 0
 }
@@ -308,7 +308,7 @@ func emitCharacter(ls *lua.LState) int {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	emitter.Character(characterID, plugin.EventType(eventType), luaTableToPayload(payload))
+	emitter.Character(characterID, pluginsdk.EventType(eventType), luaTableToPayload(payload))
 
 	return 0
 }
@@ -324,7 +324,7 @@ func emitGlobal(ls *lua.LState) int {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	emitter.Global(plugin.EventType(eventType), luaTableToPayload(payload))
+	emitter.Global(pluginsdk.EventType(eventType), luaTableToPayload(payload))
 
 	return 0
 }

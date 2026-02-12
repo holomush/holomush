@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // Payload is a map of key-value pairs for event payloads.
@@ -22,7 +22,7 @@ type Payload map[string]any
 // JSON encoding errors are tracked internally and returned from Flush().
 // Use HasErrors() or ErrorCount() to check for errors before flushing.
 type Emitter struct {
-	events []plugin.EmitEvent
+	events []pluginsdk.EmitEvent
 	errors []error
 	logger *slog.Logger
 }
@@ -42,24 +42,24 @@ func NewEmitterWithLogger(logger *slog.Logger) *Emitter {
 }
 
 // Location emits an event to a location stream ("location:<id>").
-func (e *Emitter) Location(locationID string, eventType plugin.EventType, payload Payload) {
+func (e *Emitter) Location(locationID string, eventType pluginsdk.EventType, payload Payload) {
 	e.emit("location:"+locationID, eventType, payload)
 }
 
 // Character emits an event to a character stream ("char:<id>").
-func (e *Emitter) Character(characterID string, eventType plugin.EventType, payload Payload) {
+func (e *Emitter) Character(characterID string, eventType pluginsdk.EventType, payload Payload) {
 	e.emit("char:"+characterID, eventType, payload)
 }
 
 // Global emits an event to the global stream.
-func (e *Emitter) Global(eventType plugin.EventType, payload Payload) {
+func (e *Emitter) Global(eventType pluginsdk.EventType, payload Payload) {
 	e.emit("global", eventType, payload)
 }
 
 // Flush returns all accumulated events and any JSON encoding errors, then clears both buffers.
 // Returns (nil, nil) if no events or errors have been accumulated.
 // The errors slice contains context about which streams and event types had encoding failures.
-func (e *Emitter) Flush() ([]plugin.EmitEvent, []error) {
+func (e *Emitter) Flush() ([]pluginsdk.EmitEvent, []error) {
 	if len(e.events) == 0 && len(e.errors) == 0 {
 		return nil, nil
 	}
@@ -83,7 +83,7 @@ func (e *Emitter) ErrorCount() int {
 // emit adds an event to the internal buffer.
 // JSON encoding errors result in an empty payload and are tracked for retrieval
 // via Flush(). If a logger is configured, errors are also logged immediately.
-func (e *Emitter) emit(stream string, eventType plugin.EventType, payload Payload) {
+func (e *Emitter) emit(stream string, eventType pluginsdk.EventType, payload Payload) {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		e.errors = append(e.errors, fmt.Errorf(
@@ -98,7 +98,7 @@ func (e *Emitter) emit(stream string, eventType plugin.EventType, payload Payloa
 		}
 		payloadJSON = []byte("{}")
 	}
-	e.events = append(e.events, plugin.EmitEvent{
+	e.events = append(e.events, pluginsdk.EmitEvent{
 		Stream:  stream,
 		Type:    eventType,
 		Payload: string(payloadJSON),

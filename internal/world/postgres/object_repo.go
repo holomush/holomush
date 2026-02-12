@@ -96,7 +96,7 @@ func (r *ObjectRepository) Update(ctx context.Context, obj *world.Object) error 
 
 // Delete removes an object by ID.
 func (r *ObjectRepository) Delete(ctx context.Context, id ulid.ULID) error {
-	result, err := r.pool.Exec(ctx, `DELETE FROM objects WHERE id = $1`, id.String())
+	result, err := execerFromCtx(ctx, r.pool).Exec(ctx, `DELETE FROM objects WHERE id = $1`, id.String())
 	if err != nil {
 		return oops.With("operation", "delete object").With("id", id.String()).Wrap(err)
 	}

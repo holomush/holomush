@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package plugin
+package pluginsdk
 
 import (
 	"context"
@@ -43,13 +43,13 @@ type ServeConfig struct {
 //
 //	import (
 //		"context"
-//		"github.com/holomush/holomush/pkg/plugin"
+//		pluginsdk "github.com/holomush/holomush/pkg/plugin"
 //	)
 //
 //	type EchoPlugin struct{}
 //
-//	func (p *EchoPlugin) HandleEvent(ctx context.Context, event plugin.Event) ([]plugin.EmitEvent, error) {
-//		return []plugin.EmitEvent{
+//	func (p *EchoPlugin) HandleEvent(ctx context.Context, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
+//		return []pluginsdk.EmitEvent{
 //			{
 //				Stream:  event.Stream,
 //				Type:    event.Type,
@@ -59,7 +59,7 @@ type ServeConfig struct {
 //	}
 //
 //	func main() {
-//		plugin.Serve(&plugin.ServeConfig{
+//		pluginsdk.Serve(&pluginsdk.ServeConfig{
 //			Handler: &EchoPlugin{},
 //		})
 //	}
