@@ -7,6 +7,9 @@
 package dsl
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer"
 )
@@ -112,6 +115,34 @@ func WrapAST(ast map[string]any) map[string]any {
 	}
 	result["grammar_version"] = GrammarVersion
 	return result
+}
+
+// CompilePolicy serializes a parsed Policy to JSON with grammar_version for storage.
+// Callers MUST use this instead of json.Marshal(policy) directly to ensure the
+// resulting AST includes the required grammar_version field.
+func CompilePolicy(policy *Policy) (json.RawMessage, error) {
+	// Marshal the policy to get raw JSON
+	data, err := json.Marshal(policy)
+	if err != nil {
+		return nil, fmt.Errorf("marshal policy: %w", err)
+	}
+
+	// Unmarshal into map to wrap with grammar_version
+	var ast map[string]any
+	if err := json.Unmarshal(data, &ast); err != nil {
+		return nil, fmt.Errorf("unmarshal policy: %w", err)
+	}
+
+	// Wrap with grammar_version
+	wrapped := WrapAST(ast)
+
+	// Marshal back to JSON
+	result, err := json.Marshal(wrapped)
+	if err != nil {
+		return nil, fmt.Errorf("marshal wrapped AST: %w", err)
+	}
+
+	return json.RawMessage(result), nil
 }
 
 // NewParser constructs a participle parser for the Policy grammar.

@@ -129,6 +129,40 @@ func TestValidateGrammarVersion(t *testing.T) {
 			wantErr:   true,
 			errorCode: "POLICY_INVALID_AST",
 		},
+		{
+			name:      "grammar_version as string is rejected",
+			ast:       json.RawMessage(`{"type":"policy","grammar_version":"1"}`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name:      "grammar_version as bool is rejected",
+			ast:       json.RawMessage(`{"type":"policy","grammar_version":true}`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name:      "grammar_version as object is rejected",
+			ast:       json.RawMessage(`{"type":"policy","grammar_version":{"v":1}}`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name:      "grammar_version zero is rejected",
+			ast:       json.RawMessage(`{"type":"policy","grammar_version":0}`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name:      "grammar_version negative is rejected",
+			ast:       json.RawMessage(`{"type":"policy","grammar_version":-1}`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name: "grammar_version 2 is accepted",
+			ast:  json.RawMessage(`{"type":"policy","grammar_version":2}`),
+		},
 	}
 
 	for _, tt := range tests {
