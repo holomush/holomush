@@ -31,6 +31,10 @@ var dslLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "OpLt", Pattern: `<`},
 	{Name: "Bang", Pattern: `!`},
 	{Name: "Dot", Pattern: `\.`},
+	// containsAll/containsAny are separate tokens so AttrRef's (Dot @Ident)*
+	// does not greedily consume them as path segments. The \b word boundary
+	// prevents matching as a prefix of longer identifiers.
+	{Name: "ContainsKw", Pattern: `contains(?:All|Any)\b`},
 	{Name: "Ident", Pattern: `[a-zA-Z_][a-zA-Z0-9_-]*`},
 	{Name: "Punct", Pattern: `[(){}\[\],;]`},
 	{Name: "whitespace", Pattern: `\s+`},
@@ -114,24 +118,25 @@ type Conjunction struct {
 // Condition represents a single boolean expression in the DSL.
 // Exactly one field is non-nil, representing the matched alternative.
 //
-// The parser tries alternatives in order (PEG ordered choice):
+// The parser tries alternatives in order (PEG ordered choice) with
+// MaxLookahead for full backtracking:
 // 1. Unique-prefix forms: negation (!), parenthesized, if-then-else
-// 2. has (starts with attribute_root keyword)
-// 3. Expression-starting forms: comparison, like, in-list, in-expr, containsAll/Any
+// 2. has (starts with attribute_root keyword + "has")
+// 3. Expression-starting forms ordered most-specific first:
+//    contains > like > in-list > in-expr > comparison
 // 4. Bare boolean literal (fallback)
 type Condition struct {
-	Pos           lexer.Position  `parser:"" json:"-"`
-	Negation      *Condition      `parser:"  Bang @@" json:"negation,omitempty"`
-	Parenthesized *ConditionBlock `parser:"| '(' @@ ')'" json:"parenthesized,omitempty"`
-	IfThenElse    *IfThenElse     `parser:"| @@" json:"if_then_else,omitempty"`
-	Has           *HasCondition   `parser:"| @@" json:"has,omitempty"`
-	ContainsAll   *ContainsCondition `parser:"| @@" json:"contains_all,omitempty"`
-	ContainsAny   *ContainsCondition `parser:"| @@" json:"contains_any,omitempty"`
-	Like          *LikeCondition  `parser:"| @@" json:"like,omitempty"`
-	InList        *InListCondition `parser:"| @@" json:"in_list,omitempty"`
-	InExpr        *InExprCondition `parser:"| @@" json:"in_expr,omitempty"`
-	Comparison    *Comparison     `parser:"| @@" json:"comparison,omitempty"`
-	BoolLiteral   *bool           `parser:"| @('true' | 'false')" json:"bool_literal,omitempty"`
+	Pos           lexer.Position     `parser:"" json:"-"`
+	Negation      *Condition         `parser:"  Bang @@" json:"negation,omitempty"`
+	Parenthesized *ConditionBlock    `parser:"| '(' @@ ')'" json:"parenthesized,omitempty"`
+	IfThenElse    *IfThenElse        `parser:"| @@" json:"if_then_else,omitempty"`
+	Has           *HasCondition      `parser:"| @@" json:"has,omitempty"`
+	Contains      *ContainsCondition `parser:"| @@" json:"contains,omitempty"`
+	Like          *LikeCondition     `parser:"| @@" json:"like,omitempty"`
+	InList        *InListCondition   `parser:"| @@" json:"in_list,omitempty"`
+	InExpr        *InExprCondition   `parser:"| @@" json:"in_expr,omitempty"`
+	Comparison    *Comparison        `parser:"| @@" json:"comparison,omitempty"`
+	BoolLiteral   *bool              `parser:"| @('true' | 'false')" json:"bool_literal,omitempty"`
 }
 
 // Comparison represents an expression with a comparison operator (==, !=, >, >=, <, <=).
@@ -159,11 +164,15 @@ type HasCondition struct {
 }
 
 // ContainsCondition represents a containsAll or containsAny list method call.
+// The attribute reference is inlined (root + path) rather than using Expr,
+// because AttrRef would greedily consume "containsAll" as a path segment.
+// With MaxLookahead, participle backtracks the (Dot Ident)* repetition to
+// leave the method name for the Op field.
 type ContainsCondition struct {
 	Pos  lexer.Position `parser:"" json:"-"`
-	Left *Expr          `parser:"@@" json:"left"`
-	Dot  string         `parser:"Dot" json:"-"`
-	Op   string         `parser:"@('containsAll' | 'containsAny')" json:"op"`
+	Root string         `parser:"@('principal' | 'resource' | 'action' | 'env')" json:"root"`
+	Path []string       `parser:"(Dot @Ident)*" json:"path,omitempty"`
+	Op   string         `parser:"Dot @ContainsKw" json:"op"`
 	List *ListExpr      `parser:"'(' @@ ')'" json:"list"`
 }
 
@@ -295,10 +304,8 @@ func (c *Condition) String() string {
 		return c.IfThenElse.String()
 	case c.Has != nil:
 		return c.Has.String()
-	case c.ContainsAll != nil:
-		return c.ContainsAll.StringWith("containsAll")
-	case c.ContainsAny != nil:
-		return c.ContainsAny.StringWith("containsAny")
+	case c.Contains != nil:
+		return c.Contains.String()
 	case c.Like != nil:
 		return c.Like.String()
 	case c.InList != nil:
@@ -329,9 +336,12 @@ func (hc *HasCondition) String() string {
 	return hc.Root + " has " + strings.Join(hc.Path, ".")
 }
 
-// StringWith renders the condition using the given operator name ("containsAll" or "containsAny").
-func (cc *ContainsCondition) StringWith(op string) string {
-	return cc.Left.String() + "." + op + "(" + cc.List.String() + ")"
+func (cc *ContainsCondition) String() string {
+	prefix := cc.Root
+	if len(cc.Path) > 0 {
+		prefix += "." + strings.Join(cc.Path, ".")
+	}
+	return prefix + "." + cc.Op + "(" + cc.List.String() + ")"
 }
 
 func (il *InListCondition) String() string {
@@ -438,11 +448,14 @@ func CompilePolicy(policy *Policy) (json.RawMessage, error) {
 }
 
 // NewParser constructs a participle parser for the Policy grammar.
-// Note: Parser configuration will be refined in T9 (Build DSL parser).
+// MaxLookahead enables full backtracking for condition disambiguation —
+// many condition alternatives share a common Expr prefix, requiring the
+// parser to speculatively try each and backtrack on failure.
+// Policy strings are short (<500 chars) so this is not a performance concern.
 func NewParser() (*participle.Parser[Policy], error) {
 	return participle.Build[Policy](
 		participle.Lexer(dslLexer),
 		participle.Unquote("String"),
-		participle.UseLookahead(2),
+		participle.UseLookahead(participle.MaxLookahead),
 	)
 }

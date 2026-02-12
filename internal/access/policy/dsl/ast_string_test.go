@@ -198,8 +198,10 @@ func TestCondition_String(t *testing.T) {
 		{
 			name: "containsAll",
 			cond: Condition{
-				ContainsAll: &ContainsCondition{
-					Left: &Expr{AttrRef: &AttrRef{Root: "principal", Path: []string{"flags"}}},
+				Contains: &ContainsCondition{
+					Root: "principal",
+					Path: []string{"flags"},
+					Op:   "containsAll",
 					List: &ListExpr{Values: []*Literal{{Str: strPtr("vip")}, {Str: strPtr("beta")}}},
 				},
 			},
@@ -208,8 +210,10 @@ func TestCondition_String(t *testing.T) {
 		{
 			name: "containsAny",
 			cond: Condition{
-				ContainsAny: &ContainsCondition{
-					Left: &Expr{AttrRef: &AttrRef{Root: "principal", Path: []string{"flags"}}},
+				Contains: &ContainsCondition{
+					Root: "principal",
+					Path: []string{"flags"},
+					Op:   "containsAny",
 					List: &ListExpr{Values: []*Literal{{Str: strPtr("admin")}, {Str: strPtr("builder")}}},
 				},
 			},
