@@ -232,27 +232,37 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 	t.Run("deletes location when authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
-		mockRepo.EXPECT().Delete(ctx, locID).Return(nil)
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
+		assert.True(t, tx.called, "expected InTransaction to be called")
 		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(false)
@@ -265,14 +275,19 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 	t.Run("propagates repository errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
-		mockRepo.EXPECT().Delete(ctx, locID).Return(errors.New("db error"))
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.Error(t, err)
@@ -715,27 +730,37 @@ func TestWorldService_DeleteObject(t *testing.T) {
 	t.Run("deletes object when authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
-		mockObjRepo.EXPECT().Delete(ctx, objID).Return(nil)
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
+		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.NoError(t, err)
+		assert.True(t, tx.called, "expected InTransaction to be called")
 		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(false)
@@ -2484,10 +2509,14 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	t.Run("DeleteLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(false)
@@ -2500,14 +2529,19 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	t.Run("DeleteLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
-		mockRepo.EXPECT().Delete(ctx, locID).Return(world.ErrNotFound)
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(world.ErrNotFound)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2517,14 +2551,19 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	t.Run("DeleteLocation returns LOCATION_DELETE_FAILED for repo errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
-		mockRepo.EXPECT().Delete(ctx, locID).Return(errors.New("db error"))
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2881,10 +2920,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	t.Run("DeleteObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(false)
@@ -2897,14 +2940,19 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	t.Run("DeleteObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
-		mockRepo.EXPECT().Delete(ctx, objID).Return(world.ErrNotFound)
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, objID).Return(world.ErrNotFound)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -2914,14 +2962,19 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	t.Run("DeleteObject returns OBJECT_DELETE_FAILED for repo errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
-		mockRepo.EXPECT().Delete(ctx, objID).Return(errors.New("db error"))
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
+		mockRepo.EXPECT().Delete(mock.Anything, objID).Return(errors.New("db error"))
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -4536,27 +4589,37 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	t.Run("deletes character when authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
-		mockCharRepo.EXPECT().Delete(ctx, charID).Return(nil)
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.NoError(t, err)
+		assert.True(t, tx.called, "expected InTransaction to be called")
 		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(false)
@@ -4571,14 +4634,19 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	t.Run("returns CHARACTER_NOT_FOUND for ErrNotFound", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
-		mockCharRepo.EXPECT().Delete(ctx, charID).Return(world.ErrNotFound)
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(world.ErrNotFound)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)
@@ -4588,14 +4656,19 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	t.Run("returns CHARACTER_DELETE_FAILED for repo errors", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
 			AccessControl: mockAC,
+			Transactor:    tx,
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
-		mockCharRepo.EXPECT().Delete(ctx, charID).Return(errors.New("db error"))
+		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
+		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(errors.New("db error"))
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)

@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
 
@@ -300,4 +302,116 @@ func TestCascadeDelete_Character_RollsBackPropertiesOnParentDeleteFail(t *testin
 	err = testPool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM characters WHERE id = $1)`, charID.String()).Scan(&exists)
 	require.NoError(t, err)
 	assert.True(t, exists, "character should remain after rollback")
+}
+
+func TestWorldService_DeleteLocation_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	locID := createCascadeTestLocation(ctx, t)
+	propID := createCascadeTestProperty(ctx, t, "location", locID)
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM entity_properties WHERE id = $1`, propID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locID.String())
+	})
+
+	locRepo := postgres.NewLocationRepository(testPool)
+	propRepo := postgres.NewPropertyRepository(testPool)
+	tx := postgres.NewTransactor(testPool)
+	ac := access.NewStaticAccessControl(nil, nil)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo:  locRepo,
+		PropertyRepo:  propRepo,
+		AccessControl: ac,
+		Transactor:    tx,
+	})
+
+	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "location", locID), "property should exist before delete")
+
+	err := svc.DeleteLocation(ctx, "system", locID)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, countPropertiesForParent(ctx, t, "location", locID), "properties should be deleted")
+
+	var exists bool
+	err = testPool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM locations WHERE id = $1)`, locID.String()).Scan(&exists)
+	require.NoError(t, err)
+	assert.False(t, exists, "location should be deleted")
+}
+
+func TestWorldService_DeleteObject_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	locID := createCascadeTestLocation(ctx, t)
+	objID := createCascadeTestObject(ctx, t, locID)
+	propID := createCascadeTestProperty(ctx, t, "object", objID)
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM entity_properties WHERE id = $1`, propID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM objects WHERE id = $1`, objID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locID.String())
+	})
+
+	objRepo := postgres.NewObjectRepository(testPool)
+	propRepo := postgres.NewPropertyRepository(testPool)
+	tx := postgres.NewTransactor(testPool)
+	ac := access.NewStaticAccessControl(nil, nil)
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo:    objRepo,
+		PropertyRepo:  propRepo,
+		AccessControl: ac,
+		Transactor:    tx,
+	})
+
+	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "object", objID), "property should exist before delete")
+
+	err := svc.DeleteObject(ctx, "system", objID)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, countPropertiesForParent(ctx, t, "object", objID), "properties should be deleted")
+
+	var exists bool
+	err = testPool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM objects WHERE id = $1)`, objID.String()).Scan(&exists)
+	require.NoError(t, err)
+	assert.False(t, exists, "object should be deleted")
+}
+
+func TestWorldService_DeleteCharacter_Integration(t *testing.T) {
+	ctx := context.Background()
+
+	locID := createCascadeTestLocation(ctx, t)
+	charID := createCascadeTestCharacter(ctx, t, locID)
+	propID := createCascadeTestProperty(ctx, t, "character", charID)
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM entity_properties WHERE id = $1`, propID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM characters WHERE id = $1`, charID.String())
+		_, _ = testPool.Exec(ctx, `DELETE FROM locations WHERE id = $1`, locID.String())
+	})
+
+	charRepo := postgres.NewCharacterRepository(testPool)
+	propRepo := postgres.NewPropertyRepository(testPool)
+	tx := postgres.NewTransactor(testPool)
+	ac := access.NewStaticAccessControl(nil, nil)
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: charRepo,
+		PropertyRepo:  propRepo,
+		AccessControl: ac,
+		Transactor:    tx,
+	})
+
+	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "character", charID), "property should exist before delete")
+
+	err := svc.DeleteCharacter(ctx, "system", charID)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, countPropertiesForParent(ctx, t, "character", charID), "properties should be deleted")
+
+	var exists bool
+	err = testPool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM characters WHERE id = $1)`, charID.String()).Scan(&exists)
+	require.NoError(t, err)
+	assert.False(t, exists, "character should be deleted")
 }
