@@ -186,6 +186,8 @@ func applyVisibilityDefaults(p *world.EntityProperty) error {
 }
 
 // validateVisibilityLists checks visibility list constraints.
+// For non-restricted visibility, it normalizes empty slices to nil to ensure
+// NULL is stored in the database per schema constraint visibility_non_restricted_nulls_lists.
 func validateVisibilityLists(p *world.EntityProperty) error {
 	if p.Visibility != "restricted" {
 		if len(p.VisibleTo) > 0 {
@@ -200,6 +202,8 @@ func validateVisibilityLists(p *world.EntityProperty) error {
 				With("field", "excluded_from").
 				Errorf("excluded_from must be empty for non-restricted visibility")
 		}
+		p.VisibleTo = nil
+		p.ExcludedFrom = nil
 		return nil
 	}
 	if len(p.VisibleTo) > maxVisibilityListSize {

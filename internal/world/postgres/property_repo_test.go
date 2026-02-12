@@ -402,6 +402,31 @@ func TestPropertyRepository_Update_PublicRejectsVisibleTo(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "PROPERTY_INVALID_VISIBILITY")
 }
 
+func TestPropertyRepository_Visibility_NormalizesEmptySlicesToNil(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPropertyRepository(testPool)
+
+	locationID := createTestLocation(ctx, t)
+
+	prop := newTestProperty("location", locationID)
+	prop.Visibility = "public"
+	prop.VisibleTo = []string{}
+	prop.ExcludedFrom = []string{}
+
+	err := repo.Create(ctx, prop)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = repo.Delete(ctx, prop.ID)
+	})
+
+	got, err := repo.Get(ctx, prop.ID)
+	require.NoError(t, err)
+
+	assert.Nil(t, got.VisibleTo, "empty VisibleTo slice should be normalized to nil for non-restricted visibility")
+	assert.Nil(t, got.ExcludedFrom, "empty ExcludedFrom slice should be normalized to nil for non-restricted visibility")
+}
+
 func TestPropertyRepository_ParentNameUniqueness(t *testing.T) {
 	ctx := context.Background()
 	repo := postgres.NewPropertyRepository(testPool)
