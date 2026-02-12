@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package policy_test
+package access_test
 
 import (
 	"testing"
 
-	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,7 +126,7 @@ func TestParseEntityRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			typeName, id, err := policy.ParseEntityRef(tt.input)
+			typeName, id, err := access.ParseEntityRef(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 				errutil.AssertErrorCode(t, err, tt.wantErrCode)
@@ -140,23 +140,23 @@ func TestParseEntityRef(t *testing.T) {
 }
 
 func TestSubjectPrefixConstants(t *testing.T) {
-	assert.Equal(t, "character:", policy.SubjectCharacter)
-	assert.Equal(t, "plugin:", policy.SubjectPlugin)
-	assert.Equal(t, "system", policy.SubjectSystem)
-	assert.Equal(t, "session:", policy.SubjectSession)
+	assert.Equal(t, "character:", access.SubjectCharacter)
+	assert.Equal(t, "plugin:", access.SubjectPlugin)
+	assert.Equal(t, "system", access.SubjectSystem)
+	assert.Equal(t, "session:", access.SubjectSession)
 }
 
 func TestResourcePrefixConstants(t *testing.T) {
-	assert.Equal(t, "location:", policy.ResourceLocation)
-	assert.Equal(t, "object:", policy.ResourceObject)
-	assert.Equal(t, "command:", policy.ResourceCommand)
-	assert.Equal(t, "property:", policy.ResourceProperty)
-	assert.Equal(t, "stream:", policy.ResourceStream)
-	assert.Equal(t, "exit:", policy.ResourceExit)
-	assert.Equal(t, "scene:", policy.ResourceScene)
+	assert.Equal(t, "location:", access.ResourceLocation)
+	assert.Equal(t, "object:", access.ResourceObject)
+	assert.Equal(t, "command:", access.ResourceCommand)
+	assert.Equal(t, "property:", access.ResourceProperty)
+	assert.Equal(t, "stream:", access.ResourceStream)
+	assert.Equal(t, "exit:", access.ResourceExit)
+	assert.Equal(t, "scene:", access.ResourceScene)
 }
 
 func TestSessionErrorCodeConstants(t *testing.T) {
-	assert.Equal(t, "infra:session-invalid", policy.ErrCodeSessionInvalid)
-	assert.Equal(t, "infra:session-store-error", policy.ErrCodeSessionStoreError)
+	assert.Equal(t, "infra:session-invalid", access.ErrCodeSessionInvalid)
+	assert.Equal(t, "infra:session-store-error", access.ErrCodeSessionStoreError)
 }

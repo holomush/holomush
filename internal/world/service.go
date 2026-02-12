@@ -58,11 +58,8 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.EventEmitter == nil {
 		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
 	}
-	if cfg.PropertyRepo == nil {
-		slog.Warn("world.NewService: PropertyRepo not configured, entity deletes will not cascade to child properties (spec: 05-storage-audit.md)")
-	}
-	if cfg.Transactor == nil {
-		slog.Warn("world.NewService: Transactor not configured, entity+property deletes will not be transactional (spec: 05-storage-audit.md)")
+	if cfg.PropertyRepo != nil && cfg.Transactor == nil {
+		slog.Warn("world.NewService: PropertyRepo configured without Transactor, entity+property deletes will not be possible (spec: 05-storage-audit.md §110-119 requires transactional cascade)")
 	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
@@ -148,8 +145,9 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 }
 
 // DeleteLocation deletes a location and its properties after checking delete authorization.
-// When a Transactor is configured, both deletions occur in the same database transaction
-// per spec (05-storage-audit.md). Without a Transactor, falls back to sequential deletion.
+// When PropertyRepo is configured, both deletions occur in the same database transaction
+// per spec (05-storage-audit.md §110-119). Returns an error if PropertyRepo is set but
+// Transactor is missing (transactional cascade cannot be guaranteed).
 func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
@@ -157,6 +155,10 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	resource := fmt.Sprintf("location:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	if s.propertyRepo != nil && s.transactor == nil {
+		return oops.Code("LOCATION_DELETE_FAILED").
+			Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md)")
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.locationRepo.Delete(ctx, id); err != nil {
@@ -393,8 +395,9 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 }
 
 // DeleteObject deletes an object and its properties after checking delete authorization.
-// When a Transactor is configured, both deletions occur in the same database transaction
-// per spec (05-storage-audit.md). Without a Transactor, falls back to sequential deletion.
+// When PropertyRepo is configured, both deletions occur in the same database transaction
+// per spec (05-storage-audit.md §110-119). Returns an error if PropertyRepo is set but
+// Transactor is missing (transactional cascade cannot be guaranteed).
 func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
@@ -402,6 +405,10 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	resource := fmt.Sprintf("object:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	if s.propertyRepo != nil && s.transactor == nil {
+		return oops.Code("OBJECT_DELETE_FAILED").
+			Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md)")
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.objectRepo.Delete(ctx, id); err != nil {
@@ -492,8 +499,9 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 }
 
 // DeleteCharacter deletes a character and its properties after checking delete authorization.
-// When a Transactor is configured, both deletions occur in the same database transaction
-// per spec (05-storage-audit.md). Without a Transactor, falls back to sequential deletion.
+// When PropertyRepo is configured, both deletions occur in the same database transaction
+// per spec (05-storage-audit.md §110-119). Returns an error if PropertyRepo is set but
+// Transactor is missing (transactional cascade cannot be guaranteed).
 func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
@@ -501,6 +509,10 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	resource := fmt.Sprintf("character:%s", id.String())
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	}
+	if s.propertyRepo != nil && s.transactor == nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").
+			Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md)")
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.characterRepo.Delete(ctx, id); err != nil {

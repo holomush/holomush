@@ -190,18 +190,21 @@ func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 		return oops.Code("POLICY_UPDATE_FAILED").With("name", p.Name).Wrap(err)
 	}
 
-	newVersion := currentVersion + 1
-
-	// Record previous version in history.
-	_, err = tx.Exec(ctx, `
-		INSERT INTO access_policy_versions (id, policy_id, version, dsl_text, changed_by, change_note)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, ulid.Make().String(), policyID, currentVersion, currentDSL, p.CreatedBy, p.ChangeNote)
-	if err != nil {
-		return oops.Code("POLICY_UPDATE_FAILED").With("name", p.Name).With("operation", "version_history").Wrap(err)
+	// Only bump version and record history when dsl_text changes (spec: 05-storage-audit.md §225).
+	// Non-DSL edits (description, enabled, etc.) update the row directly.
+	dslChanged := currentDSL != p.DSLText
+	newVersion := currentVersion
+	if dslChanged {
+		newVersion = currentVersion + 1
+		_, err = tx.Exec(ctx, `
+			INSERT INTO access_policy_versions (id, policy_id, version, dsl_text, changed_by, change_note)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, ulid.Make().String(), policyID, currentVersion, currentDSL, p.CreatedBy, p.ChangeNote)
+		if err != nil {
+			return oops.Code("POLICY_UPDATE_FAILED").With("name", p.Name).With("operation", "version_history").Wrap(err)
+		}
 	}
 
-	// Apply the update.
 	result, err := tx.Exec(ctx, `
 		UPDATE access_policies
 		SET description = $2, effect = $3, source = $4, dsl_text = $5,

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package policy defines constants and utilities for ABAC entity references.
-package policy
+package access
 
 import (
 	"strings"
