@@ -4,6 +4,7 @@
 package store_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -83,6 +84,54 @@ func TestValidateSourceNaming(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := store.ValidateSourceNaming(tt.pName, tt.source)
+			if tt.wantErr {
+				assert.Error(t, err)
+				errutil.AssertErrorCode(t, err, tt.errorCode)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateGrammarVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		ast       json.RawMessage
+		wantErr   bool
+		errorCode string
+	}{
+		{
+			name: "valid AST with grammar_version",
+			ast:  json.RawMessage(`{"type":"policy","grammar_version":1}`),
+		},
+		{
+			name: "empty AST is allowed",
+			ast:  nil,
+		},
+		{
+			name:      "AST missing grammar_version",
+			ast:       json.RawMessage(`{"type":"policy","effect":"permit"}`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name:      "invalid JSON",
+			ast:       json.RawMessage(`not json`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+		{
+			name:      "JSON array instead of object",
+			ast:       json.RawMessage(`[1,2,3]`),
+			wantErr:   true,
+			errorCode: "POLICY_INVALID_AST",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := store.ValidateGrammarVersion(tt.ast)
 			if tt.wantErr {
 				assert.Error(t, err)
 				errutil.AssertErrorCode(t, err, tt.errorCode)

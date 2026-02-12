@@ -58,6 +58,12 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.EventEmitter == nil {
 		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
 	}
+	if cfg.PropertyRepo == nil {
+		slog.Warn("world.NewService: PropertyRepo not configured, entity deletes will not cascade to child properties (spec: 05-storage-audit.md)")
+	}
+	if cfg.Transactor == nil {
+		slog.Warn("world.NewService: Transactor not configured, entity+property deletes will not be transactional (spec: 05-storage-audit.md)")
+	}
 	return &Service{
 		locationRepo:  cfg.LocationRepo,
 		exitRepo:      cfg.ExitRepo,

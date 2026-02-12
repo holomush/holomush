@@ -80,7 +80,7 @@ func cleanupPolicies(ctx context.Context) {
 }
 
 func sampleAST() json.RawMessage {
-	return json.RawMessage(`{"type":"policy","effect":"permit"}`)
+	return json.RawMessage(`{"type":"policy","effect":"permit","grammar_version":1}`)
 }
 
 var _ = Describe("PostgresStore", func() {

@@ -75,10 +75,29 @@ func scanPolicies(rows pgx.Rows) ([]*StoredPolicy, error) {
 	return policies, nil
 }
 
+// ValidateGrammarVersion checks that compiled_ast contains a grammar_version field
+// as required by spec (02-policy-dsl.md). This ensures forward-compatible AST evolution.
+func ValidateGrammarVersion(ast json.RawMessage) error {
+	if len(ast) == 0 {
+		return nil // empty AST is allowed (e.g., placeholder policies)
+	}
+	var parsed map[string]json.RawMessage
+	if err := json.Unmarshal(ast, &parsed); err != nil {
+		return oops.Code("POLICY_INVALID_AST").Errorf("compiled_ast is not a valid JSON object")
+	}
+	if _, ok := parsed["grammar_version"]; !ok {
+		return oops.Code("POLICY_INVALID_AST").Errorf("compiled_ast missing required grammar_version field (spec: 02-policy-dsl.md)")
+	}
+	return nil
+}
+
 // Create inserts a new policy, generating a ULID for its ID.
 // pg_notify('policy_changed', id) is sent in the same transaction.
 func (s *PostgresStore) Create(ctx context.Context, p *StoredPolicy) error {
 	if err := ValidateSourceNaming(p.Name, p.Source); err != nil {
+		return err
+	}
+	if err := ValidateGrammarVersion(p.CompiledAST); err != nil {
 		return err
 	}
 
@@ -145,6 +164,9 @@ func (s *PostgresStore) GetByID(ctx context.Context, id string) (*StoredPolicy, 
 // old version in access_policy_versions, and sends pg_notify.
 func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 	if err := ValidateSourceNaming(p.Name, p.Source); err != nil {
+		return err
+	}
+	if err := ValidateGrammarVersion(p.CompiledAST); err != nil {
 		return err
 	}
 
