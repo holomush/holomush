@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
 func main() {
-	schema, err := plugin.GenerateSchema()
+	schema, err := plugins.GenerateSchema()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating schema: %v\n", err)
 		os.Exit(1)

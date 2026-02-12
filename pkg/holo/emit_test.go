@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,26 +27,26 @@ func TestEmitter_Location(t *testing.T) {
 	tests := []struct {
 		name       string
 		locationID string
-		eventType  plugin.EventType
+		eventType  pluginsdk.EventType
 		payload    Payload
 		wantStream string
-		wantType   plugin.EventType
+		wantType   pluginsdk.EventType
 	}{
 		{
 			name:       "say event to location",
 			locationID: "01ABC123",
-			eventType:  plugin.EventTypeSay,
+			eventType:  pluginsdk.EventTypeSay,
 			payload:    Payload{"message": "Hello!", "speaker": "Alice"},
 			wantStream: "location:01ABC123",
-			wantType:   plugin.EventTypeSay,
+			wantType:   pluginsdk.EventTypeSay,
 		},
 		{
 			name:       "pose event to location",
 			locationID: "01DEF456",
-			eventType:  plugin.EventTypePose,
+			eventType:  pluginsdk.EventTypePose,
 			payload:    Payload{"message": "waves", "actor": "Bob"},
 			wantStream: "location:01DEF456",
-			wantType:   plugin.EventTypePose,
+			wantType:   pluginsdk.EventTypePose,
 		},
 	}
 
@@ -69,21 +69,21 @@ func TestEmitter_Character(t *testing.T) {
 	tests := []struct {
 		name        string
 		characterID string
-		eventType   plugin.EventType
+		eventType   pluginsdk.EventType
 		payload     Payload
 		wantStream  string
 	}{
 		{
 			name:        "tell event to character",
 			characterID: "01CHAR123",
-			eventType:   plugin.EventType("tell"),
+			eventType:   pluginsdk.EventType("tell"),
 			payload:     Payload{"message": "Psst!", "sender": "Alice"},
 			wantStream:  "char:01CHAR123",
 		},
 		{
 			name:        "system event to character",
 			characterID: "01CHAR456",
-			eventType:   plugin.EventTypeSystem,
+			eventType:   pluginsdk.EventTypeSystem,
 			payload:     Payload{"message": "You have mail"},
 			wantStream:  "char:01CHAR456",
 		},
@@ -105,13 +105,13 @@ func TestEmitter_Character(t *testing.T) {
 
 func TestEmitter_Global(t *testing.T) {
 	emitter := NewEmitter()
-	emitter.Global(plugin.EventTypeSystem, Payload{"message": "Server restart in 5 minutes"})
+	emitter.Global(pluginsdk.EventTypeSystem, Payload{"message": "Server restart in 5 minutes"})
 
 	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
 	assert.Nil(t, errs)
 	assert.Equal(t, "global", events[0].Stream)
-	assert.Equal(t, plugin.EventTypeSystem, events[0].Type)
+	assert.Equal(t, pluginsdk.EventTypeSystem, events[0].Type)
 }
 
 func TestEmitter_PayloadJSONEncoding(t *testing.T) {
@@ -165,7 +165,7 @@ func TestEmitter_PayloadJSONEncoding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			emitter := NewEmitter()
-			emitter.Global(plugin.EventTypeSystem, tt.payload)
+			emitter.Global(pluginsdk.EventTypeSystem, tt.payload)
 
 			events, errs := emitter.Flush()
 			require.Len(t, events, 1)
@@ -185,9 +185,9 @@ func TestEmitter_PayloadJSONEncoding(t *testing.T) {
 func TestEmitter_Flush(t *testing.T) {
 	t.Run("returns accumulated events and clears buffer", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Location("loc1", plugin.EventTypeSay, Payload{"m": "1"})
-		emitter.Character("char1", plugin.EventTypeSay, Payload{"m": "2"})
-		emitter.Global(plugin.EventTypeSystem, Payload{"m": "3"})
+		emitter.Location("loc1", pluginsdk.EventTypeSay, Payload{"m": "1"})
+		emitter.Character("char1", pluginsdk.EventTypeSay, Payload{"m": "2"})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"m": "3"})
 
 		events, errs := emitter.Flush()
 		require.Len(t, events, 3)
@@ -211,10 +211,10 @@ func TestEmitter_MultipleEmits(t *testing.T) {
 	emitter := NewEmitter()
 
 	// Emit multiple events
-	emitter.Location("loc1", plugin.EventTypeSay, Payload{"n": 1})
-	emitter.Location("loc1", plugin.EventTypePose, Payload{"n": 2})
-	emitter.Character("char1", plugin.EventTypeSystem, Payload{"n": 3})
-	emitter.Global(plugin.EventTypeSystem, Payload{"n": 4})
+	emitter.Location("loc1", pluginsdk.EventTypeSay, Payload{"n": 1})
+	emitter.Location("loc1", pluginsdk.EventTypePose, Payload{"n": 2})
+	emitter.Character("char1", pluginsdk.EventTypeSystem, Payload{"n": 3})
+	emitter.Global(pluginsdk.EventTypeSystem, Payload{"n": 4})
 
 	events, errs := emitter.Flush()
 	require.Len(t, events, 4)
@@ -222,16 +222,16 @@ func TestEmitter_MultipleEmits(t *testing.T) {
 
 	// Verify order preserved
 	assert.Equal(t, "location:loc1", events[0].Stream)
-	assert.Equal(t, plugin.EventTypeSay, events[0].Type)
+	assert.Equal(t, pluginsdk.EventTypeSay, events[0].Type)
 
 	assert.Equal(t, "location:loc1", events[1].Stream)
-	assert.Equal(t, plugin.EventTypePose, events[1].Type)
+	assert.Equal(t, pluginsdk.EventTypePose, events[1].Type)
 
 	assert.Equal(t, "char:char1", events[2].Stream)
-	assert.Equal(t, plugin.EventTypeSystem, events[2].Type)
+	assert.Equal(t, pluginsdk.EventTypeSystem, events[2].Type)
 
 	assert.Equal(t, "global", events[3].Stream)
-	assert.Equal(t, plugin.EventTypeSystem, events[3].Type)
+	assert.Equal(t, pluginsdk.EventTypeSystem, events[3].Type)
 }
 
 func TestEmitter_JSONEncodingError(t *testing.T) {
@@ -240,7 +240,7 @@ func TestEmitter_JSONEncodingError(t *testing.T) {
 
 	// Create a payload with a value that cannot be JSON encoded (channel)
 	badPayload := Payload{"invalid": make(chan int)}
-	emitter.Global(plugin.EventTypeSystem, badPayload)
+	emitter.Global(pluginsdk.EventTypeSystem, badPayload)
 
 	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
@@ -260,7 +260,7 @@ func TestEmitter_JSONEncodingError_LogsError(t *testing.T) {
 
 	// Create a payload with a value that cannot be JSON encoded (channel)
 	badPayload := Payload{"invalid": make(chan int)}
-	emitter.Global(plugin.EventTypeSystem, badPayload)
+	emitter.Global(pluginsdk.EventTypeSystem, badPayload)
 
 	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
@@ -283,7 +283,7 @@ func TestEmitter_JSONEncodingError_LogsPayloadType(t *testing.T) {
 
 	// Use a function which cannot be marshaled - shows type info in log
 	badPayload := Payload{"callback": func() {}}
-	emitter.Location("room123", plugin.EventTypeSay, badPayload)
+	emitter.Location("room123", pluginsdk.EventTypeSay, badPayload)
 
 	_, errs := emitter.Flush()
 	require.Len(t, errs, 1)
@@ -298,7 +298,7 @@ func TestEmitter_NilLogger_NoLogging(t *testing.T) {
 	emitter := NewEmitter()
 
 	badPayload := Payload{"invalid": make(chan int)}
-	emitter.Global(plugin.EventTypeSystem, badPayload)
+	emitter.Global(pluginsdk.EventTypeSystem, badPayload)
 
 	events, errs := emitter.Flush()
 	require.Len(t, events, 1)
@@ -312,7 +312,7 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 		emitter := NewEmitter()
 
 		badPayload := Payload{"invalid": make(chan int)}
-		emitter.Global(plugin.EventTypeSystem, badPayload)
+		emitter.Global(pluginsdk.EventTypeSystem, badPayload)
 
 		events, errs := emitter.Flush()
 		require.Len(t, events, 1)
@@ -326,9 +326,9 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 	t.Run("multiple errors", func(t *testing.T) {
 		emitter := NewEmitter()
 
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad1": make(chan int)})
-		emitter.Location("room1", plugin.EventTypeSay, Payload{"bad2": func() {}})
-		emitter.Character("char1", plugin.EventTypePose, Payload{"bad3": make(chan string)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad1": make(chan int)})
+		emitter.Location("room1", pluginsdk.EventTypeSay, Payload{"bad2": func() {}})
+		emitter.Character("char1", pluginsdk.EventTypePose, Payload{"bad3": make(chan string)})
 
 		events, errs := emitter.Flush()
 		require.Len(t, events, 3)
@@ -343,9 +343,9 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 	t.Run("mixed success and errors", func(t *testing.T) {
 		emitter := NewEmitter()
 
-		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
-		emitter.Global(plugin.EventTypeSystem, Payload{"also_ok": 123})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"ok": "value"})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad": make(chan int)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"also_ok": 123})
 
 		events, errs := emitter.Flush()
 		require.Len(t, events, 3)
@@ -358,7 +358,7 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 	t.Run("no errors returns nil slice", func(t *testing.T) {
 		emitter := NewEmitter()
 
-		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"ok": "value"})
 
 		events, errs := emitter.Flush()
 		require.Len(t, events, 1)
@@ -368,7 +368,7 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 	t.Run("flush clears errors", func(t *testing.T) {
 		emitter := NewEmitter()
 
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad": make(chan int)})
 
 		_, errs1 := emitter.Flush()
 		require.Len(t, errs1, 1)
@@ -382,19 +382,19 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 func TestEmitter_HasErrors(t *testing.T) {
 	t.Run("returns false when no errors", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"ok": "value"})
 		assert.False(t, emitter.HasErrors())
 	})
 
 	t.Run("returns true when errors present", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad": make(chan int)})
 		assert.True(t, emitter.HasErrors())
 	})
 
 	t.Run("resets after flush", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad": make(chan int)})
 		assert.True(t, emitter.HasErrors())
 
 		emitter.Flush()
@@ -405,21 +405,21 @@ func TestEmitter_HasErrors(t *testing.T) {
 func TestEmitter_ErrorCount(t *testing.T) {
 	t.Run("returns 0 when no errors", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Global(plugin.EventTypeSystem, Payload{"ok": "value"})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"ok": "value"})
 		assert.Equal(t, 0, emitter.ErrorCount())
 	})
 
 	t.Run("counts multiple errors", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad1": make(chan int)})
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad2": func() {}})
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad3": make(chan string)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad1": make(chan int)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad2": func() {}})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad3": make(chan string)})
 		assert.Equal(t, 3, emitter.ErrorCount())
 	})
 
 	t.Run("resets after flush", func(t *testing.T) {
 		emitter := NewEmitter()
-		emitter.Global(plugin.EventTypeSystem, Payload{"bad": make(chan int)})
+		emitter.Global(pluginsdk.EventTypeSystem, Payload{"bad": make(chan int)})
 		assert.Equal(t, 1, emitter.ErrorCount())
 
 		emitter.Flush()

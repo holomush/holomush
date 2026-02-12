@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	hashiplug "github.com/hashicorp/go-plugin"
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
@@ -172,11 +172,11 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 	require.NoError(t, err, "Close returned error")
 
 	tmpDir := t.TempDir()
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -207,11 +207,11 @@ func TestLoad_ContextCancelled(t *testing.T) {
 	cancel()
 
 	tmpDir := t.TempDir()
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -248,7 +248,7 @@ func TestDeliverEvent_NotLoaded(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	host := NewHost(enforcer)
 
-	_, err := host.DeliverEvent(context.Background(), "nonexistent", pluginpkg.Event{})
+	_, err := host.DeliverEvent(context.Background(), "nonexistent", pluginsdk.Event{})
 	require.Error(t, err, "expected error when delivering to nonexistent plugin")
 	assert.ErrorIs(t, err, ErrPluginNotLoaded, "expected ErrPluginNotLoaded")
 }
@@ -260,7 +260,7 @@ func TestDeliverEvent_HostClosed(t *testing.T) {
 	err := host.Close(context.Background())
 	require.NoError(t, err, "Close returned error")
 
-	_, err = host.DeliverEvent(context.Background(), "any-plugin", pluginpkg.Event{})
+	_, err = host.DeliverEvent(context.Background(), "any-plugin", pluginsdk.Event{})
 	require.Error(t, err, "expected error when delivering after close")
 	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
@@ -281,11 +281,11 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -293,7 +293,7 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 	err = host.Load(ctx, manifest, tmpDir)
 	require.NoError(t, err, "Load returned error")
 
-	_, err = host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	_, err = host.DeliverEvent(ctx, "test-plugin", pluginsdk.Event{})
 	require.Error(t, err, "expected error when HandleEvent fails")
 	// oops.Error() returns underlying error message from mock
 	assert.Contains(t, err.Error(), "plugin crashed", "expected error to contain mock error message")
@@ -315,11 +315,11 @@ func TestDeliverEvent_NilResponse(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -328,7 +328,7 @@ func TestDeliverEvent_NilResponse(t *testing.T) {
 	require.NoError(t, err, "Load returned error")
 
 	// DeliverEvent should handle nil response gracefully (proto getters are nil-safe)
-	emits, err := host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	emits, err := host.DeliverEvent(ctx, "test-plugin", pluginsdk.Event{})
 	assert.NoError(t, err, "unexpected error with nil response")
 	assert.Empty(t, emits, "expected empty emits for nil response")
 }
@@ -349,11 +349,11 @@ func TestDeliverEvent_Timeout(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -361,7 +361,7 @@ func TestDeliverEvent_Timeout(t *testing.T) {
 	err = host.Load(ctx, manifest, tmpDir)
 	require.NoError(t, err, "Load returned error")
 
-	_, err = host.DeliverEvent(ctx, "test-plugin", pluginpkg.Event{})
+	_, err = host.DeliverEvent(ctx, "test-plugin", pluginsdk.Event{})
 	require.Error(t, err, "expected error on timeout")
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "expected context.DeadlineExceeded")
 }
@@ -379,11 +379,11 @@ func TestLoad_ClientError(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -410,11 +410,11 @@ func TestLoad_DispenseError(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -435,11 +435,11 @@ func TestLoad_Unload_Plugins_Cycle(t *testing.T) {
 	err := createTempExecutable(tmpFile)
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -469,11 +469,11 @@ func TestLoad_DuplicateName(t *testing.T) {
 	err := createTempExecutable(tmpFile)
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -492,11 +492,11 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "nonexistent",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "this-executable-does-not-exist-12345",
 		},
 	}
@@ -525,11 +525,11 @@ func TestLoad_SetGrantsFailure(t *testing.T) {
 	require.NoError(t, err, "failed to create temp file")
 
 	// Create manifest with invalid capability pattern (empty string)
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 		Capabilities: []string{"valid.capability", ""}, // Empty pattern will cause SetGrants to fail
@@ -578,11 +578,11 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 		_ = os.Chmod(restrictedDir, 0o755)
 	})
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "permission-denied",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "plugin",
 		},
 	}
@@ -607,11 +607,11 @@ func TestLoad_ExecutableNotExecutable(t *testing.T) {
 	err := os.WriteFile(execPath, []byte("not executable"), 0o600)
 	require.NoError(t, err, "failed to create test file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "non-executable",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "non-executable-plugin",
 		},
 	}
@@ -635,11 +635,11 @@ func TestLoad_ExecutablePathTraversal(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(parentExec) })
 
 	// Try to load plugin with path traversal in executable path
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "malicious",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "../escaped-plugin", // Path traversal attempt
 		},
 	}
@@ -675,11 +675,11 @@ func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
 	err = os.Symlink(outsideExec, symlinkPath)
 	require.NoError(t, err, "failed to create symlink")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "symlink-escape",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "evil-link", // Symlink that points outside
 		},
 	}
@@ -709,11 +709,11 @@ func TestDeliverEvent_Success(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -721,12 +721,12 @@ func TestDeliverEvent_Success(t *testing.T) {
 	err = host.Load(ctx, manifest, tmpDir)
 	require.NoError(t, err, "Load returned error")
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:        "evt-123",
 		Stream:    "room:456",
-		Type:      pluginpkg.EventTypeSay,
+		Type:      pluginsdk.EventTypeSay,
 		Timestamp: 1234567890,
-		ActorKind: pluginpkg.ActorCharacter,
+		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   "char-789",
 		Payload:   `{"text":"hello world"}`,
 	}
@@ -735,7 +735,7 @@ func TestDeliverEvent_Success(t *testing.T) {
 	require.NoError(t, err, "DeliverEvent returned error")
 	require.Len(t, emits, 1, "expected 1 emit event")
 	assert.Equal(t, "room:123", emits[0].Stream, "expected stream 'room:123'")
-	assert.Equal(t, pluginpkg.EventTypeSay, emits[0].Type, "expected type 'say'")
+	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type, "expected type 'say'")
 }
 
 func TestClose_KillsPlugins(t *testing.T) {
@@ -746,11 +746,11 @@ func TestClose_KillsPlugins(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -767,12 +767,12 @@ func TestClose_KillsPlugins(t *testing.T) {
 func TestDeliverEvent_ActorKinds(t *testing.T) {
 	tests := []struct {
 		name      string
-		actorKind pluginpkg.ActorKind
+		actorKind pluginsdk.ActorKind
 	}{
-		{"character", pluginpkg.ActorCharacter},
-		{"system", pluginpkg.ActorSystem},
-		{"plugin", pluginpkg.ActorPlugin},
-		{"unknown", pluginpkg.ActorKind(99)},
+		{"character", pluginsdk.ActorCharacter},
+		{"system", pluginsdk.ActorSystem},
+		{"plugin", pluginsdk.ActorPlugin},
+		{"unknown", pluginsdk.ActorKind(99)},
 	}
 
 	for _, tt := range tests {
@@ -790,11 +790,11 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 			err := createTempExecutable(tmpDir + "/test-plugin")
 			require.NoError(t, err, "failed to create temp file")
 
-			manifest := &plugin.Manifest{
+			manifest := &plugins.Manifest{
 				Name:    "test-plugin",
 				Version: "1.0.0",
-				Type:    plugin.TypeBinary,
-				BinaryPlugin: &plugin.BinaryConfig{
+				Type:    plugins.TypeBinary,
+				BinaryPlugin: &plugins.BinaryConfig{
 					Executable: "test-plugin",
 				},
 			}
@@ -802,7 +802,7 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 			err = host.Load(ctx, manifest, tmpDir)
 			require.NoError(t, err, "Load returned error")
 
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "evt-123",
 				ActorKind: tt.actorKind,
 			}
@@ -819,7 +819,7 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:         "wasm-plugin",
 		Version:      "1.0.0",
 		Type:         "wasm", // Wrong type for goplugin host
@@ -849,11 +849,11 @@ func TestLoad_EmptyPluginName(t *testing.T) {
 	err := createTempExecutable(filepath.Join(tmpDir, "test-plugin"))
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "", // Empty name
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}
@@ -879,11 +879,11 @@ func TestLoad_InvalidPluginClient(t *testing.T) {
 	err := createTempExecutable(tmpDir + "/test-plugin")
 	require.NoError(t, err, "failed to create temp file")
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeBinary,
-		BinaryPlugin: &plugin.BinaryConfig{
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
 			Executable: "test-plugin",
 		},
 	}

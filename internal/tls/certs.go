@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package tls provides TLS certificate generation and loading for HoloMUSH.
-package tls
+// Package tlscerts provides TLS certificate generation and loading for HoloMUSH.
+package tlscerts
 
 import (
 	"crypto/ecdsa"

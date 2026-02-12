@@ -19,9 +19,9 @@ import (
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -39,7 +39,7 @@ var (
 )
 
 // Compile-time interface check.
-var _ plugin.Host = (*Host)(nil)
+var _ plugins.Host = (*Host)(nil)
 
 // PluginClient wraps go-plugin client for testability.
 type PluginClient interface {
@@ -68,7 +68,7 @@ func (f *DefaultClientFactory) NewClient(execPath string) PluginClient {
 	})
 }
 
-// Host manages binary plugins via HashiCorp go-plugin.
+// Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	enforcer      *capability.Enforcer
 	clientFactory ClientFactory
@@ -77,9 +77,9 @@ type Host struct {
 	closed        bool
 }
 
-// loadedPlugin holds state for a single loaded binary plugin.
+// loadedPlugin holds state for a single loaded binary plugins.
 type loadedPlugin struct {
-	manifest *plugin.Manifest
+	manifest *plugins.Manifest
 	client   PluginClient
 	plugin   pluginv1.PluginClient
 }
@@ -107,7 +107,7 @@ func NewHostWithFactory(enforcer *capability.Enforcer, factory ClientFactory) *H
 }
 
 // Load initializes a plugin from its manifest.
-func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) error {
+func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string) error {
 	// Check context before expensive operations
 	if err := ctx.Err(); err != nil {
 		return oops.In("goplugin").With("operation", "load").Wrap(err)
@@ -201,7 +201,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	return nil
 }
 
-// Unload tears down a plugin.
+// Unload tears down a plugins.
 func (h *Host) Unload(_ context.Context, name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -238,7 +238,7 @@ func (h *Host) Unload(_ context.Context, name string) error {
 // all plugin calls. If Close() or Unload() is called concurrently, the gRPC
 // call will fail gracefully when the plugin process is killed. This is the
 // standard trade-off in go-plugin based systems.
-func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
+func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	h.mu.RLock()
 	if h.closed {
 		h.mu.RUnlock()
@@ -276,11 +276,11 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Ev
 		return nil, oops.In("goplugin").With("plugin", name).With("operation", "handle_event").Wrap(err)
 	}
 
-	emits := make([]pluginpkg.EmitEvent, len(resp.GetEmitEvents()))
+	emits := make([]pluginsdk.EmitEvent, len(resp.GetEmitEvents()))
 	for i, e := range resp.GetEmitEvents() {
-		emits[i] = pluginpkg.EmitEvent{
+		emits[i] = pluginsdk.EmitEvent{
 			Stream:  e.GetStream(),
-			Type:    pluginpkg.EventType(e.GetType()),
+			Type:    pluginsdk.EventType(e.GetType()),
 			Payload: e.GetPayload(),
 		}
 	}

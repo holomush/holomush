@@ -14,18 +14,18 @@ import (
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/pkg/holo"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // Compile-time interface check.
-var _ plugin.Host = (*Host)(nil)
+var _ plugins.Host = (*Host)(nil)
 
-// luaPlugin holds compiled Lua code for a plugin.
+// luaPlugin holds compiled Lua code for a plugins.
 type luaPlugin struct {
-	manifest *plugin.Manifest
+	manifest *plugins.Manifest
 	code     string // Lua source (compiled at load time in future)
 }
 
@@ -60,8 +60,8 @@ func NewHostWithFunctions(hf *hostfunc.Functions) *Host {
 	}
 }
 
-// Load reads and validates a Lua plugin.
-func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) error {
+// Load reads and validates a Lua plugins.
+func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -94,7 +94,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugin.Manifest, dir string) 
 	return nil
 }
 
-// Unload removes a plugin.
+// Unload removes a plugins.
 func (h *Host) Unload(_ context.Context, name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -115,7 +115,7 @@ func (h *Host) Unload(_ context.Context, name string) error {
 // valid events are still returned. This ensures plugin bugs don't break game uptime while
 // still providing visibility into issues via logs. The returned error is only non-nil for
 // critical failures (plugin not found, Lua execution errors), not for emit validation issues.
-func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginpkg.Event) ([]pluginpkg.EmitEvent, error) {
+func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	h.mu.RLock()
 	p, ok := h.plugins[name]
 	if !ok {
@@ -211,7 +211,7 @@ func (h *Host) Close(_ context.Context) error {
 }
 
 // callOnCommand calls the on_command handler with a typed CommandContext.
-func (h *Host) callOnCommand(state *lua.LState, name string, event pluginpkg.Event, onCommand lua.LValue) ([]pluginpkg.EmitEvent, error) {
+func (h *Host) callOnCommand(state *lua.LState, name string, event pluginsdk.Event, onCommand lua.LValue) ([]pluginsdk.EmitEvent, error) {
 	// Parse command payload into CommandContext
 	cmdCtx := holo.ParseCommandPayload(event.Payload)
 
@@ -254,7 +254,7 @@ func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lu
 	return t
 }
 
-func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LTable {
+func (h *Host) buildEventTable(state *lua.LState, event pluginsdk.Event) *lua.LTable {
 	t := state.NewTable()
 	state.SetField(t, "id", lua.LString(event.ID))
 	state.SetField(t, "stream", lua.LString(event.Stream))
@@ -266,7 +266,7 @@ func (h *Host) buildEventTable(state *lua.LState, event pluginpkg.Event) *lua.LT
 	return t
 }
 
-func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginpkg.EmitEvent, validationErrs []string) {
+func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, validationErrs []string) {
 	if ret.Type() == lua.LTNil {
 		return nil, nil
 	}
@@ -305,9 +305,9 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginpkg.EmitEvent, val
 			return
 		}
 
-		emit := pluginpkg.EmitEvent{
+		emit := pluginsdk.EmitEvent{
 			Stream:  stream,
-			Type:    pluginpkg.EventType(eventType),
+			Type:    pluginsdk.EventType(eventType),
 			Payload: payload,
 		}
 		emits = append(emits, emit)

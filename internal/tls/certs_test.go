@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package tls provides TLS certificate generation and loading for HoloMUSH.
-package tls
+package tlscerts
 
 import (
 	"crypto/ecdsa"

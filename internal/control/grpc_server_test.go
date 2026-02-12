@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 )
 
@@ -280,14 +280,14 @@ func TestLoadControlServerTLS_FailsWithMalformedCAPEM(t *testing.T) {
 
 	// Generate valid server certificate first
 	gameID := "test-malformed-ca"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
 	// Save valid server certificates
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	// Overwrite CA with malformed PEM data that looks like PEM but isn't valid
@@ -310,14 +310,14 @@ func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
 
 	// Generate valid server certificate first
 	gameID := "test-empty-ca"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
 	// Save valid server certificates
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	// Overwrite CA with empty content (causes AppendCertsFromPEM to return false)
@@ -337,14 +337,14 @@ func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
 
 	// Generate valid server certificate
 	gameID := "test-missing-ca"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
 	// Save server certificates using the tls package, then remove the CA
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	// Remove the CA file
@@ -417,11 +417,11 @@ func TestExtractGameIDFromCA_ExtractsCorrectGameID(t *testing.T) {
 
 	// Generate a proper CA using the tls package
 	expectedGameID := "test-game-abc123"
-	ca, err := tls.GenerateCA(expectedGameID)
+	ca, err := tlscerts.GenerateCA(expectedGameID)
 	require.NoError(t, err, "failed to generate CA")
 
 	// Save the CA to the temp directory
-	err = tls.SaveCertificates(tmpDir, ca, nil)
+	err = tlscerts.SaveCertificates(tmpDir, ca, nil)
 	require.NoError(t, err, "failed to save CA")
 
 	// Extract the game ID
@@ -436,21 +436,21 @@ func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
 
 	// Generate CA and client certificate
 	gameID := "test-game-xyz"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
 	// Generate server cert (core) - client will verify against this
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
 	// Generate client cert (gateway)
-	clientCert, err := tls.GenerateClientCert(ca, "gateway")
+	clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 	require.NoError(t, err, "failed to generate client cert")
 
 	// Save all certs
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save server certs")
-	err = tls.SaveClientCert(tmpDir, clientCert)
+	err = tlscerts.SaveClientCert(tmpDir, clientCert)
 	require.NoError(t, err, "failed to save client cert")
 
 	// Load client TLS config
@@ -474,13 +474,13 @@ func TestGRPCServer_Start_FailsOnInvalidAddress(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-listen-fail"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -508,13 +508,13 @@ func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-errch"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -557,13 +557,13 @@ func TestGRPCServer_Start_PropagatesServerError(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-prop-err"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -607,19 +607,19 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 
 	// Generate CA and certificates
 	gameID := "mtls-integration-test"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	clientCert, err := tls.GenerateClientCert(ca, "gateway")
+	clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 	require.NoError(t, err, "failed to generate client cert")
 
 	// Save certificates
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save server certs")
-	err = tls.SaveClientCert(tmpDir, clientCert)
+	err = tlscerts.SaveClientCert(tmpDir, clientCert)
 	require.NoError(t, err, "failed to save client cert")
 
 	// Load TLS configs
@@ -699,14 +699,14 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 
 	// Generate CA and server certificate
 	gameID := "mtls-reject-test"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
 	// Save certificates (no client cert saved)
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save server certs")
 
 	// Load server TLS config
@@ -774,13 +774,13 @@ func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-stop-ch"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -824,13 +824,13 @@ func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-double-start"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -881,13 +881,13 @@ func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-concurrent-stop"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -942,13 +942,13 @@ func TestGRPCServer_Stop_DuringStart(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-stop-during-start"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")
@@ -1012,13 +1012,13 @@ func TestGRPCServer_Stop_RunningStateAfterGracefulStop(t *testing.T) {
 
 	// Generate valid certificates
 	gameID := "test-stop-timing"
-	ca, err := tls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "failed to generate CA")
 
-	serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "failed to generate server cert")
 
-	err = tls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "failed to save certs")
 
 	tlsConfig, err := LoadControlServerTLS(tmpDir, "core")

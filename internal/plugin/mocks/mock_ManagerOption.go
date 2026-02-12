@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	plugin "github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -21,7 +21,7 @@ func (_m *MockManagerOption) EXPECT() *MockManagerOption_Expecter {
 }
 
 // Execute provides a mock function with given fields: _a0
-func (_m *MockManagerOption) Execute(_a0 *plugin.Manager) {
+func (_m *MockManagerOption) Execute(_a0 *plugins.Manager) {
 	_m.Called(_a0)
 }
 
@@ -31,14 +31,14 @@ type MockManagerOption_Execute_Call struct {
 }
 
 // Execute is a helper method to define mock.On call
-//   - _a0 *plugin.Manager
+//   - _a0 *plugins.Manager
 func (_e *MockManagerOption_Expecter) Execute(_a0 interface{}) *MockManagerOption_Execute_Call {
 	return &MockManagerOption_Execute_Call{Call: _e.mock.On("Execute", _a0)}
 }
 
-func (_c *MockManagerOption_Execute_Call) Run(run func(_a0 *plugin.Manager)) *MockManagerOption_Execute_Call {
+func (_c *MockManagerOption_Execute_Call) Run(run func(_a0 *plugins.Manager)) *MockManagerOption_Execute_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*plugin.Manager))
+		run(args[0].(*plugins.Manager))
 	})
 	return _c
 }
@@ -48,7 +48,7 @@ func (_c *MockManagerOption_Execute_Call) Return() *MockManagerOption_Execute_Ca
 	return _c
 }
 
-func (_c *MockManagerOption_Execute_Call) RunAndReturn(run func(*plugin.Manager)) *MockManagerOption_Execute_Call {
+func (_c *MockManagerOption_Execute_Call) RunAndReturn(run func(*plugins.Manager)) *MockManagerOption_Execute_Call {
 	_c.Run(run)
 	return _c
 }

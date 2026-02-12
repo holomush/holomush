@@ -26,7 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/store"
-	"github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -200,21 +200,21 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			env.gameID = gameID
 
 			// Generate CA
-			ca, err := tls.GenerateCA(gameID)
+			ca, err := tlscerts.GenerateCA(gameID)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Generate server cert
-			serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+			serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Save certificates
-			err = tls.SaveCertificates(env.certsDir, ca, serverCert)
+			err = tlscerts.SaveCertificates(env.certsDir, ca, serverCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Generate and save client cert
-			clientCert, err := tls.GenerateClientCert(ca, "gateway")
+			clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveClientCert(env.certsDir, clientCert)
+			err = tlscerts.SaveClientCert(env.certsDir, clientCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify server cert has correct SAN
@@ -256,19 +256,19 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			env.gameID = gameID
 
 			// Generate and save certificates
-			ca, err := tls.GenerateCA(gameID)
+			ca, err := tlscerts.GenerateCA(gameID)
 			Expect(err).NotTo(HaveOccurred())
-			serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+			serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveCertificates(env.certsDir, ca, serverCert)
+			err = tlscerts.SaveCertificates(env.certsDir, ca, serverCert)
 			Expect(err).NotTo(HaveOccurred())
-			clientCert, err := tls.GenerateClientCert(ca, "gateway")
+			clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveClientCert(env.certsDir, clientCert)
+			err = tlscerts.SaveClientCert(env.certsDir, clientCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Load server TLS config
-			serverTLS, err := tls.LoadServerTLS(env.certsDir, "core")
+			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
@@ -303,7 +303,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			}).Should(BeTrue())
 
 			// Load client TLS config
-			clientTLS, err := tls.LoadClientTLS(env.certsDir, "gateway", gameID)
+			clientTLS, err := tlscerts.LoadClientTLS(env.certsDir, "gateway", gameID)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create gRPC client with mTLS
@@ -331,15 +331,15 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			env.gameID = gameID
 
 			// Generate and save certificates
-			ca, err := tls.GenerateCA(gameID)
+			ca, err := tlscerts.GenerateCA(gameID)
 			Expect(err).NotTo(HaveOccurred())
-			serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+			serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveCertificates(env.certsDir, ca, serverCert)
+			err = tlscerts.SaveCertificates(env.certsDir, ca, serverCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Load server TLS config
-			serverTLS, err := tls.LoadServerTLS(env.certsDir, "core")
+			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
@@ -367,20 +367,20 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			time.Sleep(100 * time.Millisecond)
 
 			// Generate a different CA (attacker's CA)
-			badCA, err := tls.GenerateCA("bad-game-id")
+			badCA, err := tlscerts.GenerateCA("bad-game-id")
 			Expect(err).NotTo(HaveOccurred())
 			badCertsDir := filepath.Join(env.certsDir, "bad")
 			err = os.MkdirAll(badCertsDir, 0o700)
 			Expect(err).NotTo(HaveOccurred())
-			badClientCert, err := tls.GenerateClientCert(badCA, "gateway")
+			badClientCert, err := tlscerts.GenerateClientCert(badCA, "gateway")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveCertificates(badCertsDir, badCA, nil)
+			err = tlscerts.SaveCertificates(badCertsDir, badCA, nil)
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveClientCert(badCertsDir, badClientCert)
+			err = tlscerts.SaveClientCert(badCertsDir, badClientCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Try to connect with bad cert
-			badClientTLS, err := tls.LoadClientTLS(badCertsDir, "gateway", "bad-game-id")
+			badClientTLS, err := tlscerts.LoadClientTLS(badCertsDir, "gateway", "bad-game-id")
 			Expect(err).NotTo(HaveOccurred())
 
 			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
@@ -406,15 +406,15 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			env.gameID = gameID
 
 			// Generate and save certificates
-			ca, err := tls.GenerateCA(gameID)
+			ca, err := tlscerts.GenerateCA(gameID)
 			Expect(err).NotTo(HaveOccurred())
-			serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+			serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveCertificates(env.certsDir, ca, serverCert)
+			err = tlscerts.SaveCertificates(env.certsDir, ca, serverCert)
 			Expect(err).NotTo(HaveOccurred())
-			clientCert, err := tls.GenerateClientCert(ca, "gateway")
+			clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveClientCert(env.certsDir, clientCert)
+			err = tlscerts.SaveClientCert(env.certsDir, clientCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			shutdownCalled := false
@@ -489,22 +489,22 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			env.gameID = gameID
 
 			By("Step 3: Generate TLS certs with game_id")
-			ca, err := tls.GenerateCA(gameID)
+			ca, err := tlscerts.GenerateCA(gameID)
 			Expect(err).NotTo(HaveOccurred())
-			serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+			serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveCertificates(env.certsDir, ca, serverCert)
+			err = tlscerts.SaveCertificates(env.certsDir, ca, serverCert)
 			Expect(err).NotTo(HaveOccurred())
-			clientCert, err := tls.GenerateClientCert(ca, "gateway")
+			clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 			Expect(err).NotTo(HaveOccurred())
-			err = tls.SaveClientCert(env.certsDir, clientCert)
+			err = tlscerts.SaveClientCert(env.certsDir, clientCert)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify SAN contains game_id
 			Expect(serverCert.Certificate.DNSNames).To(ContainElement("holomush-" + gameID))
 
 			By("Step 4: Start gRPC server with mTLS")
-			serverTLS, err := tls.LoadServerTLS(env.certsDir, "core")
+			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
 			eventStore := core.NewMemoryEventStore()
@@ -535,7 +535,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			}).Should(BeTrue())
 
 			By("Step 5: Connect gRPC client")
-			clientTLS, err := tls.LoadClientTLS(env.certsDir, "gateway", gameID)
+			clientTLS, err := tlscerts.LoadClientTLS(env.certsDir, "gateway", gameID)
 			Expect(err).NotTo(HaveOccurred())
 
 			client, err := grpcpkg.NewClient(env.ctx, grpcpkg.ClientConfig{
@@ -615,11 +615,11 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Generate CA and certs
-			ca, err := tls.GenerateCA(gameID)
+			ca, err := tlscerts.GenerateCA(gameID)
 			Expect(err).NotTo(HaveOccurred())
-			serverCert, err := tls.GenerateServerCert(ca, gameID, "core")
+			serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 			Expect(err).NotTo(HaveOccurred())
-			clientCert, err := tls.GenerateClientCert(ca, "gateway")
+			clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify server cert is signed by CA

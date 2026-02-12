@@ -20,7 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
-	"github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"
 )
 
@@ -97,7 +97,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		deps.GameIDExtractor = control.ExtractGameIDFromCA
 	}
 	if deps.ClientTLSLoader == nil {
-		deps.ClientTLSLoader = tls.LoadClientTLS
+		deps.ClientTLSLoader = tlscerts.LoadClientTLS
 	}
 	if deps.GRPCClientFactory == nil {
 		deps.GRPCClientFactory = func(ctx context.Context, cfg holoGRPC.ClientConfig) (GRPCClient, error) {

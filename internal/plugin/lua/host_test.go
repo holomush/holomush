@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
-	pluginpkg "github.com/holomush/holomush/pkg/plugin"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // writeMainLua creates a main.lua plugin file in the given directory.
@@ -48,11 +48,11 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
-		Type:    plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{
+		Type:    plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{
 			Entry: "main.lua",
 		},
 	}
@@ -87,22 +87,22 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "echo",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:        "01ABC",
 		Stream:    "location:123",
 		Type:      "say",
 		Timestamp: 1705591234000,
-		ActorKind: pluginpkg.ActorCharacter,
+		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   "char_1",
 		Payload:   "Hello",
 	}
@@ -113,7 +113,7 @@ end
 
 	// Verify all fields of the emitted event
 	assert.Equal(t, "location:123", emits[0].Stream)
-	assert.Equal(t, pluginpkg.EventType("say"), emits[0].Type)
+	assert.Equal(t, pluginsdk.EventType("say"), emits[0].Type)
 	assert.Contains(t, emits[0].Payload, "Echo:")
 }
 
@@ -126,17 +126,17 @@ func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "no-handler",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "no-handler", event)
 	require.NoError(t, err, "DeliverEvent() failed")
 	assert.Empty(t, emits, "expected no emits for plugin without handler")
@@ -158,17 +158,17 @@ func TestLuaHost_DeliverEvent_NoHandler_LogsDebug(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "no-handler-plugin",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "no-handler-plugin", event)
 	require.NoError(t, err, "DeliverEvent() failed")
 	assert.Empty(t, emits, "expected no emits for plugin without handler")
@@ -187,11 +187,11 @@ func TestLuaHost_Unload(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "test-plugin",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
@@ -215,7 +215,7 @@ func TestLuaHost_DeliverEvent_NotLoaded(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	_, err := host.DeliverEvent(context.Background(), "nonexistent", event)
 	assert.Error(t, err, "expected error when delivering to nonexistent plugin")
 }
@@ -229,11 +229,11 @@ func TestLuaHost_Load_SyntaxError(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "bad-syntax",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
@@ -246,11 +246,11 @@ func TestLuaHost_Load_MissingFile(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "missing-file",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "nonexistent.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "nonexistent.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
@@ -264,11 +264,11 @@ func TestLuaHost_Close(t *testing.T) {
 
 	host := pluginlua.NewHost()
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "test-plugin",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
@@ -295,17 +295,17 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "error-plugin",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	_, err = host.DeliverEvent(context.Background(), "error-plugin", event)
 	require.Error(t, err, "expected error when plugin throws runtime error")
 	// oops.Error() returns the underlying Lua error message
@@ -331,29 +331,29 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "actor-test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
 	tests := []struct {
-		kind     pluginpkg.ActorKind
+		kind     pluginsdk.ActorKind
 		expected string
 	}{
-		{pluginpkg.ActorCharacter, "character"},
-		{pluginpkg.ActorSystem, "system"},
-		{pluginpkg.ActorPlugin, "plugin"},
-		{pluginpkg.ActorKind(99), "unknown"}, // Unknown kind
+		{pluginsdk.ActorCharacter, "character"},
+		{pluginsdk.ActorSystem, "system"},
+		{pluginsdk.ActorPlugin, "plugin"},
+		{pluginsdk.ActorKind(99), "unknown"}, // Unknown kind
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			event := pluginpkg.Event{
+			event := pluginsdk.Event{
 				ID:        "01ABC",
 				Type:      "say",
 				ActorKind: tt.kind,
@@ -439,17 +439,17 @@ end
 			host := pluginlua.NewHost()
 			defer closeHost(t, host)
 
-			manifest := &plugin.Manifest{
+			manifest := &plugins.Manifest{
 				Name:      "bad-return",
 				Version:   "1.0.0",
-				Type:      plugin.TypeLua,
-				LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+				Type:      plugins.TypeLua,
+				LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 			}
 
 			err := host.Load(context.Background(), manifest, dir)
 			require.NoError(t, err)
 
-			event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+			event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 			emits, err := host.DeliverEvent(context.Background(), "bad-return", event)
 			require.NoError(t, err, "DeliverEvent() failed")
 
@@ -494,17 +494,17 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "mixed-return",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "mixed-return", event)
 	require.NoError(t, err, "DeliverEvent() failed")
 
@@ -521,11 +521,11 @@ func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
 
 	host := pluginlua.NewHost()
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "test-plugin",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
@@ -535,7 +535,7 @@ func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
 	require.NoError(t, err, "Close() failed")
 
 	// DeliverEvent should error after close
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	_, err = host.DeliverEvent(context.Background(), "test-plugin", event)
 	assert.Error(t, err, "expected error when delivering after close")
 }
@@ -560,22 +560,22 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "field-test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:        "01ABC",
 		Stream:    "location:123",
 		Type:      "say",
 		Timestamp: 1705591234000,
-		ActorKind: pluginpkg.ActorCharacter,
+		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   "char_1",
 		Payload:   "Hello",
 	}
@@ -610,17 +610,17 @@ end
 	host := pluginlua.NewHostWithFunctions(hostFuncs)
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:     "01ABC",
 		Stream: "location:123",
 		Type:   "say",
@@ -662,17 +662,17 @@ end
 	host := pluginlua.NewHostWithFunctions(hostFuncs)
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "no-kv-cap",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:     "01ABC",
 		Stream: "location:123",
 		Type:   "say",
@@ -719,22 +719,22 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "on-command-test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:        "01ABC",
 		Stream:    "char:char123",
-		Type:      pluginpkg.EventType("command"),
+		Type:      pluginsdk.EventType("command"),
 		Timestamp: 1705591234000,
-		ActorKind: pluginpkg.ActorCharacter,
+		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   "char123",
 		Payload:   `{"name":"say","args":"Hello everyone!","invoked_as":";","character_name":"Alice","character_id":"01CHAR","location_id":"01LOC","player_id":"01PLAYER"}`,
 	}
@@ -772,21 +772,21 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "fallback-test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
 	// Command event should fall back to on_event
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:      "01ABC",
 		Stream:  "char:char123",
-		Type:    pluginpkg.EventType("command"),
+		Type:    pluginsdk.EventType("command"),
 		Payload: `{"name":"say","args":"test"}`,
 	}
 
@@ -826,21 +826,21 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "both-handlers",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
 	// Non-command event should use on_event, not on_command
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:     "01ABC",
 		Stream: "location:123",
-		Type:   pluginpkg.EventTypeSay,
+		Type:   pluginsdk.EventTypeSay,
 	}
 
 	emits, err := host.DeliverEvent(context.Background(), "both-handlers", event)
@@ -872,19 +872,19 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "empty-args-test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:      "01ABC",
-		Type:    pluginpkg.EventType("command"),
+		Type:    pluginsdk.EventType("command"),
 		Payload: `{"name":"look","args":"","character_name":"Bob","location_id":"loc1"}`,
 	}
 
@@ -914,19 +914,19 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "invalid-payload-test",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{
+	event := pluginsdk.Event{
 		ID:      "01ABC",
-		Type:    pluginpkg.EventType("command"),
+		Type:    pluginsdk.EventType("command"),
 		Payload: "not valid json",
 	}
 
@@ -966,17 +966,17 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "warn-non-table",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "warn-non-table", event)
 	require.NoError(t, err)
 
@@ -1022,17 +1022,17 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "warn-missing-stream",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "warn-missing-stream", event)
 	require.NoError(t, err)
 
@@ -1077,17 +1077,17 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "warn-missing-type",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "warn-missing-type", event)
 	require.NoError(t, err)
 
@@ -1139,17 +1139,17 @@ end
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
-	manifest := &plugin.Manifest{
+	manifest := &plugins.Manifest{
 		Name:      "multi-validation",
 		Version:   "1.0.0",
-		Type:      plugin.TypeLua,
-		LuaPlugin: &plugin.LuaConfig{Entry: "main.lua"},
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
 	}
 
 	err := host.Load(context.Background(), manifest, dir)
 	require.NoError(t, err)
 
-	event := pluginpkg.Event{ID: "01ABC", Type: "say"}
+	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
 	emits, err := host.DeliverEvent(context.Background(), "multi-validation", event)
 	require.NoError(t, err, "DeliverEvent should not fail on validation errors")
 

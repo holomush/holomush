@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package plugin_test
+package plugins_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 )
@@ -47,10 +47,10 @@ events:
 lua-plugin:
   entry: main.lua
 `
-	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte(manifest))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
 
-	mgr := plugin.NewManager(filepath.Join(dir, "plugins"))
+	mgr := plugins.NewManager(filepath.Join(dir, "plugins"))
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 
@@ -71,15 +71,15 @@ version: 1.0.0
 type: lua
 lua-plugin:
   entry: main.lua`
-	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte(validManifest))
+	writeFile(t, filepath.Join(validDir, "plugins.yaml"), []byte(validManifest))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
 	// Create invalid plugin (bad YAML)
 	invalidDir := filepath.Join(pluginsDir, "invalid")
 	mkdirAll(t, invalidDir)
-	writeFile(t, filepath.Join(invalidDir, "plugin.yaml"), []byte("invalid: ["))
+	writeFile(t, filepath.Join(invalidDir, "plugins.yaml"), []byte("invalid: ["))
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	// Should succeed but only return valid plugin
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestManager_Discover_EmptyDirectory(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, manifests, "len(manifests) should be 0 for empty directory")
@@ -101,7 +101,7 @@ func TestManager_Discover_NonExistentDirectory(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "non-existent-plugins")
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err, "Discover() should handle non-existent dir gracefully")
 	assert.Empty(t, manifests, "len(manifests) should be 0 for non-existent directory")
@@ -113,7 +113,7 @@ func TestManager_Discover_SkipsFilesNotDirectories(t *testing.T) {
 	mkdirAll(t, pluginsDir)
 
 	// Create a file (not directory) in plugins dir - should be skipped
-	writeFile(t, filepath.Join(pluginsDir, "not-a-plugin.txt"), []byte("hello"))
+	writeFile(t, filepath.Join(pluginsDir, "not-a-plugins.txt"), []byte("hello"))
 
 	// Create valid plugin
 	validDir := filepath.Join(pluginsDir, "valid")
@@ -123,10 +123,10 @@ version: 1.0.0
 type: lua
 lua-plugin:
   entry: main.lua`
-	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte(validManifest))
+	writeFile(t, filepath.Join(validDir, "plugins.yaml"), []byte(validManifest))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, manifests, 1, "len(manifests) should be 1 (files should be skipped)")
@@ -136,13 +136,13 @@ func TestManager_Discover_SkipsDirWithoutManifest(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
-	// Create directory without plugin.yaml
+	// Create directory without plugins.yaml
 	noManifestDir := filepath.Join(pluginsDir, "no-manifest")
 	mkdirAll(t, noManifestDir)
-	// Only create a lua file, no plugin.yaml
+	// Only create a lua file, no plugins.yaml
 	writeFile(t, filepath.Join(noManifestDir, "main.lua"), []byte(""))
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, manifests, "len(manifests) should be 0 (dir without manifest should be skipped)")
@@ -152,7 +152,7 @@ func TestManager_Discover_MultiplePlugins(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
-	plugins := []struct {
+	testPlugins := []struct {
 		name    string
 		version string
 	}{
@@ -161,15 +161,15 @@ func TestManager_Discover_MultiplePlugins(t *testing.T) {
 		{"gamma-plugin", "3.0.0"},
 	}
 
-	for _, p := range plugins {
+	for _, p := range testPlugins {
 		pluginDir := filepath.Join(pluginsDir, p.name)
 		mkdirAll(t, pluginDir)
 		manifest := "name: " + p.name + "\nversion: " + p.version + "\ntype: lua\nlua-plugin:\n  entry: main.lua"
-		writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(manifest))
+		writeFile(t, filepath.Join(pluginDir, "plugins.yaml"), []byte(manifest))
 		writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte(""))
 	}
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	require.Len(t, manifests, 3)
@@ -197,13 +197,13 @@ version: 1.0.0
 type: binary
 binary-plugin:
   executable: plugin-${os}-${arch}`
-	writeFile(t, filepath.Join(binaryDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(binaryDir, "plugins.yaml"), []byte(manifest))
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	require.Len(t, manifests, 1)
-	assert.Equal(t, plugin.TypeBinary, manifests[0].Manifest.Type)
+	assert.Equal(t, plugins.TypeBinary, manifests[0].Manifest.Type)
 }
 
 func TestManager_ListPlugins_NoPluginsLoaded(t *testing.T) {
@@ -211,7 +211,7 @@ func TestManager_ListPlugins_NoPluginsLoaded(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	plugins := mgr.ListPlugins()
 	assert.Empty(t, plugins, "ListPlugins() should return empty slice before any plugins loaded")
 }
@@ -228,13 +228,13 @@ version: 1.0.0
 type: lua
 lua-plugin:
   entry: main.lua`
-	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte(manifest))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
 
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err)
 
@@ -250,18 +250,18 @@ func TestManager_LoadAll_SkipsInvalidManifests(t *testing.T) {
 	// Create valid plugin
 	validDir := filepath.Join(pluginsDir, "valid")
 	mkdirAll(t, validDir)
-	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte("name: valid\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(validDir, "plugins.yaml"), []byte("name: valid\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
 	// Create invalid plugin
 	invalidDir := filepath.Join(pluginsDir, "invalid")
 	mkdirAll(t, invalidDir)
-	writeFile(t, filepath.Join(invalidDir, "plugin.yaml"), []byte("invalid yaml ["))
+	writeFile(t, filepath.Join(invalidDir, "plugins.yaml"), []byte("invalid yaml ["))
 
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() should skip invalid plugins")
 
@@ -276,11 +276,11 @@ func TestManager_LoadAll_SkipsLuaPluginsWithoutHost(t *testing.T) {
 	// Create a Lua plugin
 	luaDir := filepath.Join(pluginsDir, "lua-plugin")
 	mkdirAll(t, luaDir)
-	writeFile(t, filepath.Join(luaDir, "plugin.yaml"), []byte("name: lua-plugin\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(luaDir, "plugins.yaml"), []byte("name: lua-plugin\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(luaDir, "main.lua"), []byte(""))
 
 	// Create manager without LuaHost - Lua plugins should be skipped
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() should skip Lua plugins without host")
 
@@ -296,9 +296,9 @@ func TestManager_LoadAll_SkipsBinaryPlugins(t *testing.T) {
 	// Create a binary plugin
 	binaryDir := filepath.Join(pluginsDir, "binary-plugin")
 	mkdirAll(t, binaryDir)
-	writeFile(t, filepath.Join(binaryDir, "plugin.yaml"), []byte("name: binary-plugin\nversion: 1.0.0\ntype: binary\nbinary-plugin:\n  executable: plugin"))
+	writeFile(t, filepath.Join(binaryDir, "plugins.yaml"), []byte("name: binary-plugin\nversion: 1.0.0\ntype: binary\nbinary-plugin:\n  executable: plugin"))
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() should skip binary plugins")
 
@@ -314,13 +314,13 @@ func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
 	// Create a Lua plugin with syntax error
 	luaDir := filepath.Join(pluginsDir, "bad-lua")
 	mkdirAll(t, luaDir)
-	writeFile(t, filepath.Join(luaDir, "plugin.yaml"), []byte("name: bad-lua\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(luaDir, "plugins.yaml"), []byte("name: bad-lua\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(luaDir, "main.lua"), []byte("function broken"))
 
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
 	// LoadAll should succeed but log a warning and skip the bad plugin
 	require.NoError(t, err, "LoadAll() should skip plugins with load errors")
@@ -334,7 +334,7 @@ func TestManager_Close_WithoutLuaHost(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugin.NewManager(pluginsDir)
+	mgr := plugins.NewManager(pluginsDir)
 
 	// Close should succeed even without LuaHost
 	assert.NoError(t, mgr.Close(context.Background()))
@@ -347,11 +347,11 @@ func TestManager_Close(t *testing.T) {
 	// Create a plugin
 	echoDir := filepath.Join(pluginsDir, "echo-bot")
 	mkdirAll(t, echoDir)
-	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
 
 	luaHost := pluginlua.NewHost()
-	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(luaHost))
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Verify plugin is loaded
@@ -371,7 +371,7 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 	// Create a plugin
 	echoDir := filepath.Join(pluginsDir, "echo-bot")
 	mkdirAll(t, echoDir)
-	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(echoDir, "plugins.yaml"), []byte("name: echo-bot\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
 
 	hostErr := errors.New("cleanup failed")
@@ -381,7 +381,7 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 	mockHost.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockHost.EXPECT().Close(mock.Anything).Return(hostErr)
 
-	mgr := plugin.NewManager(pluginsDir, plugin.WithLuaHost(mockHost))
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockHost))
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Verify plugin is loaded (Manager tracks this internally, not via Host.Plugins())

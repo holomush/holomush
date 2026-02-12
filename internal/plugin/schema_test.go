@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package plugin_test
+package plugins_test
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/plugin"
+	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
 func TestValidateSchema_ValidLuaManifest(t *testing.T) {
@@ -27,7 +27,7 @@ capabilities:
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err)
 }
 
@@ -44,7 +44,7 @@ capabilities:
 binary-plugin:
   executable: combat-linux-amd64
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err)
 }
 
@@ -57,7 +57,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.Error(t, err, "ValidateSchema() expected error for name exceeding 64 chars")
 }
 
@@ -70,7 +70,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err, "ValidateSchema() error for 64 char name")
 }
 
@@ -110,7 +110,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := plugin.ValidateSchema([]byte(tt.yaml))
+			err := plugins.ValidateSchema([]byte(tt.yaml))
 			assert.Error(t, err, "ValidateSchema() expected error for %s", tt.name)
 		})
 	}
@@ -185,7 +185,7 @@ lua-plugin:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := plugin.ValidateSchema([]byte(tt.yaml))
+			err := plugins.ValidateSchema([]byte(tt.yaml))
 			assert.Error(t, err, "ValidateSchema() expected error for %s", tt.name)
 		})
 	}
@@ -199,7 +199,7 @@ type: wasm
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.Error(t, err, "ValidateSchema() expected error for invalid type")
 }
 
@@ -214,14 +214,14 @@ func TestValidateSchema_EmptyInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := plugin.ValidateSchema(tt.input)
+			err := plugins.ValidateSchema(tt.input)
 			assert.Error(t, err, "ValidateSchema() expected error for empty input")
 		})
 	}
 }
 
 func TestGenerateSchema(t *testing.T) {
-	schema, err := plugin.GenerateSchema()
+	schema, err := plugins.GenerateSchema()
 	require.NoError(t, err)
 
 	// Schema should be valid JSON
@@ -251,19 +251,19 @@ type: lua
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	require.NoError(t, err)
 
 	// Reset cache
-	plugin.ResetSchemaCache()
+	plugins.ResetSchemaCache()
 
 	// Validation should still work (recompiles schema)
-	err = plugin.ValidateSchema([]byte(yaml))
+	err = plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err, "ValidateSchema() after reset")
 }
 
 func TestGetSchemaID(t *testing.T) {
-	id := plugin.GetSchemaID()
+	id := plugins.GetSchemaID()
 	assert.NotEmpty(t, id, "GetSchemaID() returned empty string")
 	assert.Contains(t, id, "holomush", "GetSchemaID() should contain 'holomush'")
 }
@@ -297,7 +297,7 @@ func TestFormatSchemaError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := plugin.FormatSchemaError(tt.err)
+			got := plugins.FormatSchemaError(tt.err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -307,7 +307,7 @@ func TestValidateSchema_InvalidYAML(t *testing.T) {
 	yaml := `name: test
 version: 1.0.0
 type: [invalid`
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.Error(t, err, "ValidateSchema() expected error for invalid YAML")
 }
 
@@ -320,7 +320,7 @@ engine: ">= 2.0.0"
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err, "ValidateSchema() for manifest with engine field")
 }
 
@@ -335,7 +335,7 @@ dependencies:
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err, "ValidateSchema() for manifest with dependencies field")
 }
 
@@ -356,12 +356,12 @@ capabilities:
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err, "ValidateSchema() for manifest with all optional fields")
 }
 
 func TestGenerateSchema_ContainsRequiredFields(t *testing.T) {
-	schema, err := plugin.GenerateSchema()
+	schema, err := plugins.GenerateSchema()
 	require.NoError(t, err)
 
 	schemaStr := string(schema)
@@ -393,7 +393,7 @@ type: lua
 lua-plugin:
   entry: main.lua
 `, name)
-			err := plugin.ValidateSchema([]byte(yaml))
+			err := plugins.ValidateSchema([]byte(yaml))
 			assert.NoError(t, err, "ValidateSchema() should accept valid name %q", name)
 		})
 	}
@@ -412,7 +412,7 @@ capabilities:
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err)
 }
 
@@ -430,12 +430,12 @@ events:
 lua-plugin:
   entry: main.lua
 `
-	err := plugin.ValidateSchema([]byte(yaml))
+	err := plugins.ValidateSchema([]byte(yaml))
 	assert.NoError(t, err)
 }
 
 func TestGetSchemaID_Format(t *testing.T) {
-	id := plugin.GetSchemaID()
+	id := plugins.GetSchemaID()
 
 	// Should be a URI-like string
 	assert.True(t, strings.HasPrefix(id, "https://") || strings.Contains(id, "holomush"),

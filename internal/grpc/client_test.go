@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	holomushtls "github.com/holomush/holomush/internal/tls"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -275,25 +275,25 @@ func TestClient_WithTLS(t *testing.T) {
 	gameID := "test-game-123"
 
 	// Generate CA
-	ca, err := holomushtls.GenerateCA(gameID)
+	ca, err := tlscerts.GenerateCA(gameID)
 	require.NoError(t, err, "GenerateCA() error")
 
 	// Generate server cert
-	serverCert, err := holomushtls.GenerateServerCert(ca, gameID, "core")
+	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	require.NoError(t, err, "GenerateServerCert() error")
 
 	// Generate client cert
-	clientCert, err := holomushtls.GenerateClientCert(ca, "gateway")
+	clientCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 	require.NoError(t, err, "GenerateClientCert() error")
 
 	// Save certificates
-	err = holomushtls.SaveCertificates(tmpDir, ca, serverCert)
+	err = tlscerts.SaveCertificates(tmpDir, ca, serverCert)
 	require.NoError(t, err, "SaveCertificates() error")
-	err = holomushtls.SaveClientCert(tmpDir, clientCert)
+	err = tlscerts.SaveClientCert(tmpDir, clientCert)
 	require.NoError(t, err, "SaveClientCert() error")
 
 	// Load server TLS config
-	serverTLSConfig, err := holomushtls.LoadServerTLS(tmpDir, "core")
+	serverTLSConfig, err := tlscerts.LoadServerTLS(tmpDir, "core")
 	require.NoError(t, err, "LoadServerTLS() error")
 
 	// Start TLS server
@@ -310,7 +310,7 @@ func TestClient_WithTLS(t *testing.T) {
 	defer server.Stop()
 
 	// Load client TLS config
-	clientTLSConfig, err := holomushtls.LoadClientTLS(tmpDir, "gateway", gameID)
+	clientTLSConfig, err := tlscerts.LoadClientTLS(tmpDir, "gateway", gameID)
 	require.NoError(t, err, "LoadClientTLS() error")
 
 	// Create client with TLS
