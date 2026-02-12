@@ -30,7 +30,7 @@ func TestPolicyStore(t *testing.T) {
 
 var (
 	pool      *pgxpool.Pool
-	container testcontainers.Container
+	container *postgres.PostgresContainer
 	ps        *store.PostgresStore
 )
 

@@ -15,12 +15,12 @@ import (
 // See docs/specs/abac/03-property-model.md for the full specification.
 type EntityProperty struct {
 	ID           ulid.ULID
-	ParentType   string    // "character", "location", "object"
+	ParentType   string // "character", "location", "object"
 	ParentID     ulid.ULID
 	Name         string
-	Value        *string   // NULL for flag-style properties
+	Value        *string // NULL for flag-style properties
 	Owner        *string
-	Visibility   string    // "public", "private", "restricted", "system", "admin"
+	Visibility   string // "public", "private", "restricted", "system", "admin"
 	Flags        []string
 	VisibleTo    []string
 	ExcludedFrom []string

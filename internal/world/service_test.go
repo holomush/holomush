@@ -4611,7 +4611,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 	charID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
 
-	t.Run("deletes properties before character", func(t *testing.T) {
+	t.Run("deletes character then cleans up properties", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
@@ -4623,14 +4623,14 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
-		mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(ctx, charID).Return(nil)
+		mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.NoError(t, err)
 	})
 
-	t.Run("returns error when property deletion fails", func(t *testing.T) {
+	t.Run("returns error when property cleanup fails", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
@@ -4642,6 +4642,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		mockCharRepo.EXPECT().Delete(ctx, charID).Return(nil)
 		mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(errors.New("db error"))
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4655,7 +4656,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 	locID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
 
-	t.Run("deletes properties before location", func(t *testing.T) {
+	t.Run("deletes location then cleans up properties", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
@@ -4667,14 +4668,14 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
-		mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
 		mockLocRepo.EXPECT().Delete(ctx, locID).Return(nil)
+		mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
 	})
 
-	t.Run("returns error when property deletion fails", func(t *testing.T) {
+	t.Run("returns error when property cleanup fails", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
@@ -4686,6 +4687,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		mockLocRepo.EXPECT().Delete(ctx, locID).Return(nil)
 		mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
@@ -4699,7 +4701,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 	objID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
 
-	t.Run("deletes properties before object", func(t *testing.T) {
+	t.Run("deletes object then cleans up properties", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
@@ -4711,14 +4713,14 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
-		mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(ctx, objID).Return(nil)
+		mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.NoError(t, err)
 	})
 
-	t.Run("returns error when property deletion fails", func(t *testing.T) {
+	t.Run("returns error when property cleanup fails", func(t *testing.T) {
 		mockAC := &mockAccessControl{}
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
@@ -4730,6 +4732,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		})
 
 		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		mockObjRepo.EXPECT().Delete(ctx, objID).Return(nil)
 		mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(errors.New("db error"))
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
@@ -4738,7 +4741,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 	})
 }
 
-func TestWorldService_DeleteLocation_ParentFailsAfterPropertyDelete(t *testing.T) {
+func TestWorldService_DeleteLocation_PropertyCleanupFailsAfterParentDelete(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
@@ -4754,15 +4757,15 @@ func TestWorldService_DeleteLocation_ParentFailsAfterPropertyDelete(t *testing.T
 	})
 
 	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
-	mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
-	mockLocRepo.EXPECT().Delete(ctx, locID).Return(errors.New("db error"))
+	mockLocRepo.EXPECT().Delete(ctx, locID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(errors.New("db error"))
 
 	err := svc.DeleteLocation(ctx, subjectID, locID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
 }
 
-func TestWorldService_DeleteObject_ParentFailsAfterPropertyDelete(t *testing.T) {
+func TestWorldService_DeleteObject_PropertyCleanupFailsAfterParentDelete(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
@@ -4778,15 +4781,15 @@ func TestWorldService_DeleteObject_ParentFailsAfterPropertyDelete(t *testing.T) 
 	})
 
 	mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
-	mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
-	mockObjRepo.EXPECT().Delete(ctx, objID).Return(errors.New("db error"))
+	mockObjRepo.EXPECT().Delete(ctx, objID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(errors.New("db error"))
 
 	err := svc.DeleteObject(ctx, subjectID, objID)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "OBJECT_DELETE_FAILED")
 }
 
-func TestWorldService_DeleteCharacter_ParentFailsAfterPropertyDelete(t *testing.T) {
+func TestWorldService_DeleteCharacter_PropertyCleanupFailsAfterParentDelete(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
 	subjectID := "char:" + ulid.Make().String()
@@ -4802,8 +4805,8 @@ func TestWorldService_DeleteCharacter_ParentFailsAfterPropertyDelete(t *testing.
 	})
 
 	mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
-	mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
-	mockCharRepo.EXPECT().Delete(ctx, charID).Return(errors.New("db error"))
+	mockCharRepo.EXPECT().Delete(ctx, charID).Return(nil)
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(errors.New("db error"))
 
 	err := svc.DeleteCharacter(ctx, subjectID, charID)
 	require.Error(t, err)

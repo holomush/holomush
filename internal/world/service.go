@@ -139,8 +139,8 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 }
 
 // DeleteLocation deletes a location after checking delete authorization.
-// Property cascade and entity deletion are sequential but not in the same DB transaction.
-// If entity deletion fails after properties are deleted, orphan cleanup (Phase 7.7) recovers.
+// Deletes parent first, then cascades to properties. If property cleanup fails after parent
+// deletion, orphaned properties are recovered by Phase 7.7 orphan cleanup.
 func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("location repository not configured")
@@ -149,17 +149,17 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if s.propertyRepo != nil {
-		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
-			return oops.Code("LOCATION_DELETE_FAILED").
-				With("operation", "delete_location_properties").Wrapf(err, "delete properties for location %s", id)
-		}
-	}
 	if err := s.locationRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "delete location %s", id)
 		}
 		return oops.Code("LOCATION_DELETE_FAILED").Wrapf(err, "delete location %s", id)
+	}
+	if s.propertyRepo != nil {
+		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
+			return oops.Code("LOCATION_DELETE_FAILED").
+				With("operation", "delete_location_properties").Wrapf(err, "delete properties for location %s", id)
+		}
 	}
 	return nil
 }
@@ -374,8 +374,8 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 }
 
 // DeleteObject deletes an object after checking delete authorization.
-// Property cascade and entity deletion are sequential but not in the same DB transaction.
-// If entity deletion fails after properties are deleted, orphan cleanup (Phase 7.7) recovers.
+// Deletes parent first, then cascades to properties. If property cleanup fails after parent
+// deletion, orphaned properties are recovered by Phase 7.7 orphan cleanup.
 func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("object repository not configured")
@@ -384,17 +384,17 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if s.propertyRepo != nil {
-		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
-			return oops.Code("OBJECT_DELETE_FAILED").
-				With("operation", "delete_object_properties").Wrapf(err, "delete properties for object %s", id)
-		}
-	}
 	if err := s.objectRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "delete object %s", id)
 		}
 		return oops.Code("OBJECT_DELETE_FAILED").Wrapf(err, "delete object %s", id)
+	}
+	if s.propertyRepo != nil {
+		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
+			return oops.Code("OBJECT_DELETE_FAILED").
+				With("operation", "delete_object_properties").Wrapf(err, "delete properties for object %s", id)
+		}
 	}
 	return nil
 }
@@ -463,8 +463,8 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 }
 
 // DeleteCharacter deletes a character after checking delete authorization.
-// Property cascade and entity deletion are sequential but not in the same DB transaction.
-// If entity deletion fails after properties are deleted, orphan cleanup (Phase 7.7) recovers.
+// Deletes parent first, then cascades to properties. If property cleanup fails after parent
+// deletion, orphaned properties are recovered by Phase 7.7 orphan cleanup.
 func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("character repository not configured")
@@ -473,17 +473,17 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
 		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
-	if s.propertyRepo != nil {
-		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
-			return oops.Code("CHARACTER_DELETE_FAILED").
-				With("operation", "delete_character_properties").Wrapf(err, "delete properties for character %s", id)
-		}
-	}
 	if err := s.characterRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "delete character %s", id)
 		}
 		return oops.Code("CHARACTER_DELETE_FAILED").Wrapf(err, "delete character %s", id)
+	}
+	if s.propertyRepo != nil {
+		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
+			return oops.Code("CHARACTER_DELETE_FAILED").
+				With("operation", "delete_character_properties").Wrapf(err, "delete properties for character %s", id)
+		}
 	}
 	return nil
 }

@@ -264,7 +264,7 @@ func TestPropertyRepository_Visibility_RestrictedDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "restricted", got.Visibility)
 	require.NotNil(t, got.VisibleTo)
-	assert.Equal(t, []string{*prop.Owner}, got.VisibleTo)
+	assert.Equal(t, []string{locationID.String()}, got.VisibleTo)
 	require.NotNil(t, got.ExcludedFrom)
 	assert.Empty(t, got.ExcludedFrom)
 }
@@ -422,7 +422,7 @@ func TestPropertyRepository_Update_RestrictedDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "restricted", got.Visibility)
 	require.NotNil(t, got.VisibleTo)
-	assert.Equal(t, []string{*prop.Owner}, got.VisibleTo)
+	assert.Equal(t, []string{locationID.String()}, got.VisibleTo)
 	require.NotNil(t, got.ExcludedFrom)
 	assert.Empty(t, got.ExcludedFrom)
 }
