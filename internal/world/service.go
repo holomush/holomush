@@ -175,7 +175,10 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 		}
 		return nil
 	}
-	return s.transactor.InTransaction(ctx, deleteFn)
+	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+		return oops.Code("LOCATION_DELETE_FAILED").Wrap(err)
+	}
+	return nil
 }
 
 // GetExit retrieves an exit by ID after checking read authorization.
@@ -418,7 +421,10 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 		}
 		return nil
 	}
-	return s.transactor.InTransaction(ctx, deleteFn)
+	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+		return oops.Code("OBJECT_DELETE_FAILED").Wrap(err)
+	}
+	return nil
 }
 
 // MoveObject moves an object to a new containment (location, character inventory, or another object).
@@ -515,7 +521,10 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 		}
 		return nil
 	}
-	return s.transactor.InTransaction(ctx, deleteFn)
+	if err := s.transactor.InTransaction(ctx, deleteFn); err != nil {
+		return oops.Code("CHARACTER_DELETE_FAILED").Wrap(err)
+	}
+	return nil
 }
 
 // GetCharacter retrieves a character by ID after checking read authorization.

@@ -129,7 +129,7 @@ func CompilePolicy(policy *Policy) (json.RawMessage, error) {
 
 	// Unmarshal into map to wrap with grammar_version
 	var ast map[string]any
-	if err := json.Unmarshal(data, &ast); err != nil {
+	if err = json.Unmarshal(data, &ast); err != nil {
 		return nil, fmt.Errorf("unmarshal policy: %w", err)
 	}
 
