@@ -153,10 +153,11 @@ func TestEngine_SessionResolved(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	// Steps 3-6 not implemented yet, so we get placeholder
+	// Steps 3-4 implemented, no policies loaded, so default deny
 	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "evaluation pending", decision.Reason)
+	assert.Equal(t, "no applicable policies", decision.Reason)
+	assert.NotNil(t, decision.Attributes, "attributes should be populated")
 }
 
 func TestEngine_SessionResolved_RewritesSubject(t *testing.T) {
@@ -245,8 +246,9 @@ func TestEngine_NonSystemNonSession(t *testing.T) {
 
 	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "evaluation pending", decision.Reason)
+	assert.Equal(t, "no applicable policies", decision.Reason)
 	assert.Equal(t, "", decision.PolicyID)
+	assert.NotNil(t, decision.Attributes, "attributes should be populated")
 }
 
 func TestEngine_AllDecisionsValidate(t *testing.T) {
@@ -371,4 +373,364 @@ func TestEngine_AuditLoggerCleanup(t *testing.T) {
 	// Verify WAL directory exists (file may or may not exist depending on whether WAL was written)
 	_, err = os.Stat(tmpDir)
 	assert.NoError(t, err, "temp directory should exist")
+}
+
+func TestEngine_FindApplicablePolicies(t *testing.T) {
+	tests := []struct {
+		name       string
+		req        types.AccessRequest
+		policies   []CachedPolicy
+		wantCount  int
+		wantIDs    []string
+		wantReason string
+	}{
+		{
+			name: "principal type match",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-1",
+					Name: "allow-characters",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							PrincipalType: strPtr("character"),
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-1"},
+		},
+		{
+			name: "principal type mismatch",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-2",
+					Name: "allow-plugins",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							PrincipalType: strPtr("plugin"),
+						},
+					},
+				},
+			},
+			wantCount: 0,
+			wantIDs:   []string{},
+		},
+		{
+			name: "principal wildcard",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-3",
+					Name: "wildcard-principal",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							PrincipalType: nil,
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-3"},
+		},
+		{
+			name: "action list match",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "say",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-4",
+					Name: "allow-say-pose",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ActionList: []string{"say", "pose"},
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-4"},
+		},
+		{
+			name: "action list mismatch",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "dig",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-5",
+					Name: "allow-say-pose",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ActionList: []string{"say", "pose"},
+						},
+					},
+				},
+			},
+			wantCount: 0,
+			wantIDs:   []string{},
+		},
+		{
+			name: "action wildcard",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "dig",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-6",
+					Name: "wildcard-action",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ActionList: nil,
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-6"},
+		},
+		{
+			name: "resource type match",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-7",
+					Name: "allow-location",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ResourceType: strPtr("location"),
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-7"},
+		},
+		{
+			name: "resource exact match",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-8",
+					Name: "allow-specific-location",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ResourceExact: strPtr("location:01XYZ"),
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-8"},
+		},
+		{
+			name: "resource exact mismatch",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-9",
+					Name: "allow-other-location",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ResourceExact: strPtr("location:01ABC"),
+						},
+					},
+				},
+			},
+			wantCount: 0,
+			wantIDs:   []string{},
+		},
+		{
+			name: "resource wildcard",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-10",
+					Name: "wildcard-resource",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ResourceType:  nil,
+							ResourceExact: nil,
+						},
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"policy-10"},
+		},
+		{
+			name: "no policies match",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "dig",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-11",
+					Name: "plugin-only",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							PrincipalType: strPtr("plugin"),
+						},
+					},
+				},
+			},
+			wantCount: 0,
+			wantIDs:   []string{},
+		},
+		{
+			name: "multiple policies with mixed targets",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "say",
+				Resource: "location:01XYZ",
+			},
+			policies: []CachedPolicy{
+				{
+					ID:   "policy-12",
+					Name: "match-character",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							PrincipalType: strPtr("character"),
+						},
+					},
+				},
+				{
+					ID:   "policy-13",
+					Name: "mismatch-plugin",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							PrincipalType: strPtr("plugin"),
+						},
+					},
+				},
+				{
+					ID:   "policy-14",
+					Name: "match-say",
+					Compiled: &CompiledPolicy{
+						Effect: types.PolicyEffectPermit,
+						Target: CompiledTarget{
+							ActionList: []string{"say", "pose"},
+						},
+					},
+				},
+			},
+			wantCount: 2,
+			wantIDs:   []string{"policy-12", "policy-14"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+			got := engine.findApplicablePolicies(tt.req, tt.policies)
+
+			assert.Equal(t, tt.wantCount, len(got), "unexpected number of matching policies")
+
+			gotIDs := make([]string, len(got))
+			for i, p := range got {
+				gotIDs[i] = p.ID
+			}
+			assert.ElementsMatch(t, tt.wantIDs, gotIDs, "unexpected policy IDs")
+		})
+	}
+}
+
+func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
+	tests := []struct {
+		name           string
+		req            types.AccessRequest
+		sessionResolve func(ctx context.Context, sessionID string) (string, error)
+		wantEffect     types.Effect
+		wantReason     string
+	}{
+		{
+			name: "attribute resolution called for character",
+			req: types.AccessRequest{
+				Subject:  "character:01ABC",
+				Action:   "read",
+				Resource: "location:01XYZ",
+			},
+			wantEffect: types.EffectDefaultDeny,
+			wantReason: "no applicable policies",
+		},
+		{
+			name: "attribute resolution called for plugin",
+			req: types.AccessRequest{
+				Subject:  "plugin:echo-bot",
+				Action:   "execute",
+				Resource: "command:say",
+			},
+			wantEffect: types.EffectDefaultDeny,
+			wantReason: "no applicable policies",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := &mockSessionResolver{
+				resolveFunc: tt.sessionResolve,
+			}
+			engine, _ := createTestEngine(t, resolver)
+
+			decision, err := engine.Evaluate(context.Background(), tt.req)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantEffect, decision.Effect)
+			assert.Equal(t, tt.wantReason, decision.Reason)
+			assert.NotNil(t, decision.Attributes, "attributes should be populated")
+		})
+	}
 }

@@ -91,15 +91,120 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 		// Rewrite subject to character: format
 		req.Subject = "character:" + characterID
-
-		// Continue to placeholder (steps 3-6 not implemented)
 	}
 
-	// Placeholder for steps 3-6
+	// Step 3: Eager attribute resolution
+	bags, err := e.resolver.Resolve(ctx, req)
+	if err != nil {
+		// Provider errors don't fail evaluation — continue with what we have
+		// (resolver already logs errors internally)
+		bags = types.NewAttributeBags()
+	}
+
+	// Step 4: Load snapshot and filter policies
+	snap := e.cache.Snapshot()
+	candidates := e.findApplicablePolicies(req, snap.Policies)
+
+	// If no candidates, default deny
+	if len(candidates) == 0 {
+		decision := types.NewDecision(types.EffectDefaultDeny, "no applicable policies", "")
+		decision.Attributes = bags
+		if valErr := decision.Validate(); valErr != nil {
+			return decision, oops.Wrapf(valErr, "decision validation failed")
+		}
+
+		// Audit the decision
+		entry := audit.Entry{
+			Subject:    req.Subject,
+			Action:     req.Action,
+			Resource:   req.Resource,
+			Effect:     types.EffectDefaultDeny,
+			PolicyID:   "",
+			PolicyName: "",
+			DurationUS: time.Since(start).Microseconds(),
+			Timestamp:  time.Now(),
+		}
+		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+			// Log error but don't fail the decision
+			_ = auditErr
+		}
+
+		return decision, nil
+	}
+
+	// Placeholder for steps 5-6 (condition evaluation)
 	decision := types.NewDecision(types.EffectDefaultDeny, "evaluation pending", "")
+	decision.Attributes = bags
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
 	}
 
 	return decision, nil
+}
+
+// findApplicablePolicies filters policies by target matching.
+// Returns only policies whose target constraints match the access request.
+func (e *Engine) findApplicablePolicies(req types.AccessRequest, policies []CachedPolicy) []CachedPolicy {
+	var result []CachedPolicy
+
+	for _, policy := range policies {
+		if policy.Compiled == nil {
+			continue
+		}
+
+		target := policy.Compiled.Target
+
+		// Check principal type
+		if target.PrincipalType != nil {
+			subjectType := parseEntityType(req.Subject)
+			if subjectType != *target.PrincipalType {
+				continue
+			}
+		}
+
+		// Check action list
+		if len(target.ActionList) > 0 {
+			if !contains(target.ActionList, req.Action) {
+				continue
+			}
+		}
+
+		// Check resource exact match (takes precedence)
+		if target.ResourceExact != nil {
+			if req.Resource != *target.ResourceExact {
+				continue
+			}
+		} else if target.ResourceType != nil {
+			// Check resource type only if exact match not specified
+			resourceType := parseEntityType(req.Resource)
+			if resourceType != *target.ResourceType {
+				continue
+			}
+		}
+
+		// All checks passed, include this policy
+		result = append(result, policy)
+	}
+
+	return result
+}
+
+// parseEntityType extracts the type prefix from "type:id" format.
+// Returns empty string if no colon found.
+func parseEntityType(id string) string {
+	parts := strings.SplitN(id, ":", 2)
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[0]
+}
+
+// contains checks if a string slice contains a specific value.
+func contains(slice []string, value string) bool {
+	for _, item := range slice {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }
