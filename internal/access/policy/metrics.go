@@ -41,10 +41,11 @@ var (
 	}, []string{"namespace", "error_type"})
 
 	// unregisteredAttributesCounter counts accesses to unregistered attributes.
-	// Not yet used - will be wired when attribute validation tracking is added.
+	// Superseded by abac_rejected_provider_attributes_total in the attribute package (S6).
+	// Kept for backward compatibility with existing dashboards.
 	unregisteredAttributesCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "abac_unregistered_attributes_total",
-		Help: "Total number of accesses to unregistered attributes",
+		Help: "Total number of accesses to unregistered attributes (legacy, see abac_rejected_provider_attributes_total)",
 	}, []string{"namespace", "key"})
 
 	// circuitBreakerTripsCounter counts circuit breaker trips per provider.

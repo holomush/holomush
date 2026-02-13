@@ -9,9 +9,19 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/samber/oops"
 )
+
+// rejectedAttributesCounter counts provider attributes rejected because
+// the key was not registered in the provider's namespace schema (S6).
+var rejectedAttributesCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "abac_rejected_provider_attributes_total",
+	Help: "Total number of provider attributes rejected due to namespace validation (S6)",
+}, []string{"namespace", "key"})
 
 // Resolver resolves attributes for access requests
 type Resolver struct {
@@ -244,9 +254,21 @@ func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider Environm
 	return attrs
 }
 
-// mergeAttributes merges attributes from a provider into a bag with namespace prefix
+// mergeAttributes merges attributes from a provider into a bag with namespace prefix.
+// Validates each key against the schema registry per Spec S6: keys not registered
+// in the provider's namespace are rejected with warning logging and metric emission.
 func (r *Resolver) mergeAttributes(namespace string, attrs, bag map[string]any) {
 	for key, value := range attrs {
+		// S6: Validate key is registered in the provider's namespace schema
+		if !r.registry.IsRegistered(namespace, key) {
+			r.logger.Warn("provider returned attribute not in registered schema",
+				"namespace", namespace,
+				"key", key,
+			)
+			rejectedAttributesCounter.WithLabelValues(namespace, key).Inc()
+			continue // reject unregistered key
+		}
+
 		// Use namespace.key format
 		bagKey := fmt.Sprintf("%s.%s", namespace, key)
 		bag[bagKey] = value

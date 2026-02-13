@@ -41,11 +41,11 @@ func TestCommandProvider_ResolveResource(t *testing.T) {
 			},
 		},
 		{
-			name:       "command with multi-part name",
-			resourceID: "command:@dig",
+			name:       "command with multi-word name",
+			resourceID: "command:dig",
 			expected: map[string]any{
 				"type": "command",
-				"name": "@dig",
+				"name": "dig",
 			},
 		},
 		{

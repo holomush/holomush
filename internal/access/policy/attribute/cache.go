@@ -39,17 +39,18 @@ func newAttributeCache(capacity int) *attributeCache {
 	}
 }
 
-// Get retrieves a value from the cache
+// Get retrieves a value from the cache.
+// Uses a full write lock because MoveToFront mutates the LRU list.
 func (c *attributeCache) Get(key string) (map[string]any, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	elem, exists := c.items[key]
 	if !exists {
 		return nil, false
 	}
 
-	// Move to front (most recently used)
+	// Move to front (most recently used) — mutates list, requires write lock
 	c.lru.MoveToFront(elem)
 
 	entry, ok := elem.Value.(*cacheEntry)

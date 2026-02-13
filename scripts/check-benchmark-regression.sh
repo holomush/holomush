@@ -43,13 +43,10 @@ echo ""
 echo "Running benchmarks (count=3, benchtime=1s)..."
 echo ""
 
-BENCH_OUTPUT=$(cd "${REPO_ROOT}" && go test \
-    -bench=. \
-    -benchmem \
-    -count=3 \
-    -benchtime=1s \
-    -run='^$' \
-    "${BENCH_PACKAGE}" 2>&1)
+BENCH_OUTPUT=$(cd "${REPO_ROOT}" && task test:bench \
+    BENCH_COUNT=3 \
+    BENCH_TIME=1s \
+    BENCH_PACKAGE="${BENCH_PACKAGE}" 2>&1)
 
 echo "${BENCH_OUTPUT}"
 echo ""

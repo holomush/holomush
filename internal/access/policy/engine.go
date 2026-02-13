@@ -112,6 +112,26 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		bags = types.NewAttributeBags()
 	}
 
+	// Step 3b: Staleness check — fail-closed when cache is stale
+	if e.cache.IsStale() {
+		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "")
+		decision.Attributes = bags
+		entry := audit.Entry{
+			Subject:    req.Subject,
+			Action:     req.Action,
+			Resource:   req.Resource,
+			Effect:     types.EffectDefaultDeny,
+			PolicyID:   "",
+			PolicyName: "",
+			DurationUS: time.Since(start).Microseconds(),
+			Timestamp:  time.Now(),
+		}
+		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+			_ = auditErr
+		}
+		return decision, nil
+	}
+
 	// Step 4: Load snapshot and filter policies
 	snap := e.cache.Snapshot()
 	candidates := e.findApplicablePolicies(req, snap.Policies)
@@ -169,7 +189,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		Resource:   req.Resource,
 		Effect:     decision.Effect,
 		PolicyID:   decision.PolicyID,
-		PolicyName: "",
+		PolicyName: policyNameFromMatches(decision.PolicyID, decision.Policies),
 		DurationUS: time.Since(start).Microseconds(),
 		Timestamp:  time.Now(),
 	}
@@ -285,6 +305,20 @@ func contains(slice []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// policyNameFromMatches looks up the policy name for the winning policy ID
+// from the list of matched policies.
+func policyNameFromMatches(policyID string, matches []types.PolicyMatch) string {
+	if policyID == "" {
+		return ""
+	}
+	for _, m := range matches {
+		if m.PolicyID == policyID {
+			return m.PolicyName
+		}
+	}
+	return ""
 }
 
 // combineDecisions implements deny-overrides combination logic.

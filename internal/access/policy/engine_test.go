@@ -79,7 +79,8 @@ func createTestEngine(t *testing.T, sessionResolver SessionResolver) (*Engine, *
 		_ = auditLogger.Close()
 	})
 
-	cache := NewCache(nil, nil) // Not used in steps 1-2
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano()) // mark non-stale for tests
 
 	engine := NewEngine(resolver, cache, sessionResolver, auditLogger)
 	return engine, mockWriter
@@ -251,6 +252,35 @@ func TestEngine_NonSystemNonSession(t *testing.T) {
 	assert.Equal(t, "no applicable policies", decision.Reason)
 	assert.Equal(t, "", decision.PolicyID)
 	assert.NotNil(t, decision.Attributes, "attributes should be populated")
+}
+
+func TestEngine_StaleCacheDefaultDeny(t *testing.T) {
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() {
+		_ = auditLogger.Close()
+	})
+
+	// Cache with lastUpdate = 0 (never reloaded → stale)
+	cache := NewCache(nil, nil)
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, "policy cache stale", decision.Reason)
+	assert.False(t, decision.IsAllowed())
 }
 
 func TestEngine_AllDecisionsValidate(t *testing.T) {
@@ -765,7 +795,7 @@ func (m *mockAttributeProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
 			"role":    types.AttrTypeString,
-			"level":   types.AttrTypeInt,
+			"level":   types.AttrTypeFloat,
 			"banned":  types.AttrTypeBool,
 			"faction": types.AttrTypeString,
 			"muted":   types.AttrTypeBool,
@@ -898,7 +928,7 @@ func TestEngine_EvaluateConditions_NumericComparison(t *testing.T) {
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"level": 7},
+		subjectMap: map[string]any{"level": float64(7)},
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -945,7 +975,7 @@ func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 		namespace: "character",
 		subjectMap: map[string]any{
 			"role":   "admin",
-			"level":  5,
+			"level":  float64(5),
 			"banned": false,
 		},
 	}
@@ -989,7 +1019,7 @@ func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
 		namespace: "character",
 		subjectMap: map[string]any{
 			"role":  "admin",
-			"level": 10,
+			"level": float64(10),
 		},
 	}
 
@@ -1160,7 +1190,7 @@ func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
 		namespace: "character",
 		subjectMap: map[string]any{
 			"role":  "player",
-			"level": 10,
+			"level": float64(10),
 		},
 	}
 

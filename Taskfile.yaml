@@ -103,6 +103,15 @@ tasks:
       FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
       FUZZ_PACKAGE: '{{default "./internal/access/policy/dsl/" .FUZZ_PACKAGE}}'
 
+  test:bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem -count={{.BENCH_COUNT}} -benchtime={{.BENCH_TIME}} -run='^$' {{.BENCH_PACKAGE}}
+    vars:
+      BENCH_COUNT: '{{default "3" .BENCH_COUNT}}'
+      BENCH_TIME: '{{default "1s" .BENCH_TIME}}'
+      BENCH_PACKAGE: '{{default "./internal/access/policy/" .BENCH_PACKAGE}}'
+
   mocks:generate:
     desc: Generate mocks with mockery
     cmds:

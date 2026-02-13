@@ -69,10 +69,15 @@ func (p *benchAttributeProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
 			"role":    types.AttrTypeString,
-			"level":   types.AttrTypeInt,
+			"level":   types.AttrTypeFloat,
 			"banned":  types.AttrTypeBool,
 			"faction": types.AttrTypeString,
 			"muted":   types.AttrTypeBool,
+			"score":   types.AttrTypeFloat,
+			"rank":    types.AttrTypeString,
+			"credits": types.AttrTypeFloat,
+			"karma":   types.AttrTypeFloat,
+			"xp":      types.AttrTypeFloat,
 		},
 	}
 }
@@ -167,7 +172,7 @@ func generateNestedIfPolicy(depth int) string {
 // Target: <10μs
 func BenchmarkSinglePolicyEvaluation(b *testing.B) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
-	attrs := map[string]any{"role": "admin", "level": 10}
+	attrs := map[string]any{"role": "admin", "level": float64(10)}
 
 	engine := createBenchEngine(b, []string{dslText}, attrs)
 
@@ -199,7 +204,7 @@ func BenchmarkConditionEvaluation(b *testing.B) {
 	};`
 	attrs := map[string]any{
 		"role":   "admin",
-		"level":  10,
+		"level":  float64(10),
 		"banned": false,
 	}
 
@@ -227,7 +232,7 @@ func BenchmarkConditionEvaluation(b *testing.B) {
 // Target: <100μs
 func BenchmarkFiftyPolicyEvaluation(b *testing.B) {
 	policies := generateBenchPolicies(50)
-	attrs := map[string]any{"role": "admin", "level": 25}
+	attrs := map[string]any{"role": "admin", "level": float64(25)}
 
 	engine := createBenchEngine(b, policies, attrs)
 
@@ -254,15 +259,15 @@ func BenchmarkFiftyPolicyEvaluation(b *testing.B) {
 func BenchmarkAttributeResolution(b *testing.B) {
 	attrs := map[string]any{
 		"role":    "admin",
-		"level":   10,
+		"level":   float64(10),
 		"banned":  false,
 		"faction": "rebels",
 		"muted":   false,
-		"score":   1000,
+		"score":   float64(1000),
 		"rank":    "general",
-		"credits": 5000,
-		"karma":   50,
-		"xp":      10000,
+		"credits": float64(5000),
+		"karma":   float64(50),
+		"xp":      float64(10000),
 	}
 
 	registry := attribute.NewSchemaRegistry()
@@ -298,7 +303,7 @@ func BenchmarkAttributeResolution(b *testing.B) {
 // Target: <25ms
 func BenchmarkWorstCase_NestedIf(b *testing.B) {
 	dslText := generateNestedIfPolicy(10)
-	attrs := map[string]any{"level": 15}
+	attrs := map[string]any{"level": float64(15)}
 
 	engine := createBenchEngine(b, []string{dslText}, attrs)
 
@@ -325,7 +330,7 @@ func BenchmarkWorstCase_NestedIf(b *testing.B) {
 func BenchmarkWorstCase_AllPoliciesMatch(b *testing.B) {
 	// All policies use level > 0, so with level=50 they all match
 	policies := generateBenchPolicies(50)
-	attrs := map[string]any{"level": 50}
+	attrs := map[string]any{"level": float64(50)}
 
 	engine := createBenchEngine(b, policies, attrs)
 
@@ -356,7 +361,7 @@ func BenchmarkEvaluateEndToEnd(b *testing.B) {
 	}
 	attrs := map[string]any{
 		"role":   "admin",
-		"level":  10,
+		"level":  float64(10),
 		"banned": false,
 	}
 

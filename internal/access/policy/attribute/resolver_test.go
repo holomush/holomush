@@ -24,6 +24,7 @@ type resolverMockAttributeProvider struct {
 	resourceError error
 	shouldPanic   bool
 	callCount     map[string]int
+	schema        *types.NamespaceSchema
 }
 
 func newResolverMockAttributeProvider(namespace string) *resolverMockAttributeProvider {
@@ -32,6 +33,7 @@ func newResolverMockAttributeProvider(namespace string) *resolverMockAttributePr
 		subjectData:  make(map[string]map[string]any),
 		resourceData: make(map[string]map[string]any),
 		callCount:    make(map[string]int),
+		schema:       newResolverMockSchema(),
 	}
 }
 
@@ -68,6 +70,10 @@ func (m *resolverMockAttributeProvider) ResolveResource(_ context.Context, resou
 }
 
 func (m *resolverMockAttributeProvider) Schema() *types.NamespaceSchema {
+	return m.schema
+}
+
+func newResolverMockSchema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
 			"role": types.AttrTypeString,
@@ -142,6 +148,11 @@ func TestResolver_RegisterEnvironmentProvider(t *testing.T) {
 		attrs: map[string]any{
 			"time": "2026-02-12T12:00:00Z",
 		},
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{
+				"time": types.AttrTypeString,
+			},
+		},
 	}
 
 	err := resolver.RegisterEnvironmentProvider(provider)
@@ -158,6 +169,14 @@ func TestResolver_Resolve_SingleProvider(t *testing.T) {
 	resolver := NewResolver(registry)
 
 	provider := newResolverMockAttributeProvider("character")
+	provider.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role":  types.AttrTypeString,
+			"level": types.AttrTypeInt,
+			"owner": types.AttrTypeString,
+			"type":  types.AttrTypeString,
+		},
+	}
 	provider.subjectData["01ABC"] = map[string]any{
 		"role":  "admin",
 		"level": 5,
@@ -197,6 +216,12 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 
 	// First provider (character namespace)
 	provider1 := newResolverMockAttributeProvider("character")
+	provider1.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role":  types.AttrTypeString,
+			"level": types.AttrTypeInt,
+		},
+	}
 	provider1.subjectData["01ABC"] = map[string]any{
 		"role":  "admin",
 		"level": 5,
@@ -204,6 +229,12 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 
 	// Second provider (permissions namespace)
 	provider2 := newResolverMockAttributeProvider("permissions")
+	provider2.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role":        types.AttrTypeString,
+			"permissions": types.AttrTypeStringList,
+		},
+	}
 	provider2.subjectData["01ABC"] = map[string]any{
 		"role":        "superuser", // Duplicate key - should override
 		"permissions": []string{"read", "write"},
@@ -235,11 +266,23 @@ func TestResolver_Resolve_ListMerging(t *testing.T) {
 	resolver := NewResolver(registry)
 
 	provider1 := newResolverMockAttributeProvider("provider1")
+	provider1.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role": types.AttrTypeString,
+			"tags": types.AttrTypeStringList,
+		},
+	}
 	provider1.subjectData["01ABC"] = map[string]any{
 		"tags": []string{"admin", "moderator"},
 	}
 
 	provider2 := newResolverMockAttributeProvider("provider2")
+	provider2.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role": types.AttrTypeString,
+			"tags": types.AttrTypeStringList,
+		},
+	}
 	provider2.subjectData["01ABC"] = map[string]any{
 		"tags": []string{"verified", "premium"},
 	}
@@ -453,6 +496,12 @@ func TestResolver_Resolve_EnvironmentProvider(t *testing.T) {
 			"time":       "2026-02-12T12:00:00Z",
 			"ip_address": "192.168.1.1",
 		},
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{
+				"time":       types.AttrTypeString,
+				"ip_address": types.AttrTypeString,
+			},
+		},
 	}
 
 	require.NoError(t, resolver.RegisterEnvironmentProvider(envProvider))
@@ -489,4 +538,39 @@ func TestResolver_Resolve_InvalidEntityIDFormat(t *testing.T) {
 
 	// Should have empty subject bag (invalid format)
 	assert.Empty(t, bags.Subject)
+}
+
+func TestResolver_Resolve_S6_NamespaceValidation(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Provider schema only registers "role" — "unregistered_key" is NOT in schema
+	provider := newResolverMockAttributeProvider("character")
+	provider.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role": types.AttrTypeString,
+		},
+	}
+	provider.subjectData["01ABC"] = map[string]any{
+		"role":             "admin",
+		"unregistered_key": "should be rejected",
+	}
+
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "room:01XYZ",
+	}
+
+	bags, err := resolver.Resolve(context.Background(), req)
+	require.NoError(t, err)
+
+	// Registered key should be present
+	assert.Equal(t, "admin", bags.Subject["character.role"])
+
+	// Unregistered key MUST be rejected (S6)
+	_, exists := bags.Subject["character.unregistered_key"]
+	assert.False(t, exists, "unregistered key must be rejected per Spec S6")
 }
