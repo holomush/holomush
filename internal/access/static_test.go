@@ -81,15 +81,15 @@ func TestStaticAccessControl_RoleBasedAccess(t *testing.T) {
 	assert.True(t, ac.Check(ctx, "char:player1", "execute", "command:look"))
 
 	// Player cannot use builder commands
-	assert.False(t, ac.Check(ctx, "char:player1", "execute", "command:@dig"))
+	assert.False(t, ac.Check(ctx, "char:player1", "execute", "command:dig"))
 	assert.False(t, ac.Check(ctx, "char:player1", "write", "location:01ABC"))
 
 	// Builder can use builder commands
-	assert.True(t, ac.Check(ctx, "char:builder1", "execute", "command:@dig"))
+	assert.True(t, ac.Check(ctx, "char:builder1", "execute", "command:dig"))
 	assert.True(t, ac.Check(ctx, "char:builder1", "write", "location:01ABC"))
 
 	// Admin can do everything
-	assert.True(t, ac.Check(ctx, "char:admin1", "execute", "command:@dig"))
+	assert.True(t, ac.Check(ctx, "char:admin1", "execute", "command:dig"))
 	assert.True(t, ac.Check(ctx, "char:admin1", "grant", "anything"))
 	assert.True(t, ac.Check(ctx, "char:admin1", "delete", "world:everything"))
 }
@@ -149,7 +149,7 @@ func TestStaticAccessControl_SessionSubjects(t *testing.T) {
 	// Session subjects work like char subjects
 	require.NoError(t, ac.AssignRole("session:web-123", "player"))
 	assert.True(t, ac.Check(ctx, "session:web-123", "execute", "command:say"))
-	assert.False(t, ac.Check(ctx, "session:web-123", "execute", "command:@dig"))
+	assert.False(t, ac.Check(ctx, "session:web-123", "execute", "command:dig"))
 }
 
 func TestStaticAccessControl_ConcurrentAccess(t *testing.T) {

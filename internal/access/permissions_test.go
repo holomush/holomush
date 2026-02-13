@@ -24,7 +24,7 @@ func TestDefaultRoles(t *testing.T) {
 
 	// Builder has world modification
 	assert.Contains(t, roles["builder"], "write:location:*")
-	assert.Contains(t, roles["builder"], "execute:command:@dig")
+	assert.Contains(t, roles["builder"], "execute:command:dig")
 
 	// Admin has full access
 	assert.Contains(t, roles["admin"], "read:**")

@@ -31,10 +31,10 @@ var builderPowers = []string{
 	"delete:object:*",
 
 	// Builder commands
-	"execute:command:@dig",
-	"execute:command:@create",
-	"execute:command:@describe",
-	"execute:command:@link",
+	"execute:command:dig",
+	"execute:command:create",
+	"execute:command:describe",
+	"execute:command:link",
 }
 
 var adminPowers = []string{
