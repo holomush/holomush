@@ -207,7 +207,7 @@ func collectFromCondition(c *dsl.Condition) []attrRefInfo {
 		if len(c.Has.Path) > 0 {
 			refs = append(refs, attrRefInfo{
 				namespace: c.Has.Root,
-				key:       c.Has.Path[0],
+				key:       strings.Join(c.Has.Path, "."),
 			})
 		}
 
@@ -215,7 +215,7 @@ func collectFromCondition(c *dsl.Condition) []attrRefInfo {
 		if len(c.Contains.Path) > 0 {
 			refs = append(refs, attrRefInfo{
 				namespace: c.Contains.Root,
-				key:       c.Contains.Path[0],
+				key:       strings.Join(c.Contains.Path, "."),
 			})
 		}
 
@@ -242,7 +242,7 @@ func collectFromExpr(e *dsl.Expr) []attrRefInfo {
 	if e.AttrRef != nil && len(e.AttrRef.Path) > 0 {
 		return []attrRefInfo{{
 			namespace: e.AttrRef.Root,
-			key:       e.AttrRef.Path[0],
+			key:       strings.Join(e.AttrRef.Path, "."),
 		}}
 	}
 	return nil

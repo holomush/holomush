@@ -388,3 +388,25 @@ func TestCompile_ValidatesAttributesInContainsCondition(t *testing.T) {
 	require.NotEmpty(t, warnings)
 	assert.Contains(t, warnings[0].Message, "resource.bogus")
 }
+
+func TestCompile_ValidatesFullDottedPath(t *testing.T) {
+	schema := schemaWith(map[string]map[string]types.AttrType{
+		"resource": {
+			"metadata.owner": types.AttrTypeString,
+		},
+	})
+	compiler := NewCompiler(schema)
+
+	// resource.metadata.owner is registered with full dotted key — should succeed
+	policy, warnings, err := compiler.Compile(`permit(principal, action, resource) when { resource.metadata.owner == principal.id };`)
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	assert.Empty(t, warnings)
+
+	// resource.metadata.bogus is NOT registered — should warn with full dotted path
+	policy, warnings, err = compiler.Compile(`permit(principal, action, resource) when { resource.metadata.bogus == "test" };`)
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	require.NotEmpty(t, warnings)
+	assert.Contains(t, warnings[0].Message, "resource.metadata.bogus")
+}
