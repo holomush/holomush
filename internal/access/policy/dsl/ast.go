@@ -120,11 +120,11 @@ type Conjunction struct {
 //
 // The parser tries alternatives in order (PEG ordered choice) with
 // MaxLookahead for full backtracking:
-// 1. Unique-prefix forms: negation (!), parenthesized, if-then-else
-// 2. has (starts with attribute_root keyword + "has")
-// 3. Expression-starting forms ordered most-specific first:
-//    contains > like > in-list > in-expr > comparison
-// 4. Bare boolean literal (fallback)
+//  1. Unique-prefix forms: negation (!), parenthesized, if-then-else
+//  2. has (starts with attribute_root keyword + "has")
+//  3. Expression-starting forms ordered most-specific first:
+//     contains > like > in-list > in-expr > comparison
+//  4. Bare boolean literal (fallback)
 type Condition struct {
 	Pos           lexer.Position     `parser:"" json:"-"`
 	Negation      *Condition         `parser:"  Bang @@" json:"negation,omitempty"`

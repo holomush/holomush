@@ -285,9 +285,9 @@ func TestEvaluateConditions_Has(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "has simple attribute present",
-			cond: mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"faction"}}}),
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["faction"] = "horde"; return b }(),
+			name:     "has simple attribute present",
+			cond:     mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"faction"}}}),
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["faction"] = "horde"; return b }(),
 			expected: true,
 		},
 		{
@@ -297,27 +297,27 @@ func TestEvaluateConditions_Has(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "has dotted path present",
-			cond: mkSingleCond(&Condition{Has: &HasCondition{Root: "resource", Path: []string{"metadata", "tags"}}}),
-			bags: func() *types.AttributeBags { b := newBags(); b.Resource["metadata.tags"] = []string{"a"}; return b }(),
+			name:     "has dotted path present",
+			cond:     mkSingleCond(&Condition{Has: &HasCondition{Root: "resource", Path: []string{"metadata", "tags"}}}),
+			bags:     func() *types.AttributeBags { b := newBags(); b.Resource["metadata.tags"] = []string{"a"}; return b }(),
 			expected: true,
 		},
 		{
-			name: "has with zero value (empty string) still true",
-			cond: mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"name"}}}),
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["name"] = ""; return b }(),
+			name:     "has with zero value (empty string) still true",
+			cond:     mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"name"}}}),
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["name"] = ""; return b }(),
 			expected: true,
 		},
 		{
-			name: "has with zero value (zero int) still true",
-			cond: mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"level"}}}),
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["level"] = 0; return b }(),
+			name:     "has with zero value (zero int) still true",
+			cond:     mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"level"}}}),
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["level"] = 0; return b }(),
 			expected: true,
 		},
 		{
-			name: "has with nil value still true (key exists)",
-			cond: mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"data"}}}),
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["data"] = nil; return b }(),
+			name:     "has with nil value still true (key exists)",
+			cond:     mkSingleCond(&Condition{Has: &HasCondition{Root: "principal", Path: []string{"data"}}}),
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["data"] = nil; return b }(),
 			expected: true,
 		},
 	}
@@ -452,7 +452,11 @@ func TestEvaluateConditions_Contains(t *testing.T) {
 				Root: "principal", Path: []string{"flags"}, Op: "containsAll",
 				List: mkStrList("vip", "beta"),
 			}}),
-			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["flags"] = []string{"vip", "beta", "extra"}; return b }(),
+			bags: func() *types.AttributeBags {
+				b := newBags()
+				b.Subject["flags"] = []string{"vip", "beta", "extra"}
+				return b
+			}(),
 			expected: true,
 		},
 		{
@@ -470,7 +474,11 @@ func TestEvaluateConditions_Contains(t *testing.T) {
 				Root: "principal", Path: []string{"flags"}, Op: "containsAny",
 				List: mkStrList("admin", "builder"),
 			}}),
-			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["flags"] = []string{"builder", "tester"}; return b }(),
+			bags: func() *types.AttributeBags {
+				b := newBags()
+				b.Subject["flags"] = []string{"builder", "tester"}
+				return b
+			}(),
 			expected: true,
 		},
 		{
@@ -479,7 +487,11 @@ func TestEvaluateConditions_Contains(t *testing.T) {
 				Root: "principal", Path: []string{"flags"}, Op: "containsAny",
 				List: mkStrList("admin", "builder"),
 			}}),
-			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["flags"] = []string{"tester", "viewer"}; return b }(),
+			bags: func() *types.AttributeBags {
+				b := newBags()
+				b.Subject["flags"] = []string{"tester", "viewer"}
+				return b
+			}(),
 			expected: false,
 		},
 		{
@@ -821,7 +833,7 @@ func TestEvaluateConditions_BooleanLogic(t *testing.T) {
 					}},
 				}},
 			}},
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "builder"; return b }(),
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "builder"; return b }(),
 			expected: true,
 		},
 	}
@@ -844,14 +856,14 @@ func TestEvaluateConditions_Negation(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "negation of true → false",
-			cond: mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: strPtr("true")}}),
+			name:     "negation of true → false",
+			cond:     mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: strPtr("true")}}),
 			bags:     newBags(),
 			expected: false,
 		},
 		{
-			name: "negation of false → true",
-			cond: mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: strPtr("false")}}),
+			name:     "negation of false → true",
+			cond:     mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: strPtr("false")}}),
 			bags:     newBags(),
 			expected: true,
 		},
@@ -1061,7 +1073,6 @@ func TestEvaluateConditions_DepthLimit(t *testing.T) {
 		assert.False(t, EvaluateConditions(ctx, cond))
 	})
 
-
 	t.Run("depthExceeded resets between calls", func(t *testing.T) {
 		// First call: trigger depth exceeded
 		inner := &Condition{BoolLiteral: strPtr("true")}
@@ -1157,15 +1168,15 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "simple role check permit",
-			dsl:  `permit(principal, action, resource) when { principal.role == "admin" };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "admin"; return b }(),
+			name:     "simple role check permit",
+			dsl:      `permit(principal, action, resource) when { principal.role == "admin" };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "admin"; return b }(),
 			expected: true,
 		},
 		{
-			name: "simple role check deny",
-			dsl:  `permit(principal, action, resource) when { principal.role == "admin" };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "guest"; return b }(),
+			name:     "simple role check deny",
+			dsl:      `permit(principal, action, resource) when { principal.role == "admin" };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "guest"; return b }(),
 			expected: false,
 		},
 		{
@@ -1180,21 +1191,21 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "disjunction",
-			dsl:  `permit(principal, action, resource) when { principal.role == "admin" || principal.role == "builder" };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "builder"; return b }(),
+			name:     "disjunction",
+			dsl:      `permit(principal, action, resource) when { principal.role == "admin" || principal.role == "builder" };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "builder"; return b }(),
 			expected: true,
 		},
 		{
-			name: "negation",
-			dsl:  `permit(principal, action, resource) when { !(principal.role == "banned") };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "player"; return b }(),
+			name:     "negation",
+			dsl:      `permit(principal, action, resource) when { !(principal.role == "banned") };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "player"; return b }(),
 			expected: true,
 		},
 		{
-			name: "in list",
-			dsl:  `permit(principal, action, resource) when { resource.name in ["say", "pose", "look"] };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Resource["name"] = "pose"; return b }(),
+			name:     "in list",
+			dsl:      `permit(principal, action, resource) when { resource.name in ["say", "pose", "look"] };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Resource["name"] = "pose"; return b }(),
 			expected: true,
 		},
 		{
@@ -1209,15 +1220,15 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "like glob",
-			dsl:  `permit(principal, action, resource) when { resource.name like "location:*" };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Resource["name"] = "location:01XYZ"; return b }(),
+			name:     "like glob",
+			dsl:      `permit(principal, action, resource) when { resource.name like "location:*" };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Resource["name"] = "location:01XYZ"; return b }(),
 			expected: true,
 		},
 		{
-			name: "has",
-			dsl:  `permit(principal, action, resource) when { principal has faction };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["faction"] = "horde"; return b }(),
+			name:     "has",
+			dsl:      `permit(principal, action, resource) when { principal has faction };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["faction"] = "horde"; return b }(),
 			expected: true,
 		},
 		{
@@ -1252,27 +1263,27 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "if-then-else no faction falls through",
-			dsl:  `permit(principal, action, resource) when { if principal has faction then principal.faction == resource.faction else true };`,
-			bags: newBags(),
+			name:     "if-then-else no faction falls through",
+			dsl:      `permit(principal, action, resource) when { if principal has faction then principal.faction == resource.faction else true };`,
+			bags:     newBags(),
 			expected: true,
 		},
 		{
-			name: "no when clause → true (unconditional)",
-			dsl:  `permit(principal is character, action in ["enter"], resource is location);`,
-			bags: newBags(),
+			name:     "no when clause → true (unconditional)",
+			dsl:      `permit(principal is character, action in ["enter"], resource is location);`,
+			bags:     newBags(),
 			expected: true,
 		},
 		{
-			name: "numeric comparison with int bag value",
-			dsl:  `permit(principal, action, resource) when { principal.level > 5 };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["level"] = 10; return b }(),
+			name:     "numeric comparison with int bag value",
+			dsl:      `permit(principal, action, resource) when { principal.level > 5 };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["level"] = 10; return b }(),
 			expected: true,
 		},
 		{
-			name: "parenthesized expression",
-			dsl:  `permit(principal, action, resource) when { (principal.role == "admin") };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "admin"; return b }(),
+			name:     "parenthesized expression",
+			dsl:      `permit(principal, action, resource) when { (principal.role == "admin") };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "admin"; return b }(),
 			expected: true,
 		},
 		{
@@ -1321,9 +1332,9 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "role in list",
-			dsl:  `permit(principal, action, resource) when { principal.role in ["builder", "admin"] };`,
-			bags: func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "builder"; return b }(),
+			name:     "role in list",
+			dsl:      `permit(principal, action, resource) when { principal.role in ["builder", "admin"] };`,
+			bags:     func() *types.AttributeBags { b := newBags(); b.Subject["role"] = "builder"; return b }(),
 			expected: true,
 		},
 	}

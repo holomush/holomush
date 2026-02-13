@@ -25,9 +25,9 @@ type subscriberHost struct {
 }
 
 func (h *subscriberHost) Load(context.Context, *plugins.Manifest, string) error { return nil }
-func (h *subscriberHost) Unload(context.Context, string) error                 { return nil }
-func (h *subscriberHost) Plugins() []string                                    { return []string{"test"} }
-func (h *subscriberHost) Close(context.Context) error                          { return nil }
+func (h *subscriberHost) Unload(context.Context, string) error                  { return nil }
+func (h *subscriberHost) Plugins() []string                                     { return []string{"test"} }
+func (h *subscriberHost) Close(context.Context) error                           { return nil }
 
 func (h *subscriberHost) DeliverEvent(_ context.Context, _ string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	h.mu.Lock()
@@ -396,9 +396,9 @@ type slowSubscriberHost struct {
 }
 
 func (h *slowSubscriberHost) Load(context.Context, *plugins.Manifest, string) error { return nil }
-func (h *slowSubscriberHost) Unload(context.Context, string) error                 { return nil }
-func (h *slowSubscriberHost) Plugins() []string                                    { return []string{"test"} }
-func (h *slowSubscriberHost) Close(context.Context) error                          { return nil }
+func (h *slowSubscriberHost) Unload(context.Context, string) error                  { return nil }
+func (h *slowSubscriberHost) Plugins() []string                                     { return []string{"test"} }
+func (h *slowSubscriberHost) Close(context.Context) error                           { return nil }
 
 func (h *slowSubscriberHost) DeliverEvent(_ context.Context, _ string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	<-h.blockCh // Block until closed

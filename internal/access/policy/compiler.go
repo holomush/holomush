@@ -39,12 +39,12 @@ type ValidationWarning struct {
 
 // CompiledPolicy is the parsed, validated, and optimized form of a policy.
 type CompiledPolicy struct {
-	GrammarVersion int                `json:"grammar_version"`
-	Effect         types.PolicyEffect `json:"effect"`
-	Target         CompiledTarget     `json:"target"`
-	Conditions     *dsl.ConditionBlock `json:"conditions,omitempty"`
+	GrammarVersion int                  `json:"grammar_version"`
+	Effect         types.PolicyEffect   `json:"effect"`
+	Target         CompiledTarget       `json:"target"`
+	Conditions     *dsl.ConditionBlock  `json:"conditions,omitempty"`
 	GlobCache      map[string]glob.Glob `json:"-"`
-	DSLText        string             `json:"dsl_text"`
+	DSLText        string               `json:"dsl_text"`
 }
 
 // CompiledTarget is the parsed target clause.
