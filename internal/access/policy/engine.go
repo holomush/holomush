@@ -167,6 +167,9 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		_ = auditErr
 	}
 
+	// Record metrics
+	RecordEvaluationMetrics(time.Since(start), decision.Effect)
+
 	return decision, nil
 }
 
