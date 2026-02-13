@@ -188,7 +188,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	// Requires the real PostgresEventStore to access the connection pool.
 	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
 		pool := realStore.Pool()
-		if pool != nil {
+		if pool == nil {
+			slog.Debug("skipping seed policy bootstrap: database pool unavailable")
+		} else {
 			partitions := audit.NewPostgresPartitionCreator(pool)
 			ps := policystore.NewPostgresStore(pool)
 			schema := types.NewAttributeSchema()
@@ -202,6 +204,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 			}
 			slog.Info("seed policies bootstrapped")
 		}
+	} else {
+		slog.Debug("skipping seed policy bootstrap: event store is not PostgresEventStore")
 	}
 
 	certsDir, err := deps.CertsDirGetter()
