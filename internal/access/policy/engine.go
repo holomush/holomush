@@ -40,11 +40,16 @@ func NewEngine(resolver *attribute.Resolver, cache *Cache, sessions SessionResol
 }
 
 // Evaluate evaluates an access request against the policy engine.
-// This implementation covers Steps 1-7 (full evaluation algorithm).
+// This implementation covers Steps 0-7 (full evaluation algorithm).
 func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
 	start := time.Now()
 
-	// Step 1: System bypass
+	// Step 0a: Context cancellation check
+	if err := ctx.Err(); err != nil {
+		return types.Decision{}, oops.Wrapf(err, "context cancelled before evaluation")
+	}
+
+	// Step 1: System bypass (before input validation — system always passes)
 	if req.Subject == "system" {
 		decision := types.NewDecision(types.EffectSystemBypass, "system bypass", "")
 		if err := decision.Validate(); err != nil {
@@ -68,6 +73,11 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 
 		return decision, nil
+	}
+
+	// Step 1b: Input validation — reject empty fields
+	if err := validateRequest(req); err != nil {
+		return types.Decision{}, err
 	}
 
 	// Step 2: Session resolution
@@ -238,6 +248,33 @@ func parseEntityType(id string) string {
 		return ""
 	}
 	return parts[0]
+}
+
+// validateRequest checks that the AccessRequest has non-empty fields and a
+// well-formed subject reference. Returns an oops error with INVALID_REQUEST
+// for empty fields or INVALID_ENTITY_REF for malformed subject format.
+// The "system" subject is handled before this function is called.
+func validateRequest(req types.AccessRequest) error {
+	// Check for empty required fields
+	if strings.TrimSpace(req.Subject) == "" ||
+		strings.TrimSpace(req.Action) == "" ||
+		strings.TrimSpace(req.Resource) == "" {
+		return oops.
+			Code("INVALID_REQUEST").
+			Errorf("subject, action, and resource must be non-empty")
+	}
+
+	// Validate subject entity reference format: "type:id" with both parts non-empty.
+	// Session subjects ("session:xxx") are valid entity refs and handled later.
+	parts := strings.SplitN(req.Subject, ":", 2)
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return oops.
+			Code("INVALID_ENTITY_REF").
+			With("subject", req.Subject).
+			Errorf("subject must be in 'type:id' format with non-empty type and id")
+	}
+
+	return nil
 }
 
 // contains checks if a string slice contains a specific value.
