@@ -168,7 +168,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	}
 
 	// Step 5: Evaluate conditions for each candidate policy
-	var satisfied []types.PolicyMatch
+	satisfied := make([]types.PolicyMatch, 0, len(candidates))
 	for _, candidate := range candidates {
 		met := e.evaluatePolicy(candidate, bags)
 		satisfied = append(satisfied, types.PolicyMatch{
@@ -220,8 +220,7 @@ func (e *Engine) evaluatePolicy(policy CachedPolicy, bags *types.AttributeBags) 
 // findApplicablePolicies filters policies by target matching.
 // Returns only policies whose target constraints match the access request.
 func (e *Engine) findApplicablePolicies(req types.AccessRequest, policies []CachedPolicy) []CachedPolicy {
-	var result []CachedPolicy
-
+	result := make([]CachedPolicy, 0, len(policies))
 	for _, policy := range policies {
 		if policy.Compiled == nil {
 			continue
