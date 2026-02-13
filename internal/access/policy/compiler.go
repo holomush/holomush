@@ -147,8 +147,8 @@ func mapEffect(effect string) (types.PolicyEffect, error) {
 // validateAttributes walks all condition nodes and validates attribute references
 // against the schema.
 func (c *Compiler) validateAttributes(cb *dsl.ConditionBlock) ([]ValidationWarning, error) {
-	var warnings []ValidationWarning
 	refs := collectAttrRefs(cb)
+	warnings := make([]ValidationWarning, 0, len(refs))
 
 	for _, ref := range refs {
 		if !c.schema.HasNamespace(ref.namespace) {
