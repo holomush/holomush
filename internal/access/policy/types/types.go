@@ -187,6 +187,12 @@ func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) er
 	return nil
 }
 
+// HasNamespace returns true if the given namespace has been registered.
+func (s *AttributeSchema) HasNamespace(namespace string) bool {
+	_, ok := s.namespaces[namespace]
+	return ok
+}
+
 // IsRegistered checks if a namespace+key pair exists. Full implementation in Task 12.
 func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
 	ns, ok := s.namespaces[namespace]
