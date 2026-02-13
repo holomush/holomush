@@ -19,6 +19,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/audit"
+	policystore "github.com/holomush/holomush/internal/access/policy/store"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
@@ -32,12 +36,13 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	grpcAddr    string
-	controlAddr string
-	metricsAddr string
-	dataDir     string
-	gameID      string
-	logFormat   string
+	grpcAddr           string
+	controlAddr        string
+	metricsAddr        string
+	dataDir            string
+	gameID             string
+	logFormat          string
+	skipSeedMigrations bool
 }
 
 // Validate checks that the configuration is valid.
@@ -82,6 +87,7 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.dataDir, "data-dir", "", "data directory (default: XDG_DATA_HOME/holomush)")
 	cmd.Flags().StringVar(&cfg.gameID, "game-id", "", "game ID (default: auto-generated from database)")
 	cmd.Flags().StringVar(&cfg.logFormat, "log-format", defaultLogFormat, "log format (json or text)")
+	cmd.Flags().BoolVar(&cfg.skipSeedMigrations, "skip-seed-migrations", false, "disable automatic seed policy version upgrades during bootstrap")
 
 	return cmd
 }
@@ -177,6 +183,26 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	}
 
 	slog.Info("game ID initialized", "game_id", gameID)
+
+	// Bootstrap seed policies and audit log partitions (ADR #91, #92).
+	// Requires the real PostgresEventStore to access the connection pool.
+	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
+		pool := realStore.Pool()
+		if pool != nil {
+			partitions := audit.NewPostgresPartitionCreator(pool)
+			ps := policystore.NewPostgresStore(pool)
+			schema := types.NewAttributeSchema()
+			compiler := policy.NewCompiler(schema)
+			bootstrapOpts := policy.BootstrapOptions{
+				SkipSeedMigrations: cfg.skipSeedMigrations,
+			}
+
+			if bootstrapErr := policy.Bootstrap(ctx, partitions, ps, compiler, slog.Default(), bootstrapOpts); bootstrapErr != nil {
+				return oops.Code("BOOTSTRAP_FAILED").With("operation", "bootstrap seed policies").Wrap(bootstrapErr)
+			}
+			slog.Info("seed policies bootstrapped")
+		}
+	}
 
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
