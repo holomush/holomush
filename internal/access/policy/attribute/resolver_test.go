@@ -17,13 +17,13 @@ import (
 // These extend the basic mocks from provider_test.go with additional capabilities
 
 type resolverMockAttributeProvider struct {
-	namespace       string
-	subjectData     map[string]map[string]any
-	resourceData    map[string]map[string]any
-	subjectError    error
-	resourceError   error
-	shouldPanic     bool
-	callCount       map[string]int
+	namespace     string
+	subjectData   map[string]map[string]any
+	resourceData  map[string]map[string]any
+	subjectError  error
+	resourceError error
+	shouldPanic   bool
+	callCount     map[string]int
 }
 
 func newResolverMockAttributeProvider(namespace string) *resolverMockAttributeProvider {
@@ -171,7 +171,7 @@ func TestResolver_Resolve_SingleProvider(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -214,7 +214,7 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -249,7 +249,7 @@ func TestResolver_Resolve_ListMerging(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -280,7 +280,7 @@ func TestResolver_Resolve_ProviderError(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -314,7 +314,7 @@ func TestResolver_Resolve_ProviderPanic(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -375,7 +375,7 @@ func TestResolver_Resolve_ReEntranceGuard(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -402,7 +402,7 @@ func (r *reentrantMockProvider) ResolveSubject(ctx context.Context, _ string) (m
 	// Try to call resolver again (re-entrance)
 	req := types.AccessRequest{
 		Subject:  "character:01XYZ",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01ABC",
 	}
 	_, _ = r.resolver.Resolve(ctx, req)
@@ -430,7 +430,7 @@ func TestResolver_Resolve_UnknownEntityType(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "unknown:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -459,7 +459,7 @@ func TestResolver_Resolve_EnvironmentProvider(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "character:01ABC",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 
@@ -480,7 +480,7 @@ func TestResolver_Resolve_InvalidEntityIDFormat(t *testing.T) {
 
 	req := types.AccessRequest{
 		Subject:  "invalid_no_colon",
-		Action:     "read",
+		Action:   "read",
 		Resource: "room:01XYZ",
 	}
 

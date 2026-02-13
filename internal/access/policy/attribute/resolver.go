@@ -15,12 +15,12 @@ import (
 
 // Resolver resolves attributes for access requests
 type Resolver struct {
-	registry           *SchemaRegistry
-	providers          map[string]AttributeProvider
-	envProviders       map[string]EnvironmentProvider
-	providerOrder      []string // Track registration order
-	envProviderOrder   []string
-	logger             *slog.Logger
+	registry         *SchemaRegistry
+	providers        map[string]AttributeProvider
+	envProviders     map[string]EnvironmentProvider
+	providerOrder    []string // Track registration order
+	envProviderOrder []string
+	logger           *slog.Logger
 }
 
 // NewResolver creates a new attribute resolver

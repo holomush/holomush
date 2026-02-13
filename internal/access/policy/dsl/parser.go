@@ -142,4 +142,3 @@ type ParseError struct {
 func (e *ParseError) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Column, e.Message)
 }
-

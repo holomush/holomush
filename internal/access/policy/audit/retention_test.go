@@ -16,24 +16,24 @@ import (
 
 // mockPartitionManager is a mock implementation of PartitionManager for testing.
 type mockPartitionManager struct {
-	mu                    sync.Mutex
-	ensureCalls           int
-	purgeCalls            int
-	detachCalls           int
-	dropCalls             int
-	healthCalls           int
-	ensureErr             error
-	purgeErr              error
-	detachErr             error
-	dropErr               error
-	healthErr             error
-	lastPurgeTime         time.Time
-	lastDetachTime        time.Time
-	lastDropGracePeriod   time.Duration
-	lastEnsureMonths      int
-	purgedRows            int64
-	detachedPartitions    []string
-	droppedPartitions     []string
+	mu                  sync.Mutex
+	ensureCalls         int
+	purgeCalls          int
+	detachCalls         int
+	dropCalls           int
+	healthCalls         int
+	ensureErr           error
+	purgeErr            error
+	detachErr           error
+	dropErr             error
+	healthErr           error
+	lastPurgeTime       time.Time
+	lastDetachTime      time.Time
+	lastDropGracePeriod time.Duration
+	lastEnsureMonths    int
+	purgedRows          int64
+	detachedPartitions  []string
+	droppedPartitions   []string
 }
 
 func (m *mockPartitionManager) EnsurePartitions(_ context.Context, months int) error {
