@@ -31,6 +31,7 @@ func (ec *EvalContext) effectiveMaxDepth() int {
 // Returns true if all conditions are satisfied. A nil block means "no conditions"
 // and evaluates to true (unconditional).
 func EvaluateConditions(ctx *EvalContext, cond *ConditionBlock) bool {
+	ctx.depthExceeded = false
 	if cond == nil {
 		return true
 	}

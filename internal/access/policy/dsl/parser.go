@@ -90,6 +90,9 @@ func validateCondition(c *Condition, depth int) error {
 	case c.InExpr != nil:
 		return validateExprs(c.InExpr.Left, c.InExpr.Right)
 	case c.Contains != nil:
+		if len(c.Contains.Path) == 0 {
+			return fmt.Errorf("contains condition requires at least one attribute path segment (e.g., principal.flags.containsAll(...))")
+		}
 		return validateHasPaths(c.Contains.Path)
 	}
 	return nil

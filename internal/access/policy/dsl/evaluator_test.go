@@ -1060,6 +1060,21 @@ func TestEvaluateConditions_DepthLimit(t *testing.T) {
 		ctx := &EvalContext{Bags: newBags(), MaxDepth: 3}
 		assert.False(t, EvaluateConditions(ctx, cond))
 	})
+
+
+	t.Run("depthExceeded resets between calls", func(t *testing.T) {
+		// First call: trigger depth exceeded
+		inner := &Condition{BoolLiteral: strPtr("true")}
+		for i := 0; i < MaxNestingDepth+1; i++ {
+			inner = &Condition{Negation: inner}
+		}
+		ctx := defaultCtx(newBags())
+		assert.False(t, EvaluateConditions(ctx, mkSingleCond(inner)))
+
+		// Second call with same ctx: simple condition should succeed
+		simple := mkSingleCond(&Condition{BoolLiteral: strPtr("true")})
+		assert.True(t, EvaluateConditions(ctx, simple))
+	})
 }
 
 // --- Nil/Empty Edge Cases ---

@@ -233,6 +233,13 @@ func TestParse_StructuralChecks(t *testing.T) {
 	})
 }
 
+func TestParse_ContainsEmptyPath(t *testing.T) {
+	// principal.containsAll(...) has no attribute path between root and method — should fail validation.
+	_, err := dsl.Parse(`permit(principal, action, resource) when { principal.containsAll(["x"]) };`)
+	assert.Error(t, err, "contains with empty path should be rejected")
+	assert.Contains(t, err.Error(), "at least one attribute path segment")
+}
+
 func TestParse_ReservedWordAsAttribute(t *testing.T) {
 	// Using a reserved word as an attribute segment should be rejected.
 	// "permit" is reserved and should not appear as an attribute name.
