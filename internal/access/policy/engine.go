@@ -40,7 +40,7 @@ func NewEngine(resolver *attribute.Resolver, cache *Cache, sessions SessionResol
 }
 
 // Evaluate evaluates an access request against the policy engine.
-// This implementation covers Steps 1-2 (system bypass + session resolution).
+// This implementation covers Steps 1-7 (full evaluation algorithm).
 func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
 	start := time.Now()
 
@@ -145,12 +145,26 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		})
 	}
 
-	// Placeholder for step 6 (deny-overrides combination)
-	decision := types.NewDecision(types.EffectDefaultDeny, "evaluation pending", "")
+	// Step 6: Deny-overrides combination
+	decision := e.combineDecisions(satisfied)
 	decision.Attributes = bags
-	decision.Policies = satisfied
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
+	}
+
+	// Step 7: Audit the decision
+	entry := audit.Entry{
+		Subject:    req.Subject,
+		Action:     req.Action,
+		Resource:   req.Resource,
+		Effect:     decision.Effect,
+		PolicyID:   decision.PolicyID,
+		PolicyName: "",
+		DurationUS: time.Since(start).Microseconds(),
+		Timestamp:  time.Now(),
+	}
+	if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+		_ = auditErr
 	}
 
 	return decision, nil
@@ -231,4 +245,31 @@ func contains(slice []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// combineDecisions implements deny-overrides combination logic.
+// Returns the final decision based on the satisfied policy matches.
+func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision {
+	// Scan for any deny policy with conditions met
+	for _, match := range satisfied {
+		if match.ConditionsMet && match.Effect == types.EffectDeny {
+			decision := types.NewDecision(types.EffectDeny, "forbid policy satisfied", match.PolicyID)
+			decision.Policies = satisfied
+			return decision
+		}
+	}
+
+	// Scan for any allow policy with conditions met
+	for _, match := range satisfied {
+		if match.ConditionsMet && match.Effect == types.EffectAllow {
+			decision := types.NewDecision(types.EffectAllow, "permit policy satisfied", match.PolicyID)
+			decision.Policies = satisfied
+			return decision
+		}
+	}
+
+	// No policies had conditions satisfied - default deny
+	decision := types.NewDecision(types.EffectDefaultDeny, "no policies satisfied", "")
+	decision.Policies = satisfied
+	return decision
 }

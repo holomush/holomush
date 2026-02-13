@@ -768,6 +768,7 @@ func (m *mockAttributeProvider) Schema() *types.NamespaceSchema {
 			"level":   types.AttrTypeInt,
 			"banned":  types.AttrTypeBool,
 			"faction": types.AttrTypeString,
+			"muted":   types.AttrTypeBool,
 		},
 	}
 }
@@ -1033,4 +1034,478 @@ func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
 	assert.Equal(t, "test-policy-1", match.PolicyName)
 	assert.Equal(t, types.EffectAllow, match.Effect)
 	assert.True(t, match.ConditionsMet)
+}
+
+// Deny-overrides combination tests
+
+func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
+	dslTexts := []string{
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"role":   "player",
+			"banned": true,
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.False(t, decision.IsAllowed())
+	assert.Equal(t, "forbid policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-2", decision.PolicyID)
+}
+
+func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"},
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.True(t, decision.IsAllowed())
+	assert.Equal(t, "permit policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-1", decision.PolicyID)
+}
+
+func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"}, // condition not met
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.False(t, decision.IsAllowed())
+	assert.Equal(t, "no policies satisfied", decision.Reason)
+	assert.Equal(t, "", decision.PolicyID)
+}
+
+func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
+	dslTexts := []string{
+		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
+		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.muted == true };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"banned": true,
+			"muted":  true,
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.False(t, decision.IsAllowed())
+	assert.Equal(t, "forbid policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-1", decision.PolicyID) // First forbid wins
+}
+
+func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
+	dslTexts := []string{
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"role":  "player",
+			"level": 10,
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.True(t, decision.IsAllowed())
+	assert.Equal(t, "permit policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-1", decision.PolicyID) // First permit wins
+}
+
+func TestEngine_DenyOverrides_ForbidUnsatisfied_PermitSatisfied(t *testing.T) {
+	dslTexts := []string{
+		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"banned": false, // forbid condition not met
+			"role":   "player",
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.True(t, decision.IsAllowed())
+	assert.Equal(t, "permit policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-2", decision.PolicyID)
+}
+
+// Audit mode tests
+
+// createTestEngineWithMode creates an Engine with a specific audit mode.
+func createTestEngineWithMode(t *testing.T, dslTexts []string, providers []attribute.AttributeProvider, mode audit.Mode) (*Engine, *mockAuditWriter) {
+	t.Helper()
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+
+	// Register providers
+	for _, p := range providers {
+		require.NoError(t, resolver.RegisterProvider(p))
+	}
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(mode, mockWriter, walPath)
+	t.Cleanup(func() {
+		_ = auditLogger.Close()
+	})
+
+	// Compile policies and create cache with them
+	schema := types.NewAttributeSchema()
+	compiler := NewCompiler(schema)
+
+	policies := make([]CachedPolicy, 0, len(dslTexts))
+	for i, text := range dslTexts {
+		compiled, _, err := compiler.Compile(text)
+		require.NoError(t, err, "compile policy %d", i)
+		policies = append(policies, CachedPolicy{
+			ID:       fmt.Sprintf("policy-%d", i+1),
+			Name:     fmt.Sprintf("test-policy-%d", i+1),
+			Compiled: compiled,
+		})
+	}
+
+	cache := NewCache(nil, nil)
+	cache.mu.Lock()
+	cache.snapshot = &Snapshot{
+		Policies:  policies,
+		CreatedAt: time.Now(),
+	}
+	cache.mu.Unlock()
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+	return engine, mockWriter
+}
+
+func TestEngine_Audit_ModeAll_AllowAudited(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"},
+	}
+
+	engine, mockWriter := createTestEngineWithMode(t, []string{dslText}, []attribute.AttributeProvider{provider}, audit.ModeAll)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+
+	// Wait a bit for async audit
+	time.Sleep(50 * time.Millisecond)
+
+	entries := mockWriter.getEntries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "character:01ABC", entries[0].Subject)
+	assert.Equal(t, "say", entries[0].Action)
+	assert.Equal(t, "location:01XYZ", entries[0].Resource)
+	assert.Equal(t, types.EffectAllow, entries[0].Effect)
+	assert.Equal(t, "policy-1", entries[0].PolicyID)
+}
+
+func TestEngine_Audit_ModeAll_DenyAudited(t *testing.T) {
+	dslText := `forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"banned": true},
+	}
+
+	engine, mockWriter := createTestEngineWithMode(t, []string{dslText}, []attribute.AttributeProvider{provider}, audit.ModeAll)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, types.EffectDeny, decision.Effect)
+
+	entries := mockWriter.getEntries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "character:01ABC", entries[0].Subject)
+	assert.Equal(t, "say", entries[0].Action)
+	assert.Equal(t, "location:01XYZ", entries[0].Resource)
+	assert.Equal(t, types.EffectDeny, entries[0].Effect)
+	assert.Equal(t, "policy-1", entries[0].PolicyID)
+}
+
+func TestEngine_Audit_ModeMinimal_AllowNotAudited(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"},
+	}
+
+	engine, mockWriter := createTestEngineWithMode(t, []string{dslText}, []attribute.AttributeProvider{provider}, audit.ModeMinimal)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+
+	// Wait a bit to ensure async operations complete
+	time.Sleep(50 * time.Millisecond)
+
+	entries := mockWriter.getEntries()
+	assert.Len(t, entries, 0, "ModeMinimal should not audit allow decisions")
+}
+
+func TestEngine_Audit_ModeMinimal_DenyAudited(t *testing.T) {
+	dslText := `forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"banned": true},
+	}
+
+	engine, mockWriter := createTestEngineWithMode(t, []string{dslText}, []attribute.AttributeProvider{provider}, audit.ModeMinimal)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, types.EffectDeny, decision.Effect)
+
+	entries := mockWriter.getEntries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, types.EffectDeny, entries[0].Effect)
+}
+
+// End-to-end integration tests
+
+func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "admin"},
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.True(t, decision.IsAllowed())
+	assert.Equal(t, "permit policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-1", decision.PolicyID)
+	assert.NotNil(t, decision.Attributes)
+	require.Len(t, decision.Policies, 1)
+	assert.True(t, decision.Policies[0].ConditionsMet)
+}
+
+func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
+	dslTexts := []string{
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"role":   "player",
+			"banned": true,
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.False(t, decision.IsAllowed())
+	assert.Equal(t, "forbid policy satisfied", decision.Reason)
+	assert.Equal(t, "policy-2", decision.PolicyID)
+	assert.NotNil(t, decision.Attributes)
+	require.Len(t, decision.Policies, 2)
+	assert.True(t, decision.Policies[0].ConditionsMet) // permit satisfied
+	assert.True(t, decision.Policies[1].ConditionsMet) // forbid satisfied (wins)
+}
+
+func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"},
+	}
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() {
+		_ = auditLogger.Close()
+	})
+
+	schema := types.NewAttributeSchema()
+	compiler := NewCompiler(schema)
+	compiled, _, err := compiler.Compile(dslText)
+	require.NoError(t, err)
+
+	cache := NewCache(nil, nil)
+	cache.mu.Lock()
+	cache.snapshot = &Snapshot{
+		Policies: []CachedPolicy{
+			{
+				ID:       "policy-1",
+				Name:     "test-policy-1",
+				Compiled: compiled,
+			},
+		},
+		CreatedAt: time.Now(),
+	}
+	cache.mu.Unlock()
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	// Session resolver that resolves session to character
+	sessionResolver := &mockSessionResolver{
+		resolveFunc: func(_ context.Context, sessionID string) (string, error) {
+			assert.Equal(t, "web-123", sessionID)
+			return "01ABC", nil
+		},
+	}
+
+	engine := NewEngine(resolver, cache, sessionResolver, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "session:web-123",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.True(t, decision.IsAllowed())
+	assert.Equal(t, "permit policy satisfied", decision.Reason)
+
+	// Wait for async audit
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify audit entry has resolved subject
+	entries := mockWriter.getEntries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "character:01ABC", entries[0].Subject) // Resolved subject
 }
