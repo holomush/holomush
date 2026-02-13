@@ -5,10 +5,12 @@ package policy
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
@@ -733,4 +735,302 @@ func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
 			assert.NotNil(t, decision.Attributes, "attributes should be populated")
 		})
 	}
+}
+
+// mockAttributeProvider is a test double for AttributeProvider.
+type mockAttributeProvider struct {
+	namespace   string
+	subjectMap  map[string]any
+	resourceMap map[string]any
+	schema      *types.NamespaceSchema
+}
+
+func (m *mockAttributeProvider) Namespace() string {
+	return m.namespace
+}
+
+func (m *mockAttributeProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	return m.subjectMap, nil
+}
+
+func (m *mockAttributeProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return m.resourceMap, nil
+}
+
+func (m *mockAttributeProvider) Schema() *types.NamespaceSchema {
+	if m.schema != nil {
+		return m.schema
+	}
+	// Return a minimal valid schema with at least one attribute
+	return &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"role":    types.AttrTypeString,
+			"level":   types.AttrTypeInt,
+			"banned":  types.AttrTypeBool,
+			"faction": types.AttrTypeString,
+		},
+	}
+}
+
+// createTestEngineWithPolicies creates an Engine with policies loaded in the cache.
+func createTestEngineWithPolicies(t *testing.T, dslTexts []string, providers []attribute.AttributeProvider) *Engine {
+	t.Helper()
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+
+	// Register providers
+	for _, p := range providers {
+		require.NoError(t, resolver.RegisterProvider(p))
+	}
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() {
+		_ = auditLogger.Close()
+	})
+
+	// Compile policies and create cache with them
+	schema := types.NewAttributeSchema()
+	compiler := NewCompiler(schema)
+
+	policies := make([]CachedPolicy, 0, len(dslTexts))
+	for i, text := range dslTexts {
+		compiled, _, err := compiler.Compile(text)
+		require.NoError(t, err, "compile policy %d", i)
+		policies = append(policies, CachedPolicy{
+			ID:       fmt.Sprintf("policy-%d", i+1),
+			Name:     fmt.Sprintf("test-policy-%d", i+1),
+			Compiled: compiled,
+		})
+	}
+
+	// Create a cache and manually set the snapshot
+	cache := NewCache(nil, nil)
+	cache.mu.Lock()
+	cache.snapshot = &Snapshot{
+		Policies:  policies,
+		CreatedAt: time.Now(),
+	}
+	cache.mu.Unlock()
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+	return engine
+}
+
+func TestEngine_EvaluateConditions_SimpleConditionSatisfied(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "admin"},
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 1)
+	assert.Equal(t, "policy-1", decision.Policies[0].PolicyID)
+	assert.True(t, decision.Policies[0].ConditionsMet, "condition should be satisfied")
+	assert.Equal(t, types.EffectAllow, decision.Policies[0].Effect)
+}
+
+func TestEngine_EvaluateConditions_SimpleConditionUnsatisfied(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"},
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 1)
+	assert.Equal(t, "policy-1", decision.Policies[0].PolicyID)
+	assert.False(t, decision.Policies[0].ConditionsMet, "condition should not be satisfied")
+}
+
+func TestEngine_EvaluateConditions_MissingAttribute(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.faction == "rebels" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "player"}, // no faction attribute
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 1)
+	assert.False(t, decision.Policies[0].ConditionsMet, "missing attribute should cause condition to fail")
+}
+
+func TestEngine_EvaluateConditions_NumericComparison(t *testing.T) {
+	dslText := `permit(principal is character, action in ["dig"], resource is location) when { principal.character.level > 5 };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"level": 7},
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "dig",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 1)
+	assert.True(t, decision.Policies[0].ConditionsMet, "numeric comparison should be satisfied")
+}
+
+func TestEngine_EvaluateConditions_Unconditional(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 1)
+	assert.True(t, decision.Policies[0].ConditionsMet, "unconditional policy should always be satisfied")
+}
+
+func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
+	dslTexts := []string{
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 10 };`,
+		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"role":   "admin",
+			"level":  5,
+			"banned": false,
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 3)
+
+	// Policy 1: role == "admin" → true
+	assert.Equal(t, "policy-1", decision.Policies[0].PolicyID)
+	assert.True(t, decision.Policies[0].ConditionsMet)
+	assert.Equal(t, types.EffectAllow, decision.Policies[0].Effect)
+
+	// Policy 2: level > 10 → false
+	assert.Equal(t, "policy-2", decision.Policies[1].PolicyID)
+	assert.False(t, decision.Policies[1].ConditionsMet)
+	assert.Equal(t, types.EffectAllow, decision.Policies[1].Effect)
+
+	// Policy 3: banned == true → false
+	assert.Equal(t, "policy-3", decision.Policies[2].PolicyID)
+	assert.False(t, decision.Policies[2].ConditionsMet)
+	assert.Equal(t, types.EffectDeny, decision.Policies[2].Effect)
+}
+
+func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
+	dslTexts := []string{
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
+	}
+
+	provider := &mockAttributeProvider{
+		namespace: "character",
+		subjectMap: map[string]any{
+			"role":  "admin",
+			"level": 10,
+		},
+	}
+
+	engine := createTestEngineWithPolicies(t, dslTexts, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 2)
+	assert.True(t, decision.Policies[0].ConditionsMet)
+	assert.True(t, decision.Policies[1].ConditionsMet)
+}
+
+func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"role": "admin"},
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "say",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, decision.Policies, 1)
+	match := decision.Policies[0]
+	assert.Equal(t, "policy-1", match.PolicyID)
+	assert.Equal(t, "test-policy-1", match.PolicyName)
+	assert.Equal(t, types.EffectAllow, match.Effect)
+	assert.True(t, match.ConditionsMet)
 }

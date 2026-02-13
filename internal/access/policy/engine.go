@@ -12,6 +12,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/audit"
+	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
@@ -132,14 +133,37 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		return decision, nil
 	}
 
-	// Placeholder for steps 5-6 (condition evaluation)
+	// Step 5: Evaluate conditions for each candidate policy
+	var satisfied []types.PolicyMatch
+	for _, candidate := range candidates {
+		met := e.evaluatePolicy(candidate, bags)
+		satisfied = append(satisfied, types.PolicyMatch{
+			PolicyID:      candidate.ID,
+			PolicyName:    candidate.Name,
+			Effect:        candidate.Compiled.Effect.ToEffect(),
+			ConditionsMet: met,
+		})
+	}
+
+	// Placeholder for step 6 (deny-overrides combination)
 	decision := types.NewDecision(types.EffectDefaultDeny, "evaluation pending", "")
 	decision.Attributes = bags
+	decision.Policies = satisfied
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
 	}
 
 	return decision, nil
+}
+
+// evaluatePolicy evaluates a single policy's conditions against attribute bags.
+// Returns true if conditions are satisfied (or if there are no conditions).
+func (e *Engine) evaluatePolicy(policy CachedPolicy, bags *types.AttributeBags) bool {
+	evalCtx := &dsl.EvalContext{
+		Bags:      bags,
+		GlobCache: policy.Compiled.GlobCache,
+	}
+	return dsl.EvaluateConditions(evalCtx, policy.Compiled.Conditions)
 }
 
 // findApplicablePolicies filters policies by target matching.
