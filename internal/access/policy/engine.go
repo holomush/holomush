@@ -116,6 +116,9 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	if e.cache.IsStale() {
 		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "")
 		decision.Attributes = bags
+		if valErr := decision.Validate(); valErr != nil {
+			return decision, oops.Wrapf(valErr, "decision validation failed")
+		}
 		entry := audit.Entry{
 			Subject:    req.Subject,
 			Action:     req.Action,
@@ -129,6 +132,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			_ = auditErr
 		}
+		RecordEvaluationMetrics(time.Since(start), decision.Effect)
 		return decision, nil
 	}
 

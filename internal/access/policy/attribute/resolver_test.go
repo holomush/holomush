@@ -172,7 +172,7 @@ func TestResolver_Resolve_SingleProvider(t *testing.T) {
 	provider.schema = &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
 			"role":  types.AttrTypeString,
-			"level": types.AttrTypeInt,
+			"level": types.AttrTypeFloat,
 			"owner": types.AttrTypeString,
 			"type":  types.AttrTypeString,
 		},
@@ -219,7 +219,7 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 	provider1.schema = &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
 			"role":  types.AttrTypeString,
-			"level": types.AttrTypeInt,
+			"level": types.AttrTypeFloat,
 		},
 	}
 	provider1.subjectData["01ABC"] = map[string]any{
