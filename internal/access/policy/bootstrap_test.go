@@ -164,19 +164,25 @@ func TestBootstrap_SeedsAllPoliciesOnEmptyStore(t *testing.T) {
 	seeds := SeedPolicies()
 	assert.Len(t, mockStore.created, len(seeds), "all seed policies must be created")
 
+	// Build lookup of expected seed versions by name.
+	expectedVersions := make(map[string]int, len(seeds))
+	for _, s := range seeds {
+		expectedVersions[s.Name] = s.SeedVersion
+	}
+
 	for _, created := range mockStore.created {
 		assert.Equal(t, "seed", created.Source)
 		assert.Equal(t, "system", created.CreatedBy)
 		assert.True(t, created.Enabled)
 		assert.NotNil(t, created.SeedVersion)
-		assert.Equal(t, 1, *created.SeedVersion)
+		assert.Equal(t, expectedVersions[created.Name], *created.SeedVersion, "seed %s version mismatch", created.Name)
 		assert.NotEmpty(t, created.CompiledAST)
 	}
 }
 
 func TestBootstrap_SkipsExistingSeedPolicy(t *testing.T) {
 	mockStore := newBootstrapMockStore()
-	seedVersion := 1
+	seedVersion := 2 // matches current SeedVersion for seed:player-self-access
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
 		Name:        "seed:player-self-access",
 		Source:      "seed",
@@ -222,7 +228,8 @@ func TestBootstrap_WarnsOnAdminCollision(t *testing.T) {
 
 func TestBootstrap_UpgradesSeedVersion(t *testing.T) {
 	mockStore := newBootstrapMockStore()
-	oldVersion := 0
+	// Use version 1 as the stored version; the current seed is version 2.
+	oldVersion := 1
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
 		Name:        "seed:player-self-access",
 		Source:      "seed",
@@ -247,8 +254,8 @@ func TestBootstrap_UpgradesSeedVersion(t *testing.T) {
 		}
 	}
 	require.NotNil(t, upgraded, "seed:player-self-access should be upgraded")
-	assert.Equal(t, 1, *upgraded.SeedVersion)
-	assert.Contains(t, upgraded.ChangeNote, "Auto-upgraded from seed v0 to v1")
+	assert.Equal(t, 2, *upgraded.SeedVersion)
+	assert.Contains(t, upgraded.ChangeNote, "Auto-upgraded from seed v1 to v2")
 }
 
 func TestBootstrap_SkipSeedMigrations(t *testing.T) {

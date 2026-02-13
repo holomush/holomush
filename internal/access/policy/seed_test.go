@@ -24,10 +24,10 @@ func TestSeedPolicies_AllNamesHaveSeedPrefix(t *testing.T) {
 	}
 }
 
-func TestSeedPolicies_AllHaveSeedVersion1(t *testing.T) {
+func TestSeedPolicies_AllHavePositiveSeedVersion(t *testing.T) {
 	for _, s := range SeedPolicies() {
-		assert.Equal(t, 1, s.SeedVersion,
-			"seed policy %q must have SeedVersion 1", s.Name)
+		assert.GreaterOrEqual(t, s.SeedVersion, 1,
+			"seed policy %q must have SeedVersion >= 1", s.Name)
 	}
 }
 

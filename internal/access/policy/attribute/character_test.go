@@ -72,7 +72,9 @@ func TestCharacterProvider_Schema(t *testing.T) {
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["player_id"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["name"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["description"])
+	assert.Equal(t, types.AttrTypeString, schema.Attributes["role"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["location_id"])
+	assert.Equal(t, types.AttrTypeString, schema.Attributes["location"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_location"])
 }
 
@@ -112,7 +114,9 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 				"player_id":    playerID.String(),
 				"name":         "TestChar",
 				"description":  "A test character",
+				"role":         "player",
 				"location_id":  locationID.String(),
+				"location":     locationID.String(),
 				"has_location": true,
 			},
 		},
@@ -136,7 +140,9 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 				"player_id":    playerID.String(),
 				"name":         "NoLocChar",
 				"description":  "",
+				"role":         "player",
 				"location_id":  "",
+				"location":     "",
 				"has_location": false,
 			},
 		},
@@ -245,7 +251,9 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 				"player_id":    playerID.String(),
 				"name":         "ResourceChar",
 				"description":  "Character as resource",
+				"role":         "player",
 				"location_id":  locationID.String(),
+				"location":     locationID.String(),
 				"has_location": true,
 			},
 		},
