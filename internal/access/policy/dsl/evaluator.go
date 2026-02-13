@@ -12,8 +12,9 @@ import (
 
 // EvalContext provides attribute bags and configuration for evaluation.
 type EvalContext struct {
-	Bags     *types.AttributeBags
-	MaxDepth int // default 32; 0 means use MaxNestingDepth
+	Bags      *types.AttributeBags
+	MaxDepth  int                  // default 32; 0 means use MaxNestingDepth
+	GlobCache map[string]glob.Glob // pre-compiled glob patterns; nil means compile on demand
 
 	depthExceeded bool // set when nesting exceeds MaxDepth; forces false
 }
@@ -114,7 +115,7 @@ func evalCondition(ctx *EvalContext, c *Condition, depth int) bool {
 		return evalComparison(ctx, c.Comparison)
 
 	case c.BoolLiteral != nil:
-		return *c.BoolLiteral
+		return c.IsBoolTrue()
 
 	default:
 		return false
@@ -276,9 +277,14 @@ func evalLike(ctx *EvalContext, lc *LikeCondition) bool {
 		return false
 	}
 
-	compiled, err := glob.Compile(lc.Pattern, ':')
-	if err != nil {
-		return false
+	// Use pre-compiled glob from cache if available; compile on demand otherwise.
+	compiled, ok := ctx.GlobCache[lc.Pattern]
+	if !ok {
+		var err error
+		compiled, err = glob.Compile(lc.Pattern, ':')
+		if err != nil {
+			return false
+		}
 	}
 
 	return compiled.Match(str)
@@ -412,7 +418,7 @@ func resolveLiteral(l *Literal) any {
 	case l.Number != nil:
 		return *l.Number
 	case l.Bool != nil:
-		return *l.Bool
+		return *l.Bool == "true"
 	default:
 		return nil
 	}

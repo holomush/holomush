@@ -136,7 +136,7 @@ type Condition struct {
 	InList        *InListCondition   `parser:"| @@" json:"in_list,omitempty"`
 	InExpr        *InExprCondition   `parser:"| @@" json:"in_expr,omitempty"`
 	Comparison    *Comparison        `parser:"| @@" json:"comparison,omitempty"`
-	BoolLiteral   *bool              `parser:"| @('true' | 'false')" json:"bool_literal,omitempty"`
+	BoolLiteral   *string            `parser:"| @('true' | 'false')" json:"bool_literal,omitempty"`
 }
 
 // Comparison represents an expression with a comparison operator (==, !=, >, >=, <, <=).
@@ -224,7 +224,7 @@ type Literal struct {
 	Pos    lexer.Position `parser:"" json:"-"`
 	Str    *string        `parser:"  @String" json:"str,omitempty"`
 	Number *float64       `parser:"| @Number" json:"number,omitempty"`
-	Bool   *bool          `parser:"| @('true' | 'false')" json:"bool,omitempty"`
+	Bool   *string        `parser:"| @('true' | 'false')" json:"bool,omitempty"`
 }
 
 // ListExpr represents a bracketed list of literals: "[" literal { "," literal } "]"
@@ -315,13 +315,20 @@ func (c *Condition) String() string {
 	case c.Comparison != nil:
 		return c.Comparison.String()
 	case c.BoolLiteral != nil:
-		if *c.BoolLiteral {
-			return "true"
-		}
-		return "false"
+		return *c.BoolLiteral
 	default:
 		return "<empty>"
 	}
+}
+
+// IsBoolTrue returns true if this condition is a boolean literal with value "true".
+func (c *Condition) IsBoolTrue() bool {
+	return c.BoolLiteral != nil && *c.BoolLiteral == "true"
+}
+
+// IsBoolFalse returns true if this condition is a boolean literal with value "false".
+func (c *Condition) IsBoolFalse() bool {
+	return c.BoolLiteral != nil && *c.BoolLiteral == "false"
 }
 
 func (cmp *Comparison) String() string {
@@ -381,10 +388,7 @@ func (l *Literal) String() string {
 		}
 		return fmt.Sprintf("%g", v)
 	case l.Bool != nil:
-		if *l.Bool {
-			return "true"
-		}
-		return "false"
+		return *l.Bool
 	default:
 		return "<empty>"
 	}

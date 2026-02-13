@@ -257,7 +257,7 @@ func detectConditionWarnings(cb *dsl.ConditionBlock) []ValidationWarning {
 		conj := cb.Disjunctions[0]
 		if len(conj.Conditions) == 1 {
 			cond := conj.Conditions[0]
-			if cond.BoolLiteral != nil && *cond.BoolLiteral {
+			if cond.IsBoolTrue() {
 				warnings = append(warnings, ValidationWarning{
 					Message: "condition block is always true; consider removing the when clause",
 				})
@@ -269,7 +269,7 @@ func detectConditionWarnings(cb *dsl.ConditionBlock) []ValidationWarning {
 	for _, conj := range cb.Disjunctions {
 		if len(conj.Conditions) > 1 {
 			first := conj.Conditions[0]
-			if first.BoolLiteral != nil && !*first.BoolLiteral {
+			if first.IsBoolFalse() {
 				warnings = append(warnings, ValidationWarning{
 					Message: "unreachable conditions: conjunction starts with false",
 				})

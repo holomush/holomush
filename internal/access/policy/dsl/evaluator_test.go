@@ -36,7 +36,11 @@ func mkNumLit(n float64) *Expr {
 
 // mkBoolLit builds a boolean literal Expr.
 func mkBoolLit(b bool) *Expr {
-	return &Expr{Literal: &Literal{Bool: boolPtr(b)}}
+	s := "false"
+	if b {
+		s = "true"
+	}
+	return &Expr{Literal: &Literal{Bool: &s}}
 }
 
 // mkComparison builds a ConditionBlock from a single comparison.
@@ -733,13 +737,13 @@ func TestEvaluateConditions_BooleanLogic(t *testing.T) {
 	}{
 		{
 			name:     "bare true",
-			cond:     mkSingleCond(&Condition{BoolLiteral: boolPtr(true)}),
+			cond:     mkSingleCond(&Condition{BoolLiteral: strPtr("true")}),
 			bags:     newBags(),
 			expected: true,
 		},
 		{
 			name:     "bare false",
-			cond:     mkSingleCond(&Condition{BoolLiteral: boolPtr(false)}),
+			cond:     mkSingleCond(&Condition{BoolLiteral: strPtr("false")}),
 			bags:     newBags(),
 			expected: false,
 		},
@@ -747,8 +751,8 @@ func TestEvaluateConditions_BooleanLogic(t *testing.T) {
 			name: "conjunction true && true",
 			cond: &ConditionBlock{Disjunctions: []*Conjunction{{
 				Conditions: []*Condition{
-					{BoolLiteral: boolPtr(true)},
-					{BoolLiteral: boolPtr(true)},
+					{BoolLiteral: strPtr("true")},
+					{BoolLiteral: strPtr("true")},
 				},
 			}}},
 			bags:     newBags(),
@@ -758,8 +762,8 @@ func TestEvaluateConditions_BooleanLogic(t *testing.T) {
 			name: "conjunction true && false",
 			cond: &ConditionBlock{Disjunctions: []*Conjunction{{
 				Conditions: []*Condition{
-					{BoolLiteral: boolPtr(true)},
-					{BoolLiteral: boolPtr(false)},
+					{BoolLiteral: strPtr("true")},
+					{BoolLiteral: strPtr("false")},
 				},
 			}}},
 			bags:     newBags(),
@@ -768,8 +772,8 @@ func TestEvaluateConditions_BooleanLogic(t *testing.T) {
 		{
 			name: "disjunction false || true",
 			cond: &ConditionBlock{Disjunctions: []*Conjunction{
-				{Conditions: []*Condition{{BoolLiteral: boolPtr(false)}}},
-				{Conditions: []*Condition{{BoolLiteral: boolPtr(true)}}},
+				{Conditions: []*Condition{{BoolLiteral: strPtr("false")}}},
+				{Conditions: []*Condition{{BoolLiteral: strPtr("true")}}},
 			}},
 			bags:     newBags(),
 			expected: true,
@@ -777,8 +781,8 @@ func TestEvaluateConditions_BooleanLogic(t *testing.T) {
 		{
 			name: "disjunction false || false",
 			cond: &ConditionBlock{Disjunctions: []*Conjunction{
-				{Conditions: []*Condition{{BoolLiteral: boolPtr(false)}}},
-				{Conditions: []*Condition{{BoolLiteral: boolPtr(false)}}},
+				{Conditions: []*Condition{{BoolLiteral: strPtr("false")}}},
+				{Conditions: []*Condition{{BoolLiteral: strPtr("false")}}},
 			}},
 			bags:     newBags(),
 			expected: false,
@@ -841,13 +845,13 @@ func TestEvaluateConditions_Negation(t *testing.T) {
 	}{
 		{
 			name: "negation of true → false",
-			cond: mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: boolPtr(true)}}),
+			cond: mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: strPtr("true")}}),
 			bags:     newBags(),
 			expected: false,
 		},
 		{
 			name: "negation of false → true",
-			cond: mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: boolPtr(false)}}),
+			cond: mkSingleCond(&Condition{Negation: &Condition{BoolLiteral: strPtr("false")}}),
 			bags:     newBags(),
 			expected: true,
 		},
@@ -874,7 +878,7 @@ func TestEvaluateConditions_Negation(t *testing.T) {
 		{
 			name: "double negation",
 			cond: mkSingleCond(&Condition{Negation: &Condition{
-				Negation: &Condition{BoolLiteral: boolPtr(true)},
+				Negation: &Condition{BoolLiteral: strPtr("true")},
 			}}),
 			bags:     newBags(),
 			expected: true,
@@ -902,7 +906,7 @@ func TestEvaluateConditions_Parenthesized(t *testing.T) {
 			name: "parenthesized true",
 			cond: mkSingleCond(&Condition{Parenthesized: &ConditionBlock{
 				Disjunctions: []*Conjunction{{
-					Conditions: []*Condition{{BoolLiteral: boolPtr(true)}},
+					Conditions: []*Condition{{BoolLiteral: strPtr("true")}},
 				}},
 			}}),
 			bags:     newBags(),
@@ -914,11 +918,11 @@ func TestEvaluateConditions_Parenthesized(t *testing.T) {
 				Conditions: []*Condition{
 					{Parenthesized: &ConditionBlock{
 						Disjunctions: []*Conjunction{
-							{Conditions: []*Condition{{BoolLiteral: boolPtr(false)}}},
-							{Conditions: []*Condition{{BoolLiteral: boolPtr(true)}}},
+							{Conditions: []*Condition{{BoolLiteral: strPtr("false")}}},
+							{Conditions: []*Condition{{BoolLiteral: strPtr("true")}}},
 						},
 					}},
-					{BoolLiteral: boolPtr(true)},
+					{BoolLiteral: strPtr("true")},
 				},
 			}}},
 			bags:     newBags(),
@@ -946,9 +950,9 @@ func TestEvaluateConditions_IfThenElse(t *testing.T) {
 		{
 			name: "if true then true else false → true",
 			cond: mkSingleCond(&Condition{IfThenElse: &IfThenElse{
-				If:   &Condition{BoolLiteral: boolPtr(true)},
-				Then: &Condition{BoolLiteral: boolPtr(true)},
-				Else: &Condition{BoolLiteral: boolPtr(false)},
+				If:   &Condition{BoolLiteral: strPtr("true")},
+				Then: &Condition{BoolLiteral: strPtr("true")},
+				Else: &Condition{BoolLiteral: strPtr("false")},
 			}}),
 			bags:     newBags(),
 			expected: true,
@@ -956,9 +960,9 @@ func TestEvaluateConditions_IfThenElse(t *testing.T) {
 		{
 			name: "if false then true else false → false",
 			cond: mkSingleCond(&Condition{IfThenElse: &IfThenElse{
-				If:   &Condition{BoolLiteral: boolPtr(false)},
-				Then: &Condition{BoolLiteral: boolPtr(true)},
-				Else: &Condition{BoolLiteral: boolPtr(false)},
+				If:   &Condition{BoolLiteral: strPtr("false")},
+				Then: &Condition{BoolLiteral: strPtr("true")},
+				Else: &Condition{BoolLiteral: strPtr("false")},
 			}}),
 			bags:     newBags(),
 			expected: false,
@@ -970,7 +974,7 @@ func TestEvaluateConditions_IfThenElse(t *testing.T) {
 				Then: &Condition{Comparison: &Comparison{
 					Left: mkAttrRef("principal", "faction"), Comparator: "==", Right: mkAttrRef("resource", "faction"),
 				}},
-				Else: &Condition{BoolLiteral: boolPtr(true)},
+				Else: &Condition{BoolLiteral: strPtr("true")},
 			}}),
 			bags: func() *types.AttributeBags {
 				b := newBags()
@@ -987,7 +991,7 @@ func TestEvaluateConditions_IfThenElse(t *testing.T) {
 				Then: &Condition{Comparison: &Comparison{
 					Left: mkAttrRef("principal", "faction"), Comparator: "==", Right: mkAttrRef("resource", "faction"),
 				}},
-				Else: &Condition{BoolLiteral: boolPtr(true)},
+				Else: &Condition{BoolLiteral: strPtr("true")},
 			}}),
 			bags:     newBags(),
 			expected: true,
@@ -999,7 +1003,7 @@ func TestEvaluateConditions_IfThenElse(t *testing.T) {
 				Then: &Condition{Comparison: &Comparison{
 					Left: mkAttrRef("principal", "faction"), Comparator: "==", Right: mkAttrRef("resource", "faction"),
 				}},
-				Else: &Condition{BoolLiteral: boolPtr(true)},
+				Else: &Condition{BoolLiteral: strPtr("true")},
 			}}),
 			bags: func() *types.AttributeBags {
 				b := newBags()
@@ -1024,7 +1028,7 @@ func TestEvaluateConditions_IfThenElse(t *testing.T) {
 func TestEvaluateConditions_DepthLimit(t *testing.T) {
 	t.Run("exceeds max depth returns false", func(t *testing.T) {
 		// Build a deeply nested negation chain: !(!(!(...true...)))
-		inner := &Condition{BoolLiteral: boolPtr(true)}
+		inner := &Condition{BoolLiteral: strPtr("true")}
 		for i := 0; i < MaxNestingDepth+1; i++ {
 			inner = &Condition{Negation: inner}
 		}
@@ -1036,7 +1040,7 @@ func TestEvaluateConditions_DepthLimit(t *testing.T) {
 	t.Run("at exactly max depth succeeds", func(t *testing.T) {
 		// Build exactly MaxNestingDepth levels of parenthesized nesting
 		// An even number of negations around true should yield true.
-		inner := &Condition{BoolLiteral: boolPtr(true)}
+		inner := &Condition{BoolLiteral: strPtr("true")}
 		for i := 0; i < MaxNestingDepth; i++ {
 			inner = &Condition{Parenthesized: &ConditionBlock{
 				Disjunctions: []*Conjunction{{Conditions: []*Condition{inner}}},
@@ -1048,7 +1052,7 @@ func TestEvaluateConditions_DepthLimit(t *testing.T) {
 	})
 
 	t.Run("custom max depth", func(t *testing.T) {
-		inner := &Condition{BoolLiteral: boolPtr(true)}
+		inner := &Condition{BoolLiteral: strPtr("true")}
 		for i := 0; i < 5; i++ {
 			inner = &Condition{Negation: inner}
 		}
@@ -1084,7 +1088,7 @@ func TestEvaluateConditions_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("zero MaxDepth defaults to MaxNestingDepth", func(t *testing.T) {
-		cond := mkSingleCond(&Condition{BoolLiteral: boolPtr(true)})
+		cond := mkSingleCond(&Condition{BoolLiteral: strPtr("true")})
 		ctx := &EvalContext{Bags: newBags(), MaxDepth: 0}
 		assert.True(t, EvaluateConditions(ctx, cond))
 	})

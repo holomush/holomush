@@ -189,7 +189,7 @@ func TestCondition_String(t *testing.T) {
 						},
 					},
 					Else: &Condition{
-						BoolLiteral: boolPtr(true),
+						BoolLiteral: strPtr("true"),
 					},
 				},
 			},
@@ -242,14 +242,14 @@ func TestCondition_String(t *testing.T) {
 		{
 			name: "bare boolean literal true",
 			cond: Condition{
-				BoolLiteral: boolPtr(true),
+				BoolLiteral: strPtr("true"),
 			},
 			expected: `true`,
 		},
 		{
 			name: "bare boolean literal false",
 			cond: Condition{
-				BoolLiteral: boolPtr(false),
+				BoolLiteral: strPtr("false"),
 			},
 			expected: `false`,
 		},
@@ -316,7 +316,7 @@ func TestExpr_String(t *testing.T) {
 		},
 		{
 			name:     "boolean literal true",
-			expr:     Expr{Literal: &Literal{Bool: boolPtr(true)}},
+			expr:     Expr{Literal: &Literal{Bool: strPtr("true")}},
 			expected: "true",
 		},
 	}
@@ -376,5 +376,4 @@ func TestListExpr_String(t *testing.T) {
 
 // Helper functions for constructing test ASTs.
 func strPtr(s string) *string       { return &s }
-func boolPtr(b bool) *bool          { return &b }
 func float64Ptr(f float64) *float64 { return &f }

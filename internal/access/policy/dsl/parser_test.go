@@ -213,7 +213,23 @@ func TestParse_StructuralChecks(t *testing.T) {
 		require.NotNil(t, cond.IfThenElse.If.Has)
 		require.NotNil(t, cond.IfThenElse.Then.Comparison)
 		require.NotNil(t, cond.IfThenElse.Else.BoolLiteral)
-		assert.True(t, *cond.IfThenElse.Else.BoolLiteral)
+		assert.Equal(t, "true", *cond.IfThenElse.Else.BoolLiteral)
+	})
+
+	t.Run("bool literal true", func(t *testing.T) {
+		p, err := dsl.Parse(`permit(principal, action, resource) when { true };`)
+		require.NoError(t, err)
+		cond := p.Conditions.Disjunctions[0].Conditions[0]
+		require.NotNil(t, cond.BoolLiteral)
+		assert.Equal(t, "true", *cond.BoolLiteral)
+	})
+
+	t.Run("bool literal false", func(t *testing.T) {
+		p, err := dsl.Parse(`permit(principal, action, resource) when { false };`)
+		require.NoError(t, err)
+		cond := p.Conditions.Disjunctions[0].Conditions[0]
+		require.NotNil(t, cond.BoolLiteral)
+		assert.Equal(t, "false", *cond.BoolLiteral)
 	})
 }
 

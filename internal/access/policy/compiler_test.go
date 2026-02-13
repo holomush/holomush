@@ -212,13 +212,11 @@ func TestCompile_UnregisteredNamespaceSkipsValidation(t *testing.T) {
 func TestCompile_UnreachableCondition(t *testing.T) {
 	// NOTE: The parser has a known issue where @('true'|'false') on *bool
 	// always captures as true, regardless of the actual token. This means
-	// `false` in DSL text becomes `true` in the AST. Therefore we test the
-	// unreachable-condition detection via detectConditionWarnings directly.
-	falseVal := false
+	falseStr := "false"
 	cb := &dsl.ConditionBlock{
 		Disjunctions: []*dsl.Conjunction{{
 			Conditions: []*dsl.Condition{
-				{BoolLiteral: &falseVal},
+				{BoolLiteral: &falseStr},
 				{Comparison: &dsl.Comparison{
 					Left:       &dsl.Expr{Literal: &dsl.Literal{Str: strPtr("a")}},
 					Comparator: "==",
