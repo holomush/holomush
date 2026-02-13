@@ -59,6 +59,12 @@ type CoreDeps struct {
 	// AutoMigrateGetter returns whether auto-migration is enabled.
 	// Default: parseAutoMigrate (reads HOLOMUSH_DB_AUTO_MIGRATE env var)
 	AutoMigrateGetter func() bool
+
+	// PolicyBootstrapper seeds policies and creates audit log partitions.
+	// Default: extracts pool from event store, runs policy.Bootstrap().
+	// Fatal if nil and event store does not expose a connection pool (ADR #92).
+	// Tests MUST set this to a no-op to avoid requiring a real database.
+	PolicyBootstrapper func(ctx context.Context, skipSeedMigrations bool) error
 }
 
 // GatewayDeps contains injectable dependencies for the gateway command.

@@ -140,6 +140,11 @@ func disableAutoMigrate() bool {
 	return false
 }
 
+// noOpBootstrapper skips seed policy bootstrap in tests.
+func noOpBootstrapper(_ context.Context, _ bool) error {
+	return nil
+}
+
 // mockListener implements net.Listener for testing.
 type mockListener struct {
 	acceptFunc func() (net.Conn, error)
@@ -259,7 +264,8 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 			return "postgres://test:test@localhost/test"
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -335,7 +341,8 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 			return nil, fmt.Errorf("connection refused")
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -366,7 +373,8 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 			}, nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -398,7 +406,8 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 			return &mockEventStore{}, nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -433,7 +442,8 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 			return nil, fmt.Errorf("failed to load TLS certificates")
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -471,7 +481,8 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -512,7 +523,8 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -557,7 +569,8 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -611,7 +624,8 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -1088,7 +1102,8 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 			return "postgres://test:test@localhost/test"
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()

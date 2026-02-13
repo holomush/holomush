@@ -173,6 +173,28 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 	slog.Info("connected to database")
 
+	// Set up default policy bootstrapper now that we have the event store.
+	// This is late-bound because it needs the database connection pool.
+	// Tests MUST provide their own PolicyBootstrapper (typically a no-op).
+	if deps.PolicyBootstrapper == nil {
+		realStore, ok := eventStore.(*store.PostgresEventStore)
+		if !ok {
+			return oops.Code("BOOTSTRAP_FAILED").Errorf("seed policy bootstrap requires PostgresEventStore (ADR #92)")
+		}
+		pool := realStore.Pool()
+		if pool == nil {
+			return oops.Code("BOOTSTRAP_FAILED").Errorf("seed policy bootstrap requires database connection pool (ADR #92)")
+		}
+		deps.PolicyBootstrapper = func(ctx context.Context, skipSeedMigrations bool) error {
+			partitions := audit.NewPostgresPartitionCreator(pool)
+			ps := policystore.NewPostgresStore(pool)
+			schema := types.NewAttributeSchema()
+			compiler := policy.NewCompiler(schema)
+			opts := policy.BootstrapOptions{SkipSeedMigrations: skipSeedMigrations}
+			return policy.Bootstrap(ctx, partitions, ps, compiler, slog.Default(), opts)
+		}
+	}
+
 	// Initialize or get game_id
 	gameID := cfg.gameID
 	if gameID == "" {
@@ -185,28 +207,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	slog.Info("game ID initialized", "game_id", gameID)
 
 	// Bootstrap seed policies and audit log partitions (ADR #91, #92).
-	// Requires the real PostgresEventStore to access the connection pool.
-	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
-		pool := realStore.Pool()
-		if pool == nil {
-			slog.Debug("skipping seed policy bootstrap: database pool unavailable")
-		} else {
-			partitions := audit.NewPostgresPartitionCreator(pool)
-			ps := policystore.NewPostgresStore(pool)
-			schema := types.NewAttributeSchema()
-			compiler := policy.NewCompiler(schema)
-			bootstrapOpts := policy.BootstrapOptions{
-				SkipSeedMigrations: cfg.skipSeedMigrations,
-			}
-
-			if bootstrapErr := policy.Bootstrap(ctx, partitions, ps, compiler, slog.Default(), bootstrapOpts); bootstrapErr != nil {
-				return oops.Code("BOOTSTRAP_FAILED").With("operation", "bootstrap seed policies").Wrap(bootstrapErr)
-			}
-			slog.Info("seed policies bootstrapped")
-		}
-	} else {
-		slog.Debug("skipping seed policy bootstrap: event store is not PostgresEventStore")
+	// Fatal on error — server MUST NOT start without seed policies.
+	if bootstrapErr := deps.PolicyBootstrapper(ctx, cfg.skipSeedMigrations); bootstrapErr != nil {
+		return oops.Code("BOOTSTRAP_FAILED").With("operation", "bootstrap seed policies").Wrap(bootstrapErr)
 	}
+	slog.Info("seed policies bootstrapped")
 
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {

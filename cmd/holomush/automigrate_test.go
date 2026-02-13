@@ -74,6 +74,7 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 		AutoMigrateGetter: func() bool {
 			return true // Default behavior
 		},
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cfg := &coreConfig{
@@ -131,6 +132,7 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 		AutoMigrateGetter: func() bool {
 			return false // Explicitly disabled
 		},
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cfg := &coreConfig{
