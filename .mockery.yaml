@@ -44,7 +44,7 @@ packages:
       SceneRepository:
       CharacterRepository:
       PropertyRepository:
-      AccessControl:
+      AccessPolicyEngine:
       EventEmitter:
   github.com/holomush/holomush/internal/access/policy:
     config:

@@ -14,20 +14,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
 	"github.com/holomush/holomush/pkg/errutil"
 )
-
-// mockAccessControl is a test mock for access.AccessControl.
-type mockAccessControl struct {
-	mock.Mock
-}
-
-func (m *mockAccessControl) Check(ctx context.Context, subject, action, resource string) bool {
-	args := m.Called(ctx, subject, action, resource)
-	return args.Bool(0)
-}
 
 // mockTransactor is a test mock that records whether InTransaction was called
 // and executes the function directly (simulating a transaction).
@@ -43,57 +34,54 @@ func (m *mockTransactor) InTransaction(ctx context.Context, fn func(ctx context.
 func TestWorldService_GetLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("returns location when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		expectedLoc := &world.Location{ID: locID, Name: "Test Room"}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(expectedLoc, nil)
 
 		loc, err := svc.GetLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedLoc, loc)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(false)
 
 		loc, err := svc.GetLocation(ctx, subjectID, locID)
 		assert.Nil(t, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateLocation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("creates location when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{
@@ -102,7 +90,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 			Type:        world.LocationTypePersistent,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.MatchedBy(func(l *world.Location) bool {
 			return l.Name == "New Room" && !l.ID.IsZero()
 		})).Return(nil)
@@ -110,16 +98,15 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
 		assert.False(t, loc.ID.IsZero(), "ID should be generated")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("preserves existing ID when already set", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		existingID := ulid.Make()
@@ -130,7 +117,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 			Type:        world.LocationTypePersistent,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.MatchedBy(func(l *world.Location) bool {
 			return l.ID == existingID
 		})).Return(nil)
@@ -138,99 +125,92 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
 		assert.Equal(t, existingID, loc.ID, "pre-set ID should be preserved")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{Name: "New Room"}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(false)
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_UpdateLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("updates location when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, loc).Return(nil)
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{ID: locID, Name: "Updated Room"}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(false)
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns not found when location does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, loc).Return(world.ErrNotFound)
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_DeleteLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("deletes location when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -238,22 +218,21 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -261,19 +240,17 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(false)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -281,77 +258,73 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_GetExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("returns exit when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		expectedExit := &world.Exit{ID: exitID, Name: "north"}
 
-		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Get(ctx, exitID).Return(expectedExit, nil)
 
 		exit, err := svc.GetExit(ctx, subjectID, exitID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedExit, exit)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(false)
 
 		exit, err := svc.GetExit(ctx, subjectID, exitID)
 		assert.Nil(t, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateExit(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
 	t.Run("creates exit when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -361,7 +334,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.MatchedBy(func(e *world.Exit) bool {
 			return e.Name == "north" && !e.ID.IsZero()
 		})).Return(nil)
@@ -369,157 +342,146 @@ func TestWorldService_CreateExit(t *testing.T) {
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err)
 		assert.False(t, exit.ID.IsZero(), "ID should be generated")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{Name: "north"}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(false)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_UpdateExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("updates exit when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north updated", Visibility: world.VisibilityAll}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(nil)
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(false)
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(errors.New("db error"))
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns not found when exit does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Update(ctx, exit).Return(world.ErrNotFound)
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "EXIT_NOT_FOUND")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_DeleteExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("deletes exit when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(nil)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(false)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("handles cleanup result for bidirectional exit", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		toLocationID := ulid.Make()
@@ -532,77 +494,73 @@ func TestWorldService_DeleteExit(t *testing.T) {
 			},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
 
 		// Should succeed since primary delete worked
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_GetObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("returns object when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		expectedObj := &world.Object{ID: objID, Name: "sword"}
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(expectedObj, nil)
 
 		obj, err := svc.GetObject(ctx, subjectID, objID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedObj, obj)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(false)
 
 		obj, err := svc.GetObject(ctx, subjectID, objID)
 		assert.Nil(t, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateObject(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	locationID := ulid.Make()
 
 	t.Run("creates object when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		engine.Grant(subjectID, "write", "object:*")
 		mockObjRepo.EXPECT().Create(ctx, mock.MatchedBy(func(o *world.Object) bool {
 			return o.Name == "sword" && !o.ID.IsZero()
 		})).Return(nil)
@@ -610,26 +568,23 @@ func TestWorldService_CreateObject(t *testing.T) {
 		err = svc.CreateObject(ctx, subjectID, obj)
 		require.NoError(t, err)
 		assert.False(t, obj.ID.IsZero(), "ID should be generated")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(false)
 
 		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -637,98 +592,93 @@ func TestWorldService_UpdateObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	locationID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("updates object when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword updated", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(nil)
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(errors.New("db error"))
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns not found when object does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Update(ctx, obj).Return(world.ErrNotFound)
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_DeleteObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("deletes object when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -736,22 +686,21 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -759,32 +708,30 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(false)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_MoveObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	locationID := ulid.Make()
 
 	t.Run("moves object when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		emitter := &mockEventEmitter{} // nil err means Emit succeeds
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -794,59 +741,55 @@ func TestWorldService_MoveObject(t *testing.T) {
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		to := world.Containment{LocationID: &locationID}
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
 		err := svc.MoveObject(ctx, subjectID, objID, to)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error for invalid containment", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		// Empty containment is invalid
 		to := world.Containment{}
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 
 		err := svc.MoveObject(ctx, subjectID, objID, to)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		fromLocID := ulid.Make()
@@ -855,21 +798,20 @@ func TestWorldService_MoveObject(t *testing.T) {
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(errors.New("db error"))
 
 		err = svc.MoveObject(ctx, subjectID, objID, to)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when object repository not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 
 		svc := world.NewService(world.ServiceConfig{
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		to := world.Containment{LocationID: &locationID}
@@ -885,13 +827,13 @@ func TestWorldService_MoveObject(t *testing.T) {
 	// Objects must always have valid containment per the domain invariant.
 
 	t.Run("returns EVENT_EMIT_FAILED when event emitter fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -901,7 +843,7 @@ func TestWorldService_MoveObject(t *testing.T) {
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockObjRepo.EXPECT().Move(ctx, objID, to).Return(nil)
 
@@ -911,7 +853,6 @@ func TestWorldService_MoveObject(t *testing.T) {
 		// Service wrapper adds OBJECT_MOVE_EVENT_FAILED but inner code takes precedence
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -919,39 +860,36 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("adds participant when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(nil)
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -959,39 +897,36 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("removes participant when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(nil)
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		require.NoError(t, err)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -999,45 +934,42 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("lists participants when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		expected := []world.SceneParticipant{
 			{CharacterID: charID, Role: world.RoleMember},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().ListParticipants(ctx, sceneID).Return(expected, nil)
 
 		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.NoError(t, err)
 		assert.Equal(t, expected, participants)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(false)
 
 		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		assert.Nil(t, participants)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1045,15 +977,15 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 
 func TestWorldService_CreateLocation_Validation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{
@@ -1062,7 +994,7 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 			Type:        world.LocationTypePersistent,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
@@ -1070,16 +1002,15 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects name exceeding max length", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		longName := make([]byte, world.MaxNameLength+1)
@@ -1092,7 +1023,7 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 			Type: world.LocationTypePersistent,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
@@ -1100,23 +1031,22 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateExit_Validation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1125,7 +1055,7 @@ func TestWorldService_CreateExit_Validation(t *testing.T) {
 			Name:           "", // Empty name
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -1133,28 +1063,27 @@ func TestWorldService_CreateExit_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateObject_Validation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj := &world.Object{
 			Name: "", // Empty name
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		engine.Grant(subjectID, "write", "object:*")
 
 		err := svc.CreateObject(ctx, subjectID, obj)
 		require.Error(t, err)
@@ -1162,28 +1091,26 @@ func TestWorldService_CreateObject_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects object without containment", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj := &world.Object{
 			Name: "orphan", // Valid name but no containment
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		engine.Grant(subjectID, "write", "object:*")
 
 		err := svc.CreateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1191,23 +1118,22 @@ func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects invalid role", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.ParticipantRole("invalid"))
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidParticipantRole)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1216,39 +1142,38 @@ func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
 func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(nil, errors.New("db error"))
 
 		loc, err := svc.GetLocation(ctx, subjectID, locID)
 		assert.Nil(t, loc)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{
@@ -1256,54 +1181,52 @@ func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
 			Type: world.LocationTypePersistent,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Get(ctx, exitID).Return(nil, errors.New("db error"))
 
 		exit, err := svc.GetExit(ctx, subjectID, exitID)
 		assert.Nil(t, exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1313,65 +1236,62 @@ func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 			Visibility:     world.VisibilityAll,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockObjRepo.EXPECT().Get(ctx, objID).Return(nil, errors.New("db error"))
 
 		obj, err := svc.GetObject(ctx, subjectID, objID)
 		assert.Nil(t, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	locationID := ulid.Make()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		engine.Grant(subjectID, "write", "object:*")
 		mockObjRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1381,24 +1301,23 @@ func TestWorldService_AddSceneParticipant_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(errors.New("db error"))
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1406,49 +1325,47 @@ func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(errors.New("db error"))
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockSceneRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockSceneRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, errors.New("db error"))
 
 		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		assert.Nil(t, participants)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1457,15 +1374,15 @@ func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
 func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("propagates severe cleanup error for bidirectional exit", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		toLocationID := ulid.Make()
@@ -1479,23 +1396,22 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 			},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
 
 		// Severe error means the entire operation was rolled back - return error
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "delete exit")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("propagates delete error cleanup for bidirectional exit", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		toLocationID := ulid.Make()
@@ -1511,29 +1427,28 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 			},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockExitRepo.EXPECT().Delete(ctx, exitID).Return(cleanupResult)
 
 		// Severe error means the entire operation was rolled back - return error
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "delete exit")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_GetExitsByLocation(t *testing.T) {
 	ctx := context.Background()
 	locationID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("returns exits when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		destID := ulid.Make()
@@ -1541,38 +1456,35 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		exit2 := &world.Exit{ID: ulid.Make(), Name: "east", FromLocationID: locationID, ToLocationID: destID}
 		expectedExits := []*world.Exit{exit1, exit2}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locationID.String())
 		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return(expectedExits, nil)
 
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedExits, exits)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(false)
 
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		assert.Nil(t, exits)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 
 		svc := world.NewService(world.ServiceConfig{
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
@@ -1582,42 +1494,40 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 	})
 
 	t.Run("returns error when repository fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		dbErr := errors.New("database connection failed")
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locationID.String())
 		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return(nil, dbErr)
 
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		assert.Nil(t, exits)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_LIST_FAILED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns empty slice for location with no exits", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locationID.String())
 		mockExitRepo.EXPECT().ListFromLocation(ctx, locationID).Return([]*world.Exit{}, nil)
 
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		require.NoError(t, err)
 		assert.NotNil(t, exits, "should return empty slice, not nil")
 		assert.Empty(t, exits)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1626,15 +1536,15 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{
@@ -1643,7 +1553,7 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 			Type: world.LocationTypePersistent,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "write", "location:"+locID.String())
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
@@ -1651,16 +1561,15 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid location type", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{
@@ -1669,27 +1578,26 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 			Type: world.LocationType("invalid"),
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "write", "location:"+locID.String())
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_UpdateExit_Validation(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1697,7 +1605,7 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 			Name: "", // Empty name
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -1705,16 +1613,15 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid visibility", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1723,21 +1630,20 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 			Visibility: world.Visibility("invalid"),
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidVisibility)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid lock type when locked", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1748,27 +1654,26 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 			LockType:   world.LockType("invalid"),
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLockType)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_UpdateObject_Validation(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects empty name", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj := &world.Object{
@@ -1776,7 +1681,7 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 			Name: "", // Empty name
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 
 		err := svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
@@ -1784,16 +1689,15 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "name", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects object without containment", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		obj := &world.Object{
@@ -1801,12 +1705,11 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 			Name: "orphan", // Valid name but no containment
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 
 		err := svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidContainment)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -1814,15 +1717,15 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 
 func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("rejects invalid location type", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		loc := &world.Location{
@@ -1830,28 +1733,27 @@ func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
 			Type: world.LocationType("invalid"),
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLocationType)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
 	t.Run("rejects invalid visibility", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1861,21 +1763,20 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 			Visibility:     world.Visibility("invalid"),
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidVisibility)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid lock type when locked", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1887,21 +1788,20 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 			LockType:       world.LockType("invalid"),
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrInvalidLockType)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid lock data when locked", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1914,7 +1814,7 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 			LockData:       map[string]any{"": "empty key is invalid"},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -1922,16 +1822,15 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "lock_data", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid visible_to when visibility is list", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		// Create duplicate ULIDs in VisibleTo
@@ -1944,7 +1843,7 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 			VisibleTo:      []ulid.ULID{duplicateID, duplicateID},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -1952,22 +1851,21 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "visible_to", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	exitID := ulid.Make()
 
 	t.Run("rejects invalid lock data when locked", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -1979,7 +1877,7 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 			LockData:   map[string]any{"invalid key!": "special chars not allowed"},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -1987,16 +1885,15 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "lock_data", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("rejects invalid visible_to when visibility is list", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		duplicateID := ulid.Make()
@@ -2007,7 +1904,7 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 			VisibleTo:  []ulid.ULID{duplicateID, duplicateID},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		require.Error(t, err)
@@ -2015,23 +1912,22 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 		var validationErr *world.ValidationError
 		assert.True(t, errors.As(err, &validationErr))
 		assert.Equal(t, "visible_to", validationErr.Field)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
 	t.Run("accepts unlocked exit with invalid lock type", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		exit := &world.Exit{
@@ -2043,21 +1939,20 @@ func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 			LockType:       world.LockType("garbage"), // Invalid but should be ignored
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err, "unlocked exit with invalid lock type should succeed")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("accepts non-list visibility with invalid visible_to", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockExitRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		// Create duplicate ULIDs in VisibleTo - invalid but should be ignored for VisibilityAll
@@ -2070,31 +1965,30 @@ func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 			VisibleTo:      []ulid.ULID{duplicateID, duplicateID},
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 		mockExitRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		require.NoError(t, err, "non-list visibility with invalid visible_to should succeed")
-		mockAC.AssertExpectations(t)
 	})
 }
 
 // --- NewService Validation Tests ---
 
-func TestNewService_RequiresAccessControl(t *testing.T) {
-	t.Run("panics when AccessControl is nil", func(t *testing.T) {
+func TestNewService_RequiresEngine(t *testing.T) {
+	t.Run("panics when Engine is nil", func(t *testing.T) {
 		assert.Panics(t, func() {
 			world.NewService(world.ServiceConfig{
-				AccessControl: nil,
+				Engine: nil,
 			})
 		})
 	})
 
-	t.Run("succeeds with AccessControl provided", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+	t.Run("succeeds with Engine provided", func(t *testing.T) {
+		engine := policytest.NewGrantEngine()
 		assert.NotPanics(t, func() {
 			svc := world.NewService(world.ServiceConfig{
-				AccessControl: mockAC,
+				Engine: engine,
 			})
 			assert.NotNil(t, svc)
 		})
@@ -2105,16 +1999,16 @@ func TestNewService_RequiresAccessControl(t *testing.T) {
 
 func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockLocationRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		LocationRepo:  mockRepo,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+	engine.Grant(subjectID, "write", "location:*")
 
 	err := svc.CreateLocation(ctx, subjectID, nil)
 	require.Error(t, err)
@@ -2123,12 +2017,12 @@ func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 
 func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockLocationRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		LocationRepo:  mockRepo,
 	})
 
@@ -2140,16 +2034,16 @@ func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 
 func TestWorldService_CreateExit_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockExitRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		ExitRepo:      mockRepo,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+	engine.Grant(subjectID, "write", "exit:*")
 
 	err := svc.CreateExit(ctx, subjectID, nil)
 	require.Error(t, err)
@@ -2158,16 +2052,16 @@ func TestWorldService_CreateExit_NilInput(t *testing.T) {
 
 func TestWorldService_CreateObject_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockObjectRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		ObjectRepo:    mockRepo,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+	engine.Grant(subjectID, "write", "object:*")
 
 	err := svc.CreateObject(ctx, subjectID, nil)
 	require.Error(t, err)
@@ -2176,12 +2070,12 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 
 func TestWorldService_UpdateExit_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockExitRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		ExitRepo:      mockRepo,
 	})
 
@@ -2193,12 +2087,12 @@ func TestWorldService_UpdateExit_NilInput(t *testing.T) {
 
 func TestWorldService_UpdateObject_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockObjectRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		ObjectRepo:    mockRepo,
 	})
 
@@ -2212,12 +2106,12 @@ func TestWorldService_UpdateObject_NilInput(t *testing.T) {
 
 func TestWorldService_NilLocationRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	locID := ulid.Make()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		// LocationRepo intentionally nil
 	})
 
@@ -2248,12 +2142,12 @@ func TestWorldService_NilLocationRepo(t *testing.T) {
 
 func TestWorldService_NilExitRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	exitID := ulid.Make()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		// ExitRepo intentionally nil
 	})
 
@@ -2284,12 +2178,12 @@ func TestWorldService_NilExitRepo(t *testing.T) {
 
 func TestWorldService_NilObjectRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	objID := ulid.Make()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		// ObjectRepo intentionally nil
 	})
 
@@ -2320,13 +2214,13 @@ func TestWorldService_NilObjectRepo(t *testing.T) {
 
 func TestWorldService_NilSceneRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	svc := world.NewService(world.ServiceConfig{
-		AccessControl: mockAC,
+		Engine: engine,
 		// SceneRepo intentionally nil
 	})
 
@@ -2356,18 +2250,18 @@ func TestWorldService_NilSceneRepo(t *testing.T) {
 func TestService_ErrorCodes_Location(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("GetLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(nil, world.ErrNotFound)
 
 		_, err := svc.GetLocation(ctx, subjectID, locID)
@@ -2376,15 +2270,14 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("GetLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(false)
 
 		_, err := svc.GetLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2392,15 +2285,15 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("GetLocation returns LOCATION_GET_FAILED for other errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+locID.String())
 		mockRepo.EXPECT().Get(ctx, locID).Return(nil, errors.New("db connection failed"))
 
 		_, err := svc.GetLocation(ctx, subjectID, locID)
@@ -2409,15 +2302,14 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("CreateLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(false)
 
 		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2425,15 +2317,15 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("CreateLocation returns LOCATION_INVALID for validation errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 
 		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2441,15 +2333,15 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("CreateLocation returns LOCATION_CREATE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:*").Return(true)
+		engine.Grant(subjectID, "write", "location:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
@@ -2458,15 +2350,14 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("UpdateLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(false)
 
 		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2474,15 +2365,15 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("UpdateLocation returns LOCATION_INVALID for validation errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "write", "location:"+locID.String())
 
 		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2490,15 +2381,15 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("UpdateLocation returns LOCATION_UPDATE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "write", "location:"+locID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
@@ -2507,7 +2398,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("DeleteLocation returns LOCATION_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -2515,11 +2406,10 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(false)
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2527,7 +2417,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("DeleteLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -2535,11 +2425,11 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(world.ErrNotFound)
 
@@ -2549,7 +2439,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 	})
 
 	t.Run("DeleteLocation returns LOCATION_DELETE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -2557,11 +2447,11 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
 
@@ -2576,18 +2466,18 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	exitID := ulid.Make()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("GetExit returns EXIT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockRepo.EXPECT().Get(ctx, exitID).Return(nil, world.ErrNotFound)
 
 		_, err := svc.GetExit(ctx, subjectID, exitID)
@@ -2596,15 +2486,14 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("GetExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(false)
 
 		_, err := svc.GetExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -2612,15 +2501,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("GetExit returns EXIT_GET_FAILED for other errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "read", "exit:"+exitID.String())
 		mockRepo.EXPECT().Get(ctx, exitID).Return(nil, errors.New("db error"))
 
 		_, err := svc.GetExit(ctx, subjectID, exitID)
@@ -2629,15 +2518,14 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("CreateExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(false)
 
 		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
@@ -2645,15 +2533,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("CreateExit returns EXIT_INVALID for validation errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 
 		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "", FromLocationID: fromLocID, ToLocationID: toLocID})
 		require.Error(t, err)
@@ -2661,15 +2549,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("CreateExit returns EXIT_CREATE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:*").Return(true)
+		engine.Grant(subjectID, "write", "exit:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
@@ -2678,15 +2566,14 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("UpdateExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(false)
 
 		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
@@ -2694,15 +2581,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("UpdateExit returns EXIT_INVALID for validation errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 
 		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: ""})
 		require.Error(t, err)
@@ -2710,15 +2597,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("UpdateExit returns EXIT_UPDATE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "write", "exit:"+exitID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
 
 		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
@@ -2727,15 +2614,14 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("DeleteExit returns EXIT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(false)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -2743,15 +2629,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("DeleteExit returns EXIT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockRepo.EXPECT().Delete(ctx, exitID).Return(world.ErrNotFound)
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
@@ -2760,15 +2646,15 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	})
 
 	t.Run("DeleteExit returns EXIT_DELETE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ExitRepo:      mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "exit:"+exitID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
 		mockRepo.EXPECT().Delete(ctx, exitID).Return(errors.New("db error"))
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
@@ -2781,18 +2667,18 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	locationID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("GetObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(nil, world.ErrNotFound)
 
 		_, err := svc.GetObject(ctx, subjectID, objID)
@@ -2801,15 +2687,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("GetObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(false)
 
 		_, err := svc.GetObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -2817,15 +2702,15 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("GetObject returns OBJECT_GET_FAILED for other errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(nil, errors.New("db error"))
 
 		_, err := svc.GetObject(ctx, subjectID, objID)
@@ -2834,15 +2719,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("CreateObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(false)
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
@@ -2857,15 +2741,15 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	// Validation is tested at the constructor level in object_test.go.
 
 	t.Run("CreateObject returns OBJECT_CREATE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:*").Return(true)
+		engine.Grant(subjectID, "write", "object:*")
 		mockRepo.EXPECT().Create(ctx, mock.Anything).Return(errors.New("db error"))
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
@@ -2876,15 +2760,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("UpdateObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
@@ -2899,15 +2782,15 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	// Validation is tested at the constructor level in object_test.go.
 
 	t.Run("UpdateObject returns OBJECT_UPDATE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Update(ctx, mock.Anything).Return(errors.New("db error"))
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
@@ -2918,7 +2801,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("DeleteObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -2926,11 +2809,10 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(false)
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -2938,7 +2820,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("DeleteObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -2946,11 +2828,11 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, objID).Return(world.ErrNotFound)
 
@@ -2960,7 +2842,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("DeleteObject returns OBJECT_DELETE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -2968,11 +2850,11 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockRepo.EXPECT().Delete(mock.Anything, objID).Return(errors.New("db error"))
 
@@ -2982,15 +2864,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("MoveObject returns OBJECT_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(false)
 
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
@@ -2998,15 +2879,15 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("MoveObject returns OBJECT_INVALID for invalid containment", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{})
 		require.Error(t, err)
@@ -3014,15 +2895,15 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("MoveObject returns OBJECT_NOT_FOUND for ErrNotFound from Get", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(nil, world.ErrNotFound)
 
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
@@ -3031,19 +2912,19 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("MoveObject returns OBJECT_NOT_FOUND for ErrNotFound from Move", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		fromLocID := ulid.Make()
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(world.ErrNotFound)
 
@@ -3053,19 +2934,19 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("MoveObject returns OBJECT_MOVE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		fromLocID := ulid.Make()
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(errors.New("db error"))
 
@@ -3075,14 +2956,14 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	})
 
 	t.Run("MoveObject returns EVENT_EMIT_FAILED when event emission fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockObjectRepository(t)
 		// mockEventEmitter is defined in events_test.go (same package)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3090,7 +2971,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
 		require.NoError(t, err)
 
-		mockAC.On("Check", ctx, subjectID, "write", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "write", "object:"+objID.String())
 		mockRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
 		mockRepo.EXPECT().Move(ctx, objID, mock.Anything).Return(nil)
 
@@ -3108,18 +2989,17 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("AddSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		require.Error(t, err)
@@ -3127,15 +3007,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("AddSceneParticipant returns SCENE_INVALID for invalid role", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.ParticipantRole("invalid"))
 		require.Error(t, err)
@@ -3143,15 +3023,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("AddSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(world.ErrNotFound)
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
@@ -3160,15 +3040,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("AddSceneParticipant returns SCENE_ADD_PARTICIPANT_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockRepo.EXPECT().AddParticipant(ctx, sceneID, charID, world.RoleMember).Return(errors.New("db error"))
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
@@ -3177,15 +3057,14 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("RemoveSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(false)
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		require.Error(t, err)
@@ -3193,15 +3072,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("RemoveSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(world.ErrNotFound)
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
@@ -3210,15 +3089,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("RemoveSceneParticipant returns SCENE_REMOVE_PARTICIPANT_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
 		mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, charID).Return(errors.New("db error"))
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
@@ -3227,15 +3106,14 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("ListSceneParticipants returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(false)
 
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.Error(t, err)
@@ -3243,15 +3121,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("ListSceneParticipants returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, world.ErrNotFound)
 
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
@@ -3260,15 +3138,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	})
 
 	t.Run("ListSceneParticipants returns SCENE_LIST_PARTICIPANTS_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			SceneRepo:     mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "scene:"+sceneID.String()).Return(true)
+		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
 		mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(nil, errors.New("db error"))
 
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
@@ -3280,15 +3158,15 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 func TestWorldService_GetCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("returns character when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		locID := ulid.Make()
@@ -3298,38 +3176,35 @@ func TestWorldService_GetCharacter(t *testing.T) {
 			LocationID: &locID,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "read", "character:"+charID.String())
 		mockRepo.EXPECT().Get(ctx, charID).Return(expectedChar, nil)
 
 		char, err := svc.GetCharacter(ctx, subjectID, charID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedChar, char)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(false)
 
 		char, err := svc.GetCharacter(ctx, subjectID, charID)
 		assert.Nil(t, char)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 
 		svc := world.NewService(world.ServiceConfig{
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		char, err := svc.GetCharacter(ctx, subjectID, charID)
@@ -3339,15 +3214,15 @@ func TestWorldService_GetCharacter(t *testing.T) {
 	})
 
 	t.Run("returns not found when character does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "read", "character:"+charID.String())
 		mockRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
 
 		char, err := svc.GetCharacter(ctx, subjectID, charID)
@@ -3357,16 +3232,16 @@ func TestWorldService_GetCharacter(t *testing.T) {
 	})
 
 	t.Run("returns error when repository fails with generic error", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		dbErr := errors.New("database connection failed")
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "read", "character:"+charID.String())
 		mockRepo.EXPECT().Get(ctx, charID).Return(nil, dbErr)
 
 		char, err := svc.GetCharacter(ctx, subjectID, charID)
@@ -3379,53 +3254,50 @@ func TestWorldService_GetCharacter(t *testing.T) {
 func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	ctx := context.Background()
 	locationID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("returns characters when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		char1 := &world.Character{ID: ulid.Make(), Name: "Char1", LocationID: &locationID}
 		char2 := &world.Character{ID: ulid.Make(), Name: "Char2", LocationID: &locationID}
 		expectedChars := []*world.Character{char1, char2}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(false)
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 
 		svc := world.NewService(world.ServiceConfig{
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
@@ -3435,35 +3307,34 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	})
 
 	t.Run("returns error when repository fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		dbErr := errors.New("database connection failed")
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(nil, dbErr)
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_QUERY_FAILED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns empty slice for location with no characters", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return([]*world.Character{}, nil)
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
@@ -3472,36 +3343,35 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	})
 
 	t.Run("passes pagination options to repository", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		opts := world.ListOptions{Limit: 10, Offset: 5}
 		expectedChars := []*world.Character{{ID: ulid.Make(), Name: "Char1"}}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+locationID.String()+":characters").Return(true)
+		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
 		mockRepo.EXPECT().GetByLocation(ctx, locationID, opts).Return(expectedChars, nil)
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, opts)
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_MoveCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
 	t.Run("successful move emits event", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		emitter := &mockEventEmitter{}
@@ -3509,7 +3379,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3519,7 +3389,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			LocationID: &fromLocID,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
@@ -3532,61 +3402,58 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		call := emitter.calls[0]
 		assert.Equal(t, world.LocationStream(toLocID), call.Stream)
 		assert.Equal(t, "move", call.EventType)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND when character does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_MOVE_FAILED when Get fails with generic error", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		dbErr := errors.New("database connection lost")
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, dbErr)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 		assert.Contains(t, err.Error(), "get character")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns LOCATION_NOT_FOUND when destination does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		existingChar := &world.Character{
@@ -3595,7 +3462,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			LocationID: &fromLocID,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(nil, world.ErrNotFound)
 
@@ -3603,18 +3470,17 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNotFound)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_MOVE_FAILED when location verification fails with generic error", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		existingChar := &world.Character{
@@ -3624,7 +3490,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		}
 
 		dbErr := errors.New("database timeout")
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(nil, dbErr)
 
@@ -3632,11 +3498,10 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
 		assert.Contains(t, err.Error(), "verify destination location")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns EVENT_EMIT_FAILED when event emission fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
@@ -3644,7 +3509,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3654,7 +3519,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			LocationID: &fromLocID,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
@@ -3665,11 +3530,10 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		// Service wrapper adds CHARACTER_MOVE_EVENT_FAILED but inner code takes precedence
 		errutil.AssertErrorCode(t, err, "EVENT_EMIT_FAILED")
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("first-time placement emits event with from_type none", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		emitter := &mockEventEmitter{}
@@ -3677,7 +3541,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3688,7 +3552,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			LocationID: nil,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
@@ -3708,36 +3572,33 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		assert.Nil(t, payload.FromID)
 		assert.Equal(t, world.ContainmentTypeLocation, payload.ToType)
 		assert.Equal(t, toLocID, payload.ToID)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_ACCESS_DENIED when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(false)
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when character repository not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
@@ -3746,14 +3607,14 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			// No EventEmitter configured
 		})
 
@@ -3763,7 +3624,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			LocationID: &fromLocID,
 		}
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
@@ -3772,18 +3633,17 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when UpdateLocation fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		existingChar := &world.Character{
@@ -3793,7 +3653,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		}
 		dbErr := errors.New("database error")
 
-		mockAC.On("Check", ctx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(dbErr)
@@ -3801,14 +3661,13 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_MOVE_FAILED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("propagates context cancellation error", func(t *testing.T) {
 		cancelCtx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("transient error")}
@@ -3816,7 +3675,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3826,7 +3685,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 			LocationID: &fromLocID,
 		}
 
-		mockAC.On("Check", cancelCtx, subjectID, "write", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "write", "character:"+charID.String())
 		mockCharRepo.EXPECT().Get(mock.Anything, charID).Return(existingChar, nil)
 		mockLocRepo.EXPECT().Get(mock.Anything, toLocID).Return(&world.Location{ID: toLocID}, nil)
 		mockCharRepo.EXPECT().UpdateLocation(mock.Anything, charID, &toLocID).Return(nil)
@@ -3835,7 +3694,6 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.Canceled)
-		mockAC.AssertExpectations(t)
 	})
 }
 
@@ -3844,10 +3702,10 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 	charID := ulid.Make()
 	targetLocID := ulid.Make()
 	charLocID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("successful examine emits event", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		emitter := &mockEventEmitter{}
@@ -3855,7 +3713,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3869,7 +3727,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			Name: "Grand Hall",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+targetLocID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+targetLocID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
 
@@ -3890,18 +3748,17 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		assert.Equal(t, targetLocID, payload.TargetID)
 		assert.Equal(t, "Grand Hall", payload.TargetName)
 		assert.Equal(t, charLocID, payload.LocationID)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND when examiner does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
@@ -3913,14 +3770,14 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 	})
 
 	t.Run("returns LOCATION_NOT_FOUND when target does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -3939,14 +3796,14 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 	})
 
 	t.Run("returns EXAMINE_ACCESS_DENIED when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -3961,24 +3818,22 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+targetLocID.String()).Return(false)
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			// No EventEmitter configured
 		})
 
@@ -3992,7 +3847,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			Name: "Grand Hall",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+targetLocID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+targetLocID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
 
@@ -4000,11 +3855,10 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when event emitter fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
@@ -4012,7 +3866,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4026,7 +3880,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			Name: "Grand Hall",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:"+targetLocID.String()).Return(true)
+		engine.Grant(subjectID, "read", "location:"+targetLocID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
 
@@ -4037,18 +3891,17 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		// Verify operation context is present
 		errutil.AssertErrorContext(t, err, "character_id", charID.String())
 		errutil.AssertErrorContext(t, err, "target_id", targetLocID.String())
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when examiner not in world", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4071,10 +3924,10 @@ func TestWorldService_ExamineObject(t *testing.T) {
 	charID := ulid.Make()
 	targetObjID := ulid.Make()
 	charLocID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("successful examine emits event", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		emitter := &mockEventEmitter{}
@@ -4082,7 +3935,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4098,7 +3951,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+targetObjID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+targetObjID.String())
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.NoError(t, err)
@@ -4117,18 +3970,17 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		assert.Equal(t, targetObjID, payload.TargetID)
 		assert.Equal(t, "Ancient Chest", payload.TargetName)
 		assert.Equal(t, charLocID, payload.LocationID)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND when examiner does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
@@ -4140,14 +3992,14 @@ func TestWorldService_ExamineObject(t *testing.T) {
 	})
 
 	t.Run("returns OBJECT_NOT_FOUND when target does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4166,14 +4018,14 @@ func TestWorldService_ExamineObject(t *testing.T) {
 	})
 
 	t.Run("returns EXAMINE_ACCESS_DENIED when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4188,24 +4040,22 @@ func TestWorldService_ExamineObject(t *testing.T) {
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+targetObjID.String()).Return(false)
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			// No EventEmitter configured
 		})
 
@@ -4219,7 +4069,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			Name: "Ancient Chest",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+targetObjID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+targetObjID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
 
@@ -4227,11 +4077,10 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when event emitter fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
@@ -4239,7 +4088,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4253,7 +4102,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			Name: "Ancient Chest",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "object:"+targetObjID.String()).Return(true)
+		engine.Grant(subjectID, "read", "object:"+targetObjID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
 
@@ -4264,18 +4113,17 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		// Verify operation context is present
 		errutil.AssertErrorContext(t, err, "character_id", charID.String())
 		errutil.AssertErrorContext(t, err, "target_id", targetObjID.String())
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when examiner not in world", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4298,16 +4146,16 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	charID := ulid.Make()
 	targetCharID := ulid.Make()
 	charLocID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("successful examine emits event", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		emitter := &mockEventEmitter{}
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4323,7 +4171,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+targetCharID.String()).Return(true)
+		engine.Grant(subjectID, "read", "character:"+targetCharID.String())
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.NoError(t, err)
@@ -4342,16 +4190,15 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		assert.Equal(t, targetCharID, payload.TargetID)
 		assert.Equal(t, "Mysterious Stranger", payload.TargetName)
 		assert.Equal(t, charLocID, payload.LocationID)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND when examiner does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
@@ -4363,12 +4210,12 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	})
 
 	t.Run("returns error when examiner not in world", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4386,12 +4233,12 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND when target does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4411,12 +4258,12 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	})
 
 	t.Run("returns EXAMINE_ACCESS_DENIED when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		examiner := &world.Character{
@@ -4431,22 +4278,20 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+targetCharID.String()).Return(false)
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			// No EventEmitter configured
 		})
 
@@ -4460,7 +4305,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			Name: "Mysterious Stranger",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+targetCharID.String()).Return(true)
+		engine.Grant(subjectID, "read", "character:"+targetCharID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
 
@@ -4468,17 +4313,16 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrNoEventEmitter)
 		errutil.AssertErrorCode(t, err, "EVENT_EMITTER_MISSING")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when event emitter fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4492,7 +4336,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			Name: "Mysterious Stranger",
 		}
 
-		mockAC.On("Check", ctx, subjectID, "read", "character:"+targetCharID.String()).Return(true)
+		engine.Grant(subjectID, "read", "character:"+targetCharID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
 
@@ -4503,76 +4347,71 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		// Verify operation context is present
 		errutil.AssertErrorContext(t, err, "character_id", charID.String())
 		errutil.AssertErrorContext(t, err, "target_id", targetCharID.String())
-		mockAC.AssertExpectations(t)
 	})
 }
 
 func TestWorldService_FindLocationByName(t *testing.T) {
 	ctx := context.Background()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 	locID := ulid.Make()
 
 	t.Run("finds location when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		expectedLoc := &world.Location{ID: locID, Name: "Test Room", Type: world.LocationTypePersistent}
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:*").Return(true)
+		engine.Grant(subjectID, "read", "location:*")
 		mockRepo.EXPECT().FindByName(ctx, "Test Room").Return(expectedLoc, nil)
 
 		loc, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
 		require.NoError(t, err)
 		assert.Equal(t, locID, loc.ID)
 		assert.Equal(t, "Test Room", loc.Name)
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:*").Return(false)
 
 		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns not found when location does not exist", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "read", "location:*").Return(true)
+		engine.Grant(subjectID, "read", "location:*")
 		mockRepo.EXPECT().FindByName(ctx, "Non-Existent").Return(nil, world.ErrNotFound)
 
 		_, err := svc.FindLocationByName(ctx, subjectID, "Non-Existent")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 
 		svc := world.NewService(world.ServiceConfig{
-			AccessControl: mockAC,
+			Engine: engine,
 		})
 
 		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
@@ -4584,10 +4423,10 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 func TestWorldService_DeleteCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("deletes character when authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4595,22 +4434,21 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.NoError(t, err)
 		assert.True(t, tx.called, "expected InTransaction to be called")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns permission denied when not authorized", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4618,21 +4456,19 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(false)
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
-		mockAC.AssertExpectations(t)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND for ErrNotFound", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4640,11 +4476,11 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(world.ErrNotFound)
 
@@ -4654,7 +4490,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	})
 
 	t.Run("returns CHARACTER_DELETE_FAILED for repo errors", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4662,11 +4498,11 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(errors.New("db error"))
 
@@ -4676,10 +4512,10 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	})
 
 	t.Run("returns CHARACTER_DELETE_FAILED when character repo nil", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 
 		svc := world.NewService(world.ServiceConfig{
-			AccessControl: mockAC,
+			Engine: engine,
 			// CharacterRepo intentionally nil
 		})
 
@@ -4693,10 +4529,10 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("cleans up properties then deletes character", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4704,11 +4540,11 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
 
@@ -4718,7 +4554,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 	})
 
 	t.Run("returns error when property delete fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4726,11 +4562,11 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(errors.New("db error"))
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4739,7 +4575,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 	})
 
 	t.Run("returns error when character delete fails after properties deleted", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4747,11 +4583,11 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "character:"+charID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 		mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(errors.New("db error"))
 
@@ -4764,10 +4600,10 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("cleans up properties then deletes location", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4775,11 +4611,11 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockLocRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
 
@@ -4789,7 +4625,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 	})
 
 	t.Run("returns error when property delete fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4797,11 +4633,11 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockLocRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(errors.New("db error"))
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
@@ -4810,7 +4646,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 	})
 
 	t.Run("returns error when location delete fails after properties deleted", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4818,11 +4654,11 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			LocationRepo:  mockLocRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "location:"+locID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 		mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
 
@@ -4835,10 +4671,10 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
 	t.Run("cleans up properties then deletes object", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4846,11 +4682,11 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
 
@@ -4860,7 +4696,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 	})
 
 	t.Run("returns error when property delete fails", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4868,11 +4704,11 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(errors.New("db error"))
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
@@ -4881,7 +4717,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 	})
 
 	t.Run("returns error when object delete fails after properties deleted", func(t *testing.T) {
-		mockAC := &mockAccessControl{}
+		engine := policytest.NewGrantEngine()
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -4889,11 +4725,11 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
 			PropertyRepo:  mockPropRepo,
-			AccessControl: mockAC,
+			Engine: engine,
 			Transactor:    tx,
 		})
 
-		mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+		engine.Grant(subjectID, "delete", "object:"+objID.String())
 		mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 		mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(errors.New("db error"))
 
@@ -4906,9 +4742,9 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -4916,11 +4752,11 @@ func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		LocationRepo:  mockLocRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "location:"+locID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(errors.New("db error"))
 
 	err := svc.DeleteLocation(ctx, subjectID, locID)
@@ -4932,9 +4768,9 @@ func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockObjRepo := worldtest.NewMockObjectRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -4942,11 +4778,11 @@ func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		ObjectRepo:    mockObjRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "object:"+objID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(errors.New("db error"))
 
 	err := svc.DeleteObject(ctx, subjectID, objID)
@@ -4958,9 +4794,9 @@ func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -4968,11 +4804,11 @@ func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockCharRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "character:"+charID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(errors.New("db error"))
 
 	err := svc.DeleteCharacter(ctx, subjectID, charID)
@@ -4984,19 +4820,19 @@ func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 func TestWorldService_DeleteLocation_ErrorsWithPropertyRepoButNoTransactor(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 
 	svc := world.NewService(world.ServiceConfig{
 		LocationRepo:  mockLocRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "location:"+locID.String())
 
 	err := svc.DeleteLocation(ctx, subjectID, locID)
 	require.Error(t, err)
@@ -5007,19 +4843,19 @@ func TestWorldService_DeleteLocation_ErrorsWithPropertyRepoButNoTransactor(t *te
 func TestWorldService_DeleteObject_ErrorsWithPropertyRepoButNoTransactor(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockObjRepo := worldtest.NewMockObjectRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 
 	svc := world.NewService(world.ServiceConfig{
 		ObjectRepo:    mockObjRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "object:"+objID.String())
 
 	err := svc.DeleteObject(ctx, subjectID, objID)
 	require.Error(t, err)
@@ -5030,19 +4866,19 @@ func TestWorldService_DeleteObject_ErrorsWithPropertyRepoButNoTransactor(t *test
 func TestWorldService_DeleteCharacter_ErrorsWithPropertyRepoButNoTransactor(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockCharRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "character:"+charID.String())
 
 	err := svc.DeleteCharacter(ctx, subjectID, charID)
 	require.Error(t, err)
@@ -5053,9 +4889,9 @@ func TestWorldService_DeleteCharacter_ErrorsWithPropertyRepoButNoTransactor(t *t
 func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -5063,11 +4899,11 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		LocationRepo:  mockLocRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "location:"+locID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 	mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(nil)
 
@@ -5079,9 +4915,9 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockObjRepo := worldtest.NewMockObjectRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -5089,11 +4925,11 @@ func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		ObjectRepo:    mockObjRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "object:"+objID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "object:"+objID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "object", objID).Return(nil)
 	mockObjRepo.EXPECT().Delete(mock.Anything, objID).Return(nil)
 
@@ -5105,9 +4941,9 @@ func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -5115,11 +4951,11 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockCharRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "character:"+charID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "character:"+charID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "character", charID).Return(nil)
 	mockCharRepo.EXPECT().Delete(mock.Anything, charID).Return(nil)
 
@@ -5131,9 +4967,9 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := "character:" +ulid.Make().String()
 
-	mockAC := &mockAccessControl{}
+	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 	tx := &mockTransactor{}
@@ -5141,11 +4977,11 @@ func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		LocationRepo:  mockLocRepo,
 		PropertyRepo:  mockPropRepo,
-		AccessControl: mockAC,
+		Engine: engine,
 		Transactor:    tx,
 	})
 
-	mockAC.On("Check", ctx, subjectID, "delete", "location:"+locID.String()).Return(true)
+	engine.Grant(subjectID, "delete", "location:"+locID.String())
 	mockPropRepo.EXPECT().DeleteByParent(mock.Anything, "location", locID).Return(nil)
 	mockLocRepo.EXPECT().Delete(mock.Anything, locID).Return(errors.New("db error"))
 

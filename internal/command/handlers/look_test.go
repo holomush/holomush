@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 )
@@ -29,9 +30,9 @@ func TestLookHandler(t *testing.T) {
 		{
 			name: "outputs room name and description",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
-				fixture.Mocks.AccessControl.EXPECT().
-					Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "location:"+location.ID.String()).
-					Return(true)
+				fixture.Mocks.Engine.EXPECT().
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 				fixture.Mocks.LocationRepo.EXPECT().
 					Get(mock.Anything, location.ID).
 					Return(location, nil)
@@ -45,9 +46,9 @@ func TestLookHandler(t *testing.T) {
 		{
 			name: "returns world error on failure",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
-				fixture.Mocks.AccessControl.EXPECT().
-					Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "location:"+location.ID.String()).
-					Return(true)
+				fixture.Mocks.Engine.EXPECT().
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 				fixture.Mocks.LocationRepo.EXPECT().
 					Get(mock.Anything, location.ID).
 					Return(nil, errors.New("database error"))
@@ -61,9 +62,9 @@ func TestLookHandler(t *testing.T) {
 		{
 			name: "returns world error on access denied",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
-				fixture.Mocks.AccessControl.EXPECT().
-					Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "location:"+location.ID.String()).
-					Return(false)
+				fixture.Mocks.Engine.EXPECT().
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Return(types.NewDecision(types.EffectDeny, "", ""), nil)
 			},
 			assertion: func(t *testing.T, _ string, err error) {
 				require.Error(t, err)

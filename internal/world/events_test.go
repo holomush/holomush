@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
@@ -641,14 +642,6 @@ func TestEmitExamineEvent(t *testing.T) {
 	})
 }
 
-// mockAccessControl is a test mock for AccessControl.
-type mockAccessControlForEvents struct {
-	allowAll bool
-}
-
-func (m *mockAccessControlForEvents) Check(_ context.Context, _, _, _ string) bool {
-	return m.allowAll
-}
 
 func TestService_MoveObject_EmitsEvent(t *testing.T) {
 	ctx := context.Background()
@@ -663,7 +656,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: &mockAccessControlForEvents{allowAll: true},
+			Engine: policytest.AllowAllEngine(),
 			EventEmitter:  emitter,
 		})
 
@@ -699,7 +692,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: &mockAccessControlForEvents{allowAll: true},
+			Engine: policytest.AllowAllEngine(),
 			// No EventEmitter configured - this is a misconfiguration
 		})
 
@@ -728,7 +721,7 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			ObjectRepo:    mockObjRepo,
-			AccessControl: &mockAccessControlForEvents{allowAll: true},
+			Engine: policytest.AllowAllEngine(),
 			EventEmitter:  emitter,
 		})
 
