@@ -25,7 +25,7 @@ func TestTransactor_InTransaction_CommitsOnSuccess(t *testing.T) {
 
 	err := tx.InTransaction(ctx, func(txCtx context.Context) error {
 		_, err := testPool.Exec(txCtx,
-			`INSERT INTO locations (id, name) VALUES ($1, $2)`, locID, "commit-test")
+			`INSERT INTO locations (id, name, description) VALUES ($1, $2, $3)`, locID, "commit-test", "A test location")
 		return err
 	})
 	require.NoError(t, err)
@@ -48,7 +48,7 @@ func TestTransactor_InTransaction_RollsBackOnError(t *testing.T) {
 
 	err := tx.InTransaction(ctx, func(txCtx context.Context) error {
 		_, err := testPool.Exec(txCtx,
-			`INSERT INTO locations (id, name) VALUES ($1, $2)`, locID, "rollback-test")
+			`INSERT INTO locations (id, name, description) VALUES ($1, $2, $3)`, locID, "rollback-test", "A test location")
 		if err != nil {
 			return err
 		}
