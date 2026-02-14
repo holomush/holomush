@@ -297,15 +297,15 @@ const (
 
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
-	World            WorldService                // world model queries and mutations
-	Session          core.SessionService         // session management
-	Engine           policy.AccessPolicyEngine   // ABAC policy engine for authorization
-	Events           core.EventStore             // event persistence
-	Broadcaster      EventBroadcaster            // event broadcasting
-	AliasCache       *AliasCache                 // alias management (optional)
-	AliasRepo        AliasWriter                 // alias persistence (optional, for alias handlers)
-	Registry         *Registry                   // command registry (optional)
-	PropertyRegistry *property.Registry          // property registry (optional)
+	World            WorldService              // world model queries and mutations
+	Session          core.SessionService       // session management
+	Engine           policy.AccessPolicyEngine // ABAC policy engine for authorization
+	Events           core.EventStore           // event persistence
+	Broadcaster      EventBroadcaster          // event broadcasting
+	AliasCache       *AliasCache               // alias management (optional)
+	AliasRepo        AliasWriter               // alias persistence (optional, for alias handlers)
+	Registry         *Registry                 // command registry (optional)
+	PropertyRegistry *property.Registry        // property registry (optional)
 }
 
 // Services provides access to core services for command handlers.
@@ -317,15 +317,15 @@ type ServicesConfig struct {
 // the command handler's execution context. The Services struct is shared
 // across all command executions.
 type Services struct {
-	world            WorldService                // world model queries and mutations
-	session          core.SessionService         // session management
-	engine           policy.AccessPolicyEngine   // ABAC policy engine for authorization
-	events           core.EventStore             // event persistence
-	broadcaster      EventBroadcaster            // event broadcasting
-	aliasCache       *AliasCache                 // alias management (optional, for alias commands)
-	aliasRepo        AliasWriter                 // alias persistence (optional, for alias handlers)
-	registry         *Registry                   // command registry (optional, for alias shadow detection)
-	propertyRegistry *property.Registry          // property registry (optional, for property handlers)
+	world            WorldService              // world model queries and mutations
+	session          core.SessionService       // session management
+	engine           policy.AccessPolicyEngine // ABAC policy engine for authorization
+	events           core.EventStore           // event persistence
+	broadcaster      EventBroadcaster          // event broadcasting
+	aliasCache       *AliasCache               // alias management (optional, for alias commands)
+	aliasRepo        AliasWriter               // alias persistence (optional, for alias handlers)
+	registry         *Registry                 // command registry (optional, for alias shadow detection)
+	propertyRegistry *property.Registry        // property registry (optional, for property handlers)
 }
 
 // World returns the world service for model queries and mutations.

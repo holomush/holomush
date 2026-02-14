@@ -716,3 +716,55 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
+
+func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
+	// Given: a registry with commands requiring capabilities
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+			command.NewTestEntry(command.CommandEntryConfig{Name: "admin", Help: "Admin command", Capabilities: []string{"admin.manage"}, Source: "admin"}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
+	charID := ulid.Make()
+	denyEngine := policytest.DenyAllEngine()
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(denyEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with explicit deny engine
+	err := L.DoString(`
+		commands, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: only commands with no capability requirements are returned
+	commands := L.GetGlobal("commands")
+	require.NotEqual(t, lua.LNil, commands)
+
+	tbl, ok := commands.(*lua.LTable)
+	require.True(t, ok)
+
+	// Collect returned command names
+	var names []string
+	tbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+
+	// Should include: look (no caps required)
+	// Should NOT include: say (EffectDeny for comms.say), admin (EffectDeny for admin.manage)
+	assert.Contains(t, names, "look", "commands without capabilities should be included")
+	assert.NotContains(t, names, "say", "explicit deny should filter out command requiring comms.say")
+	assert.NotContains(t, names, "admin", "explicit deny should filter out command requiring admin.manage")
+	assert.Len(t, names, 1, "only commands without capability requirements should be included")
+}

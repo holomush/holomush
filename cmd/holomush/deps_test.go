@@ -264,7 +264,7 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -341,7 +341,7 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return nil, fmt.Errorf("connection refused")
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -373,7 +373,7 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 				},
 			}, nil
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -406,7 +406,7 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
 			return &mockEventStore{}, nil
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -442,7 +442,7 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return nil, fmt.Errorf("failed to load TLS certificates")
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -481,7 +481,7 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -523,7 +523,7 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -569,7 +569,7 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -624,7 +624,7 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}
@@ -1132,7 +1132,7 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
-		MigratorFactory:   noOpMigratorFactory,
+		MigratorFactory:    noOpMigratorFactory,
 		AutoMigrateGetter:  disableAutoMigrate,
 		PolicyBootstrapper: noOpBootstrapper,
 	}

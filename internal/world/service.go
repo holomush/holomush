@@ -98,6 +98,19 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 	return nil
 }
 
+// wrapAccessError wraps a checkAccess error with distinct oops error codes for
+// evaluation failures vs policy denials. This allows callers (metrics, logs) to
+// distinguish infrastructure failures from authorization denials.
+//
+//   - ErrAccessEvaluationFailed → oops.Code(evalFailedCode)
+//   - ErrPermissionDenied       → oops.Code(deniedCode)
+func wrapAccessError(err error, evalFailedCode, deniedCode string) error {
+	if errors.Is(err, ErrAccessEvaluationFailed) {
+		return oops.Code(evalFailedCode).Wrap(err)
+	}
+	return oops.Code(deniedCode).Wrap(err)
+}
+
 // GetLocation retrieves a location by ID after checking read authorization.
 func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*Location, error) {
 	if s.locationRepo == nil {
@@ -105,7 +118,7 @@ func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULI
 	}
 	resource := fmt.Sprintf("location:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return nil, oops.Code("LOCATION_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
 	}
 	loc, err := s.locationRepo.Get(ctx, id)
 	if err != nil {
@@ -125,7 +138,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 		return oops.Code("LOCATION_CREATE_FAILED").Errorf("location repository not configured")
 	}
 	if err := s.checkAccess(ctx, subjectID, "write", "location:*"); err != nil {
-		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
 	}
 	if loc == nil {
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
@@ -154,7 +167,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	}
 	resource := fmt.Sprintf("location:%s", loc.ID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
 	}
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
@@ -183,7 +196,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	}
 	resource := fmt.Sprintf("location:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource); err != nil {
-		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
@@ -212,7 +225,7 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 	}
 	resource := fmt.Sprintf("exit:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return nil, oops.Code("EXIT_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "EXIT_ACCESS_EVALUATION_FAILED", "EXIT_ACCESS_DENIED")
 	}
 	exit, err := s.exitRepo.Get(ctx, id)
 	if err != nil {
@@ -235,7 +248,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
 	}
 	if err := s.checkAccess(ctx, subjectID, "write", "exit:*"); err != nil {
-		return oops.Code("EXIT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "EXIT_ACCESS_EVALUATION_FAILED", "EXIT_ACCESS_DENIED")
 	}
 	if exit == nil {
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
@@ -267,7 +280,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	}
 	resource := fmt.Sprintf("exit:%s", exit.ID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("EXIT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "EXIT_ACCESS_EVALUATION_FAILED", "EXIT_ACCESS_DENIED")
 	}
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
@@ -291,7 +304,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	}
 	resource := fmt.Sprintf("exit:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource); err != nil {
-		return oops.Code("EXIT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "EXIT_ACCESS_EVALUATION_FAILED", "EXIT_ACCESS_DENIED")
 	}
 	err := s.exitRepo.Delete(ctx, id)
 	if err != nil {
@@ -329,7 +342,7 @@ func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, loca
 	}
 	resource := fmt.Sprintf("location:%s", locationID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return nil, oops.Code("EXIT_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "EXIT_ACCESS_EVALUATION_FAILED", "EXIT_ACCESS_DENIED")
 	}
 	exits, err := s.exitRepo.ListFromLocation(ctx, locationID)
 	if err != nil {
@@ -345,7 +358,7 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 	}
 	resource := fmt.Sprintf("object:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return nil, oops.Code("OBJECT_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "OBJECT_ACCESS_EVALUATION_FAILED", "OBJECT_ACCESS_DENIED")
 	}
 	obj, err := s.objectRepo.Get(ctx, id)
 	if err != nil {
@@ -365,7 +378,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 		return oops.Code("OBJECT_CREATE_FAILED").Errorf("object repository not configured")
 	}
 	if err := s.checkAccess(ctx, subjectID, "write", "object:*"); err != nil {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "OBJECT_ACCESS_EVALUATION_FAILED", "OBJECT_ACCESS_DENIED")
 	}
 	if obj == nil {
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
@@ -397,7 +410,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	}
 	resource := fmt.Sprintf("object:%s", obj.ID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "OBJECT_ACCESS_EVALUATION_FAILED", "OBJECT_ACCESS_DENIED")
 	}
 	if err := obj.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
@@ -429,7 +442,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	}
 	resource := fmt.Sprintf("object:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource); err != nil {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "OBJECT_ACCESS_EVALUATION_FAILED", "OBJECT_ACCESS_DENIED")
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
@@ -470,7 +483,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	}
 	resource := fmt.Sprintf("object:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "OBJECT_ACCESS_EVALUATION_FAILED", "OBJECT_ACCESS_DENIED")
 	}
 	if err := to.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
@@ -529,7 +542,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	}
 	resource := fmt.Sprintf("character:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource); err != nil {
-		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "CHARACTER_ACCESS_EVALUATION_FAILED", "CHARACTER_ACCESS_DENIED")
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
@@ -558,7 +571,7 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	}
 	resource := fmt.Sprintf("character:%s", id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "CHARACTER_ACCESS_EVALUATION_FAILED", "CHARACTER_ACCESS_DENIED")
 	}
 	char, err := s.characterRepo.Get(ctx, id)
 	if err != nil {
@@ -571,13 +584,15 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 }
 
 // GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.
+// Note: This decomposes the legacy compound resource "location:<id>:characters" into
+// resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition).
 func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
 	resource := fmt.Sprintf("location:%s", locationID.String())
 	if err := s.checkAccess(ctx, subjectID, "list_characters", resource); err != nil {
-		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "CHARACTER_ACCESS_EVALUATION_FAILED", "CHARACTER_ACCESS_DENIED")
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
 	if err != nil {
@@ -594,7 +609,7 @@ func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sce
 	}
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("SCENE_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "SCENE_ACCESS_EVALUATION_FAILED", "SCENE_ACCESS_DENIED")
 	}
 	if err := role.Validate(); err != nil {
 		return oops.Code("SCENE_INVALID").Wrap(err)
@@ -615,7 +630,7 @@ func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, 
 	}
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("SCENE_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "SCENE_ACCESS_EVALUATION_FAILED", "SCENE_ACCESS_DENIED")
 	}
 	if err := s.sceneRepo.RemoveParticipant(ctx, sceneID, characterID); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -633,7 +648,7 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 	}
 	resource := fmt.Sprintf("scene:%s", sceneID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return nil, oops.Code("SCENE_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "SCENE_ACCESS_EVALUATION_FAILED", "SCENE_ACCESS_DENIED")
 	}
 	participants, err := s.sceneRepo.ListParticipants(ctx, sceneID)
 	if err != nil {
@@ -664,7 +679,7 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 	}
 	resource := fmt.Sprintf("character:%s", characterID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource); err != nil {
-		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "CHARACTER_ACCESS_EVALUATION_FAILED", "CHARACTER_ACCESS_DENIED")
 	}
 
 	// Get current location for the move event
@@ -761,7 +776,7 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 	// Check authorization to read the target
 	resource := fmt.Sprintf("location:%s", targetLocationID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "EXAMINE_ACCESS_EVALUATION_FAILED", "EXAMINE_ACCESS_DENIED")
 	}
 
 	// Build and emit examine event
@@ -819,7 +834,7 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 	// Check authorization to read the target
 	resource := fmt.Sprintf("object:%s", targetObjectID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "EXAMINE_ACCESS_EVALUATION_FAILED", "EXAMINE_ACCESS_DENIED")
 	}
 
 	// Build and emit examine event
@@ -874,7 +889,7 @@ func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, charac
 	// Check authorization to read the target
 	resource := fmt.Sprintf("character:%s", targetCharacterID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource); err != nil {
-		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(err)
+		return wrapAccessError(err, "EXAMINE_ACCESS_EVALUATION_FAILED", "EXAMINE_ACCESS_DENIED")
 	}
 
 	// Build and emit examine event
@@ -902,7 +917,7 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 	}
 	// Check read authorization for location wildcard (searching locations)
 	if err := s.checkAccess(ctx, subjectID, "read", "location:*"); err != nil {
-		return nil, oops.Code("LOCATION_ACCESS_DENIED").Wrap(err)
+		return nil, wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
 	}
 	loc, err := s.locationRepo.FindByName(ctx, name)
 	if err != nil {

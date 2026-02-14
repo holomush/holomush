@@ -65,8 +65,8 @@ func TestCreateHandler_Object(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		Engine: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -103,8 +103,8 @@ func TestCreateHandler_Location(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -228,8 +228,8 @@ func TestSetHandler_Description(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -276,8 +276,8 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -325,8 +325,8 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	registry := property.NewRegistry()
@@ -527,8 +527,8 @@ func TestSetHandler_SetName(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -578,8 +578,8 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		Engine: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -613,8 +613,8 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 		Return(errors.New("database unavailable"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		Engine: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -650,8 +650,8 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 		Return(errors.New("creation failed: constraint violation"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -700,8 +700,8 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 		Return(errors.New("optimistic locking conflict"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -766,8 +766,8 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 		Return(errors.New("access denied: permission revoked"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		Engine: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -819,8 +819,8 @@ func TestSetHandler_GetLocationFailure(t *testing.T) {
 		Return(nil, errors.New("location not found in database"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		Engine: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -869,8 +869,8 @@ func TestSetHandler_GetObjectFailure(t *testing.T) {
 		Return(nil, errors.New("object not found in database"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		Engine: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer

@@ -643,7 +643,6 @@ func TestEmitExamineEvent(t *testing.T) {
 	})
 }
 
-
 func TestService_MoveObject_EmitsEvent(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
@@ -656,9 +655,9 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: policytest.AllowAllEngine(),
-			EventEmitter:  emitter,
+			ObjectRepo:   mockObjRepo,
+			Engine:       policytest.AllowAllEngine(),
+			EventEmitter: emitter,
 		})
 
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
@@ -692,8 +691,8 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: policytest.AllowAllEngine(),
+			ObjectRepo: mockObjRepo,
+			Engine:     policytest.AllowAllEngine(),
 			// No EventEmitter configured - this is a misconfiguration
 		})
 
@@ -721,9 +720,9 @@ func TestService_MoveObject_EmitsEvent(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: policytest.AllowAllEngine(),
-			EventEmitter:  emitter,
+			ObjectRepo:   mockObjRepo,
+			Engine:       policytest.AllowAllEngine(),
+			EventEmitter: emitter,
 		})
 
 		existingObj, err := world.NewObjectWithID(objID, "Test Object", world.InLocation(fromLocID))
