@@ -178,7 +178,7 @@ var _ = Describe("Help Plugin Integration", func() {
 
 			event := pluginsdk.Event{
 				ID:        "01HTEST",
-				Stream:    "char:01HTEST000000000000000CHAR",
+				Stream:    "character:01HTEST000000000000000CHAR",
 				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
 				ActorKind: pluginsdk.ActorCharacter,
@@ -212,7 +212,7 @@ var _ = Describe("Help Plugin Integration", func() {
 
 			event := pluginsdk.Event{
 				ID:        "01HTEST",
-				Stream:    "char:01HTEST000000000000000CHAR",
+				Stream:    "character:01HTEST000000000000000CHAR",
 				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
 				ActorKind: pluginsdk.ActorCharacter,
@@ -241,7 +241,7 @@ var _ = Describe("Help Plugin Integration", func() {
 
 			event := pluginsdk.Event{
 				ID:        "01HTEST",
-				Stream:    "char:01HTEST000000000000000CHAR",
+				Stream:    "character:01HTEST000000000000000CHAR",
 				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
 				ActorKind: pluginsdk.ActorCharacter,
@@ -269,7 +269,7 @@ var _ = Describe("Help Plugin Integration", func() {
 
 			event := pluginsdk.Event{
 				ID:        "01HTEST",
-				Stream:    "char:01HTEST000000000000000CHAR",
+				Stream:    "character:01HTEST000000000000000CHAR",
 				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
 				ActorKind: pluginsdk.ActorCharacter,
@@ -298,7 +298,7 @@ var _ = Describe("Help Plugin Integration", func() {
 			// Search for "message" which only appears in usage: "say <message>"
 			event := pluginsdk.Event{
 				ID:        "01HTEST",
-				Stream:    "char:01HTEST000000000000000CHAR",
+				Stream:    "character:01HTEST000000000000000CHAR",
 				Type:      pluginsdk.EventType("command"),
 				Timestamp: time.Now().UnixMilli(),
 				ActorKind: pluginsdk.ActorCharacter,

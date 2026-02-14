@@ -731,7 +731,7 @@ end
 
 	event := pluginsdk.Event{
 		ID:        "01ABC",
-		Stream:    "char:char123",
+		Stream:    "character:char123",
 		Type:      pluginsdk.EventType("command"),
 		Timestamp: 1705591234000,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -785,7 +785,7 @@ end
 	// Command event should fall back to on_event
 	event := pluginsdk.Event{
 		ID:      "01ABC",
-		Stream:  "char:char123",
+		Stream:  "character:char123",
 		Type:    pluginsdk.EventType("command"),
 		Payload: `{"name":"say","args":"test"}`,
 	}

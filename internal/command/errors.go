@@ -43,6 +43,9 @@ var (
 
 	// ErrNilEngine is returned when creating a dispatcher with a nil policy engine.
 	ErrNilEngine = oops.Errorf("policy engine cannot be nil")
+
+	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
+	ErrNilRateLimiter = oops.Errorf("rate limiter cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.

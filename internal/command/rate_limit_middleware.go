@@ -23,14 +23,15 @@ type RateLimitMiddleware struct {
 }
 
 // NewRateLimitMiddleware creates a rate limiting middleware.
-func NewRateLimitMiddleware(limiter *RateLimiter, engine policy.AccessPolicyEngine) *RateLimitMiddleware {
+// Returns an error if the rate limiter is nil.
+func NewRateLimitMiddleware(limiter *RateLimiter, engine policy.AccessPolicyEngine) (*RateLimitMiddleware, error) {
 	if limiter == nil {
-		return nil
+		return nil, ErrNilRateLimiter
 	}
 	return &RateLimitMiddleware{
 		limiter: limiter,
 		engine:  engine,
-	}
+	}, nil
 }
 
 // Enforce checks and enforces rate limits for the provided execution context.

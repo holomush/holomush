@@ -4,7 +4,7 @@
 // Package access provides authorization for HoloMUSH.
 //
 // All parameters use prefixed string format:
-//   - subject: "char:01ABC", "session:01XYZ", "plugin:echo-bot", "system"
+//   - subject: "character:01ABC", "session:01XYZ", "plugin:echo-bot", "system"
 //   - action: "read", "write", "emit", "execute", "grant"
 //   - resource: "location:01ABC", "character:*", "stream:location:*"
 package access
@@ -15,7 +15,7 @@ import (
 )
 
 // AccessControl checks permissions for all subjects in HoloMUSH.
-// This is the single entry point for all authorization.
+// This is the legacy interface retained for backward compatibility during migration to AccessPolicyEngine.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type AccessControl interface {

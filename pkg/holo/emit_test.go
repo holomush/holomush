@@ -78,14 +78,14 @@ func TestEmitter_Character(t *testing.T) {
 			characterID: "01CHAR123",
 			eventType:   pluginsdk.EventType("tell"),
 			payload:     Payload{"message": "Psst!", "sender": "Alice"},
-			wantStream:  "char:01CHAR123",
+			wantStream:  "character:01CHAR123",
 		},
 		{
 			name:        "system event to character",
 			characterID: "01CHAR456",
 			eventType:   pluginsdk.EventTypeSystem,
 			payload:     Payload{"message": "You have mail"},
-			wantStream:  "char:01CHAR456",
+			wantStream:  "character:01CHAR456",
 		},
 	}
 
@@ -227,7 +227,7 @@ func TestEmitter_MultipleEmits(t *testing.T) {
 	assert.Equal(t, "location:loc1", events[1].Stream)
 	assert.Equal(t, pluginsdk.EventTypePose, events[1].Type)
 
-	assert.Equal(t, "char:char1", events[2].Stream)
+	assert.Equal(t, "character:char1", events[2].Stream)
 	assert.Equal(t, pluginsdk.EventTypeSystem, events[2].Type)
 
 	assert.Equal(t, "global", events[3].Stream)
@@ -337,7 +337,7 @@ func TestEmitter_Flush_ReturnsAccumulatedErrors(t *testing.T) {
 		// Verify errors have different stream contexts
 		assert.Contains(t, errs[0].Error(), "stream=global")
 		assert.Contains(t, errs[1].Error(), "stream=location:room1")
-		assert.Contains(t, errs[2].Error(), "stream=char:char1")
+		assert.Contains(t, errs[2].Error(), "stream=character:char1")
 	})
 
 	t.Run("mixed success and errors", func(t *testing.T) {

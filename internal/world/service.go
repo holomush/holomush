@@ -570,7 +570,7 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	return char, nil
 }
 
-// GetCharactersByLocation retrieves characters at a location with pagination after checking read authorization.
+// GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.
 func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")

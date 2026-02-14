@@ -139,7 +139,7 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 			}
 			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
 			errorCount++
-			slog.Error("unexpected error looking up character",
+			slog.ErrorContext(ctx, "unexpected error looking up character",
 				"target_name", targetName,
 				"session_char_id", session.CharacterID.String(),
 				"error", err,
