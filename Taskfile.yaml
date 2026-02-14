@@ -231,7 +231,7 @@ tasks:
           echo "$LEGACY_CALLS"
           echo ""
           echo "All access checks must use AccessPolicyEngine.Evaluate() instead."
-          echo "See internal/access/adapter.go for migration guidance."
+          echo "See docs/plans/2026-02-06-full-abac-phase-7.6.md or internal/world/service.go checkAccess() helper"
           exit 1
         fi
 
