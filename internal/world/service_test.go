@@ -4,9 +4,11 @@
 package world_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -17,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -91,6 +94,36 @@ func TestWorldService_GetLocation(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"engine error must not be reported as permission denied")
+	})
+
+	t.Run("logs error when Evaluate fails", func(t *testing.T) {
+		// Capture log output
+		var logBuf bytes.Buffer
+		oldLogger := slog.Default()
+		testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
+		slog.SetDefault(testLogger)
+		defer slog.SetDefault(oldLogger)
+
+		engineErr := errors.New("policy store unavailable")
+		engine := policytest.NewErrorEngine(engineErr)
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		assert.Nil(t, loc)
+		require.Error(t, err)
+
+		// Verify log output contains error and context
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+		assert.Contains(t, logOutput, subjectID, "log should contain subject")
+		assert.Contains(t, logOutput, "read", "log should contain action")
+		assert.Contains(t, logOutput, "location:"+locID.String(), "log should contain resource")
+		assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 	})
 }
 
@@ -3386,6 +3419,39 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	})
 }
 
+func TestWorldService_GetCharactersByLocation_UsesDecomposedResource(t *testing.T) {
+	ctx := context.Background()
+	locationID := ulid.Make()
+	subjectID := access.SubjectCharacter + ulid.Make().String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockCharacterRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockRepo,
+		Engine:        mockEngine,
+	})
+
+	expectedChars := []*world.Character{{ID: ulid.Make(), Name: "Char1", LocationID: &locationID}}
+
+	// Capture the AccessRequest using mock.MatchedBy to verify ADR #76 decomposition
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
+
+	_, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+	require.NoError(t, err)
+
+	// Verify ADR #76 decomposition: action=list_characters, resource=location:<id> (not location:<id>:characters)
+	assert.Equal(t, "list_characters", capturedRequest.Action, "action should be 'list_characters' per ADR #76")
+	assert.Equal(t, "location:"+locationID.String(), capturedRequest.Resource, "resource should be location:<id> per ADR #76 decomposition")
+	assert.NotContains(t, capturedRequest.Resource, ":characters", "resource must NOT contain :characters suffix (ADR #76 requires decomposition)")
+}
+
 func TestWorldService_MoveCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
@@ -5011,4 +5077,123 @@ func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 	err := svc.DeleteLocation(ctx, subjectID, locID)
 	require.Error(t, err)
 	assert.True(t, tx.called, "expected InTransaction to be called")
+}
+
+// AccessRequest Verification Tests (PR #88 Priority 1)
+
+func TestWorldService_GetLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.SubjectCharacter + charID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockLocationRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo: mockRepo,
+		Engine:       mockEngine,
+	})
+
+	expectedLoc := &world.Location{ID: locID, Name: "Test Room"}
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Get(ctx, locID).Return(expectedLoc, nil)
+
+	_, err := svc.GetLocation(ctx, subjectID, locID)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "location:"+locID.String(), capturedRequest.Resource, "resource should be location:<id>")
+}
+
+func TestWorldService_CreateLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.SubjectCharacter + charID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockLocationRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo: mockRepo,
+		Engine:       mockEngine,
+	})
+
+	loc := &world.Location{
+		Name:        "New Room",
+		Description: "A test room",
+		Type:        world.LocationTypePersistent,
+	}
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+
+	err := svc.CreateLocation(ctx, subjectID, loc)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "location:*", capturedRequest.Resource, "resource should be location:*")
+}
+
+func TestWorldService_MoveCharacter_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	callerID := ulid.Make()
+	subjectID := access.SubjectCharacter + callerID.String()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	mockLocRepo := worldtest.NewMockLocationRepository(t)
+	emitter := &mockEventEmitter{}
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		LocationRepo:  mockLocRepo,
+		Engine:        mockEngine,
+		EventEmitter:  emitter,
+	})
+
+	existingChar := &world.Character{
+		ID:         charID,
+		Name:       "Test Character",
+		LocationID: &fromLocID,
+	}
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
+	mockLocRepo.EXPECT().Get(ctx, toLocID).Return(&world.Location{ID: toLocID}, nil)
+	mockCharRepo.EXPECT().UpdateLocation(ctx, charID, &toLocID).Return(nil)
+
+	err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "character:"+charID.String(), capturedRequest.Resource, "resource should be character:<id>")
 }

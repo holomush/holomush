@@ -15,11 +15,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -1416,4 +1418,103 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 
 	assert.Equal(t, successBefore+1, successAfter, "should have success status")
 	assert.Equal(t, rateLimitedBefore+1, rateLimitedAfter, "should have rate_limited status")
+}
+
+func TestDispatcher_VerifiesAccessRequest(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+
+	// Register command with capability
+	err := reg.Register(CommandEntry{
+		Name:         "test_cmd",
+		capabilities: []string{"test.capability"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "test",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	// Execute command
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &bytes.Buffer{},
+		Services:    stubServices(),
+	})
+	err = dispatcher.Dispatch(context.Background(), "test_cmd", exec)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subject, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "execute", capturedRequest.Action, "action should be 'execute'")
+	assert.Equal(t, "test.capability", capturedRequest.Resource, "resource should be the capability")
+}
+
+func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Register command with capability
+	err := reg.Register(CommandEntry{
+		Name:         "protected",
+		capabilities: []string{"admin.manage"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+	evalErr := errors.New("policy store unavailable")
+
+	// Mock engine to return error for the capability evaluation
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.Decision{}, evalErr)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(oldLogger)
+
+	// Execute command
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	dispatchErr := dispatcher.Dispatch(context.Background(), "protected", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify log output contains error and context
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subject, "log should contain subject")
+	assert.Contains(t, logOutput, "execute", "log should contain action")
+	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
