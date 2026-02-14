@@ -5,6 +5,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -66,6 +67,43 @@ func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second command limited
+	err = middleware.Enforce(ctx, exec, "ratelimit", span)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodeRateLimited, oopsErr.Code())
+}
+
+func TestRateLimitMiddleware_EngineError_StillRateLimits(t *testing.T) {
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	ratelimiter := NewRateLimiter(RateLimiterConfig{
+		BurstCapacity: 1,
+		SustainedRate: 0.1,
+	})
+	defer ratelimiter.Close()
+
+	middleware := NewRateLimitMiddleware(ratelimiter, errorEngine)
+
+	charID := ulid.Make()
+	sessionID := ulid.Make()
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		SessionID:   sessionID,
+		Output:      &bytes.Buffer{},
+		Services:    stubServices(),
+	})
+
+	ctx := context.Background()
+	span := trace.SpanFromContext(ctx)
+
+	// First command should be allowed by rate limiter (engine error ignored, falls through)
+	err := middleware.Enforce(ctx, exec, "ratelimit", span)
+	require.NoError(t, err)
+
+	// Second command should be rate limited (engine error means no bypass)
 	err = middleware.Enforce(ctx, exec, "ratelimit", span)
 	require.Error(t, err)
 

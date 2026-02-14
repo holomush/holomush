@@ -4,6 +4,7 @@
 package hostfunc
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -12,10 +13,14 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/plugin/capability"
 )
+
+// Compile-time check: policy.Engine must satisfy hostfunc.AccessPolicyEngine.
+var _ AccessPolicyEngine = (*policy.Engine)(nil)
 
 // mockCommandRegistry implements CommandRegistry for testing.
 type mockCommandRegistry struct {
@@ -466,6 +471,53 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 		count++
 	})
 	assert.Equal(t, 1, count)
+}
+
+func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
+	// Given: commands with capabilities and an engine that always errors
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called
+	err := L.DoString(`
+		commands, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: only commands without capabilities are returned (fail-closed)
+	commands := L.GetGlobal("commands")
+	require.NotEqual(t, lua.LNil, commands)
+
+	tbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", commands)
+
+	var names []string
+	tbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+
+	assert.Contains(t, names, "look", "commands without capabilities should still appear")
+	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
+	assert.Len(t, names, 1)
 }
 
 func TestListCommands_InvalidCharacterID(t *testing.T) {

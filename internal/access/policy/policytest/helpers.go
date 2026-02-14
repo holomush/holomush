@@ -31,8 +31,7 @@ func DenyAllEngine() *MockAccessPolicyEngine {
 }
 
 // GrantEngine is a test AccessPolicyEngine that allows specific subject+action+resource
-// combinations and denies everything else. It mirrors accesstest.MockAccessControl.Grant()
-// but returns Decisions.
+// combinations and denies everything else.
 type GrantEngine struct {
 	grants map[string]bool
 }
@@ -54,4 +53,20 @@ func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (type
 		return types.NewDecision(types.EffectAllow, "test-grant", ""), nil
 	}
 	return types.NewDecision(types.EffectDeny, "test-deny", ""), nil
+}
+
+// ErrorEngine is a test AccessPolicyEngine that always returns the configured error.
+// Used to test fail-closed error paths.
+type ErrorEngine struct {
+	err error
+}
+
+// NewErrorEngine creates an engine that always returns the given error.
+func NewErrorEngine(err error) *ErrorEngine {
+	return &ErrorEngine{err: err}
+}
+
+// Evaluate always returns a deny decision and the configured error.
+func (e *ErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
+	return types.NewDecision(types.EffectDeny, "error-engine", ""), e.err
 }

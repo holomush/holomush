@@ -233,6 +233,77 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 	assert.NotNil(t, targetSession, "Target session should still exist")
 }
 
+func TestBootHandler_EngineError_ReturnsPermissionDenied(t *testing.T) {
+	executorID := ulid.Make()
+	targetID := ulid.Make()
+	execConn := ulid.Make()
+	targetConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(targetID, targetConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "RegularUser",
+	}
+	targetChar := &world.Character{
+		ID:       targetID,
+		PlayerID: playerID,
+		Name:     "Troublemaker",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	// Use a grant engine for world service (character lookups succeed)
+	worldEngine := policytest.NewGrantEngine()
+	worldEngine.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String())
+	worldEngine.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String())
+
+	// Session iteration order is non-deterministic
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, targetID).
+		Return(targetChar, nil)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		Engine:        worldEngine,
+	})
+
+	// Use ErrorEngine for the boot capability check (exec.Services().Engine())
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID:   executorID,
+		CharacterName: "RegularUser",
+		PlayerID:      playerID,
+		Args:          "Troublemaker",
+		Output:        &buf,
+		Services: command.NewTestServices(command.ServicesConfig{
+			Session: sessionMgr,
+			World:   worldService,
+			Engine:  errorEngine,
+		}),
+	})
+
+	err := BootHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, command.CodePermissionDenied, oopsErr.Code())
+
+	// Verify target session still exists (was not booted)
+	targetSession := sessionMgr.GetSession(targetID)
+	assert.NotNil(t, targetSession, "Target session should still exist")
+}
+
 func TestBootHandler_TargetNotFound(t *testing.T) {
 	executorID := ulid.Make()
 	execConn := ulid.Make()

@@ -18,6 +18,10 @@ import (
 // ErrPermissionDenied is returned when an operation is not authorized.
 var ErrPermissionDenied = errors.New("permission denied")
 
+// ErrAccessEvaluationFailed is returned when the policy engine fails to evaluate a request.
+// Callers can use errors.Is to distinguish engine failures from policy denials.
+var ErrAccessEvaluationFailed = errors.New("access evaluation failed")
+
 // AccessPolicyEngine defines the interface for ABAC policy evaluation.
 // This mirrors internal/access/policy.AccessPolicyEngine to avoid coupling world to access package.
 type AccessPolicyEngine interface {
@@ -77,7 +81,8 @@ func NewService(cfg ServiceConfig) *Service {
 }
 
 // checkAccess evaluates an access request using the ABAC policy engine.
-// Returns nil if allowed, ErrPermissionDenied if denied or on evaluation error (fail-closed).
+// Returns nil if allowed, ErrPermissionDenied if denied, or ErrAccessEvaluationFailed
+// on engine error (fail-closed). Callers can use errors.Is to distinguish the two.
 func (s *Service) checkAccess(ctx context.Context, subject, action, resource string) error {
 	decision, err := s.engine.Evaluate(ctx, types.AccessRequest{
 		Subject: subject, Action: action, Resource: resource,
@@ -85,7 +90,7 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 	if err != nil {
 		slog.ErrorContext(ctx, "access evaluation failed",
 			"error", err, "subject", subject, "action", action, "resource", resource)
-		return ErrPermissionDenied
+		return fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, err)
 	}
 	if !decision.IsAllowed() {
 		return ErrPermissionDenied

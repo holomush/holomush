@@ -24,6 +24,8 @@ type CommandRegistry interface {
 }
 
 // AccessPolicyEngine evaluates access requests against loaded policies.
+// This mirrors internal/access/policy.AccessPolicyEngine to avoid coupling hostfunc to the access package.
+// Used for command capability filtering in list_commands.
 type AccessPolicyEngine interface {
 	Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error)
 }
