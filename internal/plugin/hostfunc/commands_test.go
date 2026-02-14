@@ -4,17 +4,21 @@
 package hostfunc
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/plugin/capability"
 )
@@ -606,4 +610,109 @@ func TestListCommands_NoEngineConfigured(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.NotEqual(t, lua.LNil, errVal)
 	assert.Contains(t, errVal.String(), "access engine not available")
+}
+
+// AccessRequest Verification Tests (PR #88 Priority 1)
+
+func TestListCommands_VerifiesAccessRequest(t *testing.T) {
+	// Given: a registry with a command requiring capabilities
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name:         "admin_cmd",
+				Help:         "Admin command",
+				Capabilities: []string{"admin.manage"},
+				Source:       "admin",
+			}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with character_id
+	err := L.DoString(`
+		commands, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subject, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "execute", capturedRequest.Action, "action should be 'execute'")
+	assert.Equal(t, "admin.manage", capturedRequest.Resource, "resource should be the capability")
+}
+
+func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
+	// Given: a registry with a command requiring capabilities
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name:         "protected",
+				Help:         "Protected command",
+				Capabilities: []string{"admin.manage"},
+				Source:       "core",
+			}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+	evalErr := errors.New("policy store unavailable")
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Mock engine to return error for the capability evaluation
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.Decision{}, evalErr)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(oldLogger)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called
+	err := L.DoString(`
+		commands, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Verify log output contains error and context
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subject, "log should contain subject")
+	assert.Contains(t, logOutput, "execute", "log should contain action")
+	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
