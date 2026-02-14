@@ -41,9 +41,17 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 
 // WithRateLimiter configures the dispatcher to use rate limiting.
 // If not provided, rate limiting is disabled.
+// Note: This function panics if NewRateLimitMiddleware returns an error,
+// which should not happen since a non-nil RateLimiter is passed by callers.
 func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 	return func(d *Dispatcher) {
-		d.rateLimiter = NewRateLimitMiddleware(rl, d.engine)
+		if rl != nil {
+			middleware, err := NewRateLimitMiddleware(rl, d.engine)
+			if err != nil {
+				panic(err)
+			}
+			d.rateLimiter = middleware
+		}
 	}
 }
 

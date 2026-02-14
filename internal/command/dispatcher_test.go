@@ -451,7 +451,7 @@ func TestNewDispatcher_NilRegistry(t *testing.T) {
 	assert.Equal(t, ErrNilRegistry, err)
 }
 
-func TestNewDispatcher_NilAccessControl(t *testing.T) {
+func TestNewDispatcher_NilEngine(t *testing.T) {
 	reg := NewRegistry()
 	dispatcher, err := NewDispatcher(reg, nil)
 	require.Error(t, err)

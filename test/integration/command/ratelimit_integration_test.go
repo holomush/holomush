@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/accesstest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
@@ -398,7 +399,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			sessionID := ulid.Make()
 
 			// Grant bypass capability to admin character
-			mockAccess.Grant("char:"+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			mockAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
 
 			// Admin should be able to execute many commands without rate limiting
 			for i := 0; i < 10; i++ {
@@ -423,7 +424,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			regularSession := ulid.Make()
 
 			// Grant bypass only to admin
-			mockAccess.Grant("char:"+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			mockAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
 
 			// Admin can execute multiple commands
 			for i := 0; i < 3; i++ {

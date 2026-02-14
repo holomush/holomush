@@ -11,6 +11,13 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
+// Stream prefixes for event streams.
+const (
+	streamPrefixCharacter = "character:"
+	streamPrefixLocation  = "location:"
+	streamPrefixGlobal    = "global"
+)
+
 // Payload is a map of key-value pairs for event payloads.
 // Values are JSON-encoded when building events.
 type Payload map[string]any
@@ -43,17 +50,17 @@ func NewEmitterWithLogger(logger *slog.Logger) *Emitter {
 
 // Location emits an event to a location stream ("location:<id>").
 func (e *Emitter) Location(locationID string, eventType pluginsdk.EventType, payload Payload) {
-	e.emit("location:"+locationID, eventType, payload)
+	e.emit(streamPrefixLocation+locationID, eventType, payload)
 }
 
-// Character emits an event to a character stream ("char:<id>").
+// Character emits an event to a character stream ("character:<id>").
 func (e *Emitter) Character(characterID string, eventType pluginsdk.EventType, payload Payload) {
-	e.emit("char:"+characterID, eventType, payload)
+	e.emit(streamPrefixCharacter+characterID, eventType, payload)
 }
 
 // Global emits an event to the global stream.
 func (e *Emitter) Global(eventType pluginsdk.EventType, payload Payload) {
-	e.emit("global", eventType, payload)
+	e.emit(streamPrefixGlobal, eventType, payload)
 }
 
 // Flush returns all accumulated events and any JSON encoding errors, then clears both buffers.

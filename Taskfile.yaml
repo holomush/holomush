@@ -186,6 +186,7 @@ tasks:
       - task: lint:markdown
       - task: lint:yaml
       - task: lint:actions
+      - task: lint:access-migration
 
   lint:go:
     desc: Lint Go code
@@ -207,6 +208,34 @@ tasks:
     desc: Lint GitHub Actions workflows
     cmds:
       - actionlint
+
+  lint:access-migration:
+    desc: Verify no legacy AccessControl.Check() calls remain
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Search for legacy AccessControl.Check(ctx, ...) calls in production code.
+        # Pattern: .Check(ctx, — matches AccessControl.Check(ctx, subject, action, resource)
+        # but NOT capability.Enforcer.Check(plugin, cap) which lacks ctx parameter.
+        # Exclude test files (_test.go), generated files (*.pb.go), and comments.
+        LEGACY_CALLS=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E '\.Check\(ctx,' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' || true)
+
+        if [ -n "$LEGACY_CALLS" ]; then
+          echo "ERROR: Found legacy AccessControl.Check() calls in production code:"
+          echo "$LEGACY_CALLS"
+          echo ""
+          echo "All access checks must use AccessPolicyEngine.Evaluate() instead."
+          echo "See internal/access/adapter.go for migration guidance."
+          exit 1
+        fi
+
+        echo "✓ No legacy AccessControl.Check() calls found"
 
   # Formatting
   fmt:

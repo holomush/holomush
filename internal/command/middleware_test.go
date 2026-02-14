@@ -39,6 +39,14 @@ func TestMetricsRecorder_RecordsExecution(t *testing.T) {
 	assert.Equal(t, before+1, after)
 }
 
+func TestNewRateLimitMiddleware_NilRateLimiter(t *testing.T) {
+	engine := policytest.DenyAllEngine()
+	middleware, err := NewRateLimitMiddleware(nil, engine)
+	require.Error(t, err)
+	assert.Nil(t, middleware)
+	assert.Equal(t, ErrNilRateLimiter, err)
+}
+
 func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	engine := policytest.DenyAllEngine()
 
@@ -48,7 +56,8 @@ func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	})
 	defer ratelimiter.Close()
 
-	middleware := NewRateLimitMiddleware(ratelimiter, engine)
+	middleware, err := NewRateLimitMiddleware(ratelimiter, engine)
+	require.NoError(t, err)
 
 	charID := ulid.Make()
 	sessionID := ulid.Make()
@@ -63,7 +72,7 @@ func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	span := trace.SpanFromContext(ctx)
 
 	// First command allowed
-	err := middleware.Enforce(ctx, exec, "ratelimit", span)
+	err = middleware.Enforce(ctx, exec, "ratelimit", span)
 	require.NoError(t, err)
 
 	// Second command limited
@@ -85,7 +94,8 @@ func TestRateLimitMiddleware_EngineError_StillRateLimits(t *testing.T) {
 	})
 	defer ratelimiter.Close()
 
-	middleware := NewRateLimitMiddleware(ratelimiter, errorEngine)
+	middleware, err := NewRateLimitMiddleware(ratelimiter, errorEngine)
+	require.NoError(t, err)
 
 	charID := ulid.Make()
 	sessionID := ulid.Make()
@@ -100,7 +110,7 @@ func TestRateLimitMiddleware_EngineError_StillRateLimits(t *testing.T) {
 	span := trace.SpanFromContext(ctx)
 
 	// First command should be allowed by rate limiter (engine error ignored, falls through)
-	err := middleware.Enforce(ctx, exec, "ratelimit", span)
+	err = middleware.Enforce(ctx, exec, "ratelimit", span)
 	require.NoError(t, err)
 
 	// Second command should be rate limited (engine error means no bypass)
@@ -121,7 +131,8 @@ func TestRateLimitMiddleware_BypassCapability(t *testing.T) {
 	})
 	defer ratelimiter.Close()
 
-	middleware := NewRateLimitMiddleware(ratelimiter, engine)
+	middleware, err := NewRateLimitMiddleware(ratelimiter, engine)
+	require.NoError(t, err)
 
 	charID := ulid.Make()
 	sessionID := ulid.Make()
@@ -138,7 +149,7 @@ func TestRateLimitMiddleware_BypassCapability(t *testing.T) {
 	span := trace.SpanFromContext(ctx)
 
 	for i := 0; i < 3; i++ {
-		err := middleware.Enforce(ctx, exec, "ratelimit", span)
+		err = middleware.Enforce(ctx, exec, "ratelimit", span)
 		require.NoError(t, err)
 	}
 }
