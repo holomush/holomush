@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // mockEventStore implements EventStore for testing.
@@ -1052,6 +1053,36 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	err := runGatewayWithDeps(ctx, cfg, cmd, deps)
 	require.Error(t, err, "expected observability server start error")
 	assert.Contains(t, err.Error(), "address already in use")
+}
+
+// TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore tests that bootstrap fails fatally
+// when PolicyBootstrapper is nil and the event store is not *store.PostgresEventStore (ADR #92).
+func TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore(t *testing.T) {
+	ctx := context.Background()
+	cfg := &coreConfig{
+		grpcAddr:    "localhost:9000",
+		controlAddr: "127.0.0.1:9001",
+		logFormat:   "json",
+		gameID:      "test-game-id",
+	}
+
+	deps := &CoreDeps{
+		DatabaseURLGetter: func() string {
+			return "postgres://test:test@localhost/test"
+		},
+		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
+			return &mockEventStore{}, nil
+		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
+		// PolicyBootstrapper intentionally nil — triggers late-binding path
+	}
+
+	cmd := newMockCmd()
+	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	require.Error(t, err, "expected BOOTSTRAP_FAILED when event store is not PostgresEventStore")
+	errutil.AssertErrorCode(t, err, "BOOTSTRAP_FAILED")
+	assert.Contains(t, err.Error(), "PostgresEventStore")
 }
 
 // TestRunCoreWithDeps_WithObservability tests the happy path with observability server enabled.
