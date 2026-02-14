@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -417,9 +418,9 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			err = tlscerts.SaveClientCert(env.certsDir, clientCert)
 			Expect(err).NotTo(HaveOccurred())
 
-			shutdownCalled := false
+			var shutdownCalled atomic.Bool
 			shutdownFunc := func() {
-				shutdownCalled = true
+				shutdownCalled.Store(true)
 			}
 
 			// Create and start control server
@@ -473,7 +474,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 
 			// Wait for shutdown to be triggered
 			Eventually(func() bool {
-				return shutdownCalled
+				return shutdownCalled.Load()
 			}).Should(BeTrue())
 		})
 	})
