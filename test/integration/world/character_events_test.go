@@ -14,16 +14,10 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
-
-// allowAllAccessControl is a simple access control that allows all operations.
-type allowAllAccessControl struct{}
-
-func (a *allowAllAccessControl) Check(_ context.Context, _, _, _ string) bool {
-	return true
-}
 
 var _ = Describe("Character Movement Events", func() {
 	var ctx context.Context
@@ -57,7 +51,7 @@ var _ = Describe("Character Movement Events", func() {
 		service = world.NewService(world.ServiceConfig{
 			LocationRepo:  env.Locations,
 			CharacterRepo: env.Characters,
-			AccessControl: &allowAllAccessControl{},
+			Engine: policytest.AllowAllEngine(),
 			EventEmitter:  emitter,
 		})
 	})

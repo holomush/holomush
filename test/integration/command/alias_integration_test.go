@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
@@ -104,14 +104,14 @@ var _ = Describe("Alias Management Integration", func() {
 	var (
 		registry   *command.Registry
 		dispatcher *command.Dispatcher
-		mockAccess *accesstest.MockAccessControl
+		mockAccess *policytest.GrantEngine
 		aliasCache *command.AliasCache
 		services   *command.Services
 	)
 
 	BeforeEach(func() {
 		registry = command.NewRegistry()
-		mockAccess = accesstest.NewMockAccessControl()
+		mockAccess = policytest.NewGrantEngine()
 		aliasCache = command.NewAliasCache()
 
 		// Create services with alias cache and registry
@@ -119,7 +119,7 @@ var _ = Describe("Alias Management Integration", func() {
 		services, err = command.NewServices(command.ServicesConfig{
 			World:       &world.Service{},
 			Session:     &stubSessionService{},
-			Access:      mockAccess,
+			Engine:      mockAccess,
 			Events:      &stubEventStore{},
 			Broadcaster: &core.Broadcaster{},
 			AliasCache:  aliasCache,
@@ -713,11 +713,11 @@ var _ = Describe("Alias Persistence Integration", func() {
 
 			// Create a fresh cache and services
 			cache1 := command.NewAliasCache()
-			mockAccess := accesstest.NewMockAccessControl()
+			mockAccess := policytest.NewGrantEngine()
 			services1, err := command.NewServices(command.ServicesConfig{
 				World:       &world.Service{},
 				Session:     &stubSessionService{},
-				Access:      mockAccess,
+				Engine:      mockAccess,
 				Events:      &stubEventStore{},
 				Broadcaster: &core.Broadcaster{},
 				AliasCache:  cache1,
@@ -766,11 +766,11 @@ var _ = Describe("Alias Persistence Integration", func() {
 
 			// Create a fresh cache and services
 			cache1 := command.NewAliasCache()
-			mockAccess := accesstest.NewMockAccessControl()
+			mockAccess := policytest.NewGrantEngine()
 			services1, err := command.NewServices(command.ServicesConfig{
 				World:       &world.Service{},
 				Session:     &stubSessionService{},
-				Access:      mockAccess,
+				Engine:      mockAccess,
 				Events:      &stubEventStore{},
 				Broadcaster: &core.Broadcaster{},
 				AliasCache:  cache1,
@@ -819,11 +819,11 @@ var _ = Describe("Alias Persistence Integration", func() {
 
 			// Create cache and services
 			cache := command.NewAliasCache()
-			mockAccess := accesstest.NewMockAccessControl()
+			mockAccess := policytest.NewGrantEngine()
 			services, err := command.NewServices(command.ServicesConfig{
 				World:       &world.Service{},
 				Session:     &stubSessionService{},
-				Access:      mockAccess,
+				Engine:      mockAccess,
 				Events:      &stubEventStore{},
 				Broadcaster: &core.Broadcaster{},
 				AliasCache:  cache,
@@ -880,7 +880,7 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 		aliasCache *command.AliasCache
 		registry   *command.Registry
 		dispatcher *command.Dispatcher
-		mockAccess *accesstest.MockAccessControl
+		mockAccess *policytest.GrantEngine
 		services   *command.Services
 	)
 
@@ -888,7 +888,7 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 		aliasRepo = newInMemoryAliasRepo()
 		aliasCache = command.NewAliasCache()
 		registry = command.NewRegistry()
-		mockAccess = accesstest.NewMockAccessControl()
+		mockAccess = policytest.NewGrantEngine()
 
 		// Register a command that aliases can target
 		entry, err := command.NewCommandEntry(command.CommandEntryConfig{
@@ -920,7 +920,7 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 		services, err = command.NewServices(command.ServicesConfig{
 			World:       &world.Service{},
 			Session:     &stubSessionService{},
-			Access:      mockAccess,
+			Engine:      mockAccess,
 			Events:      &stubEventStore{},
 			Broadcaster: &core.Broadcaster{},
 			AliasCache:  aliasCache,
@@ -1146,7 +1146,7 @@ var _ = Describe("Alias Cache Startup Loading from Database", func() {
 			err = registry.Register(*entry)
 			Expect(err).NotTo(HaveOccurred())
 
-			mockAccess := accesstest.NewMockAccessControl()
+			mockAccess := policytest.NewGrantEngine()
 			dispatcher, dispErr := command.NewDispatcher(registry, mockAccess,
 				command.WithAliasCache(cache))
 			Expect(dispErr).NotTo(HaveOccurred())
@@ -1210,12 +1210,12 @@ var _ = Describe("Alias Cache Startup Loading from Database", func() {
 
 			// Phase 1: Runtime - create aliases (persisted to repo)
 			cache1 := command.NewAliasCache()
-			mockAccess := accesstest.NewMockAccessControl()
+			mockAccess := policytest.NewGrantEngine()
 			registry := command.NewRegistry()
 			services1, err := command.NewServices(command.ServicesConfig{
 				World:       &world.Service{},
 				Session:     &stubSessionService{},
-				Access:      mockAccess,
+				Engine:      mockAccess,
 				Events:      &stubEventStore{},
 				Broadcaster: &core.Broadcaster{},
 				AliasCache:  cache1,
