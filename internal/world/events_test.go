@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
@@ -646,7 +647,7 @@ func TestEmitExamineEvent(t *testing.T) {
 func TestService_MoveObject_EmitsEvent(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := "char:" + ulid.Make().String()
+	subjectID := access.SubjectCharacter + ulid.Make().String()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
