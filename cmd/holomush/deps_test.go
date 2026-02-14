@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // mockEventStore implements EventStore for testing.
@@ -138,6 +139,11 @@ func noOpMigratorFactory(_ string) (AutoMigrator, error) {
 // disableAutoMigrate returns false, disabling auto-migration for tests.
 func disableAutoMigrate() bool {
 	return false
+}
+
+// noOpBootstrapper skips seed policy bootstrap in tests.
+func noOpBootstrapper(_ context.Context, _ bool) error {
+	return nil
 }
 
 // mockListener implements net.Listener for testing.
@@ -259,7 +265,8 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 			return "postgres://test:test@localhost/test"
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -335,7 +342,8 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 			return nil, fmt.Errorf("connection refused")
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -366,7 +374,8 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 			}, nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -398,7 +407,8 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 			return &mockEventStore{}, nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -433,7 +443,8 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 			return nil, fmt.Errorf("failed to load TLS certificates")
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -471,7 +482,8 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -512,7 +524,8 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -557,7 +570,8 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -611,7 +625,8 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 			return testTLSConfig(), nil
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()
@@ -1040,6 +1055,36 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	assert.Contains(t, err.Error(), "address already in use")
 }
 
+// TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore tests that bootstrap fails fatally
+// when PolicyBootstrapper is nil and the event store is not *store.PostgresEventStore (ADR #92).
+func TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore(t *testing.T) {
+	ctx := context.Background()
+	cfg := &coreConfig{
+		grpcAddr:    "localhost:9000",
+		controlAddr: "127.0.0.1:9001",
+		logFormat:   "json",
+		gameID:      "test-game-id",
+	}
+
+	deps := &CoreDeps{
+		DatabaseURLGetter: func() string {
+			return "postgres://test:test@localhost/test"
+		},
+		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
+			return &mockEventStore{}, nil
+		},
+		MigratorFactory:   noOpMigratorFactory,
+		AutoMigrateGetter: disableAutoMigrate,
+		// PolicyBootstrapper intentionally nil — triggers late-binding path
+	}
+
+	cmd := newMockCmd()
+	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	require.Error(t, err, "expected BOOTSTRAP_FAILED when event store is not PostgresEventStore")
+	errutil.AssertErrorCode(t, err, "BOOTSTRAP_FAILED")
+	assert.Contains(t, err.Error(), "PostgresEventStore")
+}
+
 // TestRunCoreWithDeps_WithObservability tests the happy path with observability server enabled.
 func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1088,7 +1133,8 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 			return "postgres://test:test@localhost/test"
 		},
 		MigratorFactory:   noOpMigratorFactory,
-		AutoMigrateGetter: disableAutoMigrate,
+		AutoMigrateGetter:  disableAutoMigrate,
+		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cmd := newMockCmd()

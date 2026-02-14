@@ -86,14 +86,18 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 		"player_id":   char.PlayerID.String(),
 		"name":        char.Name,
 		"description": char.Description,
+		"role":        "player", // TODO: resolve from DB when role column is added
 	}
 
-	// Handle optional location
+	// Handle optional location — expose as both "location_id" (raw) and "location" (for seed policies)
 	if char.LocationID != nil {
-		attrs["location_id"] = char.LocationID.String()
+		locStr := char.LocationID.String()
+		attrs["location_id"] = locStr
+		attrs["location"] = locStr
 		attrs["has_location"] = true
 	} else {
 		attrs["location_id"] = ""
+		attrs["location"] = ""
 		attrs["has_location"] = false
 	}
 
@@ -108,7 +112,9 @@ func (p *CharacterProvider) Schema() *types.NamespaceSchema {
 			"player_id":    types.AttrTypeString,
 			"name":         types.AttrTypeString,
 			"description":  types.AttrTypeString,
+			"role":         types.AttrTypeString,
 			"location_id":  types.AttrTypeString,
+			"location":     types.AttrTypeString,
 			"has_location": types.AttrTypeBool,
 		},
 	}
