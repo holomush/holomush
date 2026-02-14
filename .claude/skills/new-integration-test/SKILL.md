@@ -10,7 +10,7 @@ Scaffold a Ginkgo/Gomega BDD integration test for a new domain area.
 
 ## Usage
 
-```
+```text
 /new-integration-test <domain>
 ```
 
@@ -19,11 +19,13 @@ Where `<domain>` is the test domain (e.g., `auth`, `plugin`, `access`).
 ## Steps
 
 1. **Create the test directory** if it doesn't exist:
-   ```
+
+   ```text
    test/integration/<domain>/
    ```
 
 2. **Create the suite file** `test/integration/<domain>/<domain>_suite_test.go`:
+
    ```go
    //go:build integration
 
@@ -46,6 +48,7 @@ Where `<domain>` is the test domain (e.g., `auth`, `plugin`, `access`).
    ```
 
 3. **Create the first spec file** `test/integration/<domain>/<feature>_test.go`:
+
    ```go
    //go:build integration
 
@@ -75,6 +78,7 @@ Where `<domain>` is the test domain (e.g., `auth`, `plugin`, `access`).
    - Pass the `*pgxpool.Pool` to specs via a package-level variable
 
 5. **Verify** the suite bootstraps:
+
    ```bash
    task test:integration
    ```

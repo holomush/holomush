@@ -10,7 +10,7 @@ Create a PostgreSQL migration pair using golang-migrate conventions.
 
 ## Usage
 
-```
+```text
 /new-migration <name>
 ```
 
@@ -19,12 +19,15 @@ Where `<name>` is a snake_case description (e.g., `add_player_inventory`).
 ## Steps
 
 1. **Create migration files** using the task runner:
+
    ```bash
    task migrate:create -- <name>
    ```
+
    This creates sequentially numbered `NNNNNN_<name>.up.sql` and `NNNNNN_<name>.down.sql` in `internal/store/migrations/`.
 
 2. **Add SPDX headers** to both files:
+
    ```sql
    -- SPDX-License-Identifier: Apache-2.0
    -- Copyright 2026 HoloMUSH Contributors
@@ -45,6 +48,7 @@ Where `<name>` is a snake_case description (e.g., `add_player_inventory`).
    - The down migration MUST cleanly reverse the up migration
 
 5. **Verify** the migration compiles into the embed:
+
    ```bash
    task build
    ```
