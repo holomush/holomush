@@ -5,10 +5,13 @@ package hostfunc
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 )
 
@@ -20,11 +23,9 @@ type CommandRegistry interface {
 	Get(name string) (command.CommandEntry, bool)
 }
 
-// AccessControl checks if a subject can perform an action on a resource.
-// This is used to filter commands based on character capabilities.
-type AccessControl interface {
-	// Check returns true if subject can perform action on resource.
-	Check(ctx context.Context, subject, action, resource string) bool
+// AccessPolicyEngine evaluates access requests against loaded policies.
+type AccessPolicyEngine interface {
+	Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error)
 }
 
 // WithCommandRegistry sets the command registry for command-related host functions.
@@ -34,10 +35,10 @@ func WithCommandRegistry(reg CommandRegistry) Option {
 	}
 }
 
-// WithAccessControl sets the access control for capability filtering.
-func WithAccessControl(ac AccessControl) Option {
+// WithEngine sets the access policy engine for capability filtering.
+func WithEngine(engine AccessPolicyEngine) Option {
 	return func(f *Functions) {
-		f.access = ac
+		f.engine = engine
 	}
 }
 
@@ -68,14 +69,14 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			return 2
 		}
 
-		if f.access == nil {
+		if f.engine == nil {
 			L.Push(lua.LNil)
-			L.Push(lua.LString("access control not available"))
+			L.Push(lua.LString("access engine not available"))
 			return 2
 		}
 
 		commands := f.commandRegistry.All()
-		subject := "char:" + charID.String()
+		subject := access.SubjectCharacter + charID.String()
 		ctx := context.Background()
 
 		// Filter commands by character capabilities
@@ -114,9 +115,17 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 		return true
 	}
 
-	// Check ALL capabilities (AND logic)
+	// Check ALL capabilities (AND logic) — fail-closed on errors
 	for _, cap := range caps {
-		if !f.access.Check(ctx, subject, "execute", cap) {
+		decision, err := f.engine.Evaluate(ctx, types.AccessRequest{
+			Subject: subject, Action: "execute", Resource: cap,
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "access evaluation failed",
+				"error", err, "subject", subject, "action", "execute", "resource", cap)
+			return false
+		}
+		if !decision.IsAllowed() {
 			return false
 		}
 	}

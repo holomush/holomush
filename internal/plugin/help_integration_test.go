@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
@@ -88,10 +88,9 @@ func setupHelpTest() (*helpFixture, error) {
 
 	enforcer := capability.NewEnforcer()
 	registry := &mockHelpCommandRegistry{}
-	ac := accesstest.AllowAll{} // Allow all access for testing
 	hostFuncs := hostfunc.New(nil, enforcer,
 		hostfunc.WithCommandRegistry(registry),
-		hostfunc.WithAccessControl(ac),
+		hostfunc.WithEngine(policytest.AllowAllEngine()),
 	)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
