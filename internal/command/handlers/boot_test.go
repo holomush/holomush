@@ -16,7 +16,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
@@ -64,7 +66,7 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -123,7 +125,7 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -187,9 +189,8 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 	// Use selective mock that allows read but denies admin.boot
 	accessControl := accesstest.NewMockAccessControl()
 	// Grant read access to characters (needed for findCharacterByName)
-	accessControl.Grant("char:"+executorID.String(), "read", "character:"+executorID.String())
-	accessControl.Grant("char:"+executorID.String(), "read", "character:"+targetID.String())
-	// Do NOT grant execute access to admin.boot
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String())
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String())
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	characterRepo.EXPECT().
@@ -216,7 +217,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-			Access:  accessControl,
+			Engine:  policytest.DenyAllEngine(),
 		}),
 	})
 
@@ -251,7 +252,7 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 
 	// Executor character lookup for self-boot check
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -320,7 +321,7 @@ func TestBootHandler_Success(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -328,16 +329,11 @@ func TestBootHandler_Success(t *testing.T) {
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -354,7 +350,7 @@ func TestBootHandler_Success(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			World:       worldService,
-			Access:      accessControl,
+			Engine:      policytest.AllowAllEngine(),
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -407,7 +403,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -415,16 +411,11 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -441,7 +432,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
 			World:       worldService,
-			Access:      accessControl,
+			Engine:      policytest.AllowAllEngine(),
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -497,7 +488,7 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -505,16 +496,11 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -531,7 +517,7 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-			Access:  accessControl,
+			Engine:  policytest.AllowAllEngine(),
 		}),
 	})
 
@@ -573,7 +559,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -581,7 +567,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 
 	// Target lookup during session iteration - accessible
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
@@ -589,13 +575,8 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 
 	// Hidden character - access denied (may not be called if target found first)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+hiddenID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+hiddenID.String()).
 		Return(false).Maybe()
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -612,7 +593,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-			Access:  accessControl,
+			Engine:  policytest.AllowAllEngine(),
 		}),
 	})
 
@@ -664,7 +645,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 
 	// Executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -672,16 +653,11 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -698,7 +674,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: mockSessionMgr,
 			World:   worldService,
-			Access:  accessControl,
+			Engine:  policytest.AllowAllEngine(),
 		}),
 	})
 
@@ -775,7 +751,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -783,7 +759,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 
 	// Target lookup during session iteration - accessible
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
@@ -792,16 +768,11 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// Error character - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+errorCharID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, unexpectedErr).Maybe()
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -818,7 +789,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-			Access:  accessControl,
+			Engine:  policytest.AllowAllEngine(),
 		}),
 	})
 
@@ -874,7 +845,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 
 	// Executor lookup - may or may not happen depending on iteration order
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -883,7 +854,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 	// Error character lookup - returns unexpected database error
 	dbError := errors.New("database connection timeout")
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+errorCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+errorCharID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
@@ -964,7 +935,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
@@ -972,7 +943,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// Target lookup during session iteration - accessible
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+targetID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
 		Return(true)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
@@ -980,7 +951,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// Not found character - access allowed but repo returns ErrNotFound (expected, no logging)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+notFoundCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+notFoundCharID.String()).
 		Return(true).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
@@ -988,13 +959,8 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// Permission denied character - access check fails (expected, no logging)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+deniedCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+deniedCharID.String()).
 		Return(false).Maybe()
-
-	// Capability check for booting another user
-	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "execute", "admin.boot").
-		Return(true)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -1011,7 +977,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			World:   worldService,
-			Access:  accessControl,
+			Engine:  policytest.AllowAllEngine(),
 		}),
 	})
 

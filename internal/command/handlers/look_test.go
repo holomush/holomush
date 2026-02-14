@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 )
@@ -29,7 +30,7 @@ func TestLookHandler(t *testing.T) {
 			name: "outputs room name and description",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.AccessControl.EXPECT().
-					Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "location:"+location.ID.String()).
+					Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "location:"+location.ID.String()).
 					Return(true)
 				fixture.Mocks.LocationRepo.EXPECT().
 					Get(mock.Anything, location.ID).
@@ -45,7 +46,7 @@ func TestLookHandler(t *testing.T) {
 			name: "returns world error on failure",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.AccessControl.EXPECT().
-					Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "location:"+location.ID.String()).
+					Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "location:"+location.ID.String()).
 					Return(true)
 				fixture.Mocks.LocationRepo.EXPECT().
 					Get(mock.Anything, location.ID).
@@ -61,7 +62,7 @@ func TestLookHandler(t *testing.T) {
 			name: "returns world error on access denied",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.AccessControl.EXPECT().
-					Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "location:"+location.ID.String()).
+					Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "location:"+location.ID.String()).
 					Return(false)
 			},
 			assertion: func(t *testing.T, _ string, err error) {

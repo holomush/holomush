@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/world"
@@ -31,7 +32,7 @@ func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
@@ -91,7 +92,7 @@ func TestMoveHandler_MatchesExitAlias(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
@@ -142,7 +143,7 @@ func TestMoveHandler_InvalidDirectionReturnsError(t *testing.T) {
 	path := testutil.NewExitContext(t, "north")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
@@ -171,7 +172,7 @@ func TestMoveHandler_NoExitsReturnsError(t *testing.T) {
 	location := testutil.NewRoom("Lonely Room", "")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+location.ID.String()).
@@ -228,7 +229,7 @@ func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
@@ -279,7 +280,7 @@ func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
 	location := testutil.NewRoom("Hallway", "")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+location.ID.String()).
@@ -314,7 +315,7 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
@@ -358,7 +359,7 @@ func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
 	require.NoError(t, err)
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).
@@ -395,7 +396,7 @@ func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := "char:" + player.CharacterID.String()
+	subjectID := access.SubjectCharacter + player.CharacterID.String()
 
 	fixture.Mocks.AccessControl.EXPECT().
 		Check(mock.Anything, subjectID, "read", "location:"+path.From.ID.String()).

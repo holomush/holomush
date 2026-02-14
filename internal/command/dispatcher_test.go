@@ -18,7 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -30,7 +31,7 @@ func stubServices() *Services {
 	svc, _ := NewServices(ServicesConfig{
 		World:       &world.Service{},
 		Session:     &stubSessionService{},
-		Access:      &stubAccessControl{},
+		Engine:      policytest.AllowAllEngine(),
 		Events:      &stubEventStore{},
 		Broadcaster: &core.Broadcaster{},
 	})
@@ -43,10 +44,6 @@ type stubSessionService struct{}
 func (s *stubSessionService) ListActiveSessions() []*core.Session  { return nil }
 func (s *stubSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
 func (s *stubSessionService) EndSession(_ ulid.ULID) error         { return nil }
-
-type stubAccessControl struct{}
-
-func (s *stubAccessControl) Check(_ context.Context, _, _, _ string) bool { return false }
 
 type stubEventStore struct{}
 
@@ -65,7 +62,7 @@ func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 
 func TestDispatcher_Dispatch(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register a test command
 	var capturedArgs string
@@ -83,7 +80,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 
 	// Grant capability
 	charID := ulid.Make()
-	mockAccess.Grant("char:"+charID.String(), "execute", "test.echo")
+	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "test.echo")
 
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
@@ -103,7 +100,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 
 func TestDispatcher_UnknownCommand(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
@@ -126,7 +123,7 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 
 func TestDispatcher_PermissionDenied(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
@@ -159,7 +156,7 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 
 func TestDispatcher_EmptyInput(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
@@ -181,7 +178,7 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 
 func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register command requiring multiple capabilities
 	err := reg.Register(CommandEntry{
@@ -193,7 +190,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	subject := "char:" + charID.String()
+	subject := access.SubjectCharacter + charID.String()
 
 	// Only grant one capability
 	mockAccess.Grant(subject, "execute", "admin.manage")
@@ -225,7 +222,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 
 func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register command with no capabilities required
 	executed := false
@@ -258,7 +255,7 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 
 func TestDispatcher_HandlerError(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	handlerErr := errors.New("handler failed")
 	err := reg.Register(CommandEntry{
@@ -289,7 +286,7 @@ func TestDispatcher_HandlerError(t *testing.T) {
 
 func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	handlerErr := errors.New("handler failed")
 	err := reg.Register(CommandEntry{
@@ -333,7 +330,7 @@ func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 
 func TestDispatcher_WhitespaceInput(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
@@ -355,7 +352,7 @@ func TestDispatcher_WhitespaceInput(t *testing.T) {
 
 func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -386,7 +383,7 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 
 func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -416,7 +413,7 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 }
 
 func TestNewDispatcher_NilRegistry(t *testing.T) {
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(nil, mockAccess)
 	require.Error(t, err)
 	assert.Nil(t, dispatcher)
@@ -433,7 +430,7 @@ func TestNewDispatcher_NilAccessControl(t *testing.T) {
 
 func TestNewDispatcher_WithAliasCache(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Without option - no alias cache
 	dispatcher, err := NewDispatcher(reg, mockAccess)
@@ -455,7 +452,7 @@ func TestNewDispatcher_WithAliasCache(t *testing.T) {
 func TestDispatcher_WithoutAliasCache(t *testing.T) {
 	// Ensure dispatcher works exactly as before when no alias cache is set
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -488,7 +485,7 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -527,7 +524,7 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -566,7 +563,7 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -606,7 +603,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -650,7 +647,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -688,7 +685,7 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 
 func TestDispatcher_NoCharacter(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "test",
@@ -721,7 +718,7 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Channel to signal handler received cancellation
 	handlerStarted := make(chan struct{})
@@ -783,7 +780,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var receivedCtx context.Context
 	err := reg.Register(CommandEntry{
@@ -828,7 +825,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 
 func TestDispatcher_NilServices(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register a command that accesses Services.World (would panic if nil)
 	err := reg.Register(CommandEntry{
@@ -867,7 +864,7 @@ func TestDispatcher_NilServices(t *testing.T) {
 func TestDispatcher_WithRateLimiter(t *testing.T) {
 	t.Run("rate limiting disabled when no limiter configured", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		var executed int
 		err := reg.Register(CommandEntry{
@@ -901,7 +898,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("rate limiting blocks commands when burst exceeded", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		err := reg.Register(CommandEntry{
 			Name:         "test",
@@ -956,7 +953,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("different sessions have independent rate limits", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		err := reg.Register(CommandEntry{
 			Name:         "test",
@@ -1008,7 +1005,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("bypass capability exempts from rate limiting", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		var executed int
 		err := reg.Register(CommandEntry{
@@ -1036,7 +1033,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		sessionID := ulid.Make()
 
 		// Grant bypass capability
-		mockAccess.Grant("char:"+charID.String(), "execute", CapabilityRateLimitBypass)
+		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", CapabilityRateLimitBypass)
 
 		// Should be able to execute many commands despite rate limit
 		for i := 0; i < 10; i++ {
@@ -1054,7 +1051,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("rate limiting happens after alias resolution", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		var capturedArgs string
 		err := reg.Register(CommandEntry{
@@ -1109,7 +1106,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 func TestDispatcher_InvokedAs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register a test command that captures InvokedAs
 	var capturedInvokedAs string
@@ -1126,7 +1123,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 
 	charID := ulid.Make()
 	playerID := ulid.Make()
-	mockAccess.Grant("char:"+charID.String(), "execute", "comms.pose")
+	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.pose")
 
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
@@ -1170,7 +1167,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 
 func TestDispatcher_MetricsIntegration(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register test commands
 	err := reg.Register(CommandEntry{
@@ -1289,7 +1286,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 func TestDispatcher_AliasMetrics(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "look",
@@ -1330,7 +1327,7 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 
 func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "ratelimit_test",

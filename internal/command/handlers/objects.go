@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -39,7 +40,7 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	entityType := strings.ToLower(matches[1])
 	name := matches[2]
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.SubjectCharacter + exec.CharacterID().String()
 
 	switch entityType {
 	case "object":
@@ -203,7 +204,7 @@ func resolveTarget(ctx context.Context, exec *command.CommandExecution, target s
 }
 
 func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName string, definition property.Definition, value string) error {
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.SubjectCharacter + exec.CharacterID().String()
 
 	switch entityType {
 	case "character":

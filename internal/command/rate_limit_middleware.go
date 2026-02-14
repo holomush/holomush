@@ -4,28 +4,31 @@ package command
 
 import (
 	"context"
+	"log/slog"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
 )
 
 // RateLimitMiddleware enforces per-session rate limiting.
 type RateLimitMiddleware struct {
 	limiter *RateLimiter
-	access  access.AccessControl
+	engine  policy.AccessPolicyEngine
 }
 
 // NewRateLimitMiddleware creates a rate limiting middleware.
-func NewRateLimitMiddleware(limiter *RateLimiter, accessControl access.AccessControl) *RateLimitMiddleware {
+func NewRateLimitMiddleware(limiter *RateLimiter, engine policy.AccessPolicyEngine) *RateLimitMiddleware {
 	if limiter == nil {
 		return nil
 	}
 	return &RateLimitMiddleware{
 		limiter: limiter,
-		access:  accessControl,
+		engine:  engine,
 	}
 }
 
@@ -35,9 +38,19 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 		return nil
 	}
 
-	subject := "char:" + exec.CharacterID().String()
-	hasBypass := r.access.Check(ctx, subject, "execute", CapabilityRateLimitBypass)
-	if hasBypass {
+	subject := access.SubjectCharacter + exec.CharacterID().String()
+	decision, err := r.engine.Evaluate(ctx, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: CapabilityRateLimitBypass,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "rate limit bypass check failed",
+			"subject", subject,
+			"error", err,
+		)
+	}
+	if err == nil && decision.IsAllowed() {
 		return nil
 	}
 

@@ -13,7 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
@@ -62,8 +63,8 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 	sessionMgr.Connect(targetID1, ulid.Make())
 	sessionMgr.Connect(targetID2, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 
@@ -81,7 +82,7 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -114,8 +115,8 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -129,7 +130,7 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -159,8 +160,8 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	// No sessions connected
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 
@@ -173,7 +174,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -193,8 +194,8 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -208,7 +209,7 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -233,8 +234,8 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -248,7 +249,7 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -277,8 +278,8 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	_ = broadcaster.Subscribe("session:" + executorID.String())
@@ -292,7 +293,7 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -312,8 +313,8 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -324,7 +325,7 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
-			Access:  accessControl,
+			Engine:  accessControl,
 			// Broadcaster is nil
 		}),
 	})
@@ -345,8 +346,8 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -360,7 +361,7 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -385,8 +386,8 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -400,7 +401,7 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -425,8 +426,8 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -440,7 +441,7 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -465,8 +466,8 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -480,7 +481,7 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -505,8 +506,8 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -520,7 +521,7 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})
@@ -545,8 +546,8 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 	sessionMgr := core.NewSessionManager()
 	sessionMgr.Connect(executorID, ulid.Make())
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executorID.String(), "execute", "admin.wall")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("session:" + executorID.String())
@@ -560,7 +561,7 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session:     sessionMgr,
-			Access:      accessControl,
+			Engine:      accessControl,
 			Broadcaster: broadcaster,
 		}),
 	})

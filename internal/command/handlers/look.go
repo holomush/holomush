@@ -9,12 +9,13 @@ import (
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 )
 
 // LookHandler displays the current location's name and description.
 func LookHandler(ctx context.Context, exec *command.CommandExecution) error {
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.SubjectCharacter + exec.CharacterID().String()
 
 	loc, err := exec.Services().World().GetLocation(ctx, subjectID, exec.LocationID())
 	if err != nil {

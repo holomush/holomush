@@ -9,6 +9,7 @@ import (
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 )
 
@@ -23,7 +24,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 			Errorf("no direction specified")
 	}
 
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.SubjectCharacter + exec.CharacterID().String()
 
 	// Get exits from current location
 	exits, err := exec.Services().World().GetExitsByLocation(ctx, subjectID, exec.LocationID())

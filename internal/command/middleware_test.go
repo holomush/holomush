@@ -15,7 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 )
 
 func TestMetricsRecorder_RecordsExecution(t *testing.T) {
@@ -38,7 +39,7 @@ func TestMetricsRecorder_RecordsExecution(t *testing.T) {
 }
 
 func TestRateLimitMiddleware_Enforce(t *testing.T) {
-	mockAccess := accesstest.NewMockAccessControl()
+	engine := policytest.DenyAllEngine()
 
 	ratelimiter := NewRateLimiter(RateLimiterConfig{
 		BurstCapacity: 1,
@@ -46,7 +47,7 @@ func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	})
 	defer ratelimiter.Close()
 
-	middleware := NewRateLimitMiddleware(ratelimiter, mockAccess)
+	middleware := NewRateLimitMiddleware(ratelimiter, engine)
 
 	charID := ulid.Make()
 	sessionID := ulid.Make()
@@ -74,7 +75,7 @@ func TestRateLimitMiddleware_Enforce(t *testing.T) {
 }
 
 func TestRateLimitMiddleware_BypassCapability(t *testing.T) {
-	mockAccess := accesstest.NewMockAccessControl()
+	engine := policytest.NewGrantEngine()
 
 	ratelimiter := NewRateLimiter(RateLimiterConfig{
 		BurstCapacity: 1,
@@ -82,7 +83,7 @@ func TestRateLimitMiddleware_BypassCapability(t *testing.T) {
 	})
 	defer ratelimiter.Close()
 
-	middleware := NewRateLimitMiddleware(ratelimiter, mockAccess)
+	middleware := NewRateLimitMiddleware(ratelimiter, engine)
 
 	charID := ulid.Make()
 	sessionID := ulid.Make()
@@ -93,7 +94,7 @@ func TestRateLimitMiddleware_BypassCapability(t *testing.T) {
 		Services:    stubServices(),
 	})
 
-	mockAccess.Grant("char:"+charID.String(), "execute", CapabilityRateLimitBypass)
+	engine.Grant(access.SubjectCharacter+charID.String(), "execute", CapabilityRateLimitBypass)
 
 	ctx := context.Background()
 	span := trace.SpanFromContext(ctx)
