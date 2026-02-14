@@ -585,7 +585,8 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 
 // GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.
 // Note: This decomposes the legacy compound resource "location:<id>:characters" into
-// resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition).
+// resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition,
+// see docs/specs/2026-02-05-full-abac-design.md §7.3).
 func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")

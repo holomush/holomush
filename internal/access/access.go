@@ -7,6 +7,11 @@
 //   - subject: "character:01ABC", "session:01XYZ", "plugin:echo-bot", "system"
 //   - action: "read", "write", "emit", "execute", "grant"
 //   - resource: "location:01ABC", "character:*", "stream:location:*"
+//
+// Migration note: During the Phase 7.6 migration to AccessPolicyEngine, both
+// "char:" and "character:" subject prefixes are accepted. New code MUST use
+// the SubjectCharacter constant ("character:"). The legacy "char:" prefix will
+// be removed in a future phase.
 package access
 
 import (

@@ -320,6 +320,27 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 	})
 
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
+		})
+
+		err := svc.DeleteLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
+	})
+
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockRepo := worldtest.NewMockLocationRepository(t)
@@ -540,6 +561,23 @@ func TestWorldService_DeleteExit(t *testing.T) {
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
+		})
+
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
 	})
 
 	t.Run("handles cleanup result for bidirectional exit", func(t *testing.T) {
@@ -779,6 +817,27 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:   mockObjRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
+		})
+
+		err := svc.DeleteObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
+	})
 }
 
 func TestWorldService_MoveObject(t *testing.T) {
@@ -952,6 +1011,23 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
+	})
 }
 
 func TestWorldService_RemoveSceneParticipant(t *testing.T) {
@@ -987,6 +1063,23 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
 	})
 }
 
@@ -1029,6 +1122,24 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		assert.Nil(t, participants)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		assert.Nil(t, participants)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
 	})
 }
 
@@ -4955,6 +5066,28 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		engine := policytest.DenyAllEngine()
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
+			Engine:        engine,
+			Transactor:    tx,
+		})
+
+		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny should return ErrPermissionDenied")
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
 	})
 
 	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
