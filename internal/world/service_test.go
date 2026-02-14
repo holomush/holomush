@@ -49,8 +49,8 @@ func TestWorldService_GetLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		expectedLoc := &world.Location{ID: locID, Name: "Test Room"}
@@ -68,14 +68,32 @@ func TestWorldService_GetLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
-
 
 		loc, err := svc.GetLocation(ctx, subjectID, locID)
 		assert.Nil(t, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+	})
+
+	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
+		// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
+		engine := policytest.DenyAllEngine()
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		assert.Nil(t, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied,
+			"explicit policy deny (EffectDeny) should return ErrPermissionDenied")
+		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+			"explicit deny must not be reported as evaluation error")
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
@@ -136,8 +154,8 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{
@@ -161,8 +179,8 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		existingID := ulid.Make()
@@ -188,12 +206,11 @@ func TestWorldService_CreateLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{Name: "New Room"}
-
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -210,8 +227,8 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
@@ -228,12 +245,11 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{ID: locID, Name: "Updated Room"}
-
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -244,8 +260,8 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{ID: locID, Name: "Updated Room", Type: world.LocationTypePersistent}
@@ -272,10 +288,10 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -294,12 +310,11 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
-
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -312,10 +327,10 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -338,8 +353,8 @@ func TestWorldService_GetExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		expectedExit := &world.Exit{ID: exitID, Name: "north"}
@@ -357,10 +372,9 @@ func TestWorldService_GetExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
-
 
 		exit, err := svc.GetExit(ctx, subjectID, exitID)
 		assert.Nil(t, exit)
@@ -379,8 +393,8 @@ func TestWorldService_CreateExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -405,12 +419,11 @@ func TestWorldService_CreateExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{Name: "north"}
-
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -427,8 +440,8 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north updated", Visibility: world.VisibilityAll}
@@ -445,12 +458,11 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
-
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -461,8 +473,8 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
@@ -480,8 +492,8 @@ func TestWorldService_UpdateExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll}
@@ -506,8 +518,8 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
@@ -522,10 +534,9 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
-
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -536,8 +547,8 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		toLocationID := ulid.Make()
@@ -569,8 +580,8 @@ func TestWorldService_GetObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		expectedObj := &world.Object{ID: objID, Name: "sword"}
@@ -588,10 +599,9 @@ func TestWorldService_GetObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
-
 
 		obj, err := svc.GetObject(ctx, subjectID, objID)
 		assert.Nil(t, obj)
@@ -609,8 +619,8 @@ func TestWorldService_CreateObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
@@ -631,13 +641,12 @@ func TestWorldService_CreateObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
-
 
 		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -655,8 +664,8 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword updated", world.InLocation(locationID))
@@ -674,13 +683,12 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
-
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -691,8 +699,8 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
@@ -711,8 +719,8 @@ func TestWorldService_UpdateObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
@@ -740,10 +748,10 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockObjRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -762,12 +770,11 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockObjRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
-
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -786,9 +793,9 @@ func TestWorldService_MoveObject(t *testing.T) {
 		emitter := &mockEventEmitter{} // nil err means Emit succeeds
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
-			EventEmitter:  emitter,
+			ObjectRepo:   mockObjRepo,
+			Engine:       engine,
+			EventEmitter: emitter,
 		})
 
 		fromLocID := ulid.Make()
@@ -810,12 +817,11 @@ func TestWorldService_MoveObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		to := world.Containment{LocationID: &locationID}
-
 
 		err := svc.MoveObject(ctx, subjectID, objID, to)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -826,8 +832,8 @@ func TestWorldService_MoveObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		// Empty containment is invalid
@@ -844,8 +850,8 @@ func TestWorldService_MoveObject(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		fromLocID := ulid.Make()
@@ -888,9 +894,9 @@ func TestWorldService_MoveObject(t *testing.T) {
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
-			EventEmitter:  emitter,
+			ObjectRepo:   mockObjRepo,
+			Engine:       engine,
+			EventEmitter: emitter,
 		})
 
 		fromLocID := ulid.Make()
@@ -923,8 +929,8 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -939,10 +945,9 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
-
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -960,8 +965,8 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -976,10 +981,9 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
-
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
@@ -997,8 +1001,8 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		expected := []world.SceneParticipant{
@@ -1018,10 +1022,9 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
-
 
 		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		assert.Nil(t, participants)
@@ -1040,8 +1043,8 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{
@@ -1065,8 +1068,8 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		longName := make([]byte, world.MaxNameLength+1)
@@ -1101,8 +1104,8 @@ func TestWorldService_CreateExit_Validation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1131,8 +1134,8 @@ func TestWorldService_CreateObject_Validation(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj := &world.Object{
@@ -1154,8 +1157,8 @@ func TestWorldService_CreateObject_Validation(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj := &world.Object{
@@ -1181,8 +1184,8 @@ func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -1205,8 +1208,8 @@ func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "read", "location:"+locID.String())
@@ -1228,8 +1231,8 @@ func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{
@@ -1256,8 +1259,8 @@ func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
@@ -1281,8 +1284,8 @@ func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1311,8 +1314,8 @@ func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "read", "object:"+objID.String())
@@ -1335,8 +1338,8 @@ func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
@@ -1364,8 +1367,8 @@ func TestWorldService_AddSceneParticipant_ErrorPropagation(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -1388,8 +1391,8 @@ func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -1411,8 +1414,8 @@ func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockSceneRepo,
-			Engine: engine,
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
@@ -1437,8 +1440,8 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		toLocationID := ulid.Make()
@@ -1466,8 +1469,8 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		toLocationID := ulid.Make()
@@ -1503,8 +1506,8 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		destID := ulid.Make()
@@ -1525,15 +1528,30 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
-
 
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		assert.Nil(t, exits)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+	})
+
+	t.Run("returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockExitRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
+		})
+
+		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+		assert.Nil(t, exits)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
@@ -1554,8 +1572,8 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		dbErr := errors.New("database connection failed")
@@ -1573,8 +1591,8 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "read", "location:"+locationID.String())
@@ -1599,8 +1617,8 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{
@@ -1624,8 +1642,8 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{
@@ -1652,8 +1670,8 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1676,8 +1694,8 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1698,8 +1716,8 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1728,8 +1746,8 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj := &world.Object{
@@ -1752,8 +1770,8 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			ObjectRepo: mockObjRepo,
+			Engine:     engine,
 		})
 
 		obj := &world.Object{
@@ -1780,8 +1798,8 @@ func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		loc := &world.Location{
@@ -1808,8 +1826,8 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1831,8 +1849,8 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1856,8 +1874,8 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1885,8 +1903,8 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		// Create duplicate ULIDs in VisibleTo
@@ -1920,8 +1938,8 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -1948,8 +1966,8 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		duplicateID := ulid.Make()
@@ -1982,8 +2000,8 @@ func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		exit := &world.Exit{
@@ -2007,8 +2025,8 @@ func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockExitRepo,
-			Engine: engine,
+			ExitRepo: mockExitRepo,
+			Engine:   engine,
 		})
 
 		// Create duplicate ULIDs in VisibleTo - invalid but should be ignored for VisibilityAll
@@ -2060,8 +2078,8 @@ func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockLocationRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		Engine: engine,
-		LocationRepo:  mockRepo,
+		Engine:       engine,
+		LocationRepo: mockRepo,
 	})
 
 	engine.Grant(subjectID, "write", "location:*")
@@ -2078,8 +2096,8 @@ func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockLocationRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		Engine: engine,
-		LocationRepo:  mockRepo,
+		Engine:       engine,
+		LocationRepo: mockRepo,
 	})
 
 	// Note: nil check happens before access check since we need the ID to build resource string
@@ -2095,8 +2113,8 @@ func TestWorldService_CreateExit_NilInput(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockExitRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		Engine: engine,
-		ExitRepo:      mockRepo,
+		Engine:   engine,
+		ExitRepo: mockRepo,
 	})
 
 	engine.Grant(subjectID, "write", "exit:*")
@@ -2113,8 +2131,8 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockObjectRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		Engine: engine,
-		ObjectRepo:    mockRepo,
+		Engine:     engine,
+		ObjectRepo: mockRepo,
 	})
 
 	engine.Grant(subjectID, "write", "object:*")
@@ -2131,8 +2149,8 @@ func TestWorldService_UpdateExit_NilInput(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockExitRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		Engine: engine,
-		ExitRepo:      mockRepo,
+		Engine:   engine,
+		ExitRepo: mockRepo,
 	})
 
 	// Note: nil check happens before access check since we need the ID to build resource string
@@ -2148,8 +2166,8 @@ func TestWorldService_UpdateObject_NilInput(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockObjectRepository(t)
 	svc := world.NewService(world.ServiceConfig{
-		Engine: engine,
-		ObjectRepo:    mockRepo,
+		Engine:     engine,
+		ObjectRepo: mockRepo,
 	})
 
 	// Note: nil check happens before access check since we need the ID to build resource string
@@ -2313,8 +2331,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "read", "location:"+locID.String())
@@ -2330,10 +2348,9 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
-
 
 		_, err := svc.GetLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2345,8 +2362,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "read", "location:"+locID.String())
@@ -2362,10 +2379,9 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
-
 
 		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2377,8 +2393,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "write", "location:*")
@@ -2393,8 +2409,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "write", "location:*")
@@ -2410,10 +2426,9 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
-
 
 		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
@@ -2425,8 +2440,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
@@ -2441,8 +2456,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "write", "location:"+locID.String())
@@ -2460,12 +2475,11 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
-
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
@@ -2479,10 +2493,10 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -2501,10 +2515,10 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -2514,6 +2528,70 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_DELETE_FAILED")
+	})
+
+	t.Run("GetLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		_, err := svc.GetLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("CreateLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("UpdateLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("DeleteLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockLocationRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
+		})
+
+		err := svc.DeleteLocation(ctx, subjectID, locID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 }
 
@@ -2529,8 +2607,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
@@ -2546,10 +2624,9 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
-
 
 		_, err := svc.GetExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -2561,8 +2638,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "read", "exit:"+exitID.String())
@@ -2578,10 +2655,9 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
-
 
 		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
@@ -2593,8 +2669,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "write", "exit:*")
@@ -2609,8 +2685,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "write", "exit:*")
@@ -2626,10 +2702,9 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
-
 
 		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
@@ -2641,8 +2716,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
@@ -2657,8 +2732,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "write", "exit:"+exitID.String())
@@ -2674,10 +2749,9 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
-
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
@@ -2689,8 +2763,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
@@ -2706,8 +2780,8 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		mockRepo := worldtest.NewMockExitRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ExitRepo:      mockRepo,
-			Engine: engine,
+			ExitRepo: mockRepo,
+			Engine:   engine,
 		})
 
 		engine.Grant(subjectID, "delete", "exit:"+exitID.String())
@@ -2716,6 +2790,66 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_DELETE_FAILED")
+	})
+
+	t.Run("GetExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo: mockRepo,
+			Engine:   engine,
+		})
+
+		_, err := svc.GetExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("CreateExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo: mockRepo,
+			Engine:   engine,
+		})
+
+		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("UpdateExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo: mockRepo,
+			Engine:   engine,
+		})
+
+		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("DeleteExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockExitRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ExitRepo: mockRepo,
+			Engine:   engine,
+		})
+
+		err := svc.DeleteExit(ctx, subjectID, exitID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 }
 
@@ -2730,8 +2864,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "read", "object:"+objID.String())
@@ -2747,10 +2881,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
-
 
 		_, err := svc.GetObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -2762,8 +2895,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "read", "object:"+objID.String())
@@ -2779,10 +2912,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
-
 
 		obj, err := world.NewObject("sword", world.InLocation(locationID))
 		require.NoError(t, err)
@@ -2801,8 +2933,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "write", "object:*")
@@ -2820,10 +2952,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
-
 
 		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
 		require.NoError(t, err)
@@ -2842,8 +2973,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
@@ -2863,12 +2994,11 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
-
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
@@ -2882,10 +3012,10 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -2904,10 +3034,10 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -2924,10 +3054,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
-
 
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
@@ -2939,8 +3068,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
@@ -2955,8 +3084,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		engine.Grant(subjectID, "write", "object:"+objID.String())
@@ -2972,8 +3101,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		fromLocID := ulid.Make()
@@ -2994,8 +3123,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		mockRepo := worldtest.NewMockObjectRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
+			ObjectRepo: mockRepo,
+			Engine:     engine,
 		})
 
 		fromLocID := ulid.Make()
@@ -3018,9 +3147,9 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		emitter := &mockEventEmitter{err: errors.New("event bus unavailable")}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockRepo,
-			Engine: engine,
-			EventEmitter:  emitter,
+			ObjectRepo:   mockRepo,
+			Engine:       engine,
+			EventEmitter: emitter,
 		})
 
 		fromLocID := ulid.Make()
@@ -3039,6 +3168,89 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		// Verify the error context indicates the move succeeded in the database
 		errutil.AssertErrorContext(t, err, "move_succeeded", true)
 	})
+
+	t.Run("GetObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo: mockRepo,
+			Engine:     engine,
+		})
+
+		_, err := svc.GetObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("CreateObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo: mockRepo,
+			Engine:     engine,
+		})
+
+		obj, err := world.NewObject("sword", world.InLocation(locationID))
+		require.NoError(t, err)
+		err = svc.CreateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("UpdateObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo: mockRepo,
+			Engine:     engine,
+		})
+
+		obj, err := world.NewObjectWithID(objID, "sword", world.InLocation(locationID))
+		require.NoError(t, err)
+		err = svc.UpdateObject(ctx, subjectID, obj)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("DeleteObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockObjectRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo:   mockRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
+		})
+
+		err := svc.DeleteObject(ctx, subjectID, objID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("MoveObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			ObjectRepo: mockRepo,
+			Engine:     engine,
+		})
+
+		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
 }
 
 func TestService_ErrorCodes_Scene(t *testing.T) {
@@ -3052,10 +3264,9 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
-
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		require.Error(t, err)
@@ -3067,8 +3278,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -3083,8 +3294,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -3100,8 +3311,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -3117,10 +3328,9 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
-
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		require.Error(t, err)
@@ -3132,8 +3342,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -3149,8 +3359,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "write", "scene:"+sceneID.String())
@@ -3166,10 +3376,9 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
-
 
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.Error(t, err)
@@ -3181,8 +3390,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
@@ -3198,8 +3407,8 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		mockRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			SceneRepo:     mockRepo,
-			Engine: engine,
+			SceneRepo: mockRepo,
+			Engine:    engine,
 		})
 
 		engine.Grant(subjectID, "read", "scene:"+sceneID.String())
@@ -3208,6 +3417,51 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_LIST_PARTICIPANTS_FAILED")
+	})
+
+	t.Run("AddSceneParticipant returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockRepo,
+			Engine:    engine,
+		})
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("RemoveSceneParticipant returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockRepo,
+			Engine:    engine,
+		})
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("ListSceneParticipants returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockRepo,
+			Engine:    engine,
+		})
+
+		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 }
 
@@ -3222,7 +3476,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		locID := ulid.Make()
@@ -3246,14 +3500,29 @@ func TestWorldService_GetCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
-
 
 		char, err := svc.GetCharacter(ctx, subjectID, charID)
 		assert.Nil(t, char)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+	})
+
+	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        engine,
+		})
+
+		char, err := svc.GetCharacter(ctx, subjectID, charID)
+		assert.Nil(t, char)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
@@ -3275,7 +3544,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		engine.Grant(subjectID, "read", "character:"+charID.String())
@@ -3293,7 +3562,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		dbErr := errors.New("database connection failed")
@@ -3318,7 +3587,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		char1 := &world.Character{ID: ulid.Make(), Name: "Char1", LocationID: &locationID}
@@ -3339,14 +3608,29 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
-
 
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+	})
+
+	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        engine,
+		})
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		assert.Nil(t, chars)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
@@ -3368,7 +3652,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		dbErr := errors.New("database connection failed")
@@ -3387,7 +3671,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		engine.Grant(subjectID, "list_characters", "location:"+locationID.String())
@@ -3404,7 +3688,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		opts := world.ListOptions{Limit: 10, Offset: 5}
@@ -3468,7 +3752,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3501,7 +3785,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		engine.Grant(subjectID, "write", "character:"+charID.String())
@@ -3521,7 +3805,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		dbErr := errors.New("database connection lost")
@@ -3542,7 +3826,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		existingChar := &world.Character{
@@ -3569,7 +3853,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		existingChar := &world.Character{
@@ -3598,7 +3882,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3630,7 +3914,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3671,9 +3955,8 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
-
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.Error(t, err)
@@ -3681,13 +3964,30 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
 	})
 
+	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			Engine:        engine,
+		})
+
+		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
 	t.Run("returns error when character repository not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			LocationRepo: mockLocRepo,
+			Engine:       engine,
 		})
 
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
@@ -3703,7 +4003,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			// No EventEmitter configured
 		})
 
@@ -3732,7 +4032,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		existingChar := &world.Character{
@@ -3764,7 +4064,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3802,7 +4102,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3847,7 +4147,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
@@ -3866,7 +4166,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -3892,7 +4192,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -3914,6 +4214,36 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
 	})
 
+	t.Run("returns EXAMINE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			Engine:        engine,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetLoc := &world.Location{
+			ID:   targetLocID,
+			Name: "Grand Hall",
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+
+		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -3922,7 +4252,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			// No EventEmitter configured
 		})
 
@@ -3955,7 +4285,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -3990,7 +4320,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4024,7 +4354,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4069,7 +4399,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
@@ -4088,7 +4418,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4114,7 +4444,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4136,6 +4466,36 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
 	})
 
+	t.Run("returns EXAMINE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			ObjectRepo:    mockObjRepo,
+			Engine:        engine,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetObj := &world.Object{
+			ID:   targetObjID,
+			Name: "Ancient Chest",
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+
+		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -4144,7 +4504,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 			// No EventEmitter configured
 		})
 
@@ -4177,7 +4537,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4212,7 +4572,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4244,7 +4604,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4287,7 +4647,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(nil, world.ErrNotFound)
@@ -4304,7 +4664,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4327,7 +4687,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4352,7 +4712,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 		})
 
 		examiner := &world.Character{
@@ -4374,13 +4734,41 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
 	})
 
+	t.Run("returns EXAMINE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			Engine:        engine,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetChar := &world.Character{
+			ID:   targetCharID,
+			Name: "Mysterious Stranger",
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+
+		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 			// No EventEmitter configured
 		})
 
@@ -4411,7 +4799,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
-			Engine: engine,
+			Engine:        engine,
 			EventEmitter:  emitter,
 		})
 
@@ -4449,8 +4837,8 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		expectedLoc := &world.Location{ID: locID, Name: "Test Room", Type: world.LocationTypePersistent}
@@ -4469,14 +4857,28 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
-
 
 		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+	})
+
+	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		_, err := svc.FindLocationByName(ctx, subjectID, "Test Room")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
 	t.Run("returns not found when location does not exist", func(t *testing.T) {
@@ -4484,8 +4886,8 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockRepo,
-			Engine: engine,
+			LocationRepo: mockRepo,
+			Engine:       engine,
 		})
 
 		engine.Grant(subjectID, "read", "location:*")
@@ -4523,7 +4925,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
 
@@ -4545,15 +4947,33 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
-
 
 		err := svc.DeleteCharacter(ctx, subjectID, charID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+	})
+
+	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
+			Engine:        engine,
+			Transactor:    tx,
+		})
+
+		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND for ErrNotFound", func(t *testing.T) {
@@ -4565,7 +4985,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
 
@@ -4587,7 +5007,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
 
@@ -4629,7 +5049,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
 
@@ -4651,7 +5071,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
 
@@ -4672,7 +5092,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			PropertyRepo:  mockPropRepo,
-			Engine: engine,
+			Engine:        engine,
 			Transactor:    tx,
 		})
 
@@ -4698,10 +5118,10 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockLocRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockLocRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4720,10 +5140,10 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockLocRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockLocRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4741,10 +5161,10 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			LocationRepo:  mockLocRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			LocationRepo: mockLocRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4769,10 +5189,10 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockObjRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -4791,10 +5211,10 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockObjRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -4812,10 +5232,10 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 		tx := &mockTransactor{}
 
 		svc := world.NewService(world.ServiceConfig{
-			ObjectRepo:    mockObjRepo,
-			PropertyRepo:  mockPropRepo,
-			Engine: engine,
-			Transactor:    tx,
+			ObjectRepo:   mockObjRepo,
+			PropertyRepo: mockPropRepo,
+			Engine:       engine,
+			Transactor:   tx,
 		})
 
 		engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -4839,10 +5259,10 @@ func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 	tx := &mockTransactor{}
 
 	svc := world.NewService(world.ServiceConfig{
-		LocationRepo:  mockLocRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
-		Transactor:    tx,
+		LocationRepo: mockLocRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
+		Transactor:   tx,
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4865,10 +5285,10 @@ func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 	tx := &mockTransactor{}
 
 	svc := world.NewService(world.ServiceConfig{
-		ObjectRepo:    mockObjRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
-		Transactor:    tx,
+		ObjectRepo:   mockObjRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
+		Transactor:   tx,
 	})
 
 	engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -4893,7 +5313,7 @@ func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockCharRepo,
 		PropertyRepo:  mockPropRepo,
-		Engine: engine,
+		Engine:        engine,
 		Transactor:    tx,
 	})
 
@@ -4916,9 +5336,9 @@ func TestWorldService_DeleteLocation_ErrorsWithPropertyRepoButNoTransactor(t *te
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 
 	svc := world.NewService(world.ServiceConfig{
-		LocationRepo:  mockLocRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
+		LocationRepo: mockLocRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -4939,9 +5359,9 @@ func TestWorldService_DeleteObject_ErrorsWithPropertyRepoButNoTransactor(t *test
 	mockPropRepo := worldtest.NewMockPropertyRepository(t)
 
 	svc := world.NewService(world.ServiceConfig{
-		ObjectRepo:    mockObjRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
+		ObjectRepo:   mockObjRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
 	})
 
 	engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -4964,7 +5384,7 @@ func TestWorldService_DeleteCharacter_ErrorsWithPropertyRepoButNoTransactor(t *t
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockCharRepo,
 		PropertyRepo:  mockPropRepo,
-		Engine: engine,
+		Engine:        engine,
 	})
 
 	engine.Grant(subjectID, "delete", "character:"+charID.String())
@@ -4986,10 +5406,10 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 	tx := &mockTransactor{}
 
 	svc := world.NewService(world.ServiceConfig{
-		LocationRepo:  mockLocRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
-		Transactor:    tx,
+		LocationRepo: mockLocRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
+		Transactor:   tx,
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())
@@ -5012,10 +5432,10 @@ func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 	tx := &mockTransactor{}
 
 	svc := world.NewService(world.ServiceConfig{
-		ObjectRepo:    mockObjRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
-		Transactor:    tx,
+		ObjectRepo:   mockObjRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
+		Transactor:   tx,
 	})
 
 	engine.Grant(subjectID, "delete", "object:"+objID.String())
@@ -5040,7 +5460,7 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: mockCharRepo,
 		PropertyRepo:  mockPropRepo,
-		Engine: engine,
+		Engine:        engine,
 		Transactor:    tx,
 	})
 
@@ -5064,10 +5484,10 @@ func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 	tx := &mockTransactor{}
 
 	svc := world.NewService(world.ServiceConfig{
-		LocationRepo:  mockLocRepo,
-		PropertyRepo:  mockPropRepo,
-		Engine: engine,
-		Transactor:    tx,
+		LocationRepo: mockLocRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       engine,
+		Transactor:   tx,
 	})
 
 	engine.Grant(subjectID, "delete", "location:"+locID.String())

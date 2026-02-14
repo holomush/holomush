@@ -47,6 +47,19 @@ func TestNewRateLimitMiddleware_NilRateLimiter(t *testing.T) {
 	assert.Equal(t, ErrNilRateLimiter, err)
 }
 
+func TestNewRateLimitMiddleware_NilEngine(t *testing.T) {
+	ratelimiter := NewRateLimiter(RateLimiterConfig{
+		BurstCapacity: 1,
+		SustainedRate: 0.1,
+	})
+	defer ratelimiter.Close()
+
+	middleware, err := NewRateLimitMiddleware(ratelimiter, nil)
+	require.Error(t, err)
+	assert.Nil(t, middleware)
+	assert.Equal(t, ErrNilEngine, err)
+}
+
 func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	engine := policytest.DenyAllEngine()
 

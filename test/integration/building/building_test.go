@@ -50,7 +50,7 @@ var _ = Describe("Building & Objects Commands", func() {
 			ExitRepo:      env.Exits,
 			ObjectRepo:    env.Objects,
 			CharacterRepo: env.Characters,
-			Engine: policytest.AllowAllEngine(),
+			Engine:        policytest.AllowAllEngine(),
 		})
 	})
 

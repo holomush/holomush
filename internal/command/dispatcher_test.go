@@ -156,6 +156,40 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
 }
 
+func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
+	reg := NewRegistry()
+	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
+	denyEngine := policytest.DenyAllEngine()
+
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, denyEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	err = dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, err)
+	assert.Contains(t, PlayerMessage(err), "permission")
+
+	// Verify COMMAND_ACCESS_DENIED error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code(),
+		"explicit policy deny should return COMMAND_ACCESS_DENIED")
+}
+
 func TestDispatch_EngineError_ReturnsPermissionDenied(t *testing.T) {
 	reg := NewRegistry()
 	engineErr := errors.New("policy store unavailable")

@@ -30,11 +30,11 @@ This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering s
 - [ ] `Bootstrap()` called at startup to seed policies
 - [ ] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism
 - [ ] **Security (S8 - holomush-5k1.355):** A static analysis rule or go vet check MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST enforce this check. Migration checklist MUST include per-site verification.
-- [ ] ALL **28 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
+- [ ] ALL **29 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
   - [ ] 3 call sites in command package (T28-pkg1)
   - [ ] 6 call sites in world: locations (T28-pkg2)
   - [ ] 11 call sites in world: exits + objects (T28-pkg3)
-  - [ ] 7 call sites in world: characters + scenes (T28-pkg4)
+  - [ ] 8 call sites in world: characters + scenes (T28-pkg4)
   - [ ] 1 call site in plugin package (T28-pkg5)
 - [ ] ALL **57 test call sites** in `internal/access/static_test.go` migrated to new engine
 - [ ] Generated mocks regenerated with mockery
@@ -87,7 +87,7 @@ See ADR #76 (Compound Resource Decomposition During Migration) for full decision
 
 **Call site counts verified (as of 2026-02-07):**
 
-- Production: 28 call sites (3 in command, 24 in world, 1 in plugin)
+- Production: 29 call sites (3 in command, 25 in world, 1 in plugin)
 - Tests: 57 call sites in `internal/access/static_test.go` + ~20 in `internal/plugin/capability/enforcer_test.go` (Task 29)
 
 ### T28-pkg1: Command Package (3 call sites)
@@ -163,16 +163,17 @@ See ADR #76 (Compound Resource Decomposition During Migration) for full decision
 5. Run `task build` — MUST PASS
 6. Commit
 
-### T28-pkg4: World Service - Characters & Scenes (7 call sites)
+### T28-pkg4: World Service - Characters & Scenes (8 call sites)
 
 **Atomic commit:** `refactor(world): migrate character and scene operations to AccessPolicyEngine`
 
-**Call sites - Characters (4):**
+**Call sites - Characters (5):**
 
 - `GetCharacter` (`internal/world/service.go:452`)
 - `GetCharactersByLocation` (`internal/world/service.go:471`) — **NOTE:** Compound resource decomposition required
 - `MoveCharacter` (`internal/world/service.go:558`)
 - `ExamineCharacter` (`internal/world/service.go:768`)
+- `DeleteCharacter` (`internal/world/service.go:xxx`)
 
 **Call sites - Scenes (3):**
 
@@ -182,7 +183,7 @@ See ADR #76 (Compound Resource Decomposition During Migration) for full decision
 
 **Steps:**
 
-1. Update 7 call sites (4 characters + 3 scenes) in `internal/world/service.go`
+1. Update 8 call sites (5 characters + 3 scenes) in `internal/world/service.go`
    - **CRITICAL:** `service.go:471` (`GetCharactersByLocation`) uses compound resource format `location:<id>:characters`. Decompose to `resource=location:<id>` with `action=list_characters` per ADR #76
 2. Update tests to mock `AccessPolicyEngine`
 3. **Per-package error-path tests:** Add tests verifying correct behavior for character and scene operations, including compound resource decomposition test
@@ -329,7 +330,7 @@ func TestAccessRequest_Construction(t *testing.T) {
 
 If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` and down migrations (documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)):
 
-1. **Revert Task 28 commit(s)** — This restores all 28 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
+1. **Revert Task 28 commit(s)** — This restores all 29 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
 2. **Run database down migrations** — Roll back 3 migration files in reverse order (000017 → 000016 → 000015) to remove ABAC tables. See [Decision #65 Database Migration Rollback Procedure](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md#database-migration-rollback-procedure) for detailed steps including required backup procedures and down-migration order.
 3. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
 
@@ -356,13 +357,13 @@ If serious issues are discovered after Task 28 migration, rollback is performed 
 
 **Acceptance Criteria:**
 
-- [ ] Equivalence test suite created covering all ~28 production call sites
+- [ ] Equivalence test suite created covering all 29 production call sites
 - [ ] Test validates identical decisions between `StaticAccessControl.Check()` and `AccessPolicyEngine.Evaluate()` for same inputs
 - [ ] Test covers all unique subject/action/resource combinations from production call sites:
   - [ ] Command dispatcher authorization (1 call site)
   - [ ] Rate limit bypass checks (1 call site)
   - [ ] Boot command permission (1 call site)
-  - [ ] World service operations (24 call sites covering all world actions)
+  - [ ] World service operations (25 call sites covering all world actions)
   - [ ] Plugin command execution (1 call site)
 - [ ] Test uses table-driven approach with request sets for each call site pattern
 - [ ] Test instantiates both engines with identical bootstrap data (roles, permissions, policies)
@@ -644,9 +645,17 @@ func TestMigrationEquivalence(t *testing.T) {
             resource: "character:01YZA",
         },
 
+        // #25: DeleteCharacter (internal/world/service.go:xxx)
+        {
+            name:     "delete character - admin deletes character",
+            subject:  "character:admin-01ABC",
+            action:   "delete",
+            resource: "character:01YZA",
+        },
+
         // === World service - Scene operations (3 call sites) ===
 
-        // #25: AddSceneParticipant (internal/world/service.go:488)
+        // #26: AddSceneParticipant (internal/world/service.go:488)
         {
             name:     "add scene participant - player adds participant",
             subject:  "character:player-01DEF",
@@ -654,7 +663,7 @@ func TestMigrationEquivalence(t *testing.T) {
             resource: "scene:01PQR",
         },
 
-        // #26: RemoveSceneParticipant (internal/world/service.go:509)
+        // #27: RemoveSceneParticipant (internal/world/service.go:509)
         {
             name:     "remove scene participant - player removes participant",
             subject:  "character:player-01DEF",
@@ -662,7 +671,7 @@ func TestMigrationEquivalence(t *testing.T) {
             resource: "scene:01PQR",
         },
 
-        // #27: ListSceneParticipants (internal/world/service.go:527)
+        // #28: ListSceneParticipants (internal/world/service.go:527)
         {
             name:     "list scene participants - player lists participants",
             subject:  "character:player-01DEF",
@@ -672,7 +681,7 @@ func TestMigrationEquivalence(t *testing.T) {
 
         // === Plugin package (1 call site) ===
 
-        // #28: Plugin command execution (internal/plugin/hostfunc/commands.go:119)
+        // #29: Plugin command execution (internal/plugin/hostfunc/commands.go:119)
         {
             name:     "plugin command - player with capability",
             subject:  "character:player-01DEF",
@@ -770,7 +779,7 @@ func setupTestAttributeResolver(t *testing.T) *policy.AttributeResolver {
    - Fix incorrect engine or migration code
    - DO NOT proceed to Task 29 until all unjustified divergences are resolved
 
-5. **Coverage Verification:** Audit all 28 production call sites to ensure each unique subject/action/resource pattern appears in test cases. Use `grep -n "\.Check(" internal/ --include="*.go"` to enumerate call sites.
+5. **Coverage Verification:** Audit all 29 production call sites to ensure each unique subject/action/resource pattern appears in test cases. Use `grep -n "\.Check(" internal/ --include="*.go"` to enumerate call sites.
 
 **Acceptance Gate:**
 
@@ -826,8 +835,8 @@ This task removes OLD interfaces/implementations. Ensure all production call sit
 - `internal/command/dispatcher.go` — migrated in Task 28 Package 1
 - `internal/command/rate_limit_middleware.go` — migrated in Task 28 Package 1
 - `internal/command/handlers/boot.go` — migrated in Task 28 Package 1
-- `internal/world/service.go` (24 calls) — migrated in Task 28 Package 2
-- `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`) — migrated in Task 28 Package 3
+- `internal/world/service.go` (25 calls) — migrated in Task 28 Package 2-4
+- `internal/plugin/hostfunc/commands.go` (1 call to `f.access.Check()`) — migrated in Task 28 Package 5
 
 The capability enforcer (`f.enforcer.Check()` in `functions.go`) is separate from `AccessControl` and removed here.
 

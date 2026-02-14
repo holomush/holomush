@@ -74,7 +74,7 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -133,7 +133,7 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -204,7 +204,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -331,7 +331,7 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -408,7 +408,7 @@ func TestBootHandler_Success(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -490,7 +490,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -575,7 +575,7 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -651,7 +651,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -732,7 +732,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -847,7 +847,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -933,7 +933,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -1035,7 +1035,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		Engine: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
