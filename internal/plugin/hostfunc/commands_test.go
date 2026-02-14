@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/plugin/capability"
 )
@@ -49,9 +50,9 @@ func TestListCommands_ReturnsAllCommands(t *testing.T) {
 
 	// Character can see all commands (no capabilities required on any command)
 	charID := ulid.Make()
-	ac := accesstest.NewMockAccessControl()
+	ac := policytest.NewGrantEngine()
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -123,9 +124,9 @@ func TestListCommands_NoRegistry(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	ac := accesstest.NewMockAccessControl()
+	ac := policytest.NewGrantEngine()
 
-	hf := New(nil, enforcer, WithAccessControl(ac)) // No WithCommandRegistry
+	hf := New(nil, enforcer, WithEngine(ac)) // No WithCommandRegistry
 
 	L := lua.NewState()
 	defer L.Close()
@@ -307,10 +308,10 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 
 	// AccessControl that grants "comms.say" to our character but NOT admin caps
 	charID := ulid.Make()
-	ac := accesstest.NewMockAccessControl()
-	ac.Grant("char:"+charID.String(), "execute", "comms.say")
+	ac := policytest.NewGrantEngine()
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.say")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -359,9 +360,9 @@ func TestListCommands_EmptyCapabilitiesAlwaysIncluded(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	ac := accesstest.NewMockAccessControl() // No grants - character has zero capabilities
+	ac := policytest.NewGrantEngine() // No grants - character has zero capabilities
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -397,12 +398,12 @@ func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	ac := accesstest.NewMockAccessControl()
+	ac := policytest.NewGrantEngine()
 	// Grant only ONE of the required capabilities
-	ac.Grant("char:"+charID.String(), "execute", "admin.nuke")
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.nuke")
 	// NOT granting admin.danger
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -438,12 +439,12 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	ac := accesstest.NewMockAccessControl()
+	ac := policytest.NewGrantEngine()
 	// Grant ALL required capabilities
-	ac.Grant("char:"+charID.String(), "execute", "admin.nuke")
-	ac.Grant("char:"+charID.String(), "execute", "admin.danger")
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.nuke")
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.danger")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -478,8 +479,8 @@ func TestListCommands_InvalidCharacterID(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
-	ac := accesstest.NewMockAccessControl()
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	ac := policytest.NewGrantEngine()
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -506,8 +507,8 @@ func TestListCommands_EmptyCharacterID(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
-	ac := accesstest.NewMockAccessControl()
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithAccessControl(ac))
+	ac := policytest.NewGrantEngine()
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -523,8 +524,8 @@ func TestListCommands_EmptyCharacterID(t *testing.T) {
 	assert.Contains(t, err.Error(), "character ID cannot be empty")
 }
 
-func TestListCommands_NoAccessControlConfigured(t *testing.T) {
-	// Given: no AccessControl configured (nil)
+func TestListCommands_NoEngineConfigured(t *testing.T) {
+	// Given: no AccessPolicyEngine configured (nil)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}}),
@@ -534,7 +535,7 @@ func TestListCommands_NoAccessControlConfigured(t *testing.T) {
 	enforcer := capability.NewEnforcer()
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
-	// NOT providing WithAccessControl
+	// NOT providing WithEngine
 	hf := New(nil, enforcer, WithCommandRegistry(registry))
 
 	L := lua.NewState()
@@ -552,5 +553,5 @@ func TestListCommands_NoAccessControlConfigured(t *testing.T) {
 	// Then: error is returned (access control required for filtering)
 	errVal := L.GetGlobal("err")
 	assert.NotEqual(t, lua.LNil, errVal)
-	assert.Contains(t, errVal.String(), "access control not available")
+	assert.Contains(t, errVal.String(), "access engine not available")
 }
