@@ -46,8 +46,11 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 		Resource: CapabilityRateLimitBypass,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "rate limit bypass check failed",
+		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
+		slog.WarnContext(ctx, "rate limit bypass check failed",
 			"subject", subject,
+			"action", "execute",
+			"resource", CapabilityRateLimitBypass,
 			"error", err,
 		)
 	}

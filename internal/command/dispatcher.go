@@ -54,7 +54,7 @@ func NewDispatcher(registry *Registry, engine policy.AccessPolicyEngine, opts ..
 		return nil, ErrNilRegistry
 	}
 	if engine == nil {
-		return nil, ErrNilAccessControl
+		return nil, ErrNilEngine
 	}
 	d := &Dispatcher{
 		registry: registry,

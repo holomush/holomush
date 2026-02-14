@@ -41,8 +41,8 @@ var (
 	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
 	ErrNilRegistry = oops.Errorf("registry cannot be nil")
 
-	// ErrNilAccessControl is returned when creating a dispatcher with nil access control.
-	ErrNilAccessControl = oops.Errorf("access control cannot be nil")
+	// ErrNilEngine is returned when creating a dispatcher with a nil policy engine.
+	ErrNilEngine = oops.Errorf("policy engine cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.

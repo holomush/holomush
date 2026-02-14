@@ -154,6 +154,37 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
 }
 
+func TestDispatch_EngineError_ReturnsPermissionDenied(t *testing.T) {
+	reg := NewRegistry()
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, errorEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	err = dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+}
+
 func TestDispatcher_EmptyInput(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
@@ -425,7 +456,7 @@ func TestNewDispatcher_NilAccessControl(t *testing.T) {
 	dispatcher, err := NewDispatcher(reg, nil)
 	require.Error(t, err)
 	assert.Nil(t, dispatcher)
-	assert.Equal(t, ErrNilAccessControl, err)
+	assert.Equal(t, ErrNilEngine, err)
 }
 
 func TestNewDispatcher_WithAliasCache(t *testing.T) {

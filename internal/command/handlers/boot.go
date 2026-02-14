@@ -57,8 +57,10 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 			Resource: "admin.boot",
 		})
 		if evalErr != nil {
-			slog.Error("boot access evaluation failed",
+			slog.ErrorContext(ctx, "boot access evaluation failed",
 				"subject", subjectID,
+				"action", "execute",
+				"resource", "admin.boot",
 				"error", evalErr,
 			)
 		}
