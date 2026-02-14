@@ -12,7 +12,7 @@ import (
 
 // WorldServiceMocks exposes mocked dependencies for WorldService.
 type WorldServiceMocks struct {
-	AccessControl *worldtest.MockAccessControl
+	Engine        *worldtest.MockAccessPolicyEngine
 	LocationRepo  *worldtest.MockLocationRepository
 	ExitRepo      *worldtest.MockExitRepository
 	ObjectRepo    *worldtest.MockObjectRepository
@@ -29,7 +29,7 @@ type WorldServiceFixture struct {
 
 // WorldServiceBuilder builds a WorldServiceFixture with configurable mocks.
 type WorldServiceBuilder struct {
-	accessControl *worldtest.MockAccessControl
+	engine        *worldtest.MockAccessPolicyEngine
 	locationRepo  *worldtest.MockLocationRepository
 	exitRepo      *worldtest.MockExitRepository
 	objectRepo    *worldtest.MockObjectRepository
@@ -41,7 +41,7 @@ type WorldServiceBuilder struct {
 // NewWorldServiceBuilder returns a builder with default mocks.
 func NewWorldServiceBuilder(t *testing.T) *WorldServiceBuilder {
 	return &WorldServiceBuilder{
-		accessControl: worldtest.NewMockAccessControl(t),
+		engine:        worldtest.NewMockAccessPolicyEngine(t),
 		locationRepo:  worldtest.NewMockLocationRepository(t),
 		exitRepo:      worldtest.NewMockExitRepository(t),
 		objectRepo:    worldtest.NewMockObjectRepository(t),
@@ -51,9 +51,9 @@ func NewWorldServiceBuilder(t *testing.T) *WorldServiceBuilder {
 	}
 }
 
-// WithAccessControl sets the access control mock.
-func (b *WorldServiceBuilder) WithAccessControl(accessControl *worldtest.MockAccessControl) *WorldServiceBuilder {
-	b.accessControl = accessControl
+// WithEngine sets the access policy engine mock.
+func (b *WorldServiceBuilder) WithEngine(engine *worldtest.MockAccessPolicyEngine) *WorldServiceBuilder {
+	b.engine = engine
 	return b
 }
 
@@ -95,8 +95,8 @@ func (b *WorldServiceBuilder) WithEventEmitter(eventEmitter *worldtest.MockEvent
 
 // Build creates a WorldServiceFixture from the builder.
 func (b *WorldServiceBuilder) Build() *WorldServiceFixture {
-	if b.accessControl == nil {
-		panic("testutil.WorldServiceBuilder: AccessControl is required")
+	if b.engine == nil {
+		panic("testutil.WorldServiceBuilder: Engine is required")
 	}
 
 	service := world.NewService(world.ServiceConfig{
@@ -105,14 +105,14 @@ func (b *WorldServiceBuilder) Build() *WorldServiceFixture {
 		ObjectRepo:    b.objectRepo,
 		SceneRepo:     b.sceneRepo,
 		CharacterRepo: b.characterRepo,
-		AccessControl: b.accessControl,
+		Engine:        b.engine,
 		EventEmitter:  b.eventEmitter,
 	})
 
 	return &WorldServiceFixture{
 		Service: service,
 		Mocks: WorldServiceMocks{
-			AccessControl: b.accessControl,
+			Engine:        b.engine,
 			LocationRepo:  b.locationRepo,
 			ExitRepo:      b.exitRepo,
 			ObjectRepo:    b.objectRepo,

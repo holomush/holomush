@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -52,11 +53,11 @@ func TestCreateHandler_Object(t *testing.T) {
 	locationID := ulid.Make()
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "object:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(obj *world.Object) bool {
 			return obj.Name == "Iron Sword" && obj.LocationID() != nil && *obj.LocationID() == locationID
@@ -65,7 +66,7 @@ func TestCreateHandler_Object(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -90,11 +91,11 @@ func TestCreateHandler_Location(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Name == "Secret Room" && loc.Type == world.LocationTypePersistent
@@ -103,7 +104,7 @@ func TestCreateHandler_Location(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -127,10 +128,10 @@ func TestCreateHandler_InvalidType(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -169,10 +170,10 @@ func TestCreateHandler_InvalidSyntax(t *testing.T) {
 			characterID := ulid.Make()
 			locationID := ulid.Make()
 
-			accessControl := worldtest.NewMockAccessControl(t)
+			accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 			worldService := world.NewService(world.ServiceConfig{
-				AccessControl: accessControl,
+				Engine: accessControl,
 			})
 
 			var buf bytes.Buffer
@@ -202,12 +203,12 @@ func TestSetHandler_Description(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -218,8 +219,8 @@ func TestSetHandler_Description(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Description == "A cozy room."
@@ -228,7 +229,7 @@ func TestSetHandler_Description(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -252,12 +253,12 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -268,15 +269,15 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -301,11 +302,11 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -315,8 +316,8 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 		}, nil)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Description == "custom:hello"
@@ -325,7 +326,7 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	registry := property.NewRegistry()
@@ -354,10 +355,10 @@ func TestSetHandler_PropertyNotFound(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -384,10 +385,10 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -420,10 +421,10 @@ func TestSetHandler_InvalidIDFormat(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -468,10 +469,10 @@ func TestSetHandler_InvalidSyntax(t *testing.T) {
 			characterID := ulid.Make()
 			locationID := ulid.Make()
 
-			accessControl := worldtest.NewMockAccessControl(t)
+			accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 			worldService := world.NewService(world.ServiceConfig{
-				AccessControl: accessControl,
+				Engine: accessControl,
 			})
 
 			var buf bytes.Buffer
@@ -501,12 +502,12 @@ func TestSetHandler_SetName(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -517,8 +518,8 @@ func TestSetHandler_SetName(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Name == "New Room Name"
@@ -527,7 +528,7 @@ func TestSetHandler_SetName(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -556,20 +557,20 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 	require.NoError(t, err)
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetObject
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
 		Return(obj, nil)
 
 	// For UpdateObject
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(obj *world.Object) bool {
 			return obj.Description == "A shiny object."
@@ -578,7 +579,7 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -602,18 +603,18 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 	locationID := ulid.Make()
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "object:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(errors.New("database unavailable"))
 
 	worldService := world.NewService(world.ServiceConfig{
 		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -639,18 +640,18 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(errors.New("creation failed: constraint violation"))
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -676,12 +677,12 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation - succeeds
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -692,15 +693,15 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 
 	// For UpdateLocation - fails (e.g., optimistic locking conflict)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(errors.New("optimistic locking conflict"))
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -746,27 +747,27 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetObject - succeeds
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
 		Return(obj, nil)
 
 	// For UpdateObject - fails (e.g., access control change)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "write", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(errors.New("access denied: permission revoked"))
 
 	worldService := world.NewService(world.ServiceConfig{
 		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -807,19 +808,19 @@ func TestSetHandler_GetLocationFailure(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation - fails (e.g., location not found in database)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(nil, errors.New("location not found in database"))
 
 	worldService := world.NewService(world.ServiceConfig{
 		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -857,19 +858,19 @@ func TestSetHandler_GetObjectFailure(t *testing.T) {
 	objectID := ulid.Make()
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetObject - fails (e.g., object not found in database)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + characterID.String(), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
 		Return(nil, errors.New("object not found in database"))
 
 	worldService := world.NewService(world.ServiceConfig{
 		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -909,10 +910,10 @@ func TestSetHandler_UnsupportedEntityType(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -949,10 +950,10 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	// Create a name that exceeds MaxNameLength (100 chars)

@@ -13,18 +13,12 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
-
-// allowAllAccessControl is a test implementation that allows all access.
-type allowAllAccessControl struct{}
-
-func (a *allowAllAccessControl) Check(_ context.Context, _, _, _ string) bool {
-	return true
-}
 
 func testServices(worldService *world.Service) *command.Services {
 	return command.NewTestServices(command.ServicesConfig{
@@ -56,7 +50,7 @@ var _ = Describe("Building & Objects Commands", func() {
 			ExitRepo:      env.Exits,
 			ObjectRepo:    env.Objects,
 			CharacterRepo: env.Characters,
-			AccessControl: &allowAllAccessControl{},
+			Engine: policytest.AllowAllEngine(),
 		})
 	})
 

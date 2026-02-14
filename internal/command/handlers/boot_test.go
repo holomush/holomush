@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/accesstest"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
@@ -62,19 +62,19 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 	broadcaster := core.NewBroadcaster()
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(char, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -118,22 +118,22 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 	broadcaster := core.NewBroadcaster()
 
 	// Subscribe to capture the notification event
 	ch := broadcaster.Subscribe("session:" + executorID.String())
 
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(char, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -187,7 +187,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	// Use selective mock that allows read but denies admin.boot
-	accessControl := accesstest.NewMockAccessControl()
+	accessControl := policytest.NewGrantEngine()
 	// Grant read access to characters (needed for findCharacterByName)
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String())
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String())
@@ -204,7 +204,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -248,19 +248,19 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Executor character lookup for self-boot check
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -316,28 +316,28 @@ func TestBootHandler_Success(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 	broadcaster := core.NewBroadcaster()
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -395,7 +395,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 	broadcaster := core.NewBroadcaster()
 
 	// Subscribe to capture the notification event
@@ -403,23 +403,23 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -484,27 +484,27 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -555,32 +555,32 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration - accessible
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
 
 	// Hidden character - access denied (may not be called if target found first)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+hiddenID.String()).
-		Return(false).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + hiddenID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -631,7 +631,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Session iteration finds only executor (target not connected)
 	// But we need to simulate a situation where we find the target name
@@ -645,23 +645,23 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 
 	// Executor lookup may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -738,7 +738,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Capture logs
 	var logBuf bytes.Buffer
@@ -751,16 +751,16 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration - accessible
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
@@ -768,15 +768,15 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// Error character - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+errorCharID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + errorCharID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, unexpectedErr).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -832,7 +832,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Capture logs (suppress during test)
 	var logBuf bytes.Buffer
@@ -845,8 +845,8 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 
 	// Executor lookup - may or may not happen depending on iteration order
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
@@ -854,15 +854,15 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 	// Error character lookup - returns unexpected database error
 	dbError := errors.New("database connection timeout")
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+errorCharID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + errorCharID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, dbError).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -922,7 +922,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Capture logs
 	var logBuf bytes.Buffer
@@ -935,36 +935,36 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
 
 	// Target lookup during session iteration - accessible
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + targetID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	characterRepo.EXPECT().
 		Get(mock.Anything, targetID).
 		Return(targetChar, nil)
 
 	// Not found character - access allowed but repo returns ErrNotFound (expected, no logging)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+notFoundCharID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + notFoundCharID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
 		Return(nil, world.ErrNotFound).Maybe()
 
 	// Permission denied character - access check fails (expected, no logging)
 	accessControl.EXPECT().
-		Check(mock.Anything, access.SubjectCharacter+executorID.String(), "read", "character:"+deniedCharID.String()).
-		Return(false).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + deniedCharID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
