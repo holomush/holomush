@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
 var tracer = otel.Tracer("holomush/command")
@@ -21,7 +23,7 @@ var tracer = otel.Tracer("holomush/command")
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
 	registry    *Registry
-	access      access.AccessControl
+	engine      policy.AccessPolicyEngine
 	aliasCache  *AliasCache          // optional, can be nil
 	rateLimiter *RateLimitMiddleware // optional, can be nil
 }
@@ -41,22 +43,22 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 // If not provided, rate limiting is disabled.
 func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 	return func(d *Dispatcher) {
-		d.rateLimiter = NewRateLimitMiddleware(rl, d.access)
+		d.rateLimiter = NewRateLimitMiddleware(rl, d.engine)
 	}
 }
 
 // NewDispatcher creates a new command dispatcher with the given registry
-// and access control. Returns an error if registry or ac is nil.
-func NewDispatcher(registry *Registry, ac access.AccessControl, opts ...DispatcherOption) (*Dispatcher, error) {
+// and policy engine. Returns an error if registry or engine is nil.
+func NewDispatcher(registry *Registry, engine policy.AccessPolicyEngine, opts ...DispatcherOption) (*Dispatcher, error) {
 	if registry == nil {
 		return nil, ErrNilRegistry
 	}
-	if ac == nil {
+	if engine == nil {
 		return nil, ErrNilAccessControl
 	}
 	d := &Dispatcher{
 		registry: registry,
-		access:   ac,
+		engine:   engine,
 	}
 	for _, opt := range opts {
 		opt(d)
@@ -132,7 +134,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
-	subject := "char:" + exec.CharacterID().String()
+	subject := access.SubjectCharacter + exec.CharacterID().String()
 	if d.rateLimiter != nil {
 		if rateErr := d.rateLimiter.Enforce(ctx, exec, parsed.Name, span); rateErr != nil {
 			metrics.SetStatus(StatusRateLimited)
@@ -154,7 +156,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
-		if !d.access.Check(ctx, subject, "execute", cap) {
+		decision, evalErr := d.engine.Evaluate(ctx, types.AccessRequest{
+			Subject:  subject,
+			Action:   "execute",
+			Resource: cap,
+		})
+		if evalErr != nil {
+			slog.ErrorContext(ctx, "access evaluation failed",
+				"subject", subject,
+				"action", "execute",
+				"resource", cap,
+				"error", evalErr,
+			)
+		}
+		if evalErr != nil || !decision.IsAllowed() {
 			metrics.SetStatus(StatusPermissionDenied)
 			err = ErrPermissionDenied(parsed.Name, cap)
 			return err

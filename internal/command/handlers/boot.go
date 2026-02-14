@@ -13,6 +13,8 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -38,7 +40,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Find the target session by character name
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.SubjectCharacter + exec.CharacterID().String()
 	targetCharID, targetCharName, err := findCharacterByName(ctx, exec, subjectID, targetName)
 	if err != nil {
 		return err
@@ -49,8 +51,18 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		allowed := exec.Services().Access().Check(ctx, subjectID, "execute", "admin.boot")
-		if !allowed {
+		decision, evalErr := exec.Services().Engine().Evaluate(ctx, types.AccessRequest{
+			Subject:  subjectID,
+			Action:   "execute",
+			Resource: "admin.boot",
+		})
+		if evalErr != nil {
+			slog.Error("boot access evaluation failed",
+				"subject", subjectID,
+				"error", evalErr,
+			)
+		}
+		if evalErr != nil || !decision.IsAllowed() {
 			//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
 			return command.ErrPermissionDenied("boot", "admin.boot")
 		}

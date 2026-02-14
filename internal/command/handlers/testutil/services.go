@@ -4,8 +4,8 @@
 package testutil
 
 import (
-	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
@@ -22,7 +22,7 @@ func NewServicesBuilder() *ServicesBuilder {
 	return &ServicesBuilder{
 		config: command.ServicesConfig{
 			Session:     core.NewSessionManager(),
-			Access:      accesstest.NewMockAccessControl(),
+			Engine:      policytest.AllowAllEngine(),
 			Events:      core.NewMemoryEventStore(),
 			Broadcaster: core.NewBroadcaster(),
 		},
@@ -49,9 +49,9 @@ func (b *ServicesBuilder) WithSession(session core.SessionService) *ServicesBuil
 	return b
 }
 
-// WithAccess sets the access control service.
-func (b *ServicesBuilder) WithAccess(accessControl access.AccessControl) *ServicesBuilder {
-	b.config.Access = accessControl
+// WithEngine sets the ABAC policy engine.
+func (b *ServicesBuilder) WithEngine(engine policy.AccessPolicyEngine) *ServicesBuilder {
+	b.config.Engine = engine
 	return b
 }
 

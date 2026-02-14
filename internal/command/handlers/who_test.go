@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
@@ -53,7 +54,7 @@ func TestWhoHandler_SinglePlayer(t *testing.T) {
 	}
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
+		Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -99,7 +100,7 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	for charID, char := range chars {
 		fixture.Mocks.AccessControl.EXPECT().
-			Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+charID.String()).
+			Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+charID.String()).
 			Return(true)
 		fixture.Mocks.CharacterRepo.EXPECT().
 			Get(mock.Anything, charID).
@@ -141,7 +142,7 @@ func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 	}
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
+		Check(mock.Anything, access.SubjectCharacter+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -183,14 +184,14 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil)
 
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
 		Return(false)
 
 	services := testutil.NewServicesBuilder().
@@ -262,7 +263,7 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 	// char1 exists and is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
@@ -270,7 +271,7 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 
 	// char2 check passes but character not found (stale session)
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char2ID).
@@ -319,7 +320,7 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// char1 is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
@@ -328,7 +329,7 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// errorChar - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
 		Return(true).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
@@ -372,7 +373,7 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	unexpectedErr := errors.New("database connection timeout")
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
@@ -411,14 +412,14 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorChar1ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+errorChar1ID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorChar1ID).
 		Return(nil, unexpectedErr)
 
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorChar2ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+errorChar2ID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorChar2ID).
@@ -455,7 +456,7 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 	// notFoundChar - access allowed but returns ErrNotFound
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
 		Return(true)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
@@ -463,7 +464,7 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 
 	// deniedChar - access denied
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
 		Return(false)
 
 	services := testutil.NewServicesBuilder().
@@ -512,7 +513,7 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	// char1 is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
 		Return(true).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
@@ -520,7 +521,7 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// notFoundChar - access allowed but returns ErrNotFound (expected, should NOT log)
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
 		Return(true).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
@@ -528,7 +529,7 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// deniedChar - access denied (expected, should NOT log)
 	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
+		Check(mock.Anything, access.SubjectCharacter+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
 		Return(false).Maybe()
 
 	services := testutil.NewServicesBuilder().

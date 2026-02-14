@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -54,7 +55,7 @@ func TestCreateHandler_Object(t *testing.T) {
 	accessControl := worldtest.NewMockAccessControl(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:*").
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:*").
 		Return(true)
 	objectRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(obj *world.Object) bool {
@@ -92,7 +93,7 @@ func TestCreateHandler_Location(t *testing.T) {
 	accessControl := worldtest.NewMockAccessControl(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:*").
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:*").
 		Return(true)
 	locationRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
@@ -205,7 +206,7 @@ func TestSetHandler_Description(t *testing.T) {
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
@@ -217,7 +218,7 @@ func TestSetHandler_Description(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
@@ -255,7 +256,7 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
@@ -267,7 +268,7 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
@@ -303,7 +304,7 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 	accessControl := worldtest.NewMockAccessControl(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
@@ -314,7 +315,7 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 		}, nil)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
@@ -504,7 +505,7 @@ func TestSetHandler_SetName(t *testing.T) {
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
@@ -516,7 +517,7 @@ func TestSetHandler_SetName(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
@@ -559,7 +560,7 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 
 	// For GetObject
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "object:"+objectID.String()).
 		Return(true)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
@@ -567,7 +568,7 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 
 	// For UpdateObject
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:"+objectID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:"+objectID.String()).
 		Return(true)
 	objectRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(obj *world.Object) bool {
@@ -604,7 +605,7 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 	accessControl := worldtest.NewMockAccessControl(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:*").
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:*").
 		Return(true)
 	objectRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
@@ -641,7 +642,7 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 	accessControl := worldtest.NewMockAccessControl(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:*").
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:*").
 		Return(true)
 	locationRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
@@ -679,7 +680,7 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 
 	// For GetLocation - succeeds
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
@@ -691,7 +692,7 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 
 	// For UpdateLocation - fails (e.g., optimistic locking conflict)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
@@ -749,7 +750,7 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 
 	// For GetObject - succeeds
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "object:"+objectID.String()).
 		Return(true)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
@@ -757,7 +758,7 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 
 	// For UpdateObject - fails (e.g., access control change)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:"+objectID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "write", "object:"+objectID.String()).
 		Return(true)
 	objectRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
@@ -810,7 +811,7 @@ func TestSetHandler_GetLocationFailure(t *testing.T) {
 
 	// For GetLocation - fails (e.g., location not found in database)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "location:"+locationID.String()).
 		Return(true)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
@@ -860,7 +861,7 @@ func TestSetHandler_GetObjectFailure(t *testing.T) {
 
 	// For GetObject - fails (e.g., object not found in database)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
+		Check(mock.Anything, access.SubjectCharacter+characterID.String(), "read", "object:"+objectID.String()).
 		Return(true)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).

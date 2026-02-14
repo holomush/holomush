@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -33,7 +34,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		return nil
 	}
 
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.SubjectCharacter + exec.CharacterID().String()
 	now := time.Now()
 
 	// Collect visible players

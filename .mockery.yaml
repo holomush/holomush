@@ -46,6 +46,12 @@ packages:
       PropertyRepository:
       AccessControl:
       EventEmitter:
+  github.com/holomush/holomush/internal/access/policy:
+    config:
+      dir: internal/access/policy/policytest
+      outpkg: policytest
+    interfaces:
+      AccessPolicyEngine:
   github.com/holomush/holomush/internal/command:
     config:
       dir: "{{.InterfaceDir}}/mocks"

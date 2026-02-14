@@ -103,7 +103,7 @@ func (s *StaticAccessControl) Check(ctx context.Context, subject, action, resour
 	switch prefix {
 	case "plugin":
 		return s.checkPlugin(id, action, resource)
-	case "char", "session":
+	case "char", "character", "session":
 		return s.checkRole(ctx, subject, action, resource)
 	default:
 		return false
