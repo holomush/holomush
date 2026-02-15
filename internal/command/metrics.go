@@ -16,6 +16,7 @@ const (
 	StatusNotFound         = "not_found"
 	StatusPermissionDenied = "permission_denied"
 	StatusRateLimited      = "rate_limited"
+	StatusEngineFailure    = "engine_failure"
 )
 
 // CommandExecutions is the counter for command executions.

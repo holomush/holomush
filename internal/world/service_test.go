@@ -3847,6 +3847,40 @@ func TestWorldService_GetCharactersByLocation_UsesDecomposedResource(t *testing.
 	assert.NotContains(t, capturedRequest.Resource, ":characters", "resource must NOT contain :characters suffix (ADR #76 requires decomposition)")
 }
 
+func TestWorldService_GetCharactersByLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	locationID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.SubjectCharacter + charID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockCharacterRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockRepo,
+		Engine:        mockEngine,
+	})
+
+	expectedChars := []*world.Character{{ID: ulid.Make(), Name: "Char1", LocationID: &locationID}}
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().GetByLocation(ctx, locationID, world.ListOptions{}).Return(expectedChars, nil)
+
+	_, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "list_characters", capturedRequest.Action, "action should be 'list_characters'")
+	assert.Equal(t, "location:"+locationID.String(), capturedRequest.Resource, "resource should be location:<id>")
+}
+
 func TestWorldService_MoveCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()

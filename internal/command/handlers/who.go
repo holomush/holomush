@@ -45,9 +45,11 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
-			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) || errors.Is(err, world.ErrAccessEvaluationFailed) {
+			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
+			// ErrAccessEvaluationFailed falls through here intentionally —
+			// engine failures should be visible to users via the error count message.
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
 			slog.ErrorContext(ctx, "unexpected error looking up character in who list",
 				"session_char_id", session.CharacterID.String(),

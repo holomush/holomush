@@ -5,6 +5,7 @@ package hostfunc
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"testing"
@@ -25,6 +26,9 @@ import (
 
 // Compile-time check: policy.Engine must satisfy hostfunc.AccessPolicyEngine.
 var _ AccessPolicyEngine = (*policy.Engine)(nil)
+
+// testContextKey is a type for context keys in tests.
+type testContextKey string
 
 // mockCommandRegistry implements CommandRegistry for testing.
 type mockCommandRegistry struct {
@@ -767,4 +771,100 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 	assert.NotContains(t, names, "say", "explicit deny should filter out command requiring comms.say")
 	assert.NotContains(t, names, "admin", "explicit deny should filter out command requiring admin.manage")
 	assert.Len(t, names, 1, "only commands without capability requirements should be included")
+}
+
+func TestListCommands_ThreadsLuaContext(t *testing.T) {
+	// Given: a registry with a command requiring capabilities
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name:         "protected",
+				Help:         "Protected command",
+				Capabilities: []string{"admin.manage"},
+				Source:       "core",
+			}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Capture the context passed to Evaluate
+	var capturedCtx context.Context
+	mockEngine.EXPECT().Evaluate(mock.MatchedBy(func(ctx context.Context) bool {
+		capturedCtx = ctx
+		return true
+	}), mock.Anything).Return(types.NewDecision(types.EffectDeny, "test", ""), nil)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+
+	// Set a context on the Lua state with a test value
+	const testKey testContextKey = "test-key"
+	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
+	L.SetContext(parentCtx)
+
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called
+	err := L.DoString(`
+		commands, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: the context from L.Context() should be threaded to the engine
+	require.NotNil(t, capturedCtx, "context should be passed to engine")
+	assert.Equal(t, "test-value", capturedCtx.Value(testKey), "context should preserve values from L.Context()")
+}
+
+func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
+	// Given: a registry with a command requiring capabilities
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name:         "protected",
+				Help:         "Protected command",
+				Capabilities: []string{"admin.manage"},
+				Source:       "core",
+			}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Capture the context passed to Evaluate
+	var capturedCtx context.Context
+	mockEngine.EXPECT().Evaluate(mock.MatchedBy(func(ctx context.Context) bool {
+		capturedCtx = ctx
+		return true
+	}), mock.Anything).Return(types.NewDecision(types.EffectDeny, "test", ""), nil)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+
+	// Do NOT set context on L - should fall back to context.Background()
+
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called without context set on L
+	err := L.DoString(`
+		commands, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: context should not be nil (should have fallen back to context.Background())
+	require.NotNil(t, capturedCtx, "context should not be nil even when L.Context() returns nil")
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // stubServices creates a minimal non-nil Services for tests that don't
@@ -190,7 +191,7 @@ func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
 		"explicit policy deny should return COMMAND_ACCESS_DENIED")
 }
 
-func TestDispatch_EngineError_ReturnsPermissionDenied(t *testing.T) {
+func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	reg := NewRegistry()
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
@@ -213,12 +214,31 @@ func TestDispatch_EngineError_ReturnsPermissionDenied(t *testing.T) {
 		Services:    stubServices(),
 	})
 
+	// Get baseline for engine_failure metric
+	engineFailureBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
+	}))
+
 	err = dispatcher.Dispatch(context.Background(), "admin", exec)
 	require.Error(t, err)
 
+	// Verify error code using errutil helper
+	errutil.AssertErrorCode(t, err, CodeAccessEvaluationFailed)
+
+	// Verify error context
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
-	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+	assert.Equal(t, "admin", oopsErr.Context()["command"])
+	assert.Equal(t, "admin.manage", oopsErr.Context()["capability"])
+
+	// Verify wrapped error
+	assert.ErrorIs(t, err, engineErr)
+
+	// Verify metric
+	engineFailureAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
+	}))
+	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should have engine_failure status")
 }
 
 func TestDispatcher_EmptyInput(t *testing.T) {
@@ -1392,6 +1412,25 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 	assert.Equal(t, before+1, after, "should have 1 expansion for 'la' alias")
 }
 
+func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
+	reg := NewRegistry()
+	rl := NewRateLimiter(RateLimiterConfig{
+		BurstCapacity: 5,
+		SustainedRate: 1.0,
+	})
+	defer rl.Close()
+
+	// Try to create dispatcher with nil engine but WithRateLimiter option
+	// This should fail because NewRateLimitMiddleware requires a non-nil engine
+	dispatcher, err := NewDispatcher(reg, nil, WithRateLimiter(rl))
+	assert.Error(t, err)
+	assert.Nil(t, dispatcher)
+	assert.Equal(t, ErrNilEngine, err, "should fail on nil engine validation before applying options")
+
+	// Now test the case where engine is set but the rate limiter middleware creation fails
+	// We can't easily test this without a mock, but the error path is covered by the optErr field
+}
+
 func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
@@ -1495,6 +1534,49 @@ func TestDispatcher_VerifiesAccessRequest(t *testing.T) {
 	assert.Equal(t, subject, capturedRequest.Subject, "subject should be character:<id>")
 	assert.Equal(t, "execute", capturedRequest.Action, "action should be 'execute'")
 	assert.Equal(t, "test.capability", capturedRequest.Resource, "resource should be the capability")
+}
+
+func TestDispatcher_PolicyDenial_ReturnsPermissionDeniedMetric(t *testing.T) {
+	reg := NewRegistry()
+	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
+	denyEngine := policytest.DenyAllEngine()
+
+	err := reg.Register(CommandEntry{
+		Name:         "protected",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, denyEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Get baseline for permission_denied metric
+	permDeniedBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "protected", "source": "core", "status": StatusPermissionDenied,
+	}))
+
+	err = dispatcher.Dispatch(context.Background(), "protected", exec)
+	require.Error(t, err)
+
+	// Verify error code is still PERMISSION_DENIED (not ACCESS_EVALUATION_FAILED)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+
+	// Verify metric shows permission_denied (not engine_failure)
+	permDeniedAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "protected", "source": "core", "status": StatusPermissionDenied,
+	}))
+	assert.Equal(t, permDeniedBefore+1, permDeniedAfter, "should have permission_denied status for policy denial")
 }
 
 func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
