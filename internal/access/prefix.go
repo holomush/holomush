@@ -53,9 +53,49 @@ var knownPrefixes = []string{
 // Panics if charID is empty, since an empty subject bypasses access control.
 func CharacterSubject(charID string) string {
 	if charID == "" {
-		panic("access.CharacterSubject: charID must not be empty")
+		panic("access.CharacterSubject: empty charID would bypass access control")
 	}
 	return SubjectCharacter + charID
+}
+
+// LocationResource returns a properly formatted location resource identifier.
+func LocationResource(locationID string) string {
+	if locationID == "" {
+		panic("access.LocationResource: empty locationID would create invalid resource reference")
+	}
+	return ResourceLocation + locationID
+}
+
+// ExitResource returns a properly formatted exit resource identifier.
+func ExitResource(exitID string) string {
+	if exitID == "" {
+		panic("access.ExitResource: empty exitID would create invalid resource reference")
+	}
+	return ResourceExit + exitID
+}
+
+// ObjectResource returns a properly formatted object resource identifier.
+func ObjectResource(objectID string) string {
+	if objectID == "" {
+		panic("access.ObjectResource: empty objectID would create invalid resource reference")
+	}
+	return ResourceObject + objectID
+}
+
+// SceneResource returns a properly formatted scene resource identifier.
+func SceneResource(sceneID string) string {
+	if sceneID == "" {
+		panic("access.SceneResource: empty sceneID would create invalid resource reference")
+	}
+	return ResourceScene + sceneID
+}
+
+// CommandResource returns a properly formatted command resource identifier.
+func CommandResource(commandName string) string {
+	if commandName == "" {
+		panic("access.CommandResource: empty commandName would create invalid resource reference")
+	}
+	return ResourceCommand + commandName
 }
 
 // ParseEntityRef parses an entity reference string into its type name and ID.

@@ -318,6 +318,8 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Contains(t, logOutput, subjectID, "log should contain subject")
 	assert.Contains(t, logOutput, "execute", "log should contain action")
 	assert.Contains(t, logOutput, "admin.boot", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "Troublemaker", "log should contain target_name")
+	assert.Contains(t, logOutput, targetID.String(), "log should contain target_char_id")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 

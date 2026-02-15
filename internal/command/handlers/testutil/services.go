@@ -4,8 +4,8 @@
 package testutil
 
 import (
-	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
@@ -50,7 +50,7 @@ func (b *ServicesBuilder) WithSession(session core.SessionService) *ServicesBuil
 }
 
 // WithEngine sets the ABAC policy engine.
-func (b *ServicesBuilder) WithEngine(engine policy.AccessPolicyEngine) *ServicesBuilder {
+func (b *ServicesBuilder) WithEngine(engine types.AccessPolicyEngine) *ServicesBuilder {
 	b.config.Engine = engine
 	return b
 }

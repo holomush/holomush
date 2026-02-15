@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
 )
@@ -19,12 +18,12 @@ import (
 // RateLimitMiddleware enforces per-session rate limiting.
 type RateLimitMiddleware struct {
 	limiter *RateLimiter
-	engine  policy.AccessPolicyEngine
+	engine  types.AccessPolicyEngine
 }
 
 // NewRateLimitMiddleware creates a rate limiting middleware.
 // Returns an error if the rate limiter or engine is nil.
-func NewRateLimitMiddleware(limiter *RateLimiter, engine policy.AccessPolicyEngine) (*RateLimitMiddleware, error) {
+func NewRateLimitMiddleware(limiter *RateLimiter, engine types.AccessPolicyEngine) (*RateLimitMiddleware, error) {
 	if limiter == nil {
 		return nil, ErrNilRateLimiter
 	}

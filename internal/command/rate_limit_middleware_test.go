@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -25,7 +24,7 @@ func TestNewRateLimitMiddleware(t *testing.T) {
 	tests := []struct {
 		name        string
 		limiter     *RateLimiter
-		engine      policy.AccessPolicyEngine
+		engine      types.AccessPolicyEngine
 		wantErr     error
 		description string
 	}{

@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
@@ -24,7 +23,7 @@ var tracer = otel.Tracer("holomush/command")
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
 	registry    *Registry
-	engine      policy.AccessPolicyEngine
+	engine      types.AccessPolicyEngine
 	aliasCache  *AliasCache          // optional, can be nil
 	rateLimiter *RateLimitMiddleware // optional, can be nil
 	optErr      error                // error from applying options
@@ -58,7 +57,7 @@ func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 
 // NewDispatcher creates a new command dispatcher with the given registry
 // and policy engine. Returns an error if registry or engine is nil.
-func NewDispatcher(registry *Registry, engine policy.AccessPolicyEngine, opts ...DispatcherOption) (*Dispatcher, error) {
+func NewDispatcher(registry *Registry, engine types.AccessPolicyEngine, opts ...DispatcherOption) (*Dispatcher, error) {
 	if registry == nil {
 		return nil, ErrNilRegistry
 	}
@@ -71,9 +70,9 @@ func NewDispatcher(registry *Registry, engine policy.AccessPolicyEngine, opts ..
 	}
 	for _, opt := range opts {
 		opt(d)
-	}
-	if d.optErr != nil {
-		return nil, d.optErr
+		if d.optErr != nil {
+			return nil, d.optErr
+		}
 	}
 	return d, nil
 }
@@ -168,11 +167,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
-		decision, evalErr := d.engine.Evaluate(ctx, types.AccessRequest{
-			Subject:  subject,
-			Action:   "execute",
-			Resource: cap,
-		})
+		req, reqErr := types.NewAccessRequest(subject, "execute", cap)
+		if reqErr != nil {
+			slog.ErrorContext(ctx, "invalid access request",
+				"error", reqErr,
+				"subject", subject,
+				"action", "execute",
+				"resource", cap,
+			)
+			metrics.SetStatus(StatusEngineFailure)
+			err = oops.Code(CodeAccessEvaluationFailed).
+				With("command", parsed.Name).
+				With("capability", cap).
+				Wrap(reqErr)
+			return err
+		}
+		decision, evalErr := d.engine.Evaluate(ctx, req)
 		if evalErr != nil {
 			slog.ErrorContext(ctx, "access evaluation failed",
 				"subject", subject,

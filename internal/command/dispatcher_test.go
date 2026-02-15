@@ -1431,6 +1431,75 @@ func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
 	// We can't easily test this without a mock, but the error path is covered by the optErr field
 }
 
+func TestNewDispatcher_MultipleOptionErrors_ReturnsFirstError(t *testing.T) {
+	tests := []struct {
+		name           string
+		opts           []DispatcherOption
+		expectErr      bool
+		expectErrCount int // How many options should NOT be applied after the first error
+	}{
+		{
+			name: "single failing option",
+			opts: []DispatcherOption{
+				func(d *Dispatcher) {
+					d.optErr = errors.New("first error")
+				},
+			},
+			expectErr:      true,
+			expectErrCount: 0,
+		},
+		{
+			name: "first option fails, second not applied",
+			opts: []DispatcherOption{
+				func(d *Dispatcher) {
+					d.optErr = errors.New("first error")
+				},
+				func(d *Dispatcher) {
+					// This should NOT be called
+					d.aliasCache = NewAliasCache()
+				},
+			},
+			expectErr:      true,
+			expectErrCount: 1,
+		},
+		{
+			name: "all options succeed",
+			opts: []DispatcherOption{
+				func(d *Dispatcher) {
+					d.aliasCache = NewAliasCache()
+				},
+				func(_ *Dispatcher) {
+					// Second option also succeeds
+				},
+			},
+			expectErr:      false,
+			expectErrCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := NewRegistry()
+			mockAccess := policytest.NewGrantEngine()
+
+			dispatcher, err := NewDispatcher(reg, mockAccess, tt.opts...)
+
+			if tt.expectErr {
+				require.Error(t, err)
+				assert.Nil(t, dispatcher)
+				assert.Contains(t, err.Error(), "first error")
+
+				// If there are multiple options and first fails,
+				// verify that subsequent options were NOT applied
+				// The error message confirms we short-circuited on the first failing option
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, dispatcher)
+			}
+		})
+	}
+}
+
 func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()

@@ -677,3 +677,207 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 	assert.True(t, strings.Contains(logOutput, resource1) || strings.Contains(logOutput, resource2),
 		"log should contain at least one character resource ID")
 }
+
+func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
+	// With 5 sessions all returning ErrAccessEvaluationFailed, the circuit breaker
+	// should trip after 3 consecutive failures, leaving 2 sessions unqueried.
+	executor := testutil.RegularPlayer()
+
+	// Create 5 sessions that will all fail with engine errors.
+	charIDs := make([]ulid.ULID, 5)
+	sessionMgr := core.NewSessionManager()
+	for i := range charIDs {
+		charIDs[i] = ulid.Make()
+		sessionMgr.Connect(charIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	for _, charID := range charIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterSubject(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Maybe()
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Circuit breaker trips after 3 errors, so errorCount is exactly 3.
+	assert.Contains(t, output, "No players online")
+	assert.Contains(t, output, "(Note: 3 players could not be displayed due to system errors)")
+
+	// Verify the circuit breaker warning was logged.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "circuit breaker tripped")
+	assert.Contains(t, logOutput, "consecutive_failures=3")
+}
+
+func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
+	// 4 sessions all returning non-engine errors (database timeout).
+	// The circuit breaker should NOT trip because consecutiveEngineErrors
+	// only increments for ErrAccessEvaluationFailed.
+	executor := testutil.RegularPlayer()
+
+	charIDs := make([]ulid.ULID, 4)
+	sessionMgr := core.NewSessionManager()
+	for i := range charIDs {
+		charIDs[i] = ulid.Make()
+		sessionMgr.Connect(charIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify NO circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// All characters: engine allows access, but repo returns unexpected error.
+	dbErr := errors.New("database connection timeout")
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	for _, charID := range charIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterSubject(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil)
+		fixture.Mocks.CharacterRepo.EXPECT().
+			Get(mock.Anything, charID).
+			Return(nil, dbErr)
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// All 4 errors counted (circuit breaker did NOT trip).
+	assert.Contains(t, output, "(Note: 4 players could not be displayed due to system errors)")
+
+	// Circuit breaker warning should NOT have been logged.
+	logOutput := logBuf.String()
+	assert.NotContains(t, logOutput, "circuit breaker tripped")
+}
+
+func TestWhoHandler_SuccessResetsConsecutiveEngineErrorCounter(t *testing.T) {
+	// With 2 engine-error sessions and 3 successful sessions, the circuit breaker
+	// should never trip regardless of iteration order (max possible consecutive
+	// engine errors is 2, below the threshold of 3).
+	executor := testutil.RegularPlayer()
+	playerID := ulid.Make()
+
+	// Create sessions: 3 will succeed, 2 will fail with engine errors.
+	successIDs := make([]ulid.ULID, 3)
+	failIDs := make([]ulid.ULID, 2)
+	sessionMgr := core.NewSessionManager()
+	for i := range successIDs {
+		successIDs[i] = ulid.Make()
+		sessionMgr.Connect(successIDs[i], ulid.Make())
+	}
+	for i := range failIDs {
+		failIDs[i] = ulid.Make()
+		sessionMgr.Connect(failIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify NO circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+
+	// Successful characters.
+	for i, charID := range successIDs {
+		char := &world.Character{
+			ID:       charID,
+			PlayerID: playerID,
+			Name:     string(rune('A' + i)), // "A", "B", "C"
+		}
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterSubject(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil).
+			Maybe()
+		fixture.Mocks.CharacterRepo.EXPECT().
+			Get(mock.Anything, charID).
+			Return(char, nil).
+			Maybe()
+	}
+
+	// Failing characters (engine error).
+	for _, charID := range failIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterSubject(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Maybe()
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Circuit breaker should NOT have tripped — all sessions processed.
+	assert.NotContains(t, output, "circuit breaker")
+
+	// Should have at least some visible players (3 successes, though order varies).
+	// We can't assert exact count due to non-deterministic ordering, but we know
+	// all 5 sessions were processed (no circuit breaker).
+	logOutput := logBuf.String()
+	assert.NotContains(t, logOutput, "circuit breaker tripped",
+		"circuit breaker should not trip with only 2 possible consecutive engine errors")
+}

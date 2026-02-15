@@ -25,8 +25,8 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// Compile-time check: policy.Engine must satisfy world.AccessPolicyEngine.
-var _ world.AccessPolicyEngine = (*policy.Engine)(nil)
+// Compile-time check: policy.Engine must satisfy types.AccessPolicyEngine.
+var _ types.AccessPolicyEngine = (*policy.Engine)(nil)
 
 // mockTransactor is a test mock that records whether InTransaction was called
 // and executes the function directly (simulating a transaction).
