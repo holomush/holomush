@@ -13,18 +13,12 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
-
-// allowAllAccessControl is a test implementation that allows all access.
-type allowAllAccessControl struct{}
-
-func (a *allowAllAccessControl) Check(_ context.Context, _, _, _ string) bool {
-	return true
-}
 
 func testServices(worldService *world.Service) *command.Services {
 	return command.NewTestServices(command.ServicesConfig{
@@ -56,7 +50,7 @@ var _ = Describe("Building & Objects Commands", func() {
 			ExitRepo:      env.Exits,
 			ObjectRepo:    env.Objects,
 			CharacterRepo: env.Characters,
-			AccessControl: &allowAllAccessControl{},
+			Engine:        policytest.AllowAllEngine(),
 		})
 	})
 
@@ -64,15 +58,16 @@ var _ = Describe("Building & Objects Commands", func() {
 		Context("creating objects", func() {
 			It("creates object in current location", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        `object "Magic Sword"`,
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-				err := handlers.CreateHandler(ctx, exec)
+				err = handlers.CreateHandler(ctx, exec)
 				Expect(err).NotTo(HaveOccurred())
 
 				output := buf.String()
@@ -90,34 +85,34 @@ var _ = Describe("Building & Objects Commands", func() {
 
 			It("returns error for invalid syntax", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "object MissingSword",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
-
-				err := handlers.CreateHandler(ctx, exec)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
-				output := buf.String()
-				Expect(output).To(ContainSubstring("Usage:"))
+				err = handlers.CreateHandler(ctx, exec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid arguments"))
 			})
 		})
 
 		Context("creating locations", func() {
 			It("creates a new location", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        `location "Secret Chamber"`,
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-				err := handlers.CreateHandler(ctx, exec)
+				err = handlers.CreateHandler(ctx, exec)
 				Expect(err).NotTo(HaveOccurred())
 
 				output := buf.String()
@@ -127,19 +122,18 @@ var _ = Describe("Building & Objects Commands", func() {
 
 			It("returns error for unknown type", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        `widget "Something"`,
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
-
-				err := handlers.CreateHandler(ctx, exec)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
-				output := buf.String()
-				Expect(output).To(ContainSubstring("Unknown type"))
+				err = handlers.CreateHandler(ctx, exec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid arguments"))
 			})
 		})
 	})
@@ -148,15 +142,16 @@ var _ = Describe("Building & Objects Commands", func() {
 		Context("setting description with prefix matching", func() {
 			It("resolves 'desc' to 'description'", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "desc of here to A dark and mysterious place.",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-				err := handlers.SetHandler(ctx, exec)
+				err = handlers.SetHandler(ctx, exec)
 				Expect(err).NotTo(HaveOccurred())
 
 				output := buf.String()
@@ -170,15 +165,16 @@ var _ = Describe("Building & Objects Commands", func() {
 
 			It("resolves 'n' to 'name'", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "n of here to Renamed Room",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-				err := handlers.SetHandler(ctx, exec)
+				err = handlers.SetHandler(ctx, exec)
 				Expect(err).NotTo(HaveOccurred())
 
 				output := buf.String()
@@ -201,15 +197,16 @@ var _ = Describe("Building & Objects Commands", func() {
 
 			It("sets description on object by ID reference", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "description of #" + obj.ID.String() + " to A shiny magical item.",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
+				})
+				Expect(err).NotTo(HaveOccurred())
 
-				err := handlers.SetHandler(ctx, exec)
+				err = handlers.SetHandler(ctx, exec)
 				Expect(err).NotTo(HaveOccurred())
 
 				output := buf.String()
@@ -227,55 +224,50 @@ var _ = Describe("Building & Objects Commands", func() {
 				// The default registry only has "name" and "description", so "xyz"
 				// won't match any known property
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "xyz of here to value",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
-
-				err := handlers.SetHandler(ctx, exec)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
-				output := buf.String()
-				Expect(output).To(ContainSubstring("property not found"))
+				err = handlers.SetHandler(ctx, exec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("property not found"))
 			})
 
 			It("returns error for invalid target", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "description of nonexistent to value",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
-
-				err := handlers.SetHandler(ctx, exec)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
-				output := buf.String()
-				Expect(output).To(ContainSubstring("Error:"))
-				Expect(output).To(ContainSubstring("target not found"))
+				err = handlers.SetHandler(ctx, exec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("target not found"))
 			})
 
 			It("returns error for invalid ID reference", func() {
 				var buf bytes.Buffer
-				exec := &command.CommandExecution{
+				exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 					CharacterID: charID,
 					LocationID:  startRoom.ID,
 					Args:        "description of #invalid-id to value",
 					Output:      &buf,
 					Services:    testServices(worldService),
-				}
-
-				err := handlers.SetHandler(ctx, exec)
+				})
 				Expect(err).NotTo(HaveOccurred())
 
-				output := buf.String()
-				Expect(output).To(ContainSubstring("Error:"))
-				Expect(output).To(ContainSubstring("invalid ID"))
+				err = handlers.SetHandler(ctx, exec)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid target ID format"))
 			})
 		})
 	})

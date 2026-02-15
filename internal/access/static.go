@@ -103,7 +103,11 @@ func (s *StaticAccessControl) Check(ctx context.Context, subject, action, resour
 	switch prefix {
 	case "plugin":
 		return s.checkPlugin(id, action, resource)
-	case "char", "session":
+	case "char", "character", "session":
+		// Migration note: During the Phase 7.6 migration to AccessPolicyEngine, both
+		// "char:" and "character:" subject prefixes are accepted. New code MUST use
+		// the SubjectCharacter constant ("character:"). The legacy "char:" prefix will
+		// be removed in a future phase.
 		return s.checkRole(ctx, subject, action, resource)
 	default:
 		return false

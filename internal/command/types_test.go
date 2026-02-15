@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -64,7 +65,7 @@ func TestServices_HasAllDependencies(t *testing.T) {
 
 	assert.Nil(t, svc.World(), "World service should be nil when not set")
 	assert.Nil(t, svc.Session(), "Session service should be nil when not set")
-	assert.Nil(t, svc.Access(), "Access service should be nil when not set")
+	assert.Nil(t, svc.Engine(), "Engine service should be nil when not set")
 	assert.Nil(t, svc.Events(), "Events service should be nil when not set")
 }
 
@@ -72,7 +73,7 @@ func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:       nil,
 		Session:     &mockSessionService{},
-		Access:      &mockAccessControl{},
+		Engine:      &mockEngine{},
 		Events:      &mockEventStore{},
 		Broadcaster: &core.Broadcaster{},
 	})
@@ -84,7 +85,7 @@ func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:       &world.Service{},
 		Session:     nil,
-		Access:      &mockAccessControl{},
+		Engine:      &mockEngine{},
 		Events:      &mockEventStore{},
 		Broadcaster: &core.Broadcaster{},
 	})
@@ -92,23 +93,23 @@ func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Session")
 }
 
-func TestNewServices_NilAccess_ReturnsError(t *testing.T) {
+func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:       &world.Service{},
 		Session:     &mockSessionService{},
-		Access:      nil,
+		Engine:      nil,
 		Events:      &mockEventStore{},
 		Broadcaster: &core.Broadcaster{},
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Access")
+	assert.Contains(t, err.Error(), "Engine")
 }
 
 func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:       &world.Service{},
 		Session:     &mockSessionService{},
-		Access:      &mockAccessControl{},
+		Engine:      &mockEngine{},
 		Events:      nil,
 		Broadcaster: &core.Broadcaster{},
 	})
@@ -120,7 +121,7 @@ func TestNewServices_NilBroadcaster_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:       &world.Service{},
 		Session:     &mockSessionService{},
-		Access:      &mockAccessControl{},
+		Engine:      &mockEngine{},
 		Events:      &mockEventStore{},
 		Broadcaster: nil,
 	})
@@ -131,21 +132,21 @@ func TestNewServices_NilBroadcaster_ReturnsError(t *testing.T) {
 func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
 	worldSvc := &world.Service{}
 	sessionSvc := &mockSessionService{}
-	accessCtrl := &mockAccessControl{}
+	engine := &mockEngine{}
 	eventStore := &mockEventStore{}
 	broadcaster := &core.Broadcaster{}
 
 	svc, err := NewServices(ServicesConfig{
 		World:       worldSvc,
 		Session:     sessionSvc,
-		Access:      accessCtrl,
+		Engine:      engine,
 		Events:      eventStore,
 		Broadcaster: broadcaster,
 	})
 	require.NoError(t, err)
 	assert.Same(t, worldSvc, svc.World())
 	assert.Same(t, sessionSvc, svc.Session())
-	assert.Same(t, accessCtrl, svc.Access())
+	assert.Same(t, engine, svc.Engine())
 	assert.Same(t, eventStore, svc.Events())
 	assert.Same(t, broadcaster, svc.Broadcaster())
 }
@@ -156,7 +157,7 @@ func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:       nil,
 		Session:     nil,
-		Access:      nil,
+		Engine:      nil,
 		Events:      nil,
 		Broadcaster: nil,
 	})
@@ -171,9 +172,11 @@ func (m *mockSessionService) ListActiveSessions() []*core.Session  { return nil 
 func (m *mockSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
 func (m *mockSessionService) EndSession(_ ulid.ULID) error         { return nil }
 
-type mockAccessControl struct{}
+type mockEngine struct{}
 
-func (m *mockAccessControl) Check(_ context.Context, _, _, _ string) bool { return false }
+func (m *mockEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
+	return types.Decision{}, nil
+}
 
 type mockEventStore struct{}
 

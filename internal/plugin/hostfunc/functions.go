@@ -44,7 +44,7 @@ type Functions struct {
 	enforcer         CapabilityChecker
 	worldMutator     WorldMutator
 	commandRegistry  CommandRegistry
-	access           AccessControl
+	engine           AccessPolicyEngine
 	propertyRegistry *property.Registry
 }
 

@@ -1,32 +1,40 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
 package command
 
 import (
 	"context"
+	"log/slog"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
 )
 
 // RateLimitMiddleware enforces per-session rate limiting.
 type RateLimitMiddleware struct {
 	limiter *RateLimiter
-	access  access.AccessControl
+	engine  policy.AccessPolicyEngine
 }
 
 // NewRateLimitMiddleware creates a rate limiting middleware.
-func NewRateLimitMiddleware(limiter *RateLimiter, accessControl access.AccessControl) *RateLimitMiddleware {
+// Returns an error if the rate limiter or engine is nil.
+func NewRateLimitMiddleware(limiter *RateLimiter, engine policy.AccessPolicyEngine) (*RateLimitMiddleware, error) {
 	if limiter == nil {
-		return nil
+		return nil, ErrNilRateLimiter
+	}
+	if engine == nil {
+		return nil, ErrNilEngine
 	}
 	return &RateLimitMiddleware{
 		limiter: limiter,
-		access:  accessControl,
-	}
+		engine:  engine,
+	}, nil
 }
 
 // Enforce checks and enforces rate limits for the provided execution context.
@@ -35,9 +43,8 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 		return nil
 	}
 
-	subject := "char:" + exec.CharacterID().String()
-	hasBypass := r.access.Check(ctx, subject, "execute", CapabilityRateLimitBypass)
-	if hasBypass {
+	subject := access.CharacterSubject(exec.CharacterID().String())
+	if r.hasBypass(ctx, subject, commandName) {
 		return nil
 	}
 
@@ -50,4 +57,27 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 	span.SetAttributes(attribute.Int64("command.cooldown_ms", cooldownMs))
 	observability.RecordCommandRateLimited(commandName)
 	return ErrRateLimited(cooldownMs)
+}
+
+// hasBypass evaluates whether the subject has rate limit bypass capability.
+// Returns true if the bypass check succeeds and permission is granted.
+// On evaluation error, returns false (fail-closed: apply rate limiting).
+func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject, commandName string) bool {
+	decision, err := r.engine.Evaluate(ctx, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: CapabilityRateLimitBypass,
+	})
+	if err != nil {
+		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
+		slog.ErrorContext(ctx, "rate limit bypass check failed",
+			"subject", subject,
+			"action", "execute",
+			"resource", CapabilityRateLimitBypass,
+			"command", commandName,
+			"error", err,
+		)
+		return false
+	}
+	return decision.IsAllowed()
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -38,7 +40,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Find the target session by character name
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 	targetCharID, targetCharName, err := findCharacterByName(ctx, exec, subjectID, targetName)
 	if err != nil {
 		return err
@@ -49,10 +51,32 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		allowed := exec.Services().Access().Check(ctx, subjectID, "execute", "admin.boot")
-		if !allowed {
-			//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
-			return command.ErrPermissionDenied("boot", "admin.boot")
+		decision, evalErr := exec.Services().Engine().Evaluate(ctx, types.AccessRequest{
+			Subject:  subjectID,
+			Action:   "execute",
+			Resource: "admin.boot",
+		})
+		if evalErr != nil {
+			slog.ErrorContext(ctx, "boot access evaluation failed",
+				"subject", subjectID,
+				"action", "execute",
+				"resource", "admin.boot",
+				"error", evalErr,
+			)
+			err := oops.Code(command.CodeAccessEvaluationFailed).
+				With("command", "boot").
+				With("capability", "admin.boot").
+				Wrap(evalErr)
+			return err
+		}
+		if !decision.IsAllowed() {
+			err := oops.Code(command.CodePermissionDenied).
+				With("command", "boot").
+				With("capability", "admin.boot").
+				With("reason", decision.Reason).
+				With("policy_id", decision.PolicyID).
+				Errorf("permission denied for command boot")
+			return err
 		}
 	}
 
@@ -120,12 +144,21 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
+			// - permission denied and not found are expected, don't log or count
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
+			// Access evaluation failures are already logged by checkAccess helper.
+			// Count them (but don't re-log) so system errors are surfaced.
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				errorCount++
+				continue
+			}
 			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
+			// Unexpected errors fall through here intentionally —
+			// database failures or timeouts should be visible to admins via error reporting.
 			errorCount++
-			slog.Error("unexpected error looking up character",
+			slog.ErrorContext(ctx, "unexpected error looking up character",
 				"target_name", targetName,
 				"session_char_id", session.CharacterID.String(),
 				"error", err,
@@ -145,7 +178,7 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 	// and we need WORLD_ERROR code for PlayerMessage to return our custom message.
 	if errorCount > 0 {
 		//nolint:wrapcheck // WorldError creates a structured oops error
-		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to system error. Try again.", nil)
+		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a temporary system error. Please try again shortly.", nil)
 	}
 
 	//nolint:wrapcheck // ErrTargetNotFound creates a structured oops error

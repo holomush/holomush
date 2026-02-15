@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/stretchr/testify/assert"
@@ -130,9 +131,9 @@ func TestSeedSmoke_PlayerSelfAccess(t *testing.T) {
 
 	// Character reading itself → permit (seed:player-self-access)
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
-		Resource: "character:" + charID,
+		Resource: access.CharacterSubject(charID),
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "player should read own character; got: %s — %s", decision.Effect, decision.Reason)
@@ -440,7 +441,7 @@ func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
 	})
 
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
 		Resource: "property:01PROP01",
 	})
@@ -487,7 +488,7 @@ func TestSeedSmoke_PropertyRestrictedForbid(t *testing.T) {
 
 	// Character is in both visible_to and excluded_from — forbid overrides permit
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
 		Resource: "property:01PROP01",
 	})
@@ -509,7 +510,7 @@ func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
 	})
 
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "write",
 		Resource: "property:01PROP01",
 	})

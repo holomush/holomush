@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
@@ -24,15 +25,15 @@ import (
 func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 	executor := testutil.AdminPlayer()
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 	// Subscribe to system stream to capture broadcast
 	ch := broadcaster.Subscribe("system")
 
 	services := testutil.NewServicesBuilder().
-		WithAccess(accessControl).
+		WithEngine(accessControl).
 		WithBroadcaster(broadcaster).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -64,14 +65,14 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 	executor := testutil.AdminPlayer()
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 	ch := broadcaster.Subscribe("system")
 
 	services := testutil.NewServicesBuilder().
-		WithAccess(accessControl).
+		WithEngine(accessControl).
 		WithBroadcaster(broadcaster).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -117,11 +118,11 @@ func TestShutdownHandler_InvalidDelay(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			executor := testutil.AdminPlayer()
-			accessControl := accesstest.NewMockAccessControl()
-			accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
+			accessControl := policytest.NewGrantEngine()
+			accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 			services := testutil.NewServicesBuilder().
-				WithAccess(accessControl).
+				WithEngine(accessControl).
 				Build()
 			exec, _ := testutil.NewExecutionBuilder().
 				WithCharacter(executor).
@@ -147,13 +148,13 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 
 	executor := testutil.AdminPlayer()
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 
 	services := testutil.NewServicesBuilder().
-		WithAccess(accessControl).
+		WithEngine(accessControl).
 		WithBroadcaster(broadcaster).
 		Build()
 	exec, _ := testutil.NewExecutionBuilder().
@@ -171,8 +172,8 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 	executor := testutil.AdminPlayer()
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	broadcaster := core.NewBroadcaster()
 
@@ -181,7 +182,7 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 	systemCh := broadcaster.Subscribe("system")
 
 	services := testutil.NewServicesBuilder().
-		WithAccess(accessControl).
+		WithEngine(accessControl).
 		WithBroadcaster(broadcaster).
 		Build()
 	exec, _ := testutil.NewExecutionBuilder().
@@ -208,11 +209,11 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 	executor := testutil.AdminPlayer()
 
-	accessControl := accesstest.NewMockAccessControl()
-	accessControl.Grant("char:"+executor.CharacterID.String(), "execute", "admin.shutdown")
+	accessControl := policytest.NewGrantEngine()
+	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
 	services := testutil.NewServicesBuilder().
-		WithAccess(accessControl).
+		WithEngine(accessControl).
 		WithBroadcaster(nil).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().

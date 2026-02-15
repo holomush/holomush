@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -51,11 +53,11 @@ func TestCreateHandler_Object(t *testing.T) {
 	locationID := ulid.Make()
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "object:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(obj *world.Object) bool {
 			return obj.Name == "Iron Sword" && obj.LocationID() != nil && *obj.LocationID() == locationID
@@ -63,8 +65,8 @@ func TestCreateHandler_Object(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -89,11 +91,11 @@ func TestCreateHandler_Location(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Name == "Secret Room" && loc.Type == world.LocationTypePersistent
@@ -101,8 +103,8 @@ func TestCreateHandler_Location(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -126,10 +128,10 @@ func TestCreateHandler_InvalidType(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -168,10 +170,10 @@ func TestCreateHandler_InvalidSyntax(t *testing.T) {
 			characterID := ulid.Make()
 			locationID := ulid.Make()
 
-			accessControl := worldtest.NewMockAccessControl(t)
+			accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 			worldService := world.NewService(world.ServiceConfig{
-				AccessControl: accessControl,
+				Engine: accessControl,
 			})
 
 			var buf bytes.Buffer
@@ -201,12 +203,12 @@ func TestSetHandler_Description(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -217,8 +219,8 @@ func TestSetHandler_Description(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Description == "A cozy room."
@@ -226,8 +228,8 @@ func TestSetHandler_Description(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -251,12 +253,12 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -267,15 +269,15 @@ func TestSetHandler_PrefixMatch(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -300,11 +302,11 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -314,8 +316,8 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 		}, nil)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Description == "custom:hello"
@@ -323,8 +325,8 @@ func TestSetHandler_UsesInjectedPropertyRegistry(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	registry := property.NewRegistry()
@@ -353,10 +355,10 @@ func TestSetHandler_PropertyNotFound(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -383,10 +385,10 @@ func TestSetHandler_InvalidTarget(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -419,10 +421,10 @@ func TestSetHandler_InvalidIDFormat(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -467,10 +469,10 @@ func TestSetHandler_InvalidSyntax(t *testing.T) {
 			characterID := ulid.Make()
 			locationID := ulid.Make()
 
-			accessControl := worldtest.NewMockAccessControl(t)
+			accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 			worldService := world.NewService(world.ServiceConfig{
-				AccessControl: accessControl,
+				Engine: accessControl,
 			})
 
 			var buf bytes.Buffer
@@ -500,12 +502,12 @@ func TestSetHandler_SetName(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -516,8 +518,8 @@ func TestSetHandler_SetName(t *testing.T) {
 
 	// For UpdateLocation
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(loc *world.Location) bool {
 			return loc.Name == "New Room Name"
@@ -525,8 +527,8 @@ func TestSetHandler_SetName(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -555,20 +557,20 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 	require.NoError(t, err)
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetObject
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
 		Return(obj, nil)
 
 	// For UpdateObject
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Update(mock.Anything, mock.MatchedBy(func(obj *world.Object) bool {
 			return obj.Description == "A shiny object."
@@ -576,8 +578,8 @@ func TestSetHandler_DirectIDReference(t *testing.T) {
 		Return(nil)
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -601,18 +603,18 @@ func TestCreateHandler_ObjectServiceError(t *testing.T) {
 	locationID := ulid.Make()
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "object:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(errors.New("database unavailable"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -638,18 +640,18 @@ func TestCreateHandler_LocationServiceError(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:*").
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:*"}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(errors.New("creation failed: constraint violation"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -675,12 +677,12 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation - succeeds
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(&world.Location{
@@ -691,15 +693,15 @@ func TestSetHandler_UpdateLocationFailure(t *testing.T) {
 
 	// For UpdateLocation - fails (e.g., optimistic locking conflict)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(errors.New("optimistic locking conflict"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -745,27 +747,27 @@ func TestSetHandler_UpdateObjectFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetObject - succeeds
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
 		Return(obj, nil)
 
 	// For UpdateObject - fails (e.g., access control change)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "write", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(errors.New("access denied: permission revoked"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -806,19 +808,19 @@ func TestSetHandler_GetLocationFailure(t *testing.T) {
 	locationID := ulid.Make()
 
 	locationRepo := worldtest.NewMockLocationRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetLocation - fails (e.g., location not found in database)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "location:"+locationID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	locationRepo.EXPECT().
 		Get(mock.Anything, locationID).
 		Return(nil, errors.New("location not found in database"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  locationRepo,
-		AccessControl: accessControl,
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -856,19 +858,19 @@ func TestSetHandler_GetObjectFailure(t *testing.T) {
 	objectID := ulid.Make()
 
 	objectRepo := worldtest.NewMockObjectRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// For GetObject - fails (e.g., object not found in database)
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+characterID.String(), "read", "object:"+objectID.String()).
-		Return(true)
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	objectRepo.EXPECT().
 		Get(mock.Anything, objectID).
 		Return(nil, errors.New("object not found in database"))
 
 	worldService := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objectRepo,
-		AccessControl: accessControl,
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -908,10 +910,10 @@ func TestSetHandler_UnsupportedEntityType(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	var buf bytes.Buffer
@@ -948,10 +950,10 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 	characterID := ulid.Make()
 	locationID := ulid.Make()
 
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	worldService := world.NewService(world.ServiceConfig{
-		AccessControl: accessControl,
+		Engine: accessControl,
 	})
 
 	// Create a name that exceeds MaxNameLength (100 chars)
@@ -983,4 +985,282 @@ func TestCreateHandler_Object_InvalidName(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "Failed to create object.")
 	assert.NotContains(t, output, "exceeds maximum length") // internal error not exposed
+}
+
+func TestCreateHandler_Object_AccessEvaluationFailed(t *testing.T) {
+	// Tests that CreateHandler preserves access evaluation failure error codes
+	// instead of masking them as generic WORLD_ERROR
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	objectRepo := worldtest.NewMockObjectRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// Simulate policy engine failure (not a denial, but an error)
+	engineErr := errors.New("policy store unavailable")
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "object:*"}).
+		Return(types.Decision{}, engineErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        `object "Iron Sword"`,
+		Output:      &buf,
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
+	})
+
+	err := CreateHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Should preserve world.ErrAccessEvaluationFailed sentinel
+	assert.True(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+		"should preserve ErrAccessEvaluationFailed from world service")
+
+	// Verify specific error code from world service
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, "OBJECT_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+		"should preserve specific access evaluation error code, not mask as WORLD_ERROR")
+}
+
+func TestCreateHandler_Location_AccessEvaluationFailed(t *testing.T) {
+	// Tests that CreateHandler preserves access evaluation failure error codes for locations
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// Simulate policy engine failure
+	engineErr := errors.New("policy store unavailable")
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:*"}).
+		Return(types.Decision{}, engineErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        `location "Secret Room"`,
+		Output:      &buf,
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
+	})
+
+	err := CreateHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Should preserve world.ErrAccessEvaluationFailed sentinel
+	assert.True(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+		"should preserve ErrAccessEvaluationFailed from world service")
+
+	// Verify specific error code from world service
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, "LOCATION_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+		"should preserve specific access evaluation error code, not mask as WORLD_ERROR")
+}
+
+func TestSetHandler_GetLocation_AccessEvaluationFailed(t *testing.T) {
+	// Tests that SetHandler preserves access evaluation failures from GetLocation
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// Simulate policy engine failure on GetLocation
+	engineErr := errors.New("policy store unavailable")
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.Decision{}, engineErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of here to A cozy room.",
+		Output:      &buf,
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
+	})
+
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Should preserve world.ErrAccessEvaluationFailed sentinel
+	assert.True(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+		"should preserve ErrAccessEvaluationFailed from world service")
+
+	// Verify specific error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, "LOCATION_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+		"should preserve specific access evaluation error code, not mask as WORLD_ERROR")
+}
+
+func TestSetHandler_GetObject_AccessEvaluationFailed(t *testing.T) {
+	// Tests that SetHandler preserves access evaluation failures from GetObject
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+	objectID := ulid.Make()
+
+	objectRepo := worldtest.NewMockObjectRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// Simulate policy engine failure on GetObject
+	engineErr := errors.New("policy store unavailable")
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.Decision{}, engineErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of #" + objectID.String() + " to A shiny object.",
+		Output:      &buf,
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
+	})
+
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Should preserve world.ErrAccessEvaluationFailed sentinel
+	assert.True(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+		"should preserve ErrAccessEvaluationFailed from world service")
+
+	// Verify specific error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, "OBJECT_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+		"should preserve specific access evaluation error code, not mask as WORLD_ERROR")
+}
+
+func TestSetHandler_UpdateLocation_AccessEvaluationFailed(t *testing.T) {
+	// Tests that SetHandler preserves access evaluation failures from UpdateLocation
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+
+	locationRepo := worldtest.NewMockLocationRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// GetLocation succeeds
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "location:" + locationID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
+	locationRepo.EXPECT().
+		Get(mock.Anything, locationID).
+		Return(&world.Location{
+			ID:   locationID,
+			Name: "Test Room",
+			Type: world.LocationTypePersistent,
+		}, nil)
+
+	// UpdateLocation fails with policy engine error
+	engineErr := errors.New("policy store unavailable")
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "location:" + locationID.String()}).
+		Return(types.Decision{}, engineErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo: locationRepo,
+		Engine:       accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of here to A cozy room.",
+		Output:      &buf,
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
+	})
+
+	err := SetHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Should preserve world.ErrAccessEvaluationFailed sentinel
+	assert.True(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+		"should preserve ErrAccessEvaluationFailed from world service")
+
+	// Verify specific error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, "LOCATION_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+		"should preserve specific access evaluation error code, not mask as WORLD_ERROR")
+}
+
+func TestSetHandler_UpdateObject_AccessEvaluationFailed(t *testing.T) {
+	// Tests that SetHandler preserves access evaluation failures from UpdateObject
+	characterID := ulid.Make()
+	locationID := ulid.Make()
+	objectID := ulid.Make()
+
+	obj, err := world.NewObjectWithID(objectID, "Test Object", world.InLocation(locationID))
+	require.NoError(t, err)
+
+	objectRepo := worldtest.NewMockObjectRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// GetObject succeeds
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "read", Resource: "object:" + objectID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
+	objectRepo.EXPECT().
+		Get(mock.Anything, objectID).
+		Return(obj, nil)
+
+	// UpdateObject fails with policy engine error
+	engineErr := errors.New("policy store unavailable")
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(characterID.String()), Action: "write", Resource: "object:" + objectID.String()}).
+		Return(types.Decision{}, engineErr)
+
+	worldService := world.NewService(world.ServiceConfig{
+		ObjectRepo: objectRepo,
+		Engine:     accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID: characterID,
+		LocationID:  locationID,
+		Args:        "description of #" + objectID.String() + " to A shiny object.",
+		Output:      &buf,
+		Services:    command.NewTestServices(command.ServicesConfig{World: worldService}),
+	})
+
+	err = SetHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Should preserve world.ErrAccessEvaluationFailed sentinel
+	assert.True(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+		"should preserve ErrAccessEvaluationFailed from world service")
+
+	// Verify specific error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "error should be oops error")
+	assert.Equal(t, "OBJECT_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+		"should preserve specific access evaluation error code, not mask as WORLD_ERROR")
 }

@@ -160,3 +160,34 @@ func TestSessionErrorCodeConstants(t *testing.T) {
 	assert.Equal(t, "infra:session-invalid", access.ErrCodeSessionInvalid)
 	assert.Equal(t, "infra:session-store-error", access.ErrCodeSessionStoreError)
 }
+
+func TestCharacterSubject(t *testing.T) {
+	tests := []struct {
+		name     string
+		charID   string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			charID:   "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "character:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "simple ID",
+			charID:   "test-id",
+			expected: "character:test-id",
+		},
+		{
+			name:     "empty ID",
+			charID:   "",
+			expected: "character:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.CharacterSubject(tt.charID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

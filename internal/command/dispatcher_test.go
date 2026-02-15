@@ -15,12 +15,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/holomush/holomush/internal/access/accesstest"
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // stubServices creates a minimal non-nil Services for tests that don't
@@ -30,7 +34,7 @@ func stubServices() *Services {
 	svc, _ := NewServices(ServicesConfig{
 		World:       &world.Service{},
 		Session:     &stubSessionService{},
-		Access:      &stubAccessControl{},
+		Engine:      policytest.AllowAllEngine(),
 		Events:      &stubEventStore{},
 		Broadcaster: &core.Broadcaster{},
 	})
@@ -43,10 +47,6 @@ type stubSessionService struct{}
 func (s *stubSessionService) ListActiveSessions() []*core.Session  { return nil }
 func (s *stubSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
 func (s *stubSessionService) EndSession(_ ulid.ULID) error         { return nil }
-
-type stubAccessControl struct{}
-
-func (s *stubAccessControl) Check(_ context.Context, _, _, _ string) bool { return false }
 
 type stubEventStore struct{}
 
@@ -65,7 +65,7 @@ func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 
 func TestDispatcher_Dispatch(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register a test command
 	var capturedArgs string
@@ -83,7 +83,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 
 	// Grant capability
 	charID := ulid.Make()
-	mockAccess.Grant("char:"+charID.String(), "execute", "test.echo")
+	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "test.echo")
 
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 
 func TestDispatcher_UnknownCommand(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
@@ -126,7 +126,7 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 
 func TestDispatcher_PermissionDenied(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
@@ -157,9 +157,93 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
 }
 
+func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
+	reg := NewRegistry()
+	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
+	denyEngine := policytest.DenyAllEngine()
+
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, denyEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	err = dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, err)
+	assert.Contains(t, PlayerMessage(err), "permission")
+
+	// Verify COMMAND_ACCESS_DENIED error code
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code(),
+		"explicit policy deny should return COMMAND_ACCESS_DENIED")
+}
+
+func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
+	reg := NewRegistry()
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, errorEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Get baseline for engine_failure metric
+	engineFailureBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
+	}))
+
+	err = dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, err)
+
+	// Verify error code using errutil helper
+	errutil.AssertErrorCode(t, err, CodeAccessEvaluationFailed)
+
+	// Verify error context
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "admin", oopsErr.Context()["command"])
+	assert.Equal(t, "admin.manage", oopsErr.Context()["capability"])
+
+	// Verify wrapped error
+	assert.ErrorIs(t, err, engineErr)
+
+	// Verify metric
+	engineFailureAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
+	}))
+	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should have engine_failure status")
+}
+
 func TestDispatcher_EmptyInput(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
@@ -181,7 +265,7 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 
 func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register command requiring multiple capabilities
 	err := reg.Register(CommandEntry{
@@ -193,7 +277,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	subject := "char:" + charID.String()
+	subject := access.CharacterSubject(charID.String())
 
 	// Only grant one capability
 	mockAccess.Grant(subject, "execute", "admin.manage")
@@ -225,7 +309,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 
 func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register command with no capabilities required
 	executed := false
@@ -258,7 +342,7 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 
 func TestDispatcher_HandlerError(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	handlerErr := errors.New("handler failed")
 	err := reg.Register(CommandEntry{
@@ -289,7 +373,7 @@ func TestDispatcher_HandlerError(t *testing.T) {
 
 func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	handlerErr := errors.New("handler failed")
 	err := reg.Register(CommandEntry{
@@ -333,7 +417,7 @@ func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 
 func TestDispatcher_WhitespaceInput(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
@@ -355,7 +439,7 @@ func TestDispatcher_WhitespaceInput(t *testing.T) {
 
 func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -386,7 +470,7 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 
 func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -416,24 +500,24 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 }
 
 func TestNewDispatcher_NilRegistry(t *testing.T) {
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 	dispatcher, err := NewDispatcher(nil, mockAccess)
 	require.Error(t, err)
 	assert.Nil(t, dispatcher)
 	assert.Equal(t, ErrNilRegistry, err)
 }
 
-func TestNewDispatcher_NilAccessControl(t *testing.T) {
+func TestNewDispatcher_NilEngine(t *testing.T) {
 	reg := NewRegistry()
 	dispatcher, err := NewDispatcher(reg, nil)
 	require.Error(t, err)
 	assert.Nil(t, dispatcher)
-	assert.Equal(t, ErrNilAccessControl, err)
+	assert.Equal(t, ErrNilEngine, err)
 }
 
 func TestNewDispatcher_WithAliasCache(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Without option - no alias cache
 	dispatcher, err := NewDispatcher(reg, mockAccess)
@@ -455,7 +539,7 @@ func TestNewDispatcher_WithAliasCache(t *testing.T) {
 func TestDispatcher_WithoutAliasCache(t *testing.T) {
 	// Ensure dispatcher works exactly as before when no alias cache is set
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -488,7 +572,7 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -527,7 +611,7 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -566,7 +650,7 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -606,7 +690,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -650,7 +734,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 
 func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var capturedArgs string
 	err := reg.Register(CommandEntry{
@@ -688,7 +772,7 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 
 func TestDispatcher_NoCharacter(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "test",
@@ -721,7 +805,7 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Channel to signal handler received cancellation
 	handlerStarted := make(chan struct{})
@@ -783,7 +867,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	var receivedCtx context.Context
 	err := reg.Register(CommandEntry{
@@ -828,7 +912,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 
 func TestDispatcher_NilServices(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register a command that accesses Services.World (would panic if nil)
 	err := reg.Register(CommandEntry{
@@ -867,7 +951,7 @@ func TestDispatcher_NilServices(t *testing.T) {
 func TestDispatcher_WithRateLimiter(t *testing.T) {
 	t.Run("rate limiting disabled when no limiter configured", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		var executed int
 		err := reg.Register(CommandEntry{
@@ -901,7 +985,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("rate limiting blocks commands when burst exceeded", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		err := reg.Register(CommandEntry{
 			Name:         "test",
@@ -956,7 +1040,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("different sessions have independent rate limits", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		err := reg.Register(CommandEntry{
 			Name:         "test",
@@ -1008,7 +1092,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("bypass capability exempts from rate limiting", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		var executed int
 		err := reg.Register(CommandEntry{
@@ -1036,7 +1120,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		sessionID := ulid.Make()
 
 		// Grant bypass capability
-		mockAccess.Grant("char:"+charID.String(), "execute", CapabilityRateLimitBypass)
+		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", CapabilityRateLimitBypass)
 
 		// Should be able to execute many commands despite rate limit
 		for i := 0; i < 10; i++ {
@@ -1054,7 +1138,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 	t.Run("rate limiting happens after alias resolution", func(t *testing.T) {
 		reg := NewRegistry()
-		mockAccess := accesstest.NewMockAccessControl()
+		mockAccess := policytest.NewGrantEngine()
 
 		var capturedArgs string
 		err := reg.Register(CommandEntry{
@@ -1109,7 +1193,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 
 func TestDispatcher_InvokedAs(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register a test command that captures InvokedAs
 	var capturedInvokedAs string
@@ -1126,7 +1210,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 
 	charID := ulid.Make()
 	playerID := ulid.Make()
-	mockAccess.Grant("char:"+charID.String(), "execute", "comms.pose")
+	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.pose")
 
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
@@ -1170,7 +1254,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 
 func TestDispatcher_MetricsIntegration(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register test commands
 	err := reg.Register(CommandEntry{
@@ -1289,7 +1373,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 func TestDispatcher_AliasMetrics(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "look",
@@ -1328,9 +1412,28 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 	assert.Equal(t, before+1, after, "should have 1 expansion for 'la' alias")
 }
 
+func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
+	reg := NewRegistry()
+	rl := NewRateLimiter(RateLimiterConfig{
+		BurstCapacity: 5,
+		SustainedRate: 1.0,
+	})
+	defer rl.Close()
+
+	// Try to create dispatcher with nil engine but WithRateLimiter option
+	// This should fail because NewRateLimitMiddleware requires a non-nil engine
+	dispatcher, err := NewDispatcher(reg, nil, WithRateLimiter(rl))
+	assert.Error(t, err)
+	assert.Nil(t, dispatcher)
+	assert.Equal(t, ErrNilEngine, err, "should fail on nil engine validation before applying options")
+
+	// Now test the case where engine is set but the rate limiter middleware creation fails
+	// We can't easily test this without a mock, but the error path is covered by the optErr field
+}
+
 func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	reg := NewRegistry()
-	mockAccess := accesstest.NewMockAccessControl()
+	mockAccess := policytest.NewGrantEngine()
 
 	err := reg.Register(CommandEntry{
 		Name:         "ratelimit_test",
@@ -1388,4 +1491,270 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 
 	assert.Equal(t, successBefore+1, successAfter, "should have success status")
 	assert.Equal(t, rateLimitedBefore+1, rateLimitedAfter, "should have rate_limited status")
+}
+
+func TestDispatcher_VerifiesAccessRequest(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	charID := ulid.Make()
+	subject := access.CharacterSubject(charID.String())
+
+	// Register command with capability
+	err := reg.Register(CommandEntry{
+		Name:         "test_cmd",
+		capabilities: []string{"test.capability"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "test",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	// Execute command
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &bytes.Buffer{},
+		Services:    stubServices(),
+	})
+	err = dispatcher.Dispatch(context.Background(), "test_cmd", exec)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subject, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "execute", capturedRequest.Action, "action should be 'execute'")
+	assert.Equal(t, "test.capability", capturedRequest.Resource, "resource should be the capability")
+}
+
+func TestDispatcher_PolicyDenial_ReturnsPermissionDeniedMetric(t *testing.T) {
+	reg := NewRegistry()
+	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
+	denyEngine := policytest.DenyAllEngine()
+
+	err := reg.Register(CommandEntry{
+		Name:         "protected",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, denyEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Get baseline for permission_denied metric
+	permDeniedBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "protected", "source": "core", "status": StatusPermissionDenied,
+	}))
+
+	err = dispatcher.Dispatch(context.Background(), "protected", exec)
+	require.Error(t, err)
+
+	// Verify error code is still PERMISSION_DENIED (not ACCESS_EVALUATION_FAILED)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+
+	// Verify metric shows permission_denied (not engine_failure)
+	permDeniedAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "protected", "source": "core", "status": StatusPermissionDenied,
+	}))
+	assert.Equal(t, permDeniedBefore+1, permDeniedAfter, "should have permission_denied status for policy denial")
+}
+
+func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Register command with capability
+	err := reg.Register(CommandEntry{
+		Name:         "protected",
+		capabilities: []string{"admin.manage"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	subject := access.CharacterSubject(charID.String())
+	evalErr := errors.New("policy store unavailable")
+
+	// Mock engine to return error for the capability evaluation
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.Decision{}, evalErr)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(oldLogger)
+
+	// Execute command
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	dispatchErr := dispatcher.Dispatch(context.Background(), "protected", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify log output contains error and context
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subject, "log should contain subject")
+	assert.Contains(t, logOutput, "execute", "log should contain action")
+	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
+}
+
+func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Register command with capability
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	subject := access.CharacterSubject(charID.String())
+	testReason := "admin_role_required"
+	testPolicyID := "policy-admin-001"
+
+	// Mock engine to return explicit denial with reason and policy ID
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.NewDecision(types.EffectDeny, testReason, testPolicyID), nil)
+
+	// Execute command
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	dispatchErr := dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify error code is PERMISSION_DENIED
+	oopsErr, ok := oops.AsOops(dispatchErr)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+
+	// Verify decision context (reason and policy_id) is propagated
+	context := oopsErr.Context()
+	assert.Equal(t, testReason, context["reason"], "decision reason should be propagated in error context")
+	assert.Equal(t, testPolicyID, context["policy_id"], "decision policy_id should be propagated in error context")
+
+	// Also verify command and capability are still present
+	assert.Equal(t, "admin", context["command"])
+	assert.Equal(t, "admin.manage", context["capability"])
+}
+
+func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Register command with 2 capabilities
+	err := reg.Register(CommandEntry{
+		Name:         "dangerous",
+		capabilities: []string{"admin.manage", "admin.danger"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	subject := access.CharacterSubject(charID.String())
+	evalErr := errors.New("policy store unavailable")
+
+	// First capability succeeds (allow)
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	// Second capability errors (fail-closed)
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.danger",
+	}).Return(types.Decision{}, evalErr)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Should return error and deny access
+	dispatchErr := dispatcher.Dispatch(context.Background(), "dangerous", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify error code is access evaluation failure
+	errutil.AssertErrorCode(t, dispatchErr, CodeAccessEvaluationFailed)
+
+	// Verify error context includes the failing capability
+	oopsErr, ok := oops.AsOops(dispatchErr)
+	require.True(t, ok)
+	assert.Equal(t, "admin.danger", oopsErr.Context()["capability"],
+		"error should report which capability failed")
+	assert.Equal(t, "dangerous", oopsErr.Context()["command"])
+
+	// Verify wrapped error
+	assert.ErrorIs(t, dispatchErr, evalErr)
+
+	// Verify fail-closed: engine_failure metric, not success
+	metrics := CommandExecutions.With(prometheus.Labels{
+		"command": "dangerous", "source": "core", "status": StatusEngineFailure,
+	})
+	val := testutil.ToFloat64(metrics)
+	assert.Greater(t, val, float64(0), "should have recorded engine_failure metric")
 }

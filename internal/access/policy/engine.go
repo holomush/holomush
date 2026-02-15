@@ -10,6 +10,7 @@ import (
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
@@ -101,7 +102,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 
 		// Rewrite subject to character: format
-		req.Subject = "character:" + characterID
+		req.Subject = access.CharacterSubject(characterID)
 	}
 
 	// Step 3: Eager attribute resolution

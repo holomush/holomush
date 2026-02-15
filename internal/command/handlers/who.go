@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -33,7 +34,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		return nil
 	}
 
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 	now := time.Now()
 
 	// Collect visible players
@@ -44,11 +45,18 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
+			// - permission denied and not found are expected, don't log or count
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
+			// Access evaluation failures are already logged by the WorldService.checkAccess method.
+			// Count them (but don't re-log) so users see the error notice.
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				errorCount++
+				continue
+			}
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
-			slog.Error("unexpected error looking up character in who list",
+			slog.ErrorContext(ctx, "unexpected error looking up character in who list",
 				"session_char_id", session.CharacterID.String(),
 				"error", err,
 			)
@@ -71,9 +79,9 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Output write errors are logged but don't fail the command.
 	if errorCount > 0 {
 		if errorCount == 1 {
-			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to an error)")
+			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to a system error)")
 		} else {
-			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to errors)\n", errorCount)
+			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to system errors)\n", errorCount)
 		}
 	}
 	return nil
