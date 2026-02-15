@@ -24,8 +24,8 @@ import (
 	"github.com/holomush/holomush/internal/plugin/capability"
 )
 
-// Compile-time check: policy.Engine must satisfy hostfunc.AccessPolicyEngine.
-var _ AccessPolicyEngine = (*policy.Engine)(nil)
+// Compile-time check: policy.Engine must satisfy types.AccessPolicyEngine.
+var _ types.AccessPolicyEngine = (*policy.Engine)(nil)
 
 // testContextKey is a type for context keys in tests.
 type testContextKey string

@@ -106,8 +106,8 @@ func (s *StaticAccessControl) Check(ctx context.Context, subject, action, resour
 	case "char", "character", "session":
 		// Migration note: During the Phase 7.6 migration to AccessPolicyEngine, both
 		// "char:" and "character:" subject prefixes are accepted. New code MUST use
-		// the SubjectCharacter constant ("character:"). The legacy "char:" prefix will
-		// be removed in a future phase.
+		// the SubjectCharacter constant ("character:"). The legacy "char:" prefix is
+		// scheduled for removal in Phase 7.7 (tracked by holomush-c6qch).
 		return s.checkRole(ctx, subject, action, resource)
 	default:
 		return false

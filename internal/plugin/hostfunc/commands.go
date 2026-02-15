@@ -23,13 +23,6 @@ type CommandRegistry interface {
 	Get(name string) (command.CommandEntry, bool)
 }
 
-// AccessPolicyEngine evaluates access requests against loaded policies.
-// This mirrors internal/access/policy.AccessPolicyEngine to avoid coupling hostfunc to the access package.
-// Used for command capability filtering in list_commands.
-type AccessPolicyEngine interface {
-	Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error)
-}
-
 // WithCommandRegistry sets the command registry for command-related host functions.
 func WithCommandRegistry(reg CommandRegistry) Option {
 	return func(f *Functions) {
@@ -38,7 +31,7 @@ func WithCommandRegistry(reg CommandRegistry) Option {
 }
 
 // WithEngine sets the access policy engine for capability filtering.
-func WithEngine(engine AccessPolicyEngine) Option {
+func WithEngine(engine types.AccessPolicyEngine) Option {
 	return func(f *Functions) {
 		f.engine = engine
 	}

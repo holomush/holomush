@@ -15,7 +15,8 @@ import (
 )
 
 // AccessControl checks permissions for all subjects in HoloMUSH.
-// This is the legacy interface retained for backward compatibility during migration to AccessPolicyEngine.
+// This is the legacy interface retained for backward compatibility during the Phase 7.6 migration
+// to AccessPolicyEngine. Scheduled for removal in Phase 7.7 (tracked by holomush-c6qch).
 // See StaticAccessControl for dual-prefix migration details during Phase 7.6.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance

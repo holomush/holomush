@@ -17,12 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-// AccessPolicyEngine is the main entry point for policy-based authorization.
-type AccessPolicyEngine interface {
-	Evaluate(ctx context.Context, request types.AccessRequest) (types.Decision, error)
-}
-
-// Engine implements AccessPolicyEngine.
+// Engine implements types.AccessPolicyEngine.
 type Engine struct {
 	resolver *attribute.Resolver
 	cache    *Cache

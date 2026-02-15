@@ -17,6 +17,11 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
+// maxConsecutiveEngineErrors is the circuit breaker threshold for the who handler.
+// After this many consecutive access evaluation failures, the handler stops
+// querying the engine to prevent amplifying load on a degraded system.
+const maxConsecutiveEngineErrors = 3
+
 // playerInfo holds display information for a connected player.
 type playerInfo struct {
 	Name     string
@@ -40,19 +45,32 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Collect visible players
 	players := make([]playerInfo, 0, len(sessions))
 	var errorCount int
+	var consecutiveEngineErrors int
 	for _, session := range sessions {
+		// Circuit breaker: stop querying if the engine is consistently failing.
+		if consecutiveEngineErrors >= maxConsecutiveEngineErrors {
+			slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after consecutive engine failures",
+				"consecutive_failures", consecutiveEngineErrors,
+				"threshold", maxConsecutiveEngineErrors,
+				"remaining_sessions", len(sessions),
+			)
+			break
+		}
+
 		// Try to get character info - skip if not accessible
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
 			// - permission denied and not found are expected, don't log or count
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+				consecutiveEngineErrors = 0
 				continue
 			}
 			// Access evaluation failures are already logged by the WorldService.checkAccess method.
 			// Count them (but don't re-log) so users see the error notice.
 			if errors.Is(err, world.ErrAccessEvaluationFailed) {
 				errorCount++
+				consecutiveEngineErrors++
 				continue
 			}
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
@@ -61,9 +79,11 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 				"error", err,
 			)
 			errorCount++
+			consecutiveEngineErrors = 0
 			continue
 		}
 
+		consecutiveEngineErrors = 0
 		idleTime := now.Sub(session.LastActivity)
 		players = append(players, playerInfo{
 			Name:     char.Name,

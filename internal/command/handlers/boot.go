@@ -61,6 +61,8 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 				"subject", subjectID,
 				"action", "execute",
 				"resource", "admin.boot",
+				"target_name", targetName,
+				"target_char_id", targetCharID.String(),
 				"error", evalErr,
 			)
 			err := oops.Code(command.CodeAccessEvaluationFailed).

@@ -188,7 +188,167 @@ func TestCharacterSubject(t *testing.T) {
 }
 
 func TestCharacterSubject_EmptyID_Panics(t *testing.T) {
-	assert.PanicsWithValue(t, "access.CharacterSubject: charID must not be empty", func() {
+	assert.PanicsWithValue(t, "access.CharacterSubject: empty charID would bypass access control", func() {
 		access.CharacterSubject("")
+	})
+}
+
+func TestLocationResource(t *testing.T) {
+	tests := []struct {
+		name       string
+		locationID string
+		expected   string
+	}{
+		{
+			name:       "ULID string",
+			locationID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected:   "location:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:       "simple ID",
+			locationID: "room-1",
+			expected:   "location:room-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.LocationResource(tt.locationID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestLocationResource_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.LocationResource: empty locationID would create invalid resource reference", func() {
+		access.LocationResource("")
+	})
+}
+
+func TestExitResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		exitID   string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			exitID:   "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "exit:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "simple ID",
+			exitID:   "exit-north",
+			expected: "exit:exit-north",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.ExitResource(tt.exitID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExitResource_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.ExitResource: empty exitID would create invalid resource reference", func() {
+		access.ExitResource("")
+	})
+}
+
+func TestObjectResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		objectID string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			objectID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "object:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "simple ID",
+			objectID: "sword-1",
+			expected: "object:sword-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.ObjectResource(tt.objectID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestObjectResource_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.ObjectResource: empty objectID would create invalid resource reference", func() {
+		access.ObjectResource("")
+	})
+}
+
+func TestSceneResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		sceneID  string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			sceneID:  "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "scene:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "simple ID",
+			sceneID:  "midnight-meeting",
+			expected: "scene:midnight-meeting",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.SceneResource(tt.sceneID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSceneResource_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.SceneResource: empty sceneID would create invalid resource reference", func() {
+		access.SceneResource("")
+	})
+}
+
+func TestCommandResource(t *testing.T) {
+	tests := []struct {
+		name        string
+		commandName string
+		expected    string
+	}{
+		{
+			name:        "single word command",
+			commandName: "dig",
+			expected:    "command:dig",
+		},
+		{
+			name:        "compound command name",
+			commandName: "teleport-self",
+			expected:    "command:teleport-self",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.CommandResource(tt.commandName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCommandResource_EmptyName_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.CommandResource: empty commandName would create invalid resource reference", func() {
+		access.CommandResource("")
 	})
 }

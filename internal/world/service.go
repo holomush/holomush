@@ -22,15 +22,6 @@ var ErrPermissionDenied = errors.New("permission denied")
 // Callers can use errors.Is to distinguish engine failures from policy denials.
 var ErrAccessEvaluationFailed = errors.New("access evaluation failed")
 
-// AccessPolicyEngine defines the interface for ABAC policy evaluation.
-// This mirrors internal/access/policy.AccessPolicyEngine to avoid coupling world to access package.
-//
-// Implementations MUST return an error or a deny decision for unknown/unmatched requests (fail-closed).
-// This ensures that missing policies result in access denial rather than unexpected grants.
-type AccessPolicyEngine interface {
-	Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error)
-}
-
 // ServiceConfig holds dependencies for WorldService.
 type ServiceConfig struct {
 	LocationRepo  LocationRepository
@@ -39,7 +30,7 @@ type ServiceConfig struct {
 	SceneRepo     SceneRepository
 	CharacterRepo CharacterRepository
 	PropertyRepo  PropertyRepository
-	Engine        AccessPolicyEngine
+	Engine        types.AccessPolicyEngine
 	EventEmitter  EventEmitter
 	Transactor    Transactor
 }
@@ -53,7 +44,7 @@ type Service struct {
 	sceneRepo     SceneRepository
 	characterRepo CharacterRepository
 	propertyRepo  PropertyRepository
-	engine        AccessPolicyEngine
+	engine        types.AccessPolicyEngine
 	eventEmitter  EventEmitter
 	transactor    Transactor
 }
@@ -94,9 +85,15 @@ func NewService(cfg ServiceConfig) *Service {
 // Unknown errors (context errors, DB failures, etc.) are classified as evaluation
 // failures rather than denials to avoid poisoning metrics and user feedback.
 func (s *Service) checkAccess(ctx context.Context, subject, action, resource, entityPrefix string) error {
-	decision, err := s.engine.Evaluate(ctx, types.AccessRequest{
-		Subject: subject, Action: action, Resource: resource,
-	})
+	req, reqErr := types.NewAccessRequest(subject, action, resource)
+	if reqErr != nil {
+		slog.ErrorContext(ctx, "invalid access request",
+			"error", reqErr, "subject", subject, "action", action, "resource", resource)
+		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").Wrap(
+			fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, reqErr),
+		)
+	}
+	decision, err := s.engine.Evaluate(ctx, req)
 	if err != nil {
 		slog.ErrorContext(ctx, "access evaluation failed",
 			"error", err, "subject", subject, "action", action, "resource", resource)

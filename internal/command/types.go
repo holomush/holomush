@@ -14,7 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -299,7 +299,7 @@ const (
 type ServicesConfig struct {
 	World            WorldService              // world model queries and mutations
 	Session          core.SessionService       // session management
-	Engine           policy.AccessPolicyEngine // ABAC policy engine for authorization
+	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	Events           core.EventStore           // event persistence
 	Broadcaster      EventBroadcaster          // event broadcasting
 	AliasCache       *AliasCache               // alias management (optional)
@@ -319,7 +319,7 @@ type ServicesConfig struct {
 type Services struct {
 	world            WorldService              // world model queries and mutations
 	session          core.SessionService       // session management
-	engine           policy.AccessPolicyEngine // ABAC policy engine for authorization
+	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	events           core.EventStore           // event persistence
 	broadcaster      EventBroadcaster          // event broadcasting
 	aliasCache       *AliasCache               // alias management (optional, for alias commands)
@@ -335,7 +335,7 @@ func (s *Services) World() WorldService { return s.world }
 func (s *Services) Session() core.SessionService { return s.session }
 
 // Engine returns the ABAC policy engine for authorization checks.
-func (s *Services) Engine() policy.AccessPolicyEngine { return s.engine }
+func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }
 
 // Events returns the event store for event persistence.
 func (s *Services) Events() core.EventStore { return s.events }
