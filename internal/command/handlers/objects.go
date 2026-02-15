@@ -41,7 +41,7 @@ func CreateHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	entityType := strings.ToLower(matches[1])
 	name := matches[2]
-	subjectID := access.SubjectCharacter + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 
 	switch entityType {
 	case "object":
@@ -213,7 +213,7 @@ func resolveTarget(ctx context.Context, exec *command.CommandExecution, target s
 }
 
 func applyProperty(ctx context.Context, exec *command.CommandExecution, entityType string, entityID ulid.ULID, propName string, definition property.Definition, value string) error {
-	subjectID := access.SubjectCharacter + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 
 	switch entityType {
 	case "character":

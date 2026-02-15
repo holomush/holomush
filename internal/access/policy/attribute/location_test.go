@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
@@ -206,7 +207,7 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:        "wrong entity type (character)",
-			resourceID:  "character:" + ulid.Make().String(),
+			resourceID:  access.CharacterSubject(ulid.Make().String()),
 			setupMock:   func(_ *mockLocationRepository) {},
 			expectNil:   true,
 			expectError: false,

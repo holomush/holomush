@@ -4,46 +4,136 @@
 package world
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestWrapAccessError(t *testing.T) {
-	t.Run("wraps ErrAccessEvaluationFailed with eval failed code", func(t *testing.T) {
-		err := fmt.Errorf("engine down: %w", ErrAccessEvaluationFailed)
-		got := wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
+// MockAccessPolicyEngine is a mock for testing checkAccess.
+type MockAccessPolicyEngine struct {
+	mock.Mock
+}
 
-		errutil.AssertErrorCode(t, got, "LOCATION_ACCESS_EVALUATION_FAILED")
-		assert.ErrorIs(t, got, ErrAccessEvaluationFailed)
+func (m *MockAccessPolicyEngine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
+	args := m.Called(ctx, req)
+	return args.Get(0).(types.Decision), args.Error(1)
+}
+
+func TestCheckAccess(t *testing.T) {
+	ctx := context.Background()
+	subject := "user:123"
+	action := "read"
+	resource := "location:456"
+
+	t.Run("returns nil when access is allowed", func(t *testing.T) {
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.NewDecision(types.EffectAllow, "policy matched", "policy-1"), nil)
+
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+
+		assert.NoError(t, err)
+		engine.AssertExpectations(t)
 	})
 
-	t.Run("wraps permission denied with denied code", func(t *testing.T) {
-		err := fmt.Errorf("not allowed: %w", ErrPermissionDenied)
-		got := wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
+	t.Run("returns LOCATION_ACCESS_DENIED when permission denied", func(t *testing.T) {
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.NewDecision(types.EffectDefaultDeny, "no policy match", ""), nil)
 
-		errutil.AssertErrorCode(t, got, "LOCATION_ACCESS_DENIED")
-		assert.ErrorIs(t, got, ErrPermissionDenied)
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		assert.ErrorIs(t, err, ErrPermissionDenied)
+		engine.AssertExpectations(t)
 	})
 
-	t.Run("wraps other errors with denied code", func(t *testing.T) {
-		err := errors.New("unexpected error")
-		got := wrapAccessError(err, "LOCATION_ACCESS_EVALUATION_FAILED", "LOCATION_ACCESS_DENIED")
+	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED on engine error", func(t *testing.T) {
+		engineErr := errors.New("policy engine down")
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.Decision{}, engineErr)
 
-		errutil.AssertErrorCode(t, got, "LOCATION_ACCESS_DENIED")
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, ErrAccessEvaluationFailed)
+		engine.AssertExpectations(t)
 	})
 
-	t.Run("preserves oops error chain", func(t *testing.T) {
+	t.Run("uses entity prefix to generate error codes", func(t *testing.T) {
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.NewDecision(types.EffectDeny, "denied", "policy-2"), nil)
+
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "EXIT")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		assert.ErrorIs(t, err, ErrPermissionDenied)
+		engine.AssertExpectations(t)
+	})
+
+	t.Run("wraps context.Canceled as evaluation failure", func(t *testing.T) {
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.Decision{}, context.Canceled)
+
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, context.Canceled)
+		engine.AssertExpectations(t)
+	})
+
+	t.Run("wraps context.DeadlineExceeded as evaluation failure", func(t *testing.T) {
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.Decision{}, context.DeadlineExceeded)
+
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		engine.AssertExpectations(t)
+	})
+
+	t.Run("preserves oops error chain on engine error", func(t *testing.T) {
 		inner := oops.Errorf("inner problem")
-		err := fmt.Errorf("wrapped: %w: %w", ErrAccessEvaluationFailed, inner)
-		got := wrapAccessError(err, "EXIT_ACCESS_EVALUATION_FAILED", "EXIT_ACCESS_DENIED")
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(types.Decision{}, inner)
 
-		errutil.AssertErrorCode(t, got, "EXIT_ACCESS_EVALUATION_FAILED")
-		assert.ErrorIs(t, got, ErrAccessEvaluationFailed)
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "EXIT")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, ErrAccessEvaluationFailed)
+		engine.AssertExpectations(t)
 	})
 }

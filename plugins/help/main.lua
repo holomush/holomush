@@ -31,28 +31,38 @@ end
 
 -- List all available commands (filtered by character capabilities)
 function list_commands(ctx)
-    local commands, err = holomush.list_commands(ctx.character_id)
-    if err then
-        holo.emit.character(ctx.character_id, "error", {
-            message = "Error listing commands: " .. err
-        })
+    local result, err = holomush.list_commands(ctx.character_id)
+
+    -- Distinguish nil (service issue) from a result table.
+    -- holomush.list_commands() returns nil when the command service is unavailable,
+    -- and a table {commands: [...], incomplete: bool} otherwise.
+    if result == nil then
+        if err then
+            holo.emit.character(ctx.character_id, "error", {
+                message = "Error listing commands: " .. err
+            })
+        else
+            holo.emit.character(ctx.character_id, "error", {
+                message = "Help service temporarily unavailable. Please try again later."
+            })
+        end
         return holo.emit.flush()
     end
 
-    -- Distinguish nil (service issue) from empty table (no commands registered).
-    -- holomush.list_commands() returns nil when the command service is unavailable,
-    -- and an empty table when no commands match the character's capabilities.
-    if commands == nil then
-        holo.emit.character(ctx.character_id, "error", {
-            message = "Help service temporarily unavailable. Please try again later."
-        })
-        return holo.emit.flush()
-    end
+    -- Extract commands array and metadata from the result wrapper table.
+    -- list_commands returns {commands: [...], incomplete: bool}
+    local commands = result.commands or {}
+    local incomplete = result.incomplete
 
     if #commands == 0 then
         holo.emit.character(ctx.character_id, "info", {
             message = "No commands available."
         })
+        if incomplete then
+            holo.emit.character(ctx.character_id, "warning", {
+                message = "Note: some commands may be hidden due to temporary access errors."
+            })
+        end
         return holo.emit.flush()
     end
 
@@ -94,6 +104,10 @@ function list_commands(ctx)
             headers = {"Command", "Description"},
             rows = rows
         }) .. "\n\n"
+    end
+
+    if incomplete then
+        output = output .. holo.fmt.dim("Note: some commands may be hidden due to temporary access errors.") .. "\n"
     end
 
     output = output .. holo.fmt.dim("Type 'help <command>' for detailed help.")
@@ -151,18 +165,29 @@ end
 
 -- Search commands by keyword (filtered by character capabilities)
 function search_commands(ctx, term)
-    local commands, err = holomush.list_commands(ctx.character_id)
-    if err then
-        holo.emit.character(ctx.character_id, "error", {
-            message = "Error searching commands: " .. err
-        })
+    local result, err = holomush.list_commands(ctx.character_id)
+
+    if result == nil then
+        if err then
+            holo.emit.character(ctx.character_id, "error", {
+                message = "Error searching commands: " .. err
+            })
+        else
+            holo.emit.character(ctx.character_id, "error", {
+                message = "Search service temporarily unavailable. Please try again later."
+            })
+        end
         return holo.emit.flush()
     end
+
+    -- Extract commands array and metadata from the result wrapper table
+    local commands = result.commands or {}
+    local incomplete = result.incomplete
 
     -- Filter commands matching the search term (searches name, help, and usage fields)
     local matches = {}
     local lower_term = term:lower()
-    for _, cmd in ipairs(commands or {}) do
+    for _, cmd in ipairs(commands) do
         local name_match = cmd.name and cmd.name:lower():find(lower_term, 1, true)
         local help_match = cmd.help and cmd.help:lower():find(lower_term, 1, true)
         local usage_match = cmd.usage and cmd.usage:lower():find(lower_term, 1, true)
@@ -175,6 +200,11 @@ function search_commands(ctx, term)
         holo.emit.character(ctx.character_id, "info", {
             message = "No commands found matching '" .. term .. "'."
         })
+        if incomplete then
+            holo.emit.character(ctx.character_id, "warning", {
+                message = "Note: some commands may be hidden due to temporary access errors."
+            })
+        end
         return holo.emit.flush()
     end
 
@@ -190,6 +220,10 @@ function search_commands(ctx, term)
         headers = {"Command", "Description"},
         rows = rows
     }) .. "\n\n"
+
+    if incomplete then
+        output = output .. holo.fmt.dim("Note: some commands may be hidden due to temporary access errors.") .. "\n"
+    end
 
     output = output .. holo.fmt.dim("Found " .. #matches .. " command(s).")
 

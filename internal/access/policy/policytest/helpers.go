@@ -66,7 +66,7 @@ func NewErrorEngine(err error) *ErrorEngine {
 	return &ErrorEngine{err: err}
 }
 
-// Evaluate always returns a deny decision and the configured error.
+// Evaluate returns a zero-value decision and the configured error.
 func (e *ErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
-	return types.NewDecision(types.EffectDefaultDeny, "error-engine", ""), e.err
+	return types.Decision{}, e.err
 }

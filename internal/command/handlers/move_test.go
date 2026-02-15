@@ -33,7 +33,7 @@ func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -43,7 +43,7 @@ func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
 		Return([]*world.Exit{path.Exit}, nil)
 
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -93,7 +93,7 @@ func TestMoveHandler_MatchesExitAlias(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -103,7 +103,7 @@ func TestMoveHandler_MatchesExitAlias(t *testing.T) {
 		Return([]*world.Exit{path.Exit}, nil)
 
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -144,7 +144,7 @@ func TestMoveHandler_InvalidDirectionReturnsError(t *testing.T) {
 	path := testutil.NewExitContext(t, "north")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -173,7 +173,7 @@ func TestMoveHandler_NoExitsReturnsError(t *testing.T) {
 	location := testutil.NewRoom("Lonely Room", "")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + location.ID.String()}).
@@ -230,7 +230,7 @@ func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -240,7 +240,7 @@ func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
 		Return([]*world.Exit{path.Exit}, nil)
 
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -281,7 +281,7 @@ func TestMoveHandler_GetExitsFailureReturnsError(t *testing.T) {
 	location := testutil.NewRoom("Hallway", "")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + location.ID.String()}).
@@ -316,7 +316,7 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -326,7 +326,7 @@ func TestMoveHandler_MoveCharacterFailure(t *testing.T) {
 		Return([]*world.Exit{path.Exit}, nil)
 
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -360,7 +360,7 @@ func TestMoveHandler_LockedExitReturnsError(t *testing.T) {
 	require.NoError(t, err)
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -397,7 +397,7 @@ func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -407,7 +407,7 @@ func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 		Return([]*world.Exit{path.Exit}, nil)
 
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Once()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
@@ -451,7 +451,7 @@ func TestMoveHandler_AccessEvaluationFailureOnGetExits(t *testing.T) {
 	location := testutil.NewRoom("Hallway", "")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + location.ID.String()}).
@@ -482,7 +482,7 @@ func TestMoveHandler_AccessEvaluationFailureOnMoveCharacter(t *testing.T) {
 	path := testutil.NewExitContext(t, "north")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -493,7 +493,7 @@ func TestMoveHandler_AccessEvaluationFailureOnMoveCharacter(t *testing.T) {
 
 	// Engine fails during character move permission check
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.Decision{}, errors.New("policy engine database error"))
 
 	services := testutil.NewServicesBuilder().WithWorldFixture(fixture).Build()
@@ -528,7 +528,7 @@ func TestMoveHandler_AccessEvaluationFailureOnGetLocationAfterMove(t *testing.T)
 	}
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	subjectID := access.SubjectCharacter + player.CharacterID.String()
+	subjectID := access.CharacterSubject(player.CharacterID.String())
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.From.ID.String()}).
@@ -538,7 +538,7 @@ func TestMoveHandler_AccessEvaluationFailureOnGetLocationAfterMove(t *testing.T)
 		Return([]*world.Exit{path.Exit}, nil)
 
 	fixture.Mocks.Engine.EXPECT().
-		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: "character:" + player.CharacterID.String()}).
+		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "write", Resource: access.CharacterSubject(player.CharacterID.String())}).
 		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).

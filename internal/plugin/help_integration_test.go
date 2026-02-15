@@ -8,6 +8,7 @@ package plugins_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -320,6 +321,230 @@ var _ = Describe("Help Plugin Integration", func() {
 			// Should NOT find "look" or "dig" (they don't have "message" in any field)
 			Expect(message).NotTo(ContainSubstring("look"))
 			Expect(message).NotTo(ContainSubstring("dig"))
+		})
+	})
+})
+
+// setupHelpTestWithEngine creates help plugin fixture with a custom access engine.
+func setupHelpTestWithEngine(engine hostfunc.AccessPolicyEngine) (*helpFixture, error) {
+	pluginsDir, err := findPluginsDir()
+	if err != nil {
+		return nil, err
+	}
+	helpDir := filepath.Join(pluginsDir, "help")
+
+	if _, statErr := os.Stat(helpDir); os.IsNotExist(statErr) {
+		return nil, statErr
+	}
+
+	enforcer := capability.NewEnforcer()
+	registry := &mockHelpCommandRegistry{}
+	hostFuncs := hostfunc.New(nil, enforcer,
+		hostfunc.WithCommandRegistry(registry),
+		hostfunc.WithEngine(engine),
+	)
+	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
+
+	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+
+	ctx := context.Background()
+	discovered, err := manager.Discover(ctx)
+	if err != nil {
+		_ = luaHost.Close(ctx)
+		return nil, err
+	}
+
+	var helpPlugin *plugins.DiscoveredPlugin
+	for _, dp := range discovered {
+		if dp.Manifest.Name == "help" {
+			helpPlugin = dp
+			break
+		}
+	}
+
+	if helpPlugin == nil {
+		_ = luaHost.Close(ctx)
+		return nil, os.ErrNotExist
+	}
+
+	if err := luaHost.Load(ctx, helpPlugin.Manifest, helpPlugin.Dir); err != nil {
+		_ = luaHost.Close(ctx)
+		return nil, err
+	}
+
+	if err := enforcer.SetGrants("help", helpPlugin.Manifest.Capabilities); err != nil {
+		_ = luaHost.Close(ctx)
+		return nil, err
+	}
+
+	return &helpFixture{
+		LuaHost:  luaHost,
+		Enforcer: enforcer,
+		Plugin:   helpPlugin,
+		Cleanup: func() {
+			_ = luaHost.Close(context.Background())
+		},
+	}, nil
+}
+
+var _ = Describe("Help Plugin – list_commands result format", func() {
+	Describe("extracting commands from wrapper table", func() {
+		It("extracts .commands field and iterates correctly", func() {
+			// This test verifies the Lua plugin correctly unwraps
+			// the {commands: [...], incomplete: bool} result table.
+			fixture, err := setupHelpTest()
+			Expect(err).NotTo(HaveOccurred())
+			defer fixture.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			event := pluginsdk.Event{
+				ID:        "01HTEST",
+				Stream:    "character:01HTEST000000000000000CHAR",
+				Type:      pluginsdk.EventType("command"),
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginsdk.ActorCharacter,
+				ActorID:   "01HTEST000000000000000CHAR",
+				Payload:   makeCommandPayload("help", ""),
+			}
+
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(len(result)).To(BeNumerically(">=", 1))
+
+			// The event type MUST be "help" not "info" —
+			// "info" means the plugin hit #commands == 0 (wrapper table has no integer keys)
+			outputEvent := result[0]
+			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("help")),
+				"event type should be 'help', not 'info' (which indicates #commands==0 bug)")
+
+			payload := parsePayload(outputEvent.Payload)
+			message := payload["message"].(string)
+			Expect(message).To(ContainSubstring("say"))
+			Expect(message).To(ContainSubstring("look"))
+			Expect(message).To(ContainSubstring("dig"))
+		})
+
+		It("search_commands extracts .commands field correctly", func() {
+			fixture, err := setupHelpTest()
+			Expect(err).NotTo(HaveOccurred())
+			defer fixture.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			event := pluginsdk.Event{
+				ID:        "01HTEST",
+				Stream:    "character:01HTEST000000000000000CHAR",
+				Type:      pluginsdk.EventType("command"),
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginsdk.ActorCharacter,
+				ActorID:   "01HTEST000000000000000CHAR",
+				Payload:   makeCommandPayload("help", "search room"),
+			}
+
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(len(result)).To(BeNumerically(">=", 1))
+
+			// Must be "help" type, meaning search found results
+			outputEvent := result[0]
+			Expect(outputEvent.Type).To(Equal(pluginsdk.EventType("help")),
+				"search should find commands and emit 'help' event")
+
+			payload := parsePayload(outputEvent.Payload)
+			message := payload["message"].(string)
+			Expect(message).To(ContainSubstring("say"))
+		})
+	})
+
+	Describe("incomplete flag handling", func() {
+		It("shows warning when incomplete is true", func() {
+			// Use an error engine so some commands are hidden and incomplete=true
+			errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+			fixture, err := setupHelpTestWithEngine(errorEngine)
+			Expect(err).NotTo(HaveOccurred())
+			defer fixture.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			event := pluginsdk.Event{
+				ID:        "01HTEST",
+				Stream:    "character:01HTEST000000000000000CHAR",
+				Type:      pluginsdk.EventType("command"),
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginsdk.ActorCharacter,
+				ActorID:   "01HTEST000000000000000CHAR",
+				Payload:   makeCommandPayload("help", ""),
+			}
+
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+
+			// Should still show available commands (those with no capabilities: "look")
+			// plus an incomplete warning
+			var messages []string
+			for _, ev := range result {
+				p := parsePayload(ev.Payload)
+				if msg, ok := p["message"].(string); ok {
+					messages = append(messages, msg)
+				}
+			}
+
+			combined := ""
+			for _, m := range messages {
+				combined += m + "\n"
+			}
+
+			// "look" has no capabilities, so it should still appear
+			Expect(combined).To(ContainSubstring("look"),
+				"commands without capabilities should still appear when engine errors")
+
+			// There should be some indication that the list is incomplete
+			Expect(combined).To(SatisfyAny(
+				ContainSubstring("incomplete"),
+				ContainSubstring("hidden"),
+				ContainSubstring("some commands"),
+			), "should warn user that command list may be incomplete")
+		})
+
+		It("does not show warning when incomplete is false", func() {
+			fixture, err := setupHelpTest() // AllowAll engine, no errors
+			Expect(err).NotTo(HaveOccurred())
+			defer fixture.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			event := pluginsdk.Event{
+				ID:        "01HTEST",
+				Stream:    "character:01HTEST000000000000000CHAR",
+				Type:      pluginsdk.EventType("command"),
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginsdk.ActorCharacter,
+				ActorID:   "01HTEST000000000000000CHAR",
+				Payload:   makeCommandPayload("help", ""),
+			}
+
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+
+			var combined string
+			for _, ev := range result {
+				p := parsePayload(ev.Payload)
+				if msg, ok := p["message"].(string); ok {
+					combined += msg + "\n"
+				}
+			}
+
+			Expect(combined).NotTo(ContainSubstring("incomplete"))
+			Expect(combined).NotTo(ContainSubstring("hidden"))
 		})
 	})
 })

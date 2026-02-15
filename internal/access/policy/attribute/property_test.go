@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -286,7 +287,7 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:          "wrong entity type - character",
-			resourceID:    "character:" + propID.String(),
+			resourceID:    access.CharacterSubject(propID.String()),
 			expectedAttrs: nil,
 		},
 		{

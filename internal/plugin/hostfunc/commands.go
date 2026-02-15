@@ -79,7 +79,7 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		}
 
 		commands := f.commandRegistry.All()
-		subject := access.SubjectCharacter + charID.String()
+		subject := access.CharacterSubject(charID.String())
 		ctx := L.Context()
 		if ctx == nil {
 			ctx = context.Background()

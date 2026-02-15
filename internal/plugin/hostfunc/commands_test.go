@@ -665,7 +665,7 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
@@ -711,7 +711,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 	evalErr := errors.New("policy store unavailable")
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
@@ -1028,7 +1028,7 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 

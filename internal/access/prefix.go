@@ -48,6 +48,12 @@ var knownPrefixes = []string{
 	ResourceScene,
 }
 
+// CharacterSubject returns a properly formatted character subject identifier.
+// This eliminates scattered string concatenation patterns throughout the codebase.
+func CharacterSubject(charID string) string {
+	return SubjectCharacter + charID
+}
+
 // ParseEntityRef parses an entity reference string into its type name and ID.
 // Returns an INVALID_ENTITY_REF error for empty, unknown, or legacy prefixes.
 func ParseEntityRef(ref string) (typeName, id string, err error) {
