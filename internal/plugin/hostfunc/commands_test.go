@@ -1087,3 +1087,107 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 	assert.Contains(t, names, "look")
 	assert.NotContains(t, names, "boot")
 }
+
+func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
+	// Given: a registry with commands and an engine that always errors
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with engine that errors
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: the second return value should be an error string (not lua.LNil)
+	errVal := L.GetGlobal("err")
+	assert.NotEqual(t, lua.LNil, errVal, "error return value should not be nil when engine errors")
+	assert.Contains(t, errVal.String(), "access engine errors", "error message should indicate access engine errors")
+
+	// AND the result table should still be returned with incomplete: true
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result, "result table should still be returned")
+
+	tbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	incomplete := L.GetField(tbl, "incomplete")
+	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when engine errors occur")
+
+	// Verify commands array exists with only non-capability commands
+	commands := L.GetField(tbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
+	cmdsTbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "commands should be a table")
+
+	var names []string
+	cmdsTbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+
+	assert.Contains(t, names, "look", "commands without capabilities should still appear")
+	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
+	assert.Len(t, names, 1)
+}
+
+func TestListCommands_NoErrorWhenEngineSucceeds(t *testing.T) {
+	// Given: a registry with commands and an engine that succeeds
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine()
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.say")
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with no engine errors
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: the second return value should be lua.LNil (no error)
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LNil, errVal, "error return value should be nil when no engine errors occur")
+
+	// AND result.incomplete should be false
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	tbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	incomplete := L.GetField(tbl, "incomplete")
+	assert.Equal(t, lua.LFalse, incomplete, "incomplete should be false when no engine errors occur")
+}

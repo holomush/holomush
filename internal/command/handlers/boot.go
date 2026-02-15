@@ -143,10 +143,15 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 		// Get character info for this session
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
-			// Skip expected errors (not found, permission denied, access evaluation failures)
-			// - checkAccess helper already logs access evaluation failures, so don't re-log
-			// - permission denied and not found are also expected, don't log or count
-			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) || errors.Is(err, world.ErrAccessEvaluationFailed) {
+			// Skip expected errors (not found, permission denied)
+			// - permission denied and not found are expected, don't log or count
+			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+				continue
+			}
+			// Access evaluation failures are already logged by checkAccess helper.
+			// Count them (but don't re-log) so system errors are surfaced.
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				errorCount++
 				continue
 			}
 			// Track unexpected errors (database failures, timeouts, etc.) but continue searching

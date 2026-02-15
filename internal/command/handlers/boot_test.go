@@ -1148,3 +1148,84 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	logOutput := logBuf.String()
 	assert.Empty(t, logOutput, "Expected errors should not be logged")
 }
+
+func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
+	executorID := ulid.Make()
+	evalFail1ID := ulid.Make()
+	evalFail2ID := ulid.Make()
+	execConn := ulid.Make()
+	evalFailConn1 := ulid.Make()
+	evalFailConn2 := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(evalFail1ID, evalFailConn1)
+	sessionMgr.Connect(evalFail2ID, evalFailConn2)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "Admin",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
+
+	// Capture logs to suppress them
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Executor lookup - may or may not happen
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + executorID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+
+	// All character lookups fail with access evaluation errors
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + evalFail1ID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+	accessControl.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executorID.String(), Action: "read", Resource: "character:" + evalFail2ID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		Engine:        accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID:   executorID,
+		CharacterName: "Admin",
+		PlayerID:      playerID,
+		Args:          "NonexistentPlayer",
+		Output:        &buf,
+		Services: command.NewTestServices(command.ServicesConfig{
+			Session: sessionMgr,
+			World:   worldService,
+		}),
+	})
+
+	err := BootHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+
+	// Should return system error, not "target not found"
+	assert.Equal(t, command.CodeWorldError, oopsErr.Code())
+
+	// Verify user-facing message
+	playerMsg := command.PlayerMessage(err)
+	assert.Contains(t, playerMsg, "system error")
+	assert.Contains(t, playerMsg, "Please try again shortly")
+}
