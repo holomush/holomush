@@ -113,6 +113,22 @@ func CommandResource(commandName string) string {
 	return ResourceCommand + commandName
 }
 
+// PropertyResource returns a properly formatted property resource identifier.
+func PropertyResource(propPath string) string {
+	if propPath == "" {
+		panic("access.PropertyResource: empty propPath would create invalid resource reference")
+	}
+	return ResourceProperty + propPath
+}
+
+// StreamResource returns a properly formatted stream resource identifier.
+func StreamResource(streamID string) string {
+	if streamID == "" {
+		panic("access.StreamResource: empty streamID would create invalid resource reference")
+	}
+	return ResourceStream + streamID
+}
+
 // ParseEntityRef parses an entity reference string into its type name and ID.
 // Returns an INVALID_ENTITY_REF error for empty, unknown, or legacy prefixes.
 func ParseEntityRef(ref string) (typeName, id string, err error) {

@@ -6441,7 +6441,7 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 
 			require.Error(t, err, "operation should fail with access error")
 
-			// Verify correct sentinel error
+			// Verify error wraps expected sentinel
 			assert.ErrorIs(t, err, tt.expectedSentinel,
 				"error should wrap %v", tt.expectedSentinel)
 
