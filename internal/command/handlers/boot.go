@@ -159,7 +159,7 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 	// and we need WORLD_ERROR code for PlayerMessage to return our custom message.
 	if errorCount > 0 {
 		//nolint:wrapcheck // WorldError creates a structured oops error
-		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to system error. Try again.", nil)
+		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a temporary system error. Please try again shortly.", nil)
 	}
 
 	//nolint:wrapcheck // ErrTargetNotFound creates a structured oops error

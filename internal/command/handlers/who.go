@@ -74,9 +74,9 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Output write errors are logged but don't fail the command.
 	if errorCount > 0 {
 		if errorCount == 1 {
-			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to an error)")
+			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to a system error)")
 		} else {
-			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to errors)\n", errorCount)
+			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to system errors)\n", errorCount)
 		}
 	}
 	return nil

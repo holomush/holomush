@@ -93,7 +93,7 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 		return fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, err)
 	}
 	if !decision.IsAllowed() {
-		return ErrPermissionDenied
+		return oops.With("reason", decision.Reason).With("policy_id", decision.PolicyID).Wrap(ErrPermissionDenied)
 	}
 	return nil
 }
