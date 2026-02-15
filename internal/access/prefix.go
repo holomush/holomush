@@ -50,7 +50,11 @@ var knownPrefixes = []string{
 
 // CharacterSubject returns a properly formatted character subject identifier.
 // This eliminates scattered string concatenation patterns throughout the codebase.
+// Panics if charID is empty, since an empty subject bypasses access control.
 func CharacterSubject(charID string) string {
+	if charID == "" {
+		panic("access.CharacterSubject: charID must not be empty")
+	}
 	return SubjectCharacter + charID
 }
 

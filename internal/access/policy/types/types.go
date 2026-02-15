@@ -67,6 +67,25 @@ type AccessRequest struct {
 	Resource string // "location:01XYZ", "command:dig", "property:01DEF"
 }
 
+// NewAccessRequest creates a validated AccessRequest. Returns an error if any
+// field is empty, preventing silent misuse at access control boundaries.
+func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
+	if subject == "" {
+		return AccessRequest{}, fmt.Errorf("access request: subject must not be empty")
+	}
+	if action == "" {
+		return AccessRequest{}, fmt.Errorf("access request: action must not be empty")
+	}
+	if resource == "" {
+		return AccessRequest{}, fmt.Errorf("access request: resource must not be empty")
+	}
+	return AccessRequest{
+		Subject:  subject,
+		Action:   action,
+		Resource: resource,
+	}, nil
+}
+
 // Decision is the result of evaluating an access request against the policy engine.
 // The allowed field is unexported to prevent invariant bypass.
 type Decision struct {

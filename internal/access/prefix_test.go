@@ -177,11 +177,6 @@ func TestCharacterSubject(t *testing.T) {
 			charID:   "test-id",
 			expected: "character:test-id",
 		},
-		{
-			name:     "empty ID",
-			charID:   "",
-			expected: "character:",
-		},
 	}
 
 	for _, tt := range tests {
@@ -190,4 +185,10 @@ func TestCharacterSubject(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestCharacterSubject_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.CharacterSubject: charID must not be empty", func() {
+		access.CharacterSubject("")
+	})
 }

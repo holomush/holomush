@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -278,6 +279,13 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
 
+	// Capture log output
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(oldLogger)
+
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID:   executorID,
@@ -302,6 +310,15 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	// Verify target session still exists (was not booted)
 	targetSession := sessionMgr.GetSession(targetID)
 	assert.NotNil(t, targetSession, "Target session should still exist")
+
+	// Verify log output contains error and context
+	logOutput := logBuf.String()
+	subjectID := access.CharacterSubject(executorID.String())
+	assert.Contains(t, logOutput, "boot access evaluation failed", "log should mention boot access evaluation failure")
+	assert.Contains(t, logOutput, subjectID, "log should contain subject")
+	assert.Contains(t, logOutput, "execute", "log should contain action")
+	assert.Contains(t, logOutput, "admin.boot", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
 func TestBootHandler_TargetNotFound(t *testing.T) {
@@ -1172,7 +1189,7 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
-	// Capture logs to suppress them
+	// Capture log output
 	var logBuf bytes.Buffer
 	originalLogger := slog.Default()
 	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
@@ -1228,4 +1245,17 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	playerMsg := command.PlayerMessage(err)
 	assert.Contains(t, playerMsg, "system error")
 	assert.Contains(t, playerMsg, "Please try again shortly")
+
+	// Verify log output contains errors and context (logged by world.Service.checkAccess)
+	logOutput := logBuf.String()
+	subjectID := access.CharacterSubject(executorID.String())
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subjectID, "log should contain subject")
+	assert.Contains(t, logOutput, "read", "log should contain action")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
+	// Should have logged at least one character lookup failure
+	resource1 := access.CharacterSubject(evalFail1ID.String())
+	resource2 := access.CharacterSubject(evalFail2ID.String())
+	assert.True(t, strings.Contains(logOutput, resource1) || strings.Contains(logOutput, resource2),
+		"log should contain at least one character resource ID")
 }

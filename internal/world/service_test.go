@@ -75,6 +75,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 		loc, err := svc.GetLocation(ctx, subjectID, locID)
 		assert.Nil(t, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -92,6 +93,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny (EffectDeny) should return ErrPermissionDenied")
+		mockRepo.AssertNotCalled(t, "Get")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -110,6 +112,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 		assert.Nil(t, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockRepo.AssertNotCalled(t, "Get")
 
 		// Verify oops context contains decision details
 		errutil.AssertErrorContext(t, err, "reason", "test-deny-all")
@@ -130,6 +133,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 		assert.Nil(t, loc)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Get")
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"engine error must not be reported as permission denied")
 	})
@@ -234,6 +238,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 
 		err := svc.CreateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 }
 
@@ -273,6 +278,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 
 		err := svc.UpdateLocation(ctx, subjectID, loc)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("returns not found when location does not exist", func(t *testing.T) {
@@ -338,6 +344,8 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -357,6 +365,8 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
+		mockRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -420,6 +430,7 @@ func TestWorldService_GetExit(t *testing.T) {
 		exit, err := svc.GetExit(ctx, subjectID, exitID)
 		assert.Nil(t, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockExitRepo.AssertNotCalled(t, "Get")
 	})
 }
 
@@ -468,6 +479,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 
 		err := svc.CreateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockExitRepo.AssertNotCalled(t, "Create")
 	})
 }
 
@@ -507,6 +519,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 
 		err := svc.UpdateExit(ctx, subjectID, exit)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockExitRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
@@ -581,6 +594,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockExitRepo.AssertNotCalled(t, "Delete")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -596,6 +610,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
+		mockExitRepo.AssertNotCalled(t, "Delete")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -664,6 +679,7 @@ func TestWorldService_GetObject(t *testing.T) {
 		obj, err := svc.GetObject(ctx, subjectID, objID)
 		assert.Nil(t, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockObjRepo.AssertNotCalled(t, "Get")
 	})
 }
 
@@ -708,6 +724,7 @@ func TestWorldService_CreateObject(t *testing.T) {
 
 		err = svc.CreateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockObjRepo.AssertNotCalled(t, "Create")
 	})
 }
 
@@ -750,6 +767,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockObjRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("propagates repository errors", func(t *testing.T) {
@@ -836,6 +854,8 @@ func TestWorldService_DeleteObject(t *testing.T) {
 
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockObjRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -855,6 +875,8 @@ func TestWorldService_DeleteObject(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
+		mockObjRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -1030,6 +1052,7 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -1045,6 +1068,7 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
+		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -1083,6 +1107,7 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -1098,6 +1123,7 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
+		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -1142,6 +1168,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		assert.Nil(t, participants)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		mockSceneRepo.AssertNotCalled(t, "ListParticipants")
 	})
 
 	t.Run("returns permission denied on explicit policy deny", func(t *testing.T) {
@@ -1158,6 +1185,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied,
 			"explicit policy deny should return ErrPermissionDenied")
+		mockSceneRepo.AssertNotCalled(t, "ListParticipants")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
@@ -1667,6 +1695,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		assert.Nil(t, exits)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		mockExitRepo.AssertNotCalled(t, "ListFromLocation")
 	})
 
 	t.Run("returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -1683,6 +1712,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockExitRepo.AssertNotCalled(t, "ListFromLocation")
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
@@ -2486,6 +2516,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		_, err := svc.GetLocation(ctx, subjectID, locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("GetLocation returns LOCATION_GET_FAILED for other errors", func(t *testing.T) {
@@ -2517,6 +2548,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		err := svc.CreateLocation(ctx, subjectID, &world.Location{Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	t.Run("CreateLocation returns LOCATION_INVALID for validation errors", func(t *testing.T) {
@@ -2564,6 +2596,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		err := svc.UpdateLocation(ctx, subjectID, &world.Location{ID: locID, Name: "Test", Type: world.LocationTypePersistent})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("UpdateLocation returns LOCATION_INVALID for validation errors", func(t *testing.T) {
@@ -2615,6 +2648,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		err := svc.DeleteLocation(ctx, subjectID, locID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 	})
 
 	t.Run("DeleteLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
@@ -2674,6 +2709,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("CreateLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -2689,6 +2725,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	t.Run("UpdateLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -2704,6 +2741,7 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("DeleteLocation returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -2723,6 +2761,8 @@ func TestService_ErrorCodes_Location(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 	})
 }
 
@@ -2762,6 +2802,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		_, err := svc.GetExit(ctx, subjectID, exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("GetExit returns EXIT_GET_FAILED for other errors", func(t *testing.T) {
@@ -2793,6 +2834,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		err := svc.CreateExit(ctx, subjectID, &world.Exit{Name: "north", FromLocationID: fromLocID, ToLocationID: toLocID, Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	t.Run("CreateExit returns EXIT_INVALID for validation errors", func(t *testing.T) {
@@ -2840,6 +2882,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		err := svc.UpdateExit(ctx, subjectID, &world.Exit{ID: exitID, Name: "north", Visibility: world.VisibilityAll})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("UpdateExit returns EXIT_INVALID for validation errors", func(t *testing.T) {
@@ -2887,6 +2930,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Delete")
 	})
 
 	t.Run("DeleteExit returns EXIT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
@@ -2936,6 +2980,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("CreateExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -2951,6 +2996,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	t.Run("UpdateExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -2966,6 +3012,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("DeleteExit returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -2980,6 +3027,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 		err := svc.DeleteExit(ctx, subjectID, exitID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		mockRepo.AssertNotCalled(t, "Delete")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 }
@@ -3019,6 +3067,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		_, err := svc.GetObject(ctx, subjectID, objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("GetObject returns OBJECT_GET_FAILED for other errors", func(t *testing.T) {
@@ -3052,6 +3101,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		err = svc.CreateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	// Note: "CreateObject returns OBJECT_INVALID for validation errors" test was removed.
@@ -3092,6 +3142,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		err = svc.UpdateObject(ctx, subjectID, obj)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	// Note: "UpdateObject returns OBJECT_INVALID for validation errors" test was removed.
@@ -3134,6 +3185,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		err := svc.DeleteObject(ctx, subjectID, objID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 	})
 
 	t.Run("DeleteObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
@@ -3192,6 +3245,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		err := svc.MoveObject(ctx, subjectID, objID, world.Containment{LocationID: &locationID})
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "Get")
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("MoveObject returns OBJECT_INVALID for invalid containment", func(t *testing.T) {
@@ -3313,6 +3368,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Get")
 	})
 
 	t.Run("CreateObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -3330,6 +3386,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Create")
 	})
 
 	t.Run("UpdateObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -3347,6 +3404,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Update")
 	})
 
 	t.Run("DeleteObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -3366,6 +3424,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Delete")
+		mockPropRepo.AssertNotCalled(t, "DeleteByParent")
 	})
 
 	t.Run("MoveObject returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -3381,6 +3441,8 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "Get")
+		mockRepo.AssertNotCalled(t, "Move")
 	})
 }
 
@@ -3402,6 +3464,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "AddParticipant")
 	})
 
 	t.Run("AddSceneParticipant returns SCENE_INVALID for invalid role", func(t *testing.T) {
@@ -3466,6 +3529,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "RemoveParticipant")
 	})
 
 	t.Run("RemoveSceneParticipant returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
@@ -3514,6 +3578,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_DENIED")
+		mockRepo.AssertNotCalled(t, "ListParticipants")
 	})
 
 	t.Run("ListSceneParticipants returns SCENE_NOT_FOUND for ErrNotFound", func(t *testing.T) {
@@ -3563,6 +3628,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "AddParticipant")
 	})
 
 	t.Run("RemoveSceneParticipant returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -3578,6 +3644,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "RemoveParticipant")
 	})
 
 	t.Run("ListSceneParticipants returns SCENE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
@@ -3593,6 +3660,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "SCENE_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		mockRepo.AssertNotCalled(t, "ListParticipants")
 	})
 }
 
