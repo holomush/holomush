@@ -178,6 +178,16 @@ func (m *mockEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.D
 	return types.Decision{}, nil
 }
 
+// TestDecision_ZeroValue_IsDeny verifies that the zero-value Decision denies access.
+// This is critical for fail-closed security - mocks returning Decision{} must deny by default.
+func TestDecision_ZeroValue_IsDeny(t *testing.T) {
+	t.Parallel()
+
+	var d types.Decision
+	assert.False(t, d.IsAllowed(), "Zero-value Decision should deny access (fail-closed)")
+	assert.Equal(t, types.EffectDefaultDeny, d.Effect, "Zero-value Decision should have DefaultDeny effect")
+}
+
 type mockEventStore struct{}
 
 func (m *mockEventStore) Append(_ context.Context, _ core.Event) error { return nil }

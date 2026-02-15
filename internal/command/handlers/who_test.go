@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -564,7 +565,7 @@ func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 
-	// Capture logs to suppress them
+	// Capture log output
 	var logBuf bytes.Buffer
 	originalLogger := slog.Default()
 	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
@@ -604,6 +605,16 @@ func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 	assert.Contains(t, output, "Visible")
 	// Should show error notice
 	assert.Contains(t, output, "(Note: 1 player could not be displayed due to a system error)")
+
+	// Verify log output contains error and context (logged by world.Service.checkAccess)
+	logOutput := logBuf.String()
+	subjectID := access.CharacterSubject(executor.CharacterID.String())
+	resourceID := access.CharacterSubject(evalFailCharID.String())
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subjectID, "log should contain subject")
+	assert.Contains(t, logOutput, "read", "log should contain action")
+	assert.Contains(t, logOutput, resourceID, "log should contain resource")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
 func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.T) {
@@ -617,7 +628,7 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 	sessionMgr.Connect(evalFail1ID, evalFailConn1)
 	sessionMgr.Connect(evalFail2ID, evalFailConn2)
 
-	// Capture logs to suppress them
+	// Capture log output
 	var logBuf bytes.Buffer
 	originalLogger := slog.Default()
 	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
@@ -652,4 +663,17 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 	assert.Contains(t, output, "No players online")
 	// Should show error notice (plural form)
 	assert.Contains(t, output, "(Note: 2 players could not be displayed due to system errors)")
+
+	// Verify log output contains errors and context (logged by world.Service.checkAccess)
+	logOutput := logBuf.String()
+	subjectID := access.CharacterSubject(executor.CharacterID.String())
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subjectID, "log should contain subject")
+	assert.Contains(t, logOutput, "read", "log should contain action")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
+	// Should have logged both failures (check for both resource IDs)
+	resource1 := access.CharacterSubject(evalFail1ID.String())
+	resource2 := access.CharacterSubject(evalFail2ID.String())
+	assert.True(t, strings.Contains(logOutput, resource1) || strings.Contains(logOutput, resource2),
+		"log should contain at least one character resource ID")
 }

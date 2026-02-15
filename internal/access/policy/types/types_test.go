@@ -162,6 +162,20 @@ func TestPolicyEffect_String(t *testing.T) {
 	}
 }
 
+func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
+	// The zero value of Decision must deny access (fail-closed).
+	// This is critical for safety: if code uses Decision{} as a fallback
+	// or returns it from an error path, access must be denied.
+	var d Decision
+	assert.False(t, d.IsAllowed(), "zero-value Decision must deny access (fail-closed)")
+	assert.Equal(t, EffectDefaultDeny, d.Effect, "zero-value Decision effect must be default_deny")
+	assert.Empty(t, d.Reason)
+	assert.Empty(t, d.PolicyID)
+
+	// Validate should pass because allowed=false is consistent with EffectDefaultDeny
+	assert.NoError(t, d.Validate(), "zero-value Decision should be internally consistent")
+}
+
 func TestAccessRequest_Fields(t *testing.T) {
 	req := AccessRequest{
 		Subject:  "character:01ABC",
@@ -171,6 +185,36 @@ func TestAccessRequest_Fields(t *testing.T) {
 	assert.Equal(t, "character:01ABC", req.Subject)
 	assert.Equal(t, "read", req.Action)
 	assert.Equal(t, "location:01XYZ", req.Resource)
+}
+
+func TestNewAccessRequest_Valid(t *testing.T) {
+	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	require.NoError(t, err)
+	assert.Equal(t, "character:01ABC", req.Subject)
+	assert.Equal(t, "read", req.Action)
+	assert.Equal(t, "location:01XYZ", req.Resource)
+}
+
+func TestNewAccessRequest_EmptyFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		subject  string
+		action   string
+		resource string
+		wantMsg  string
+	}{
+		{"empty subject", "", "read", "location:01XYZ", "subject"},
+		{"empty action", "character:01ABC", "", "location:01XYZ", "action"},
+		{"empty resource", "character:01ABC", "read", "", "resource"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewAccessRequest(tt.subject, tt.action, tt.resource)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantMsg)
+		})
+	}
 }
 
 func TestAttributeBags_Initialization(t *testing.T) {
