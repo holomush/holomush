@@ -108,7 +108,7 @@ func TestRateLimitMiddleware_Enforce_AccessRequest(t *testing.T) {
 	_ = middleware.Enforce(ctx, exec, "test-command", span)
 
 	// Verify the AccessRequest was constructed correctly
-	expectedSubject := access.SubjectCharacter + charID.String()
+	expectedSubject := access.CharacterSubject(charID.String())
 	assert.Equal(t, expectedSubject, captured.Subject, "subject should be SubjectCharacter + charID")
 	assert.Equal(t, "execute", captured.Action, "action should be 'execute'")
 	assert.Equal(t, CapabilityRateLimitBypass, captured.Resource, "resource should be CapabilityRateLimitBypass")

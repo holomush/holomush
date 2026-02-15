@@ -646,7 +646,7 @@ func TestEmitExamineEvent(t *testing.T) {
 func TestService_MoveObject_EmitsEvent(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 

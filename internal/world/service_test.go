@@ -42,7 +42,7 @@ func (m *mockTransactor) InTransaction(ctx context.Context, fn func(ctx context.
 func TestWorldService_GetLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("returns location when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -167,7 +167,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 
 func TestWorldService_CreateLocation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("creates location when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -240,7 +240,7 @@ func TestWorldService_CreateLocation(t *testing.T) {
 func TestWorldService_UpdateLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("updates location when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -299,7 +299,7 @@ func TestWorldService_UpdateLocation(t *testing.T) {
 func TestWorldService_DeleteLocation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("deletes location when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -387,7 +387,7 @@ func TestWorldService_DeleteLocation(t *testing.T) {
 func TestWorldService_GetExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("returns exit when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -425,7 +425,7 @@ func TestWorldService_GetExit(t *testing.T) {
 
 func TestWorldService_CreateExit(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -474,7 +474,7 @@ func TestWorldService_CreateExit(t *testing.T) {
 func TestWorldService_UpdateExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("updates exit when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -552,7 +552,7 @@ func TestWorldService_UpdateExit(t *testing.T) {
 func TestWorldService_DeleteExit(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("deletes exit when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -631,7 +631,7 @@ func TestWorldService_DeleteExit(t *testing.T) {
 func TestWorldService_GetObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("returns object when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -669,7 +669,7 @@ func TestWorldService_GetObject(t *testing.T) {
 
 func TestWorldService_CreateObject(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	locationID := ulid.Make()
 
 	t.Run("creates object when authorized", func(t *testing.T) {
@@ -715,7 +715,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	locationID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("updates object when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -797,7 +797,7 @@ func TestWorldService_UpdateObject(t *testing.T) {
 func TestWorldService_DeleteObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("deletes object when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -863,7 +863,7 @@ func TestWorldService_DeleteObject(t *testing.T) {
 func TestWorldService_MoveObject(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	locationID := ulid.Make()
 
 	t.Run("moves object when authorized", func(t *testing.T) {
@@ -1001,7 +1001,7 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("adds participant when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1054,7 +1054,7 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("removes participant when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1107,7 +1107,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("lists participants when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1167,7 +1167,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 
 func TestWorldService_CreateLocation_Validation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects empty name", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1226,7 +1226,7 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 
 func TestWorldService_CreateExit_Validation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -1258,7 +1258,7 @@ func TestWorldService_CreateExit_Validation(t *testing.T) {
 
 func TestWorldService_CreateObject_Validation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects empty name", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1308,7 +1308,7 @@ func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects invalid role", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1332,7 +1332,7 @@ func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
 func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1355,7 +1355,7 @@ func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
 
 func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1383,7 +1383,7 @@ func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
 func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1406,7 +1406,7 @@ func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
 
 func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -1438,7 +1438,7 @@ func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1461,7 +1461,7 @@ func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
 
 func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	locationID := ulid.Make()
 
 	t.Run("propagates repository errors", func(t *testing.T) {
@@ -1491,7 +1491,7 @@ func TestWorldService_AddSceneParticipant_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1515,7 +1515,7 @@ func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1538,7 +1538,7 @@ func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
 func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates repository errors", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1564,7 +1564,7 @@ func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
 func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("propagates severe cleanup error for bidirectional exit", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1630,7 +1630,7 @@ func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
 func TestWorldService_GetExitsByLocation(t *testing.T) {
 	ctx := context.Background()
 	locationID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("returns exits when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1741,7 +1741,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects empty name", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1794,7 +1794,7 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 func TestWorldService_UpdateExit_Validation(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects empty name", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1870,7 +1870,7 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 func TestWorldService_UpdateObject_Validation(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects empty name", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1922,7 +1922,7 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 
 func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("rejects invalid location type", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -1948,7 +1948,7 @@ func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
 
 func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -2061,7 +2061,7 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 
 func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	exitID := ulid.Make()
 
 	t.Run("rejects invalid lock data when locked", func(t *testing.T) {
@@ -2122,7 +2122,7 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 
 func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -2204,7 +2204,7 @@ func TestNewService_RequiresEngine(t *testing.T) {
 
 func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockLocationRepository(t)
@@ -2222,7 +2222,7 @@ func TestWorldService_CreateLocation_NilInput(t *testing.T) {
 
 func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockLocationRepository(t)
@@ -2239,7 +2239,7 @@ func TestWorldService_UpdateLocation_NilInput(t *testing.T) {
 
 func TestWorldService_CreateExit_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockExitRepository(t)
@@ -2257,7 +2257,7 @@ func TestWorldService_CreateExit_NilInput(t *testing.T) {
 
 func TestWorldService_CreateObject_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockObjectRepository(t)
@@ -2275,7 +2275,7 @@ func TestWorldService_CreateObject_NilInput(t *testing.T) {
 
 func TestWorldService_UpdateExit_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockExitRepository(t)
@@ -2292,7 +2292,7 @@ func TestWorldService_UpdateExit_NilInput(t *testing.T) {
 
 func TestWorldService_UpdateObject_NilInput(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockRepo := worldtest.NewMockObjectRepository(t)
@@ -2311,7 +2311,7 @@ func TestWorldService_UpdateObject_NilInput(t *testing.T) {
 
 func TestWorldService_NilLocationRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	locID := ulid.Make()
 
 	engine := policytest.NewGrantEngine()
@@ -2347,7 +2347,7 @@ func TestWorldService_NilLocationRepo(t *testing.T) {
 
 func TestWorldService_NilExitRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	exitID := ulid.Make()
 
 	engine := policytest.NewGrantEngine()
@@ -2383,7 +2383,7 @@ func TestWorldService_NilExitRepo(t *testing.T) {
 
 func TestWorldService_NilObjectRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	objID := ulid.Make()
 
 	engine := policytest.NewGrantEngine()
@@ -2419,7 +2419,7 @@ func TestWorldService_NilObjectRepo(t *testing.T) {
 
 func TestWorldService_NilSceneRepo(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	sceneID := ulid.Make()
 	charID := ulid.Make()
 
@@ -2455,7 +2455,7 @@ func TestWorldService_NilSceneRepo(t *testing.T) {
 func TestService_ErrorCodes_Location(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("GetLocation returns LOCATION_NOT_FOUND for ErrNotFound", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -2731,7 +2731,7 @@ func TestService_ErrorCodes_Exit(t *testing.T) {
 	exitID := ulid.Make()
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("GetExit returns EXIT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -2988,7 +2988,7 @@ func TestService_ErrorCodes_Object(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	locationID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("GetObject returns OBJECT_NOT_FOUND for ErrNotFound", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -3388,7 +3388,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("AddSceneParticipant returns SCENE_ACCESS_DENIED for permission denied", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -3599,7 +3599,7 @@ func TestService_ErrorCodes_Scene(t *testing.T) {
 func TestWorldService_GetCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("returns character when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -3710,7 +3710,7 @@ func TestWorldService_GetCharacter(t *testing.T) {
 func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	ctx := context.Background()
 	locationID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("returns characters when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -3837,7 +3837,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 func TestWorldService_GetCharactersByLocation_UsesDecomposedResource(t *testing.T) {
 	ctx := context.Background()
 	locationID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockCharacterRepository(t)
@@ -3871,7 +3871,7 @@ func TestWorldService_GetCharactersByLocation_VerifiesAccessRequest(t *testing.T
 	ctx := context.Background()
 	locationID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + charID.String()
+	subjectID := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockCharacterRepository(t)
@@ -3904,7 +3904,7 @@ func TestWorldService_GetCharactersByLocation_VerifiesAccessRequest(t *testing.T
 func TestWorldService_MoveCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -4256,7 +4256,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 	charID := ulid.Make()
 	targetLocID := ulid.Make()
 	charLocID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("successful examine emits event", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -4508,7 +4508,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 	charID := ulid.Make()
 	targetObjID := ulid.Make()
 	charLocID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("successful examine emits event", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -4760,7 +4760,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	charID := ulid.Make()
 	targetCharID := ulid.Make()
 	charLocID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("successful examine emits event", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -4994,7 +4994,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 func TestWorldService_FindLocationByName(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 	locID := ulid.Make()
 
 	t.Run("finds location when authorized", func(t *testing.T) {
@@ -5079,7 +5079,7 @@ func TestWorldService_FindLocationByName(t *testing.T) {
 func TestWorldService_DeleteCharacter(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("deletes character when authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -5225,7 +5225,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("cleans up properties then deletes character", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -5296,7 +5296,7 @@ func TestWorldService_DeleteCharacter_CascadesProperties(t *testing.T) {
 func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("cleans up properties then deletes location", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -5367,7 +5367,7 @@ func TestWorldService_DeleteLocation_CascadesProperties(t *testing.T) {
 func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	t.Run("cleans up properties then deletes object", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
@@ -5438,7 +5438,7 @@ func TestWorldService_DeleteObject_CascadesProperties(t *testing.T) {
 func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -5464,7 +5464,7 @@ func TestWorldService_DeleteLocation_PropertyDeleteFails(t *testing.T) {
 func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -5490,7 +5490,7 @@ func TestWorldService_DeleteObject_PropertyDeleteFails(t *testing.T) {
 func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -5516,7 +5516,7 @@ func TestWorldService_DeleteCharacter_PropertyDeleteFails(t *testing.T) {
 func TestWorldService_DeleteLocation_ErrorsWithPropertyRepoButNoTransactor(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -5539,7 +5539,7 @@ func TestWorldService_DeleteLocation_ErrorsWithPropertyRepoButNoTransactor(t *te
 func TestWorldService_DeleteObject_ErrorsWithPropertyRepoButNoTransactor(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -5562,7 +5562,7 @@ func TestWorldService_DeleteObject_ErrorsWithPropertyRepoButNoTransactor(t *test
 func TestWorldService_DeleteCharacter_ErrorsWithPropertyRepoButNoTransactor(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -5585,7 +5585,7 @@ func TestWorldService_DeleteCharacter_ErrorsWithPropertyRepoButNoTransactor(t *t
 func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -5611,7 +5611,7 @@ func TestWorldService_DeleteLocation_UsesTransactor(t *testing.T) {
 func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -5637,7 +5637,7 @@ func TestWorldService_DeleteObject_UsesTransactor(t *testing.T) {
 func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -5663,7 +5663,7 @@ func TestWorldService_DeleteCharacter_UsesTransactor(t *testing.T) {
 func TestWorldService_DeleteLocation_TransactorRollsBackOnError(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	engine := policytest.NewGrantEngine()
 	mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -5692,7 +5692,7 @@ func TestWorldService_GetLocation_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + charID.String()
+	subjectID := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockLocationRepository(t)
@@ -5725,7 +5725,7 @@ func TestWorldService_GetLocation_VerifiesAccessRequest(t *testing.T) {
 func TestWorldService_CreateLocation_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + charID.String()
+	subjectID := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockLocationRepository(t)
@@ -5763,7 +5763,7 @@ func TestWorldService_MoveCharacter_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
 	callerID := ulid.Make()
-	subjectID := access.SubjectCharacter + callerID.String()
+	subjectID := access.CharacterSubject(callerID.String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -5808,7 +5808,7 @@ func TestWorldService_MoveCharacter_VerifiesAccessRequest(t *testing.T) {
 func TestWorldService_CreateExit_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + charID.String()
+	subjectID := access.CharacterSubject(charID.String())
 	fromLocID := ulid.Make()
 	toLocID := ulid.Make()
 
@@ -5850,7 +5850,7 @@ func TestWorldService_DeleteExit_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
 	charID := ulid.Make()
-	subjectID := access.SubjectCharacter + charID.String()
+	subjectID := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockRepo := worldtest.NewMockExitRepository(t)
@@ -5882,7 +5882,7 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 	ctx := context.Background()
 	charID := ulid.Make()
 	callerID := ulid.Make()
-	subjectID := access.SubjectCharacter + callerID.String()
+	subjectID := access.CharacterSubject(callerID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 	mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -5921,15 +5921,15 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 //   - Policy denials (ErrPermissionDenied) result in *_ACCESS_DENIED codes
 func TestWorldService_ErrorCodePropagation(t *testing.T) {
 	ctx := context.Background()
-	subjectID := access.SubjectCharacter + ulid.Make().String()
+	subjectID := access.CharacterSubject(ulid.Make().String())
 
 	tests := []struct {
-		name               string
-		setupService       func() (*world.Service, ulid.ULID)
-		invokeMethod       func(*world.Service, ulid.ULID) error
-		engineBehavior     string // "error" or "deny"
-		expectedErrorCode  string
-		expectedSentinel   error
+		name              string
+		setupService      func() (*world.Service, ulid.ULID)
+		invokeMethod      func(*world.Service, ulid.ULID) error
+		engineBehavior    string // "error" or "deny"
+		expectedErrorCode string
+		expectedSentinel  error
 	}{
 		// Location operations
 		{
@@ -6364,7 +6364,6 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 			expectedErrorCode: "SCENE_ACCESS_DENIED",
 			expectedSentinel:  world.ErrPermissionDenied,
 		},
-
 	}
 
 	for _, tt := range tests {

@@ -146,7 +146,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
-	subject := access.SubjectCharacter + exec.CharacterID().String()
+	subject := access.CharacterSubject(exec.CharacterID().String())
 	if d.rateLimiter != nil {
 		if rateErr := d.rateLimiter.Enforce(ctx, exec, parsed.Name, span); rateErr != nil {
 			metrics.SetStatus(StatusRateLimited)

@@ -26,7 +26,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 			Errorf("no direction specified")
 	}
 
-	subjectID := access.SubjectCharacter + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 
 	// Get exits from current location
 	exits, err := exec.Services().World().GetExitsByLocation(ctx, subjectID, exec.LocationID())

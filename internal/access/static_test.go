@@ -441,3 +441,102 @@ func TestStaticAccessControl_HereTokenResolverError(t *testing.T) {
 	assert.True(t, ac.Check(ctx, "char:01ABC", "execute", "command:say"))
 	assert.True(t, ac.Check(ctx, "char:01ABC", "read", "character:01ABC")) // $self works
 }
+
+func TestStaticAccessControl_DualPrefixRegression(t *testing.T) {
+	// Regression test: Verify that both "char:" and "character:" prefixes
+	// produce identical results. During Phase 7.6 migration to AccessPolicyEngine,
+	// the "character:" prefix was added alongside the legacy "char:" prefix.
+	// This test ensures that both prefixes are handled equivalently, so that
+	// if someone accidentally removes "character:" from the switch statement,
+	// the test will catch the breakage.
+
+	tests := []struct {
+		name      string
+		role      string
+		action    string
+		resource  string
+		wantAllow bool
+	}{
+		{
+			name:      "player allow - execute say",
+			role:      "player",
+			action:    "execute",
+			resource:  "command:say",
+			wantAllow: true,
+		},
+		{
+			name:      "player deny - execute dig",
+			role:      "player",
+			action:    "execute",
+			resource:  "command:dig",
+			wantAllow: false,
+		},
+		{
+			name:      "admin allow - grant role",
+			role:      "admin",
+			action:    "grant",
+			resource:  "role:any",
+			wantAllow: true,
+		},
+		{
+			name:      "builder allow - write location",
+			role:      "builder",
+			action:    "write",
+			resource:  "location:room1",
+			wantAllow: true,
+		},
+		{
+			name:      "player deny - write location",
+			role:      "player",
+			action:    "write",
+			resource:  "location:room1",
+			wantAllow: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test with "char:" prefix
+			acChar := access.NewStaticAccessControl(nil, nil)
+			ctxChar := context.Background()
+			require.NoError(t, acChar.AssignRole("char:testsubject", tt.role))
+			charResult := acChar.Check(ctxChar, "char:testsubject", tt.action, tt.resource)
+
+			// Test with "character:" prefix
+			acCharacter := access.NewStaticAccessControl(nil, nil)
+			ctxCharacter := context.Background()
+			require.NoError(t, acCharacter.AssignRole("character:testsubject", tt.role))
+			characterResult := acCharacter.Check(ctxCharacter, "character:testsubject", tt.action, tt.resource)
+
+			// Both should produce identical results
+			assert.Equal(t, charResult, characterResult,
+				"char: and character: prefixes should produce identical results")
+			assert.Equal(t, tt.wantAllow, charResult,
+				"char: prefix result should match expected value")
+			assert.Equal(t, tt.wantAllow, characterResult,
+				"character: prefix result should match expected value")
+		})
+	}
+}
+
+func TestStaticAccessControl_CharacterPrefixEquivalence(t *testing.T) {
+	// Simplified test: "character:" prefix should work identically to "char:" prefix.
+	// This ensures the migration path is safe and can be reverted without issues.
+	ac := access.NewStaticAccessControl(nil, nil)
+	ctx := context.Background()
+
+	require.NoError(t, ac.AssignRole("char:alice", "player"))
+	require.NoError(t, ac.AssignRole("character:bob", "player"))
+
+	// Both prefixes with same role should have same permissions
+	charAliceCanSay := ac.Check(ctx, "char:alice", "execute", "command:say")
+	charAliceCantDig := !ac.Check(ctx, "char:alice", "execute", "command:dig")
+
+	charBobCanSay := ac.Check(ctx, "character:bob", "execute", "command:say")
+	charBobCantDig := !ac.Check(ctx, "character:bob", "execute", "command:dig")
+
+	assert.True(t, charAliceCanSay, "char:alice should execute say")
+	assert.True(t, charAliceCantDig, "char:alice should not execute dig")
+	assert.True(t, charBobCanSay, "character:bob should execute say")
+	assert.True(t, charBobCantDig, "character:bob should not execute dig")
+}

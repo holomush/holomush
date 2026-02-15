@@ -34,7 +34,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		return nil
 	}
 
-	subjectID := access.SubjectCharacter + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 	now := time.Now()
 
 	// Collect visible players
@@ -49,7 +49,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
-			// Access evaluation failures are already logged by checkAccess helper.
+			// Access evaluation failures are already logged by the WorldService.checkAccess method.
 			// Count them (but don't re-log) so users see the error notice.
 			if errors.Is(err, world.ErrAccessEvaluationFailed) {
 				errorCount++

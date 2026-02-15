@@ -277,7 +277,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 
 	// Only grant one capability
 	mockAccess.Grant(subject, "execute", "admin.manage")
@@ -1498,7 +1498,7 @@ func TestDispatcher_VerifiesAccessRequest(t *testing.T) {
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 
 	// Register command with capability
 	err := reg.Register(CommandEntry{
@@ -1598,7 +1598,7 @@ func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 	evalErr := errors.New("policy store unavailable")
 
 	// Mock engine to return error for the capability evaluation
@@ -1654,7 +1654,7 @@ func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 	testReason := "admin_role_required"
 	testPolicyID := "policy-admin-001"
 
@@ -1710,7 +1710,7 @@ func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	subject := access.SubjectCharacter + charID.String()
+	subject := access.CharacterSubject(charID.String())
 	evalErr := errors.New("policy store unavailable")
 
 	// First capability succeeds (allow)

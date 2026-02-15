@@ -40,7 +40,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Find the target session by character name
-	subjectID := access.SubjectCharacter + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 	targetCharID, targetCharName, err := findCharacterByName(ctx, exec, subjectID, targetName)
 	if err != nil {
 		return err

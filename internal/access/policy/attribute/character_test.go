@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
@@ -95,7 +96,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 	}{
 		{
 			name:      "valid character ID",
-			subjectID: "character:" + charID.String(),
+			subjectID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, id ulid.ULID) (*world.Character, error) {
 					assert.Equal(t, charID, id)
@@ -122,7 +123,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 		},
 		{
 			name:      "character without location",
-			subjectID: "character:" + charID.String(),
+			subjectID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return &world.Character{
@@ -176,7 +177,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 		},
 		{
 			name:      "repository error",
-			subjectID: "character:" + charID.String(),
+			subjectID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return nil, errors.New("database connection failed")
@@ -233,7 +234,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 	}{
 		{
 			name:       "valid character resource",
-			resourceID: "character:" + charID.String(),
+			resourceID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return &world.Character{
@@ -266,7 +267,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:       "repository error",
-			resourceID: "character:" + charID.String(),
+			resourceID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return nil, errors.New("repo error")

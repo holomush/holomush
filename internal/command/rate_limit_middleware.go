@@ -43,22 +43,8 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 		return nil
 	}
 
-	subject := access.SubjectCharacter + exec.CharacterID().String()
-	decision, err := r.engine.Evaluate(ctx, types.AccessRequest{
-		Subject:  subject,
-		Action:   "execute",
-		Resource: CapabilityRateLimitBypass,
-	})
-	if err != nil {
-		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
-		slog.ErrorContext(ctx, "rate limit bypass check failed",
-			"subject", subject,
-			"action", "execute",
-			"resource", CapabilityRateLimitBypass,
-			"error", err,
-		)
-	}
-	if err == nil && decision.IsAllowed() {
+	subject := access.CharacterSubject(exec.CharacterID().String())
+	if r.hasBypass(ctx, subject, commandName) {
 		return nil
 	}
 
@@ -71,4 +57,27 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 	span.SetAttributes(attribute.Int64("command.cooldown_ms", cooldownMs))
 	observability.RecordCommandRateLimited(commandName)
 	return ErrRateLimited(cooldownMs)
+}
+
+// hasBypass evaluates whether the subject has rate limit bypass capability.
+// Returns true if the bypass check succeeds and permission is granted.
+// On evaluation error, returns false (fail-closed: apply rate limiting).
+func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject, commandName string) bool {
+	decision, err := r.engine.Evaluate(ctx, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: CapabilityRateLimitBypass,
+	})
+	if err != nil {
+		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
+		slog.ErrorContext(ctx, "rate limit bypass check failed",
+			"subject", subject,
+			"action", "execute",
+			"resource", CapabilityRateLimitBypass,
+			"command", commandName,
+			"error", err,
+		)
+		return false
+	}
+	return decision.IsAllowed()
 }

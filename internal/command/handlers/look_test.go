@@ -33,7 +33,7 @@ func TestLookHandler(t *testing.T) {
 			name: "outputs room name and description",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.Engine.EXPECT().
-					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: "location:" + location.ID.String()}).
 					Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 				fixture.Mocks.LocationRepo.EXPECT().
 					Get(mock.Anything, location.ID).
@@ -49,7 +49,7 @@ func TestLookHandler(t *testing.T) {
 			name: "returns world error on failure",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.Engine.EXPECT().
-					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: "location:" + location.ID.String()}).
 					Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 				fixture.Mocks.LocationRepo.EXPECT().
 					Get(mock.Anything, location.ID).
@@ -65,7 +65,7 @@ func TestLookHandler(t *testing.T) {
 			name: "returns world error on access denied",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.Engine.EXPECT().
-					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: "location:" + location.ID.String()}).
 					Return(types.NewDecision(types.EffectDeny, "", ""), nil)
 			},
 			assertion: func(t *testing.T, _ string, err error) {
@@ -78,7 +78,7 @@ func TestLookHandler(t *testing.T) {
 			name: "returns LOCATION_ACCESS_EVALUATION_FAILED code when engine fails",
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.Engine.EXPECT().
-					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: "location:" + location.ID.String()}).
 					Return(types.Decision{}, errors.New("policy engine timeout"))
 			},
 			assertion: func(t *testing.T, _ string, err error) {
