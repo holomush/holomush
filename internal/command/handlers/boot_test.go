@@ -233,7 +233,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 	assert.NotNil(t, targetSession, "Target session should still exist")
 }
 
-func TestBootHandler_EngineError_ReturnsPermissionDenied(t *testing.T) {
+func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
 	execConn := ulid.Make()
@@ -297,7 +297,7 @@ func TestBootHandler_EngineError_ReturnsPermissionDenied(t *testing.T) {
 
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
-	assert.Equal(t, command.CodePermissionDenied, oopsErr.Code())
+	assert.Equal(t, command.CodeAccessEvaluationFailed, oopsErr.Code())
 
 	// Verify target session still exists (was not booted)
 	targetSession := sessionMgr.GetSession(targetID)

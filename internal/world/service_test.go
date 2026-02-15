@@ -5914,3 +5914,481 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 	assert.Equal(t, "delete", capturedRequest.Action, "action should be 'delete'")
 	assert.Equal(t, "character:"+charID.String(), capturedRequest.Resource, "resource should be character:<id>")
 }
+
+// TestWorldService_ErrorCodePropagation verifies that error codes propagate correctly
+// through actual service methods when access checks fail. This tests end-to-end that:
+//   - Engine errors (ErrAccessEvaluationFailed) result in *_ACCESS_EVALUATION_FAILED codes
+//   - Policy denials (ErrPermissionDenied) result in *_ACCESS_DENIED codes
+func TestWorldService_ErrorCodePropagation(t *testing.T) {
+	ctx := context.Background()
+	subjectID := access.SubjectCharacter + ulid.Make().String()
+
+	tests := []struct {
+		name               string
+		setupService       func() (*world.Service, ulid.ULID)
+		invokeMethod       func(*world.Service, ulid.ULID) error
+		engineBehavior     string // "error" or "deny"
+		expectedErrorCode  string
+		expectedSentinel   error
+	}{
+		// Location operations
+		{
+			name: "GetLocation - engine error produces LOCATION_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				locID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+				return svc, locID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetLocation(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "GetLocation - policy deny produces LOCATION_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				locID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+				return svc, locID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetLocation(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "LOCATION_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+		{
+			name: "CreateLocation - engine error produces LOCATION_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+				return svc, ulid.ULID{} // ID not used for create
+			},
+			invokeMethod: func(svc *world.Service, _ ulid.ULID) error {
+				loc := &world.Location{
+					Name:        "Test Room",
+					Description: "A test",
+					Type:        world.LocationTypePersistent,
+				}
+				return svc.CreateLocation(ctx, subjectID, loc)
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "CreateLocation - policy deny produces LOCATION_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+				return svc, ulid.ULID{}
+			},
+			invokeMethod: func(svc *world.Service, _ ulid.ULID) error {
+				loc := &world.Location{
+					Name:        "Test Room",
+					Description: "A test",
+					Type:        world.LocationTypePersistent,
+				}
+				return svc.CreateLocation(ctx, subjectID, loc)
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "LOCATION_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+		{
+			name: "UpdateLocation - engine error produces LOCATION_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				locID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+				return svc, locID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				loc := &world.Location{
+					ID:          id,
+					Name:        "Updated Room",
+					Description: "Updated",
+					Type:        world.LocationTypePersistent,
+				}
+				return svc.UpdateLocation(ctx, subjectID, loc)
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "UpdateLocation - policy deny produces LOCATION_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				locID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+				return svc, locID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				loc := &world.Location{
+					ID:          id,
+					Name:        "Updated Room",
+					Description: "Updated",
+					Type:        world.LocationTypePersistent,
+				}
+				return svc.UpdateLocation(ctx, subjectID, loc)
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "LOCATION_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+		{
+			name: "DeleteLocation - engine error produces LOCATION_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				locID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockLocRepo := worldtest.NewMockLocationRepository(t)
+				mockPropRepo := worldtest.NewMockPropertyRepository(t)
+				transactor := &mockTransactor{}
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockLocRepo,
+					PropertyRepo: mockPropRepo,
+					Transactor:   transactor,
+					Engine:       engine,
+				})
+				return svc, locID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				return svc.DeleteLocation(ctx, subjectID, id)
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "DeleteLocation - policy deny produces LOCATION_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				locID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockLocRepo := worldtest.NewMockLocationRepository(t)
+				mockPropRepo := worldtest.NewMockPropertyRepository(t)
+				transactor := &mockTransactor{}
+				svc := world.NewService(world.ServiceConfig{
+					LocationRepo: mockLocRepo,
+					PropertyRepo: mockPropRepo,
+					Transactor:   transactor,
+					Engine:       engine,
+				})
+				return svc, locID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				return svc.DeleteLocation(ctx, subjectID, id)
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "LOCATION_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+
+		// Exit operations
+		{
+			name: "GetExit - engine error produces EXIT_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				exitID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockExitRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					ExitRepo: mockRepo,
+					Engine:   engine,
+				})
+				return svc, exitID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetExit(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "EXIT_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "GetExit - policy deny produces EXIT_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				exitID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockExitRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					ExitRepo: mockRepo,
+					Engine:   engine,
+				})
+				return svc, exitID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetExit(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "EXIT_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+
+		// Object operations
+		{
+			name: "GetObject - engine error produces OBJECT_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				objID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockObjectRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					ObjectRepo: mockRepo,
+					Engine:     engine,
+				})
+				return svc, objID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetObject(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "OBJECT_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "GetObject - policy deny produces OBJECT_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				objID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockObjectRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					ObjectRepo: mockRepo,
+					Engine:     engine,
+				})
+				return svc, objID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetObject(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "OBJECT_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+		{
+			name: "MoveObject - engine error produces OBJECT_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				objID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockObjectRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					ObjectRepo: mockRepo,
+					Engine:     engine,
+				})
+				return svc, objID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				locID := ulid.Make()
+				to := world.InLocation(locID)
+				return svc.MoveObject(ctx, subjectID, id, to)
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "OBJECT_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "MoveObject - policy deny produces OBJECT_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				objID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockObjectRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					ObjectRepo: mockRepo,
+					Engine:     engine,
+				})
+				return svc, objID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				locID := ulid.Make()
+				to := world.InLocation(locID)
+				return svc.MoveObject(ctx, subjectID, id, to)
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "OBJECT_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+
+		// Character operations
+		{
+			name: "GetCharacter - engine error produces CHARACTER_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				charID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockCharacterRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					CharacterRepo: mockRepo,
+					Engine:        engine,
+				})
+				return svc, charID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetCharacter(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "GetCharacter - policy deny produces CHARACTER_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				charID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockCharacterRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					CharacterRepo: mockRepo,
+					Engine:        engine,
+				})
+				return svc, charID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				_, err := svc.GetCharacter(ctx, subjectID, id)
+				return err
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "CHARACTER_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+		{
+			name: "MoveCharacter - engine error produces CHARACTER_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				charID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockCharacterRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					CharacterRepo: mockRepo,
+					Engine:        engine,
+				})
+				return svc, charID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				locID := ulid.Make()
+				return svc.MoveCharacter(ctx, subjectID, id, locID)
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "MoveCharacter - policy deny produces CHARACTER_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				charID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockCharacterRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					CharacterRepo: mockRepo,
+					Engine:        engine,
+				})
+				return svc, charID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				locID := ulid.Make()
+				return svc.MoveCharacter(ctx, subjectID, id, locID)
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "CHARACTER_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+
+		// Scene operations
+		{
+			name: "AddSceneParticipant - engine error produces SCENE_ACCESS_EVALUATION_FAILED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				sceneID := ulid.Make()
+				engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+				mockRepo := worldtest.NewMockSceneRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					SceneRepo: mockRepo,
+					Engine:    engine,
+				})
+				return svc, sceneID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				charID := ulid.Make()
+				return svc.AddSceneParticipant(ctx, subjectID, id, charID, world.RoleMember)
+			},
+			engineBehavior:    "error",
+			expectedErrorCode: "SCENE_ACCESS_EVALUATION_FAILED",
+			expectedSentinel:  world.ErrAccessEvaluationFailed,
+		},
+		{
+			name: "AddSceneParticipant - policy deny produces SCENE_ACCESS_DENIED",
+			setupService: func() (*world.Service, ulid.ULID) {
+				sceneID := ulid.Make()
+				engine := policytest.DenyAllEngine()
+				mockRepo := worldtest.NewMockSceneRepository(t)
+				svc := world.NewService(world.ServiceConfig{
+					SceneRepo: mockRepo,
+					Engine:    engine,
+				})
+				return svc, sceneID
+			},
+			invokeMethod: func(svc *world.Service, id ulid.ULID) error {
+				charID := ulid.Make()
+				return svc.AddSceneParticipant(ctx, subjectID, id, charID, world.RoleMember)
+			},
+			engineBehavior:    "deny",
+			expectedErrorCode: "SCENE_ACCESS_DENIED",
+			expectedSentinel:  world.ErrPermissionDenied,
+		},
+
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, id := tt.setupService()
+			err := tt.invokeMethod(svc, id)
+
+			require.Error(t, err, "operation should fail with access error")
+
+			// Verify correct sentinel error
+			assert.ErrorIs(t, err, tt.expectedSentinel,
+				"error should wrap %v", tt.expectedSentinel)
+
+			// Verify correct error code
+			errutil.AssertErrorCode(t, err, tt.expectedErrorCode)
+
+			// Ensure the other sentinel is NOT present
+			if tt.engineBehavior == "error" {
+				assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+					"engine error must not be reported as permission denied")
+			} else {
+				assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
+					"policy denial must not be reported as evaluation error")
+			}
+		})
+	}
+}

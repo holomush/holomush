@@ -173,7 +173,7 @@ See ADR #76 (Compound Resource Decomposition During Migration) for full decision
 - `GetCharactersByLocation` (`internal/world/service.go:471`) — **NOTE:** Compound resource decomposition required
 - `MoveCharacter` (`internal/world/service.go:558`)
 - `ExamineCharacter` (`internal/world/service.go:768`)
-- `DeleteCharacter` (`internal/world/service.go:xxx`)
+- `DeleteCharacter` (`internal/world/service.go:533`)
 
 **Call sites - Scenes (3):**
 
@@ -645,7 +645,7 @@ func TestMigrationEquivalence(t *testing.T) {
             resource: "character:01YZA",
         },
 
-        // #25: DeleteCharacter (internal/world/service.go:xxx)
+        // #25: DeleteCharacter (internal/world/service.go:533)
         {
             name:     "delete character - admin deletes character",
             subject:  "character:admin-01ABC",

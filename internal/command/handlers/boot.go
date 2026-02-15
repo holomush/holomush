@@ -63,8 +63,13 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 				"resource", "admin.boot",
 				"error", evalErr,
 			)
+			err := oops.Code(command.CodeAccessEvaluationFailed).
+				With("command", "boot").
+				With("capability", "admin.boot").
+				Wrap(evalErr)
+			return err
 		}
-		if evalErr != nil || !decision.IsAllowed() {
+		if !decision.IsAllowed() {
 			err := oops.Code(command.CodePermissionDenied).
 				With("command", "boot").
 				With("capability", "admin.boot").
@@ -138,13 +143,15 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 		// Get character info for this session
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
-			// Skip expected errors (not found, permission denied)
-			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+			// Skip expected errors (not found, permission denied, access evaluation failures)
+			// - checkAccess helper already logs access evaluation failures, so don't re-log
+			// - permission denied and not found are also expected, don't log or count
+			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) || errors.Is(err, world.ErrAccessEvaluationFailed) {
 				continue
 			}
+			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
 			// Unexpected errors fall through here intentionally —
 			// database failures or timeouts should be visible to admins via error reporting.
-			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
 			errorCount++
 			slog.ErrorContext(ctx, "unexpected error looking up character",
 				"target_name", targetName,

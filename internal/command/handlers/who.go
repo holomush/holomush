@@ -44,12 +44,12 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		// Try to get character info - skip if not accessible
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
-			// Skip expected errors (not found, permission denied)
-			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+			// Skip expected errors (not found, permission denied, access evaluation failures)
+			// - checkAccess helper already logs access evaluation failures, so don't re-log
+			// - permission denied and not found are also expected, don't log or count
+			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) || errors.Is(err, world.ErrAccessEvaluationFailed) {
 				continue
 			}
-			// ErrAccessEvaluationFailed falls through here intentionally —
-			// engine failures should be visible to users via the error count message.
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
 			slog.ErrorContext(ctx, "unexpected error looking up character in who list",
 				"session_char_id", session.CharacterID.String(),
