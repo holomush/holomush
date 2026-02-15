@@ -393,7 +393,7 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should show warning about error
-	assert.Contains(t, buf.String(), "(Note: 1 player could not be displayed due to an error)")
+	assert.Contains(t, buf.String(), "(Note: 1 player could not be displayed due to a system error)")
 }
 
 func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
@@ -439,7 +439,7 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should show warning about errors (plural)
-	assert.Contains(t, buf.String(), "(Note: 2 players could not be displayed due to errors)")
+	assert.Contains(t, buf.String(), "(Note: 2 players could not be displayed due to system errors)")
 }
 
 func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {

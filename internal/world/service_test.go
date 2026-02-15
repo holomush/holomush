@@ -96,6 +96,26 @@ func TestWorldService_GetLocation(t *testing.T) {
 			"explicit deny must not be reported as evaluation error")
 	})
 
+	t.Run("preserves decision context on permission denied", func(t *testing.T) {
+		// DenyAllEngine returns Decision with Reason="test-deny-all" and PolicyID=""
+		engine := policytest.DenyAllEngine()
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		assert.Nil(t, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+
+		// Verify oops context contains decision details
+		errutil.AssertErrorContext(t, err, "reason", "test-deny-all")
+		errutil.AssertErrorContext(t, err, "policy_id", "")
+	})
+
 	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
 		engineErr := errors.New("policy store unavailable")
 		engine := policytest.NewErrorEngine(engineErr)

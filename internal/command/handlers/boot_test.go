@@ -961,7 +961,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 	// Verify user-facing message indicates system error
 	playerMsg := command.PlayerMessage(err)
 	assert.Contains(t, playerMsg, "system error")
-	assert.Contains(t, playerMsg, "Try again")
+	assert.Contains(t, playerMsg, "Please try again shortly")
 }
 
 func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
