@@ -11,19 +11,20 @@ import (
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand    = "UNKNOWN_COMMAND"
-	CodePermissionDenied  = "PERMISSION_DENIED"
-	CodeInvalidArgs       = "INVALID_ARGS"
-	CodeWorldError        = "WORLD_ERROR"
-	CodeRateLimited       = "RATE_LIMITED"
-	CodeCircularAlias     = "CIRCULAR_ALIAS"
-	CodeAliasConflict     = "ALIAS_CONFLICT"
-	CodeNoCharacter       = "NO_CHARACTER"
-	CodeTargetNotFound    = "TARGET_NOT_FOUND"
-	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
-	CodeNilServices       = "NIL_SERVICES"
-	CodeInvalidName       = "INVALID_NAME"
-	CodeNoAliasCache      = "NO_ALIAS_CACHE"
+	CodeUnknownCommand             = "UNKNOWN_COMMAND"
+	CodePermissionDenied           = "PERMISSION_DENIED"
+	CodeAccessEvaluationFailed     = "ACCESS_EVALUATION_FAILED"
+	CodeInvalidArgs                = "INVALID_ARGS"
+	CodeWorldError                 = "WORLD_ERROR"
+	CodeRateLimited                = "RATE_LIMITED"
+	CodeCircularAlias              = "CIRCULAR_ALIAS"
+	CodeAliasConflict              = "ALIAS_CONFLICT"
+	CodeNoCharacter                = "NO_CHARACTER"
+	CodeTargetNotFound             = "TARGET_NOT_FOUND"
+	CodeShutdownRequested          = "SHUTDOWN_REQUESTED"
+	CodeNilServices                = "NIL_SERVICES"
+	CodeInvalidName                = "INVALID_NAME"
+	CodeNoAliasCache               = "NO_ALIAS_CACHE"
 )
 
 // Sentinel errors for special conditions.
@@ -150,6 +151,8 @@ func PlayerMessage(err error) string {
 		return "Unknown command. Try 'help'."
 	case CodePermissionDenied:
 		return "You don't have permission to do that."
+	case CodeAccessEvaluationFailed:
+		return "Permission check failed. Please try again or contact an administrator."
 	case CodeInvalidArgs:
 		if usage, ok := oopsErr.Context()["usage"].(string); ok && usage != "" {
 			return "Usage: " + usage

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -26,6 +27,7 @@ type Dispatcher struct {
 	engine      policy.AccessPolicyEngine
 	aliasCache  *AliasCache          // optional, can be nil
 	rateLimiter *RateLimitMiddleware // optional, can be nil
+	optErr      error                // error from applying options
 }
 
 // DispatcherOption configures a Dispatcher during construction.
@@ -41,15 +43,13 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 
 // WithRateLimiter configures the dispatcher to use rate limiting.
 // If not provided, rate limiting is disabled.
-// Note: This function panics if NewRateLimitMiddleware returns an error.
-// This can happen if either rl is nil (guarded above) or d.engine is nil
-// (callers must set engine via NewDispatcher before applying options).
 func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 	return func(d *Dispatcher) {
 		if rl != nil {
 			middleware, err := NewRateLimitMiddleware(rl, d.engine)
 			if err != nil {
-				panic(err)
+				d.optErr = err
+				return
 			}
 			d.rateLimiter = middleware
 		}
@@ -71,6 +71,9 @@ func NewDispatcher(registry *Registry, engine policy.AccessPolicyEngine, opts ..
 	}
 	for _, opt := range opts {
 		opt(d)
+	}
+	if d.optErr != nil {
+		return nil, d.optErr
 	}
 	return d, nil
 }
@@ -177,8 +180,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 				"resource", cap,
 				"error", evalErr,
 			)
+			metrics.SetStatus(StatusEngineFailure)
+			err = oops.Code(CodeAccessEvaluationFailed).
+				With("command", parsed.Name).
+				With("capability", cap).
+				Wrap(evalErr)
+			return err
 		}
-		if evalErr != nil || !decision.IsAllowed() {
+		if !decision.IsAllowed() {
 			metrics.SetStatus(StatusPermissionDenied)
 			err = ErrPermissionDenied(parsed.Name, cap)
 			return err

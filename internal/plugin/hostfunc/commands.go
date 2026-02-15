@@ -79,7 +79,10 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 
 		commands := f.commandRegistry.All()
 		subject := access.SubjectCharacter + charID.String()
-		ctx := context.Background()
+		ctx := L.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
 
 		// Filter commands by character capabilities
 		var filtered []command.CommandEntry

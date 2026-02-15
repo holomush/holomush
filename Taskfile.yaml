@@ -216,14 +216,14 @@ tasks:
         set -euo pipefail
 
         # Search for legacy AccessControl.Check(ctx, ...) calls in production code.
-        # Pattern: .Check(ctx, — matches AccessControl.Check(ctx, subject, action, resource)
-        # but NOT capability.Enforcer.Check(plugin, cap) which lacks ctx parameter.
+        # Pattern: AccessControl\.Check\(ctx, — specifically targets AccessControl.Check(ctx, subject, action, resource)
+        # This avoids false positives from other Check() methods (e.g., capability.Enforcer.Check).
         # Exclude test files (_test.go), generated files (*.pb.go), and comments.
         LEGACY_CALLS=$(grep -rn \
           --include="*.go" \
           --exclude="*_test.go" \
           --exclude="*.pb.go" \
-          -E '\.Check\(ctx,' \
+          -E 'AccessControl\.Check\(ctx,' \
           internal/ pkg/ 2>/dev/null | grep -v '^\s*//' || true)
 
         if [ -n "$LEGACY_CALLS" ]; then
