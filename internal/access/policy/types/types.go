@@ -92,7 +92,7 @@ func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
 }
 
 // Decision is the result of evaluating an access request against the policy engine.
-// The allowed and effect fields are unexported to prevent invariant bypass.
+// The allowed and effect fields are deliberately unexported; use NewDecision() and accessor methods.
 type Decision struct {
 	allowed    bool
 	effect     Effect

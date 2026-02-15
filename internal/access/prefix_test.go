@@ -385,3 +385,67 @@ func TestCharacterResource_EmptyID_Panics(t *testing.T) {
 		access.CharacterResource("")
 	})
 }
+
+func TestPropertyResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		propPath string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			propPath: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "property:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "path with dots",
+			propPath: "character.stats.strength",
+			expected: "property:character.stats.strength",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.PropertyResource(tt.propPath)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestPropertyResource_EmptyPath_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.PropertyResource: empty propPath would create invalid resource reference", func() {
+		access.PropertyResource("")
+	})
+}
+
+func TestStreamResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		streamID string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			streamID: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "stream:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "compound stream ID",
+			streamID: "location:01XYZ",
+			expected: "stream:location:01XYZ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.StreamResource(tt.streamID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestStreamResource_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.StreamResource: empty streamID would create invalid resource reference", func() {
+		access.StreamResource("")
+	})
+}

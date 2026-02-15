@@ -446,6 +446,7 @@ func TestStaticAccessControl_DualPrefixRegression(t *testing.T) {
 	// Regression test: Verify that both "char:" and "character:" prefixes
 	// produce identical results. During Phase 7.6 migration to AccessPolicyEngine,
 	// the "character:" prefix was added alongside the legacy "char:" prefix.
+	// TEMPORARY: This dual-prefix support will be removed in Phase 7.7.
 	// This test ensures that both prefixes are handled equivalently, so that
 	// if someone accidentally removes "character:" from the switch statement,
 	// the test will catch the breakage.
@@ -521,6 +522,7 @@ func TestStaticAccessControl_DualPrefixRegression(t *testing.T) {
 
 func TestStaticAccessControl_CharacterPrefixEquivalence(t *testing.T) {
 	// Simplified test: "character:" prefix should work identically to "char:" prefix.
+	// TEMPORARY: This dual-prefix support will be removed in Phase 7.7.
 	// This ensures the migration path is safe and can be reverted without issues.
 	ac := access.NewStaticAccessControl(nil, nil)
 	ctx := context.Background()
@@ -545,6 +547,7 @@ func TestStaticAccessControl_DualPrefixSameSubjectID(t *testing.T) {
 	// End-to-end test: Verify that a subject ID with "char:" prefix produces the same
 	// evaluation result as "character:" prefix through the full permission check path.
 	// This validates the prefix translation in StaticAccessControl.Check() switch statement.
+	// TEMPORARY: This dual-prefix support will be removed in Phase 7.7.
 	//
 	// Regression scenario: If someone accidentally removes "char:" from the switch case,
 	// this test will catch the breakage by showing different results for the same ID.
@@ -582,6 +585,7 @@ func TestStaticAccessControl_DualPrefixSameSubjectID(t *testing.T) {
 func TestStaticAccessControl_DualPrefixWithTokenResolution(t *testing.T) {
 	// End-to-end test: Verify both "char:" and "character:" prefixes work through
 	// the full path including $self token resolution (which extracts the subject ID).
+	// TEMPORARY: This dual-prefix support will be removed in Phase 7.7.
 	//
 	// This ensures that the prefix translation doesn't break $self resolution in checkRole().
 	//

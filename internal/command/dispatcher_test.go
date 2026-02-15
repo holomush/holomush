@@ -184,7 +184,7 @@ func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, PlayerMessage(err), "permission")
 
-	// Verify COMMAND_ACCESS_DENIED error code
+	// Verify PERMISSION_DENIED error code
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code(),
