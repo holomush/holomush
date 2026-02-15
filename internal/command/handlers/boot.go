@@ -51,11 +51,16 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		decision, evalErr := exec.Services().Engine().Evaluate(ctx, types.AccessRequest{
-			Subject:  subjectID,
-			Action:   "execute",
-			Resource: "admin.boot",
-		})
+		req, reqErr := types.NewAccessRequest(subjectID, "execute", "admin.boot")
+		if reqErr != nil {
+			err := oops.Code(command.CodeAccessEvaluationFailed).
+				With("command", "boot").
+				With("capability", "admin.boot").
+				Wrap(reqErr)
+			return err
+		}
+
+		decision, evalErr := exec.Services().Engine().Evaluate(ctx, req)
 		if evalErr != nil {
 			slog.ErrorContext(ctx, "boot access evaluation failed",
 				"subject", subjectID,

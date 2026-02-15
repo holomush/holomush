@@ -41,6 +41,16 @@ var commandRateLimited = prometheus.NewCounterVec(
 	[]string{"command"},
 )
 
+// engineFailures is a package-level counter for access engine failures.
+// This tracks when the access policy engine returns errors during evaluation.
+var engineFailures = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_engine_failures_total",
+		Help: "Total number of access engine evaluation failures",
+	},
+	[]string{"operation"},
+)
+
 // RecordCommandOutputFailure increments the command output failure counter.
 // Called by command handlers when output write fails.
 func RecordCommandOutputFailure(command string) {
@@ -51,6 +61,12 @@ func RecordCommandOutputFailure(command string) {
 // Called by the dispatcher when a command is rejected due to rate limiting.
 func RecordCommandRateLimited(command string) {
 	commandRateLimited.WithLabelValues(command).Inc()
+}
+
+// RecordEngineFailure increments the engine failure counter.
+// Called when the access policy engine returns an error during evaluation.
+func RecordEngineFailure(operation string) {
+	engineFailures.WithLabelValues(operation).Inc()
 }
 
 // Metrics contains custom Prometheus metrics for HoloMUSH.
@@ -82,6 +98,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	reg.MustRegister(m.RequestsTotal)
 	reg.MustRegister(commandOutputFailures)
 	reg.MustRegister(commandRateLimited)
+	reg.MustRegister(engineFailures)
 
 	return m
 }

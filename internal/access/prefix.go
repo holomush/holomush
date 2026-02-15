@@ -19,13 +19,14 @@ const (
 
 // Resource prefix constants identify the type of entity being accessed.
 const (
-	ResourceLocation = "location:"
-	ResourceObject   = "object:"
-	ResourceCommand  = "command:"
-	ResourceProperty = "property:"
-	ResourceStream   = "stream:"
-	ResourceExit     = "exit:"
-	ResourceScene    = "scene:"
+	ResourceCharacter = "character:"
+	ResourceLocation  = "location:"
+	ResourceObject    = "object:"
+	ResourceCommand   = "command:"
+	ResourceProperty  = "property:"
+	ResourceStream    = "stream:"
+	ResourceExit      = "exit:"
+	ResourceScene     = "scene:"
 )
 
 // Session error code constants for infrastructure-level session errors.
@@ -39,6 +40,7 @@ var knownPrefixes = []string{
 	SubjectCharacter,
 	SubjectPlugin,
 	SubjectSession,
+	ResourceCharacter,
 	ResourceLocation,
 	ResourceObject,
 	ResourceCommand,
@@ -56,6 +58,19 @@ func CharacterSubject(charID string) string {
 		panic("access.CharacterSubject: empty charID would bypass access control")
 	}
 	return SubjectCharacter + charID
+}
+
+// CharacterResource returns a properly formatted character resource identifier.
+// Note: ResourceCharacter has the same string value as SubjectCharacter ("character:").
+// This is intentional: a character can be both a subject (who is acting) and a resource
+// (what is being acted upon). The prefix is identical but the semantic role differs
+// based on context (subject vs. resource parameter in access checks).
+// Panics if charID is empty, since an empty resource creates an invalid reference.
+func CharacterResource(charID string) string {
+	if charID == "" {
+		panic("access.CharacterResource: empty charID would create invalid resource reference")
+	}
+	return ResourceCharacter + charID
 }
 
 // LocationResource returns a properly formatted location resource identifier.

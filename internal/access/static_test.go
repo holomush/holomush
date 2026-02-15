@@ -540,3 +540,78 @@ func TestStaticAccessControl_CharacterPrefixEquivalence(t *testing.T) {
 	assert.True(t, charBobCanSay, "character:bob should execute say")
 	assert.True(t, charBobCantDig, "character:bob should not execute dig")
 }
+
+func TestStaticAccessControl_DualPrefixSameSubjectID(t *testing.T) {
+	// End-to-end test: Verify that a subject ID with "char:" prefix produces the same
+	// evaluation result as "character:" prefix through the full permission check path.
+	// This validates the prefix translation in StaticAccessControl.Check() switch statement.
+	//
+	// Regression scenario: If someone accidentally removes "char:" from the switch case,
+	// this test will catch the breakage by showing different results for the same ID.
+	//
+	// Note: StaticAccessControl stores roles keyed by raw subject string, so each prefix
+	// needs its own role assignment. This tests that both prefixes route correctly through
+	// the Check() switch and produce identical results for the same role.
+	subjectID := "01ABC"
+	ctx := context.Background()
+
+	// Assign role via char: prefix, verify it works
+	acChar := access.NewStaticAccessControl(nil, nil)
+	require.NoError(t, acChar.AssignRole("char:"+subjectID, "player"))
+	charAllow := acChar.Check(ctx, "char:"+subjectID, "execute", "command:say")
+	charDeny := acChar.Check(ctx, "char:"+subjectID, "execute", "command:dig")
+
+	// Assign role via character: prefix, verify it works
+	acCharacter := access.NewStaticAccessControl(nil, nil)
+	require.NoError(t, acCharacter.AssignRole("character:"+subjectID, "player"))
+	characterAllow := acCharacter.Check(ctx, "character:"+subjectID, "execute", "command:say")
+	characterDeny := acCharacter.Check(ctx, "character:"+subjectID, "execute", "command:dig")
+
+	// Both prefixes should produce identical results for same role
+	assert.Equal(t, characterAllow, charAllow,
+		"char: and character: prefixes for same ID should produce identical allow results")
+	assert.True(t, charAllow, "player role should allow execute:command:say via char:")
+	assert.True(t, characterAllow, "player role should allow execute:command:say via character:")
+
+	assert.Equal(t, characterDeny, charDeny,
+		"char: and character: prefixes should deny the same actions")
+	assert.False(t, charDeny, "player role should not allow execute:command:dig via char:")
+	assert.False(t, characterDeny, "player role should not allow execute:command:dig via character:")
+}
+
+func TestStaticAccessControl_DualPrefixWithTokenResolution(t *testing.T) {
+	// End-to-end test: Verify both "char:" and "character:" prefixes work through
+	// the full path including $self token resolution (which extracts the subject ID).
+	//
+	// This ensures that the prefix translation doesn't break $self resolution in checkRole().
+	//
+	// Note: Roles are stored keyed by raw subject string, so each prefix instance
+	// needs its own assignment. We verify $self resolution works for both prefixes.
+	subjectID := "01XYZ"
+	otherID := "01OTHER"
+	ctx := context.Background()
+
+	// Test char: prefix with $self resolution
+	acChar := access.NewStaticAccessControl(nil, nil)
+	require.NoError(t, acChar.AssignRole("char:"+subjectID, "player"))
+	charCanReadSelf := acChar.Check(ctx, "char:"+subjectID, "read", "character:"+subjectID)
+	charCannotReadOther := acChar.Check(ctx, "char:"+subjectID, "read", "character:"+otherID)
+
+	// Test character: prefix with $self resolution
+	acCharacter := access.NewStaticAccessControl(nil, nil)
+	require.NoError(t, acCharacter.AssignRole("character:"+subjectID, "player"))
+	characterCanReadSelf := acCharacter.Check(ctx, "character:"+subjectID, "read", "character:"+subjectID)
+	characterCannotReadOther := acCharacter.Check(ctx, "character:"+subjectID, "read", "character:"+otherID)
+
+	// Both should allow reading own character ($self)
+	assert.True(t, charCanReadSelf, "char: prefix should resolve $self correctly")
+	assert.True(t, characterCanReadSelf, "character: prefix should resolve $self correctly")
+	assert.Equal(t, characterCanReadSelf, charCanReadSelf,
+		"$self resolution should work identically for both prefixes")
+
+	// Both should deny reading other characters
+	assert.False(t, charCannotReadOther, "char: prefix should deny reading other character")
+	assert.False(t, characterCannotReadOther, "character: prefix should deny reading other character")
+	assert.Equal(t, characterCannotReadOther, charCannotReadOther,
+		"both prefixes should deny access to other characters")
+}

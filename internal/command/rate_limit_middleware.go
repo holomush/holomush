@@ -43,7 +43,19 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 	}
 
 	subject := access.CharacterSubject(exec.CharacterID().String())
-	if r.hasBypass(ctx, subject, commandName) {
+	bypass, err := r.hasBypass(ctx, subject)
+	if err != nil {
+		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
+		slog.WarnContext(ctx, "rate limit bypass check failed",
+			"subject", subject,
+			"action", "execute",
+			"resource", CapabilityRateLimitBypass,
+			"command", commandName,
+			"error", err,
+		)
+		observability.RecordEngineFailure("rate_limit_bypass")
+		// Continue to rate limiting check below (fail-closed)
+	} else if bypass {
 		return nil
 	}
 
@@ -59,24 +71,22 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 }
 
 // hasBypass evaluates whether the subject has rate limit bypass capability.
-// Returns true if the bypass check succeeds and permission is granted.
-// On evaluation error, returns false (fail-closed: apply rate limiting).
-func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject, commandName string) bool {
-	decision, err := r.engine.Evaluate(ctx, types.AccessRequest{
-		Subject:  subject,
-		Action:   "execute",
-		Resource: CapabilityRateLimitBypass,
-	})
+// Returns (bypass bool, err error) where:
+//   - bypass is true if the bypass check succeeds and permission is granted
+//   - err is non-nil if request construction or evaluation fails
+//
+// On evaluation error, returns (false, err) (fail-closed: apply rate limiting).
+func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject string) (bool, error) {
+	req, err := types.NewAccessRequest(subject, "execute", CapabilityRateLimitBypass)
 	if err != nil {
-		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
-		slog.ErrorContext(ctx, "rate limit bypass check failed",
-			"subject", subject,
-			"action", "execute",
-			"resource", CapabilityRateLimitBypass,
-			"command", commandName,
-			"error", err,
-		)
-		return false
+		//nolint:wrapcheck // Constructor error, will be wrapped by caller
+		return false, err
 	}
-	return decision.IsAllowed()
+
+	decision, err := r.engine.Evaluate(ctx, req)
+	if err != nil {
+		//nolint:wrapcheck // Engine error, will be wrapped by caller
+		return false, err
+	}
+	return decision.IsAllowed(), nil
 }

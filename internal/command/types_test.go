@@ -185,7 +185,7 @@ func TestDecision_ZeroValue_IsDeny(t *testing.T) {
 
 	var d types.Decision
 	assert.False(t, d.IsAllowed(), "Zero-value Decision should deny access (fail-closed)")
-	assert.Equal(t, types.EffectDefaultDeny, d.Effect, "Zero-value Decision should have DefaultDeny effect")
+	assert.Equal(t, types.EffectDefaultDeny, d.Effect(), "Zero-value Decision should have DefaultDeny effect")
 }
 
 type mockEventStore struct{}

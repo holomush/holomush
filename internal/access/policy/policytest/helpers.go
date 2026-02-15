@@ -46,7 +46,7 @@ func (g *GrantEngine) Grant(subject, action, resource string) {
 	g.grants[subject+"\x00"+action+"\x00"+resource] = true
 }
 
-// Evaluate implements policy.AccessPolicyEngine.
+// Evaluate implements types.AccessPolicyEngine.
 func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (types.Decision, error) {
 	key := req.Subject + "\x00" + req.Action + "\x00" + req.Resource
 	if g.grants[key] {
@@ -55,7 +55,7 @@ func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (type
 	return types.NewDecision(types.EffectDeny, "test-deny", ""), nil
 }
 
-// ErrorEngine is a test AccessPolicyEngine that always returns the configured error.
+// ErrorEngine is a test types.AccessPolicyEngine that always returns the configured error.
 // Used to test fail-closed error paths.
 type ErrorEngine struct {
 	err error

@@ -57,11 +57,12 @@ func TestNewDecision_Invariant(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewDecision(tt.effect, tt.reason, tt.policyID)
 			assert.Equal(t, tt.expectedAllowed, d.IsAllowed())
-			assert.Equal(t, tt.effect, d.Effect)
+			assert.Equal(t, tt.effect, d.Effect())
 			assert.Equal(t, tt.reason, d.Reason)
 			assert.Equal(t, tt.policyID, d.PolicyID)
-			// Verify unexported field directly
+			// Verify unexported fields directly
 			assert.Equal(t, tt.expectedAllowed, d.allowed)
+			assert.Equal(t, tt.effect, d.effect)
 		})
 	}
 }
@@ -74,42 +75,42 @@ func TestDecision_Validate(t *testing.T) {
 	}{
 		{
 			name:      "valid allow decision",
-			decision:  Decision{allowed: true, Effect: EffectAllow, Reason: "ok"},
+			decision:  Decision{allowed: true, effect: EffectAllow, Reason: "ok"},
 			expectErr: false,
 		},
 		{
 			name:      "valid system bypass decision",
-			decision:  Decision{allowed: true, Effect: EffectSystemBypass, Reason: "system"},
+			decision:  Decision{allowed: true, effect: EffectSystemBypass, Reason: "system"},
 			expectErr: false,
 		},
 		{
 			name:      "valid deny decision",
-			decision:  Decision{allowed: false, Effect: EffectDeny, Reason: "forbidden"},
+			decision:  Decision{allowed: false, effect: EffectDeny, Reason: "forbidden"},
 			expectErr: false,
 		},
 		{
 			name:      "valid default deny decision",
-			decision:  Decision{allowed: false, Effect: EffectDefaultDeny, Reason: "no match"},
+			decision:  Decision{allowed: false, effect: EffectDefaultDeny, Reason: "no match"},
 			expectErr: false,
 		},
 		{
 			name:      "invalid: allowed true but effect deny",
-			decision:  Decision{allowed: true, Effect: EffectDeny, Reason: "broken"},
+			decision:  Decision{allowed: true, effect: EffectDeny, Reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed true but effect default deny",
-			decision:  Decision{allowed: true, Effect: EffectDefaultDeny, Reason: "broken"},
+			decision:  Decision{allowed: true, effect: EffectDefaultDeny, Reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed false but effect allow",
-			decision:  Decision{allowed: false, Effect: EffectAllow, Reason: "broken"},
+			decision:  Decision{allowed: false, effect: EffectAllow, Reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed false but effect system bypass",
-			decision:  Decision{allowed: false, Effect: EffectSystemBypass, Reason: "broken"},
+			decision:  Decision{allowed: false, effect: EffectSystemBypass, Reason: "broken"},
 			expectErr: true,
 		},
 	}
@@ -168,7 +169,7 @@ func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
 	// or returns it from an error path, access must be denied.
 	var d Decision
 	assert.False(t, d.IsAllowed(), "zero-value Decision must deny access (fail-closed)")
-	assert.Equal(t, EffectDefaultDeny, d.Effect, "zero-value Decision effect must be default_deny")
+	assert.Equal(t, EffectDefaultDeny, d.Effect(), "zero-value Decision effect must be default_deny")
 	assert.Empty(t, d.Reason)
 	assert.Empty(t, d.PolicyID)
 
