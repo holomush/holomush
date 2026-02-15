@@ -51,7 +51,7 @@ var _ = Describe("Character Movement Events", func() {
 		service = world.NewService(world.ServiceConfig{
 			LocationRepo:  env.Locations,
 			CharacterRepo: env.Characters,
-			Engine: policytest.AllowAllEngine(),
+			Engine:        policytest.AllowAllEngine(),
 			EventEmitter:  emitter,
 		})
 	})

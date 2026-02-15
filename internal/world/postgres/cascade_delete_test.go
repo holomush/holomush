@@ -321,10 +321,10 @@ func TestWorldService_DeleteLocation_Integration(t *testing.T) {
 	ac := policytest.AllowAllEngine()
 
 	svc := world.NewService(world.ServiceConfig{
-		LocationRepo:  locRepo,
-		PropertyRepo:  propRepo,
-		Engine: ac,
-		Transactor:    tx,
+		LocationRepo: locRepo,
+		PropertyRepo: propRepo,
+		Engine:       ac,
+		Transactor:   tx,
 	})
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "location", locID), "property should exist before delete")
@@ -359,10 +359,10 @@ func TestWorldService_DeleteObject_Integration(t *testing.T) {
 	ac := policytest.AllowAllEngine()
 
 	svc := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objRepo,
-		PropertyRepo:  propRepo,
-		Engine: ac,
-		Transactor:    tx,
+		ObjectRepo:   objRepo,
+		PropertyRepo: propRepo,
+		Engine:       ac,
+		Transactor:   tx,
 	})
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "object", objID), "property should exist before delete")
@@ -399,7 +399,7 @@ func TestWorldService_DeleteCharacter_Integration(t *testing.T) {
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: charRepo,
 		PropertyRepo:  propRepo,
-		Engine: ac,
+		Engine:        ac,
 		Transactor:    tx,
 	})
 

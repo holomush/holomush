@@ -964,6 +964,91 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 	assert.Contains(t, playerMsg, "Please try again shortly")
 }
 
+func TestBootHandler_BootOthers_IncludesDecisionContext(t *testing.T) {
+	executorID := ulid.Make()
+	targetID := ulid.Make()
+	execConn := ulid.Make()
+	targetConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(targetID, targetConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "RegularUser",
+	}
+	targetChar := &world.Character{
+		ID:       targetID,
+		PlayerID: playerID,
+		Name:     "Troublemaker",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	// Use selective mock that allows read but denies admin.boot
+	accessControl := policytest.NewGrantEngine()
+	// Grant read access to characters (needed for findCharacterByName)
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String())
+	accessControl.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String())
+
+	// Session iteration order is non-deterministic, so executor lookup may or may not happen
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+
+	// Target lookup during session iteration
+	characterRepo.EXPECT().
+		Get(mock.Anything, targetID).
+		Return(targetChar, nil)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		Engine:        accessControl,
+	})
+
+	// Create a mock engine that denies admin.boot with specific reason and policy ID
+	bootEngine := worldtest.NewMockAccessPolicyEngine(t)
+	bootEngine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{
+			Subject:  access.SubjectCharacter + executorID.String(),
+			Action:   "execute",
+			Resource: "admin.boot",
+		}).
+		Return(types.NewDecision(types.EffectDeny, "policy violation detected", "policy-123"), nil)
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID:   executorID,
+		CharacterName: "RegularUser",
+		PlayerID:      playerID,
+		Args:          "Troublemaker",
+		Output:        &buf,
+		Services: command.NewTestServices(command.ServicesConfig{
+			Session: sessionMgr,
+			World:   worldService,
+			Engine:  bootEngine,
+		}),
+	})
+
+	err := BootHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, command.CodePermissionDenied, oopsErr.Code())
+
+	// Verify decision context is propagated
+	ctx := oopsErr.Context()
+	assert.Equal(t, "policy violation detected", ctx["reason"], "decision reason should be propagated")
+	assert.Equal(t, "policy-123", ctx["policy_id"], "policy ID should be propagated")
+
+	// Verify target session still exists (was not booted)
+	targetSession := sessionMgr.GetSession(targetID)
+	assert.NotNil(t, targetSession, "Target session should still exist")
+}
+
 func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()

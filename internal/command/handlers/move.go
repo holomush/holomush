@@ -5,12 +5,14 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // MoveHandler navigates the character through an exit in the given direction.
@@ -29,6 +31,10 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Get exits from current location
 	exits, err := exec.Services().World().GetExitsByLocation(ctx, subjectID, exec.LocationID())
 	if err != nil {
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return oops.Code(command.CodeWorldError).
 			With("message", "You can't see any way out.").
 			Wrap(err)
@@ -49,6 +55,10 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 		// Move the character
 		if err := exec.Services().World().MoveCharacter(ctx, subjectID, exec.CharacterID(), exit.ToLocationID); err != nil {
+			// Preserve access evaluation failures with their specific codes
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				return err //nolint:wrapcheck // preserve oops error code from world service
+			}
 			return oops.Code(command.CodeWorldError).
 				With("message", "Something prevents you from going that way.").
 				Wrap(err)
@@ -57,6 +67,10 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 		// Show the new location
 		loc, err := exec.Services().World().GetLocation(ctx, subjectID, exit.ToLocationID)
 		if err != nil {
+			// Preserve access evaluation failures with their specific codes
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				return err //nolint:wrapcheck // preserve oops error code from world service
+			}
 			return oops.Code(command.CodeWorldError).
 				With("message", "You arrive somewhere strange...").
 				Wrap(err)

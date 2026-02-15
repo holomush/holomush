@@ -46,11 +46,12 @@ func WithEngine(engine AccessPolicyEngine) Option {
 
 // listCommandsFn returns the list_commands host function.
 // Args: character_id (string) - the character whose capabilities determine visible commands
-// Returns: (commands table, error string)
+// Returns: ({commands: [...], incomplete: bool}, error string)
 //
 // Commands are filtered by capability:
 //   - Commands with no capabilities (nil or empty slice) are always included
 //   - Commands with capabilities require ALL capabilities to be granted (AND logic)
+//   - incomplete field is true if any engine errors occurred during filtering
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		charIDStr := L.CheckString(1)
@@ -86,14 +87,19 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 
 		// Filter commands by character capabilities
 		var filtered []command.CommandEntry
+		var hadEngineError bool
 		for _, cmd := range commands {
-			if f.canExecuteCommand(ctx, subject, cmd) {
+			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
+			if hadError {
+				hadEngineError = true
+			}
+			if allowed {
 				filtered = append(filtered, cmd)
 			}
 		}
 
-		// Create result table
-		tbl := L.NewTable()
+		// Create commands array
+		commandsTbl := L.NewTable()
 		for i, cmd := range filtered {
 			cmdTbl := L.NewTable()
 			L.SetField(cmdTbl, "name", lua.LString(cmd.Name))
@@ -102,22 +108,33 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			L.SetField(cmdTbl, "source", lua.LString(cmd.Source))
 
 			// Add to array (1-indexed for Lua)
-			L.SetTable(tbl, lua.LNumber(i+1), cmdTbl)
+			L.SetTable(commandsTbl, lua.LNumber(i+1), cmdTbl)
 		}
 
-		L.Push(tbl)
+		// Create result table with commands and incomplete metadata
+		resultTbl := L.NewTable()
+		L.SetField(resultTbl, "commands", commandsTbl)
+		if hadEngineError {
+			L.SetField(resultTbl, "incomplete", lua.LTrue)
+		} else {
+			L.SetField(resultTbl, "incomplete", lua.LFalse)
+		}
+
+		L.Push(resultTbl)
 		L.Push(lua.LNil) // no error
 		return 2
 	}
 }
 
 // canExecuteCommand checks if subject has all required capabilities for a command.
-// Returns true if command has no capabilities or subject has ALL required capabilities.
-func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) bool {
+// Returns (allowed bool, hadError bool) where:
+//   - allowed is true if command has no capabilities or subject has ALL required capabilities
+//   - hadError is true if any engine.Evaluate call returned an error
+func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
 	caps := cmd.GetCapabilities()
 	// Commands with no capabilities are always available
 	if len(caps) == 0 {
-		return true
+		return true, false
 	}
 
 	// Check ALL capabilities (AND logic) — fail-closed on errors
@@ -128,13 +145,14 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 		if err != nil {
 			slog.ErrorContext(ctx, "access evaluation failed",
 				"error", err, "subject", subject, "action", "execute", "resource", cap)
-			return false
+			hadError = true
+			return false, hadError
 		}
 		if !decision.IsAllowed() {
-			return false
+			return false, hadError
 		}
 	}
-	return true
+	return true, hadError
 }
 
 // getCommandHelpFn returns the get_command_help host function.

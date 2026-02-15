@@ -1634,3 +1634,127 @@ func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
+
+func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Register command with capability
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+	testReason := "admin_role_required"
+	testPolicyID := "policy-admin-001"
+
+	// Mock engine to return explicit denial with reason and policy ID
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.NewDecision(types.EffectDeny, testReason, testPolicyID), nil)
+
+	// Execute command
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	dispatchErr := dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify error code is PERMISSION_DENIED
+	oopsErr, ok := oops.AsOops(dispatchErr)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+
+	// Verify decision context (reason and policy_id) is propagated
+	context := oopsErr.Context()
+	assert.Equal(t, testReason, context["reason"], "decision reason should be propagated in error context")
+	assert.Equal(t, testPolicyID, context["policy_id"], "decision policy_id should be propagated in error context")
+
+	// Also verify command and capability are still present
+	assert.Equal(t, "admin", context["command"])
+	assert.Equal(t, "admin.manage", context["capability"])
+}
+
+func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
+	reg := NewRegistry()
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Register command with 2 capabilities
+	err := reg.Register(CommandEntry{
+		Name:         "dangerous",
+		capabilities: []string{"admin.manage", "admin.danger"},
+		handler: func(_ context.Context, _ *CommandExecution) error {
+			return nil
+		},
+		Source: "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+	evalErr := errors.New("policy store unavailable")
+
+	// First capability succeeds (allow)
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.manage",
+	}).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	// Second capability errors (fail-closed)
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.danger",
+	}).Return(types.Decision{}, evalErr)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Should return error and deny access
+	dispatchErr := dispatcher.Dispatch(context.Background(), "dangerous", exec)
+	require.Error(t, dispatchErr)
+
+	// Verify error code is access evaluation failure
+	errutil.AssertErrorCode(t, dispatchErr, CodeAccessEvaluationFailed)
+
+	// Verify error context includes the failing capability
+	oopsErr, ok := oops.AsOops(dispatchErr)
+	require.True(t, ok)
+	assert.Equal(t, "admin.danger", oopsErr.Context()["capability"],
+		"error should report which capability failed")
+	assert.Equal(t, "dangerous", oopsErr.Context()["command"])
+
+	// Verify wrapped error
+	assert.ErrorIs(t, dispatchErr, evalErr)
+
+	// Verify fail-closed: engine_failure metric, not success
+	metrics := CommandExecutions.With(prometheus.Labels{
+		"command": "dangerous", "source": "core", "status": StatusEngineFailure,
+	})
+	val := testutil.ToFloat64(metrics)
+	assert.Greater(t, val, float64(0), "should have recorded engine_failure metric")
+}
