@@ -5804,3 +5804,113 @@ func TestWorldService_MoveCharacter_VerifiesAccessRequest(t *testing.T) {
 	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
 	assert.Equal(t, "character:"+charID.String(), capturedRequest.Resource, "resource should be character:<id>")
 }
+
+func TestWorldService_CreateExit_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.SubjectCharacter + charID.String()
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockExitRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ExitRepo: mockRepo,
+		Engine:   mockEngine,
+	})
+
+	exit := &world.Exit{
+		Name:           "North",
+		Aliases:        []string{"n"},
+		FromLocationID: fromLocID,
+		ToLocationID:   toLocID,
+		Visibility:     world.VisibilityAll,
+	}
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+
+	err := svc.CreateExit(ctx, subjectID, exit)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "exit:*", capturedRequest.Resource, "resource should be exit:*")
+}
+
+func TestWorldService_DeleteExit_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.SubjectCharacter + charID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockExitRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ExitRepo: mockRepo,
+		Engine:   mockEngine,
+	})
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Delete(ctx, exitID).Return(nil)
+
+	err := svc.DeleteExit(ctx, subjectID, exitID)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "delete", capturedRequest.Action, "action should be 'delete'")
+	assert.Equal(t, "exit:"+exitID.String(), capturedRequest.Resource, "resource should be exit:<id>")
+}
+
+func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	callerID := ulid.Make()
+	subjectID := access.SubjectCharacter + callerID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	mockTransactor := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		PropertyRepo:  mockPropRepo,
+		Engine:        mockEngine,
+		Transactor:    mockTransactor,
+	})
+
+	// Capture the AccessRequest using mock.MatchedBy
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "character", charID).Return(nil)
+	mockCharRepo.EXPECT().Delete(ctx, charID).Return(nil)
+
+	err := svc.DeleteCharacter(ctx, subjectID, charID)
+	require.NoError(t, err)
+
+	// Verify AccessRequest fields
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "delete", capturedRequest.Action, "action should be 'delete'")
+	assert.Equal(t, "character:"+charID.String(), capturedRequest.Resource, "resource should be character:<id>")
+}

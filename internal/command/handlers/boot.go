@@ -65,8 +65,13 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 			)
 		}
 		if evalErr != nil || !decision.IsAllowed() {
-			//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
-			return command.ErrPermissionDenied("boot", "admin.boot")
+			err := oops.Code(command.CodePermissionDenied).
+				With("command", "boot").
+				With("capability", "admin.boot").
+				With("reason", decision.Reason).
+				With("policy_id", decision.PolicyID).
+				Errorf("permission denied for command boot")
+			return err
 		}
 	}
 
@@ -137,6 +142,8 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
+			// Unexpected errors fall through here intentionally —
+			// database failures or timeouts should be visible to admins via error reporting.
 			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
 			errorCount++
 			slog.ErrorContext(ctx, "unexpected error looking up character",

@@ -73,13 +73,19 @@ func TestListCommands_ReturnsAllCommands(t *testing.T) {
 
 	// When: list_commands is called with character_id
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: all commands are returned as a Lua table
-	commands := L.GetGlobal("commands")
-	require.NotEqual(t, lua.LNil, commands)
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	commands := L.GetField(resultTbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
 
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok, "expected table, got %T", commands)
@@ -332,13 +338,19 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 
 	// When: list_commands is called with character_id
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: only commands the character can execute are returned
-	commands := L.GetGlobal("commands")
-	require.NotEqual(t, lua.LNil, commands)
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	commands := L.GetField(resultTbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
 
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok, "expected table, got %T", commands)
@@ -383,12 +395,16 @@ func TestListCommands_EmptyCapabilitiesAlwaysIncluded(t *testing.T) {
 
 	// When: list_commands is called
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: both commands are returned (no capabilities required)
-	commands := L.GetGlobal("commands")
+	result := L.GetGlobal("result")
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok)
+
+	commands := L.GetField(resultTbl, "commands")
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok)
 
@@ -424,12 +440,16 @@ func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
 
 	// When: list_commands is called
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: nuke command should NOT be in results (needs BOTH caps)
-	commands := L.GetGlobal("commands")
+	result := L.GetGlobal("result")
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok)
+
+	commands := L.GetField(resultTbl, "commands")
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok)
 
@@ -465,12 +485,16 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 
 	// When: list_commands is called
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: command IS included because character has both caps
-	commands := L.GetGlobal("commands")
+	result := L.GetGlobal("result")
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok)
+
+	commands := L.GetField(resultTbl, "commands")
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok)
 
@@ -505,13 +529,19 @@ func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
 
 	// When: list_commands is called
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: only commands without capabilities are returned (fail-closed)
-	commands := L.GetGlobal("commands")
-	require.NotEqual(t, lua.LNil, commands)
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	commands := L.GetField(resultTbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
 
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok, "expected table, got %T", commands)
@@ -654,7 +684,7 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 
 	// When: list_commands is called with character_id
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -708,7 +738,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 
 	// When: list_commands is called
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -746,13 +776,19 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 
 	// When: list_commands is called with explicit deny engine
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: only commands with no capability requirements are returned
-	commands := L.GetGlobal("commands")
-	require.NotEqual(t, lua.LNil, commands)
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok)
+
+	commands := L.GetField(resultTbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
 
 	tbl, ok := commands.(*lua.LTable)
 	require.True(t, ok)
@@ -814,7 +850,7 @@ func TestListCommands_ThreadsLuaContext(t *testing.T) {
 
 	// When: list_commands is called
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -861,10 +897,193 @@ func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
 
 	// When: list_commands is called without context set on L
 	err := L.DoString(`
-		commands, err = holomush.list_commands("` + charID.String() + `")
+		result, err = holomush.list_commands("` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
 	// Then: context should not be nil (should have fallen back to context.Background())
 	require.NotNil(t, capturedCtx, "context should not be nil even when L.Context() returns nil")
+}
+
+// F4: Incomplete metadata tests
+
+func TestListCommands_IncompleteField_FalseWhenNoErrors(t *testing.T) {
+	// Given: a registry with commands and an engine that succeeds
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine()
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.say")
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with no engine errors
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: result.incomplete should be false
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	tbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	incomplete := L.GetField(tbl, "incomplete")
+	assert.Equal(t, lua.LFalse, incomplete, "incomplete should be false when no engine errors occur")
+
+	// Verify commands array exists
+	commands := L.GetField(tbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
+	cmdsTbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "commands should be a table")
+
+	count := 0
+	cmdsTbl.ForEach(func(_, _ lua.LValue) {
+		count++
+	})
+	assert.Equal(t, 2, count, "both commands should be included")
+}
+
+func TestListCommands_IncompleteField_TrueWhenEngineErrors(t *testing.T) {
+	// Given: a registry with commands and an engine that always errors
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	engineErr := errors.New("policy store unavailable")
+	errorEngine := policytest.NewErrorEngine(engineErr)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with engine that errors
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: result.incomplete should be true
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	tbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	incomplete := L.GetField(tbl, "incomplete")
+	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when engine errors occur")
+
+	// Verify commands array exists with only non-capability commands
+	commands := L.GetField(tbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
+	cmdsTbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "commands should be a table")
+
+	var names []string
+	cmdsTbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+
+	assert.Contains(t, names, "look", "commands without capabilities should still appear")
+	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
+	assert.Len(t, names, 1)
+}
+
+func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
+	// Given: a registry with multiple commands and an engine that errors for some
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	subject := access.SubjectCharacter + charID.String()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// comms.say succeeds
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "comms.say",
+	}).Return(types.NewDecision(types.EffectAllow, "test", ""), nil).Maybe()
+
+	// admin.boot errors
+	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
+		Subject:  subject,
+		Action:   "execute",
+		Resource: "admin.boot",
+	}).Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called with partial engine errors
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: result.incomplete should be true
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	tbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	incomplete := L.GetField(tbl, "incomplete")
+	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when any engine errors occur")
+
+	// Verify commands array exists
+	commands := L.GetField(tbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
+	cmdsTbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "commands should be a table")
+
+	var names []string
+	cmdsTbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+
+	// Should include: say (granted), look (no caps required)
+	// Should NOT include: boot (errored)
+	assert.Contains(t, names, "say")
+	assert.Contains(t, names, "look")
+	assert.NotContains(t, names, "boot")
 }

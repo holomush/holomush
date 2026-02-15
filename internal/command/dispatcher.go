@@ -189,7 +189,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		}
 		if !decision.IsAllowed() {
 			metrics.SetStatus(StatusPermissionDenied)
-			err = ErrPermissionDenied(parsed.Name, cap)
+			err = oops.Code(CodePermissionDenied).
+				With("command", parsed.Name).
+				With("capability", cap).
+				With("reason", decision.Reason).
+				With("policy_id", decision.PolicyID).
+				Errorf("permission denied for command %s", parsed.Name)
 			return err
 		}
 	}

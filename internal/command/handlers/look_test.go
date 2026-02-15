@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
+	"github.com/holomush/holomush/internal/world"
 )
 
 func TestLookHandler(t *testing.T) {
@@ -70,6 +72,24 @@ func TestLookHandler(t *testing.T) {
 				require.Error(t, err)
 				msg := command.PlayerMessage(err)
 				assert.NotEmpty(t, msg)
+			},
+		},
+		{
+			name: "returns LOCATION_ACCESS_EVALUATION_FAILED code when engine fails",
+			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
+				fixture.Mocks.Engine.EXPECT().
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + player.CharacterID.String(), Action: "read", Resource: "location:" + location.ID.String()}).
+					Return(types.Decision{}, errors.New("policy engine timeout"))
+			},
+			assertion: func(t *testing.T, _ string, err error) {
+				require.Error(t, err)
+				// Verify the error contains ErrAccessEvaluationFailed
+				assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+				// Verify it's an oops error with the world-specific code (not the generic command handler code)
+				oopsErr, ok := oops.AsOops(err)
+				require.True(t, ok, "error should be an oops error")
+				assert.Equal(t, "LOCATION_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+					"handler should preserve world service's specific code, not wrap as WORLD_ERROR")
 			},
 		},
 	}

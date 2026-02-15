@@ -11,20 +11,20 @@ import (
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand             = "UNKNOWN_COMMAND"
-	CodePermissionDenied           = "PERMISSION_DENIED"
-	CodeAccessEvaluationFailed     = "ACCESS_EVALUATION_FAILED"
-	CodeInvalidArgs                = "INVALID_ARGS"
-	CodeWorldError                 = "WORLD_ERROR"
-	CodeRateLimited                = "RATE_LIMITED"
-	CodeCircularAlias              = "CIRCULAR_ALIAS"
-	CodeAliasConflict              = "ALIAS_CONFLICT"
-	CodeNoCharacter                = "NO_CHARACTER"
-	CodeTargetNotFound             = "TARGET_NOT_FOUND"
-	CodeShutdownRequested          = "SHUTDOWN_REQUESTED"
-	CodeNilServices                = "NIL_SERVICES"
-	CodeInvalidName                = "INVALID_NAME"
-	CodeNoAliasCache               = "NO_ALIAS_CACHE"
+	CodeUnknownCommand         = "UNKNOWN_COMMAND"
+	CodePermissionDenied       = "PERMISSION_DENIED"
+	CodeAccessEvaluationFailed = "ACCESS_EVALUATION_FAILED"
+	CodeInvalidArgs            = "INVALID_ARGS"
+	CodeWorldError             = "WORLD_ERROR"
+	CodeRateLimited            = "RATE_LIMITED"
+	CodeCircularAlias          = "CIRCULAR_ALIAS"
+	CodeAliasConflict          = "ALIAS_CONFLICT"
+	CodeNoCharacter            = "NO_CHARACTER"
+	CodeTargetNotFound         = "TARGET_NOT_FOUND"
+	CodeShutdownRequested      = "SHUTDOWN_REQUESTED"
+	CodeNilServices            = "NIL_SERVICES"
+	CodeInvalidName            = "INVALID_NAME"
+	CodeNoAliasCache           = "NO_ALIAS_CACHE"
 )
 
 // Sentinel errors for special conditions.
