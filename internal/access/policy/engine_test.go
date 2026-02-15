@@ -98,7 +98,7 @@ func TestEngine_SystemBypass(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectSystemBypass, decision.Effect)
+	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "system bypass", decision.Reason)
 }
@@ -157,7 +157,7 @@ func TestEngine_SessionResolved(t *testing.T) {
 	require.NoError(t, err)
 
 	// Steps 3-4 implemented, no policies loaded, so default deny
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "no applicable policies", decision.Reason)
 	assert.NotNil(t, decision.Attributes, "attributes should be populated")
@@ -206,7 +206,7 @@ func TestEngine_SessionInvalid(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "session invalid", decision.Reason)
 	assert.Equal(t, "infra:session-invalid", decision.PolicyID)
@@ -229,7 +229,7 @@ func TestEngine_SessionStoreError(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "session store error", decision.Reason)
 	assert.Equal(t, "infra:session-store-error", decision.PolicyID)
@@ -247,7 +247,7 @@ func TestEngine_NonSystemNonSession(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "no applicable policies", decision.Reason)
 	assert.Equal(t, "", decision.PolicyID)
@@ -278,7 +278,7 @@ func TestEngine_StaleCacheDefaultDeny(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.Equal(t, "policy cache stale", decision.Reason)
 	assert.False(t, decision.IsAllowed())
 }
@@ -342,7 +342,7 @@ func TestEngine_AllDecisionsValidate(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.NoError(t, decision.Validate(),
-				"decision with effect=%s should validate", decision.Effect)
+				"decision with effect=%s should validate", decision.Effect())
 		})
 	}
 }
@@ -760,7 +760,7 @@ func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
 			decision, err := engine.Evaluate(context.Background(), tt.req)
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.wantEffect, decision.Effect)
+			assert.Equal(t, tt.wantEffect, decision.Effect())
 			assert.Equal(t, tt.wantReason, decision.Reason)
 			assert.NotNil(t, decision.Attributes, "attributes should be populated")
 		})
@@ -1093,7 +1093,7 @@ func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "forbid policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-2", decision.PolicyID)
@@ -1118,7 +1118,7 @@ func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "permit policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-1", decision.PolicyID)
@@ -1143,7 +1143,7 @@ func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "no policies satisfied", decision.Reason)
 	assert.Equal(t, "", decision.PolicyID)
@@ -1174,7 +1174,7 @@ func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "forbid policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-1", decision.PolicyID) // First forbid wins
@@ -1205,7 +1205,7 @@ func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "permit policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-1", decision.PolicyID) // First permit wins
@@ -1236,7 +1236,7 @@ func TestEngine_DenyOverrides_ForbidUnsatisfied_PermitSatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "permit policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-2", decision.PolicyID)
@@ -1309,7 +1309,7 @@ func TestEngine_Audit_ModeAll_AllowAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 
 	// Wait a bit for async audit
 	time.Sleep(50 * time.Millisecond)
@@ -1341,7 +1341,7 @@ func TestEngine_Audit_ModeAll_DenyAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 
 	entries := mockWriter.getEntries()
 	require.Len(t, entries, 1)
@@ -1370,7 +1370,7 @@ func TestEngine_Audit_ModeMinimal_AllowNotAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 
 	// Wait a bit to ensure async operations complete
 	time.Sleep(50 * time.Millisecond)
@@ -1397,7 +1397,7 @@ func TestEngine_Audit_ModeMinimal_DenyAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 
 	entries := mockWriter.getEntries()
 	require.Len(t, entries, 1)
@@ -1425,7 +1425,7 @@ func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "permit policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-1", decision.PolicyID)
@@ -1459,7 +1459,7 @@ func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "forbid policy satisfied", decision.Reason)
 	assert.Equal(t, "policy-2", decision.PolicyID)
@@ -1527,7 +1527,7 @@ func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "permit policy satisfied", decision.Reason)
 

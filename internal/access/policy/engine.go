@@ -128,7 +128,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			_ = auditErr
 		}
-		RecordEvaluationMetrics(time.Since(start), decision.Effect)
+		RecordEvaluationMetrics(time.Since(start), decision.Effect())
 		return decision, nil
 	}
 
@@ -187,7 +187,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		Subject:    req.Subject,
 		Action:     req.Action,
 		Resource:   req.Resource,
-		Effect:     decision.Effect,
+		Effect:     decision.Effect(),
 		PolicyID:   decision.PolicyID,
 		PolicyName: policyNameFromMatches(decision.PolicyID, decision.Policies),
 		DurationUS: time.Since(start).Microseconds(),
@@ -198,7 +198,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	}
 
 	// Record metrics
-	RecordEvaluationMetrics(time.Since(start), decision.Effect)
+	RecordEvaluationMetrics(time.Since(start), decision.Effect())
 
 	return decision, nil
 }

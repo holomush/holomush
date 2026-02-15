@@ -13,6 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/observability"
 )
 
 // CommandRegistry provides read-only access to registered commands.
@@ -136,12 +137,19 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 
 	// Check ALL capabilities (AND logic) — fail-closed on errors
 	for _, cap := range caps {
-		decision, err := f.engine.Evaluate(ctx, types.AccessRequest{
-			Subject: subject, Action: "execute", Resource: cap,
-		})
+		req, err := types.NewAccessRequest(subject, "execute", cap)
+		if err != nil {
+			slog.ErrorContext(ctx, "access request construction failed",
+				"error", err, "subject", subject, "action", "execute", "resource", cap)
+			hadError = true
+			return false, hadError
+		}
+
+		decision, err := f.engine.Evaluate(ctx, req)
 		if err != nil {
 			slog.ErrorContext(ctx, "access evaluation failed",
 				"error", err, "subject", subject, "action", "execute", "resource", cap)
+			observability.RecordEngineFailure("command_capability_check")
 			hadError = true
 			return false, hadError
 		}

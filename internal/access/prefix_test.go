@@ -147,6 +147,7 @@ func TestSubjectPrefixConstants(t *testing.T) {
 }
 
 func TestResourcePrefixConstants(t *testing.T) {
+	assert.Equal(t, "character:", access.ResourceCharacter)
 	assert.Equal(t, "location:", access.ResourceLocation)
 	assert.Equal(t, "object:", access.ResourceObject)
 	assert.Equal(t, "command:", access.ResourceCommand)
@@ -350,5 +351,37 @@ func TestCommandResource(t *testing.T) {
 func TestCommandResource_EmptyName_Panics(t *testing.T) {
 	assert.PanicsWithValue(t, "access.CommandResource: empty commandName would create invalid resource reference", func() {
 		access.CommandResource("")
+	})
+}
+
+func TestCharacterResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		charID   string
+		expected string
+	}{
+		{
+			name:     "ULID string",
+			charID:   "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			expected: "character:01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		},
+		{
+			name:     "simple ID",
+			charID:   "player-alice",
+			expected: "character:player-alice",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := access.CharacterResource(tt.charID)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCharacterResource_EmptyID_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.CharacterResource: empty charID would create invalid resource reference", func() {
+		access.CharacterResource("")
 	})
 }

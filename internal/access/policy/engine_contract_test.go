@@ -151,7 +151,7 @@ func TestContract_EmptyPolicyCache(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "no applicable policies", decision.Reason)
 	assert.Empty(t, decision.PolicyID)
@@ -181,7 +181,7 @@ func TestContract_EmptyPolicyCache_AllSubjectTypes(t *testing.T) {
 			decision, err := engine.Evaluate(context.Background(), req)
 			require.NoError(t, err)
 
-			assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+			assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 			assert.False(t, decision.IsAllowed())
 		})
 	}
@@ -240,7 +240,7 @@ func TestContract_ErrorCodePreservation(t *testing.T) {
 			decision, err := engine.Evaluate(context.Background(), req)
 			require.NoError(t, err, "session errors should not propagate as engine errors")
 
-			assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+			assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 			assert.False(t, decision.IsAllowed())
 			assert.Equal(t, tt.wantReason, decision.Reason)
 			assert.Equal(t, tt.wantPolicyID, decision.PolicyID)
@@ -262,7 +262,7 @@ func TestContract_SystemBypass_SkipsValidation(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectSystemBypass, decision.Effect)
+	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 }
 

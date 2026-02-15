@@ -7,6 +7,8 @@ package types
 import (
 	"context"
 	"fmt"
+
+	"github.com/samber/oops"
 )
 
 // Effect represents the evaluated outcome of an access control decision.
@@ -74,13 +76,13 @@ type AccessRequest struct {
 // field is empty, preventing silent misuse at access control boundaries.
 func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
 	if subject == "" {
-		return AccessRequest{}, fmt.Errorf("access request: subject must not be empty")
+		return AccessRequest{}, oops.In("access").With("field", "subject").Errorf("access request: subject must not be empty")
 	}
 	if action == "" {
-		return AccessRequest{}, fmt.Errorf("access request: action must not be empty")
+		return AccessRequest{}, oops.In("access").With("field", "action").Errorf("access request: action must not be empty")
 	}
 	if resource == "" {
-		return AccessRequest{}, fmt.Errorf("access request: resource must not be empty")
+		return AccessRequest{}, oops.In("access").With("field", "resource").Errorf("access request: resource must not be empty")
 	}
 	return AccessRequest{
 		Subject:  subject,
@@ -90,10 +92,10 @@ func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
 }
 
 // Decision is the result of evaluating an access request against the policy engine.
-// The allowed field is unexported to prevent invariant bypass.
+// The allowed and effect fields are unexported to prevent invariant bypass.
 type Decision struct {
 	allowed    bool
-	Effect     Effect
+	effect     Effect
 	Reason     string
 	PolicyID   string
 	Policies   []PolicyMatch
@@ -106,7 +108,7 @@ func NewDecision(effect Effect, reason, policyID string) Decision {
 	allowed := effect == EffectAllow || effect == EffectSystemBypass
 	return Decision{
 		allowed:  allowed,
-		Effect:   effect,
+		effect:   effect,
 		Reason:   reason,
 		PolicyID: policyID,
 	}
@@ -117,15 +119,20 @@ func (d Decision) IsAllowed() bool {
 	return d.allowed
 }
 
+// Effect returns the evaluated effect of this decision.
+func (d Decision) Effect() Effect {
+	return d.effect
+}
+
 // Validate checks that the Decision invariant holds: the allowed field
-// must be consistent with the Effect. Returns an error if the invariant
+// must be consistent with the effect. Returns an error if the invariant
 // is violated. This should be called at engine return boundaries.
 func (d Decision) Validate() error {
-	expectAllowed := d.Effect == EffectAllow || d.Effect == EffectSystemBypass
+	expectAllowed := d.effect == EffectAllow || d.effect == EffectSystemBypass
 	if d.allowed != expectAllowed {
 		return fmt.Errorf(
 			"decision invariant violated: allowed=%v but effect=%s",
-			d.allowed, d.Effect,
+			d.allowed, d.effect,
 		)
 	}
 	return nil
