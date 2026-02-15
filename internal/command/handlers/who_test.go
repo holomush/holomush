@@ -549,3 +549,107 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	logOutput := logBuf.String()
 	assert.Empty(t, logOutput, "Expected no error logs for ErrNotFound or ErrPermissionDenied")
 }
+
+func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
+	char1ID := ulid.Make()
+	evalFailCharID := ulid.Make()
+	conn1 := ulid.Make()
+	evalFailConn := ulid.Make()
+	playerID := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, conn1)
+	sessionMgr.Connect(evalFailCharID, evalFailConn)
+
+	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
+
+	// Capture logs to suppress them
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// char1 is accessible
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executor.CharacterID.String(), Action: "read", Resource: "character:" + char1ID.String()}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, char1ID).
+		Return(char1, nil).Maybe()
+
+	// evalFailChar - access evaluation fails (should count as error and show warning)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executor.CharacterID.String(), Action: "read", Resource: "character:" + evalFailCharID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should show visible character
+	assert.Contains(t, output, "Visible")
+	// Should show error notice
+	assert.Contains(t, output, "(Note: 1 player could not be displayed due to a system error)")
+}
+
+func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.T) {
+	evalFail1ID := ulid.Make()
+	evalFail2ID := ulid.Make()
+	evalFailConn1 := ulid.Make()
+	evalFailConn2 := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(evalFail1ID, evalFailConn1)
+	sessionMgr.Connect(evalFail2ID, evalFailConn2)
+
+	// Capture logs to suppress them
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Both characters return access evaluation failures
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executor.CharacterID.String(), Action: "read", Resource: "character:" + evalFail1ID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.SubjectCharacter + executor.CharacterID.String(), Action: "read", Resource: "character:" + evalFail2ID.String()}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should show no players (all failed access checks)
+	assert.Contains(t, output, "No players online")
+	// Should show error notice (plural form)
+	assert.Contains(t, output, "(Note: 2 players could not be displayed due to system errors)")
+}

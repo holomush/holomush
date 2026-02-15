@@ -12,6 +12,9 @@ import (
 )
 
 // Stream prefixes for event streams.
+// Note: The character stream prefix was changed from "char:" to "character:" during
+// Phase 7.6. No backward compatibility layer is needed because no event stores have
+// been deployed yet. If stores exist before first release, add a migration.
 const (
 	streamPrefixCharacter = "character:"
 	streamPrefixLocation  = "location:"

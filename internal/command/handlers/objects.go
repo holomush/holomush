@@ -5,6 +5,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -71,6 +72,10 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 			"character_id", exec.CharacterID(),
 			"object_name", name,
 			"error", err)
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create object.", err)
 	}
 
@@ -93,6 +98,10 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 			"character_id", exec.CharacterID(),
 			"location_name", name,
 			"error", err)
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create location.", err)
 	}
 
@@ -257,6 +266,10 @@ type propertyQuerier struct {
 func (q propertyQuerier) GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error) {
 	loc, err := q.service.GetLocation(ctx, q.subjectID, id)
 	if err != nil {
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return nil, err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return nil, oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
 			With("entity_id", id.String()).
@@ -269,6 +282,10 @@ func (q propertyQuerier) GetLocation(ctx context.Context, id ulid.ULID) (*world.
 func (q propertyQuerier) GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error) {
 	obj, err := q.service.GetObject(ctx, q.subjectID, id)
 	if err != nil {
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return nil, err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return nil, oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
 			With("entity_id", id.String()).
@@ -285,6 +302,10 @@ type propertyMutator struct {
 
 func (m propertyMutator) UpdateLocation(ctx context.Context, subjectID string, loc *world.Location) error {
 	if err := m.service.UpdateLocation(ctx, subjectID, loc); err != nil {
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
 			With("entity_id", loc.ID.String()).
@@ -297,6 +318,10 @@ func (m propertyMutator) UpdateLocation(ctx context.Context, subjectID string, l
 
 func (m propertyMutator) UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error {
 	if err := m.service.UpdateObject(ctx, subjectID, obj); err != nil {
+		// Preserve access evaluation failures with their specific codes
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
 			With("entity_id", obj.ID.String()).

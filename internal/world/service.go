@@ -82,7 +82,8 @@ func NewService(cfg ServiceConfig) *Service {
 
 // checkAccess evaluates an access request using the ABAC policy engine.
 // Returns nil if allowed, ErrPermissionDenied if denied, or ErrAccessEvaluationFailed
-// on engine error (fail-closed). Callers can use errors.Is to distinguish the two.
+// on engine error (fail-closed). Callers typically wrap with wrapAccessError to apply
+// distinct oops error codes for each case (e.g., *_ACCESS_DENIED vs *_ACCESS_EVALUATION_FAILED).
 func (s *Service) checkAccess(ctx context.Context, subject, action, resource string) error {
 	decision, err := s.engine.Evaluate(ctx, types.AccessRequest{
 		Subject: subject, Action: action, Resource: resource,
