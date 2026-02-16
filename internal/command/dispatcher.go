@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/observability"
 )
 
 var tracer = otel.Tracer("holomush/command")
@@ -175,6 +176,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 				"action", "execute",
 				"resource", cap,
 			)
+			observability.RecordEngineFailure("dispatcher_capability_check")
 			metrics.SetStatus(StatusEngineFailure)
 			err = oops.Code(CodeAccessEvaluationFailed).
 				With("command", parsed.Name).
@@ -190,6 +192,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 				"resource", cap,
 				"error", evalErr,
 			)
+			observability.RecordEngineFailure("dispatcher_capability_check")
 			metrics.SetStatus(StatusEngineFailure)
 			err = oops.Code(CodeAccessEvaluationFailed).
 				With("command", parsed.Name).

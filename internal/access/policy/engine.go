@@ -5,6 +5,7 @@ package policy
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if err := e.audit.Log(ctx, entry); err != nil {
 			// Log error but don't fail the decision
-			_ = err
+			slog.WarnContext(ctx, "audit log failed", "error", err)
 		}
 
 		return decision, nil
@@ -157,7 +158,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			// Log error but don't fail the decision
-			_ = auditErr
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 		}
 
 		return decision, nil
@@ -194,7 +195,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		Timestamp:  time.Now(),
 	}
 	if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-		_ = auditErr
+		slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 	}
 
 	// Record metrics

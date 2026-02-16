@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -53,6 +54,15 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	if !isSelfBoot {
 		req, reqErr := types.NewAccessRequest(subjectID, "execute", "admin.boot")
 		if reqErr != nil {
+			slog.ErrorContext(ctx, "boot access request construction failed",
+				"subject", subjectID,
+				"action", "execute",
+				"resource", "admin.boot",
+				"target_name", targetName,
+				"target_char_id", targetCharID.String(),
+				"error", reqErr,
+			)
+			observability.RecordEngineFailure("boot_access_check")
 			err := oops.Code(command.CodeAccessEvaluationFailed).
 				With("command", "boot").
 				With("capability", "admin.boot").
@@ -70,6 +80,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 				"target_char_id", targetCharID.String(),
 				"error", evalErr,
 			)
+			observability.RecordEngineFailure("boot_access_check")
 			err := oops.Code(command.CodeAccessEvaluationFailed).
 				With("command", "boot").
 				With("capability", "admin.boot").

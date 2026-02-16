@@ -21,14 +21,14 @@ This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering s
 
 **Acceptance Criteria:**
 
-- [ ] Per-package atomic migration: DI wiring + call sites migrated together, each commit compiles and passes `task build`
-- [ ] `AccessControl` replaced with `*policy.Engine` in dependency graph
-- [ ] `AttributeResolver` wired with all registered providers
-- [ ] `PolicyCache` wired and `Listen()` called for NOTIFY subscription
-- [ ] `SessionResolver` wired
-- [ ] `AuditLogger` wired
+- [ ] Per-package atomic migration: DI wiring + call sites migrated together, each commit compiles and passes `task build` [DEFERRED: holomush-ur6c]
+- [ ] `AccessControl` replaced with `*policy.Engine` in dependency graph [DEFERRED: holomush-ur6c]
+- [ ] `AttributeResolver` wired with all registered providers [DEFERRED: holomush-ur6c]
+- [ ] `PolicyCache` wired and `Listen()` called for NOTIFY subscription [DEFERRED: holomush-ur6c]
+- [ ] `SessionResolver` wired [DEFERRED: holomush-ur6c]
+- [ ] `AuditLogger` wired [DEFERRED: holomush-ur6c]
 - [ ] `Bootstrap()` called at startup to seed policies
-- [ ] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism
+- [ ] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism [DEFERRED: holomush-dpsd]
 - [ ] **Security (S8 - holomush-5k1.355):** A static analysis rule or go vet check MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST enforce this check. Migration checklist MUST include per-site verification.
 - [ ] ALL **29 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
   - [ ] 3 call sites in command package (T28-pkg1)
@@ -43,9 +43,9 @@ This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering s
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
 - [ ] **All migrated call sites MUST use `SubjectCharacter` constant, not `char:` prefix** (per ADR #13 prefix normalization)
 - [ ] **Static analysis check for remaining `char:` prefix usage** — verify no call sites use legacy `char:` prefix after migration
-- [ ] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names)
+- [ ] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names) [DEFERRED: holomush-39vv]
 - [ ] Audit logs are immutable: old entries keep `char:` prefix, new entries use `character:` prefix
-- [ ] Tests verify both prefix variants are accepted by EventStore during migration period
+- [ ] Tests verify both prefix variants are accepted by EventStore during migration period [DEFERRED: holomush-39vv]
 - [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
 - [ ] **Per-package error-path tests:** Each migrated package MUST have tests verifying:
   1. Correct `AccessRequest` construction (subject, action, resource populated)
