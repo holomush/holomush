@@ -74,6 +74,7 @@ func CharacterResource(charID string) string {
 }
 
 // LocationResource returns a properly formatted location resource identifier.
+// It panics if locationID is empty.
 func LocationResource(locationID string) string {
 	if locationID == "" {
 		panic("access.LocationResource: empty locationID would create invalid resource reference")
@@ -82,6 +83,7 @@ func LocationResource(locationID string) string {
 }
 
 // ExitResource returns a properly formatted exit resource identifier.
+// It panics if exitID is empty.
 func ExitResource(exitID string) string {
 	if exitID == "" {
 		panic("access.ExitResource: empty exitID would create invalid resource reference")
@@ -90,6 +92,7 @@ func ExitResource(exitID string) string {
 }
 
 // ObjectResource returns a properly formatted object resource identifier.
+// It panics if objectID is empty.
 func ObjectResource(objectID string) string {
 	if objectID == "" {
 		panic("access.ObjectResource: empty objectID would create invalid resource reference")
@@ -98,6 +101,7 @@ func ObjectResource(objectID string) string {
 }
 
 // SceneResource returns a properly formatted scene resource identifier.
+// It panics if sceneID is empty.
 func SceneResource(sceneID string) string {
 	if sceneID == "" {
 		panic("access.SceneResource: empty sceneID would create invalid resource reference")
@@ -106,6 +110,7 @@ func SceneResource(sceneID string) string {
 }
 
 // CommandResource returns a properly formatted command resource identifier.
+// It panics if commandName is empty.
 func CommandResource(commandName string) string {
 	if commandName == "" {
 		panic("access.CommandResource: empty commandName would create invalid resource reference")
@@ -114,6 +119,7 @@ func CommandResource(commandName string) string {
 }
 
 // PropertyResource returns a properly formatted property resource identifier.
+// It panics if propPath is empty.
 func PropertyResource(propPath string) string {
 	if propPath == "" {
 		panic("access.PropertyResource: empty propPath would create invalid resource reference")
@@ -122,6 +128,7 @@ func PropertyResource(propPath string) string {
 }
 
 // StreamResource returns a properly formatted stream resource identifier.
+// It panics if streamID is empty.
 func StreamResource(streamID string) string {
 	if streamID == "" {
 		panic("access.StreamResource: empty streamID would create invalid resource reference")
