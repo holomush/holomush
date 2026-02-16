@@ -133,7 +133,7 @@ func TestSeedSmoke_PlayerSelfAccess(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
-		Resource: access.CharacterSubject(charID),
+		Resource: access.CharacterResource(charID),
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "player should read own character; got: %s — %s", decision.Effect(), decision.Reason)

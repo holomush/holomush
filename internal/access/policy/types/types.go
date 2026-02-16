@@ -266,13 +266,13 @@ const (
 )
 
 // AccessPolicyEngine defines the interface for ABAC policy evaluation.
+// Implementations MUST return an error or a deny decision for unknown/unmatched requests (fail-closed).
+// This ensures that missing policies result in access denial rather than unexpected grants.
+//
 // This interface is defined here (in types package) to avoid import cycles:
 // - world package needs to call the engine
 // - policy/attribute package needs to query world repositories
 // By defining the interface with the types it uses, both can import types without a cycle.
-//
-// Implementations MUST return an error or a deny decision for unknown/unmatched requests (fail-closed).
-// This ensures that missing policies result in access denial rather than unexpected grants.
 type AccessPolicyEngine interface {
 	Evaluate(ctx context.Context, request AccessRequest) (Decision, error)
 }

@@ -188,7 +188,7 @@ func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code(),
-		"explicit policy deny should return COMMAND_ACCESS_DENIED")
+		"explicit policy deny should return PERMISSION_DENIED")
 }
 
 func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {

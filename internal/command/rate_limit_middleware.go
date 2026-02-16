@@ -84,6 +84,9 @@ func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject string) (bo
 	}
 
 	decision, err := r.engine.Evaluate(ctx, req)
+	// Design decision: engine errors in bypass check return false (no bypass) rather than
+	// propagating the error. This prevents engine outages from blocking rate-limited commands.
+	// Errors are logged at Warn for operator visibility. See PR #88 review discussion.
 	if err != nil {
 		//nolint:wrapcheck // Engine error, will be wrapped by caller
 		return false, err
