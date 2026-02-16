@@ -1119,7 +1119,7 @@ func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
 	// Then: the second return value should be an error string (not lua.LNil)
 	errVal := L.GetGlobal("err")
 	assert.NotEqual(t, lua.LNil, errVal, "error return value should not be nil when engine errors")
-	assert.Contains(t, errVal.String(), "access engine errors", "error message should indicate access engine errors")
+	assert.Contains(t, errVal.String(), "system error", "error message should indicate system error")
 
 	// AND the result table should still be returned with incomplete: true
 	result := L.GetGlobal("result")

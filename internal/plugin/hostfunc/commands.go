@@ -116,7 +116,7 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 
 		L.Push(resultTbl)
 		if hadEngineError {
-			L.Push(lua.LString("some commands may be hidden due to access engine errors"))
+			L.Push(lua.LString("some commands may be hidden due to a system error; try again or contact an admin if the problem persists"))
 		} else {
 			L.Push(lua.LNil) // no error
 		}

@@ -7109,3 +7109,224 @@ func TestWorldService_ErrorCodePropagation(t *testing.T) {
 		})
 	}
 }
+
+// TestWorldService_MalformedAccessParams verifies fail-closed behavior when
+// NewAccessRequest construction fails due to empty/invalid parameters.
+// This ensures operations fail safely rather than bypassing authorization.
+func TestWorldService_MalformedAccessParams(t *testing.T) {
+	ctx := context.Background()
+	validSubjectID := access.CharacterSubject(ulid.Make().String())
+	locID := ulid.Make()
+	charID := ulid.Make()
+	objID := ulid.Make()
+
+	tests := []struct {
+		name              string
+		setupService      func() *world.Service
+		invokeOperation   func(*world.Service) error
+		expectedErrorCode string
+	}{
+		{
+			name: "GetLocation with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				return world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				_, err := svc.GetLocation(ctx, "", locID) // Empty subject
+				return err
+			},
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "CreateLocation with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				return world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				loc := &world.Location{
+					ID:          ulid.Make(),
+					Name:        "Test Location",
+					Description: "A test location",
+				}
+				return svc.CreateLocation(ctx, "", loc) // Empty subject
+			},
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "UpdateLocation with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockLocationRepository(t)
+				return world.NewService(world.ServiceConfig{
+					LocationRepo: mockRepo,
+					Engine:       engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				loc := &world.Location{
+					ID:          locID,
+					Name:        "Updated Location",
+					Description: "An updated location",
+				}
+				return svc.UpdateLocation(ctx, "", loc) // Empty subject
+			},
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "CreateExit with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockExitRepository(t)
+				return world.NewService(world.ServiceConfig{
+					ExitRepo: mockRepo,
+					Engine:   engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				exit := &world.Exit{
+					ID:             ulid.Make(),
+					Name:           "north",
+					FromLocationID: locID,
+					ToLocationID:   ulid.Make(),
+					Visibility:     world.VisibilityAll,
+				}
+				return svc.CreateExit(ctx, "", exit) // Empty subject
+			},
+			expectedErrorCode: "EXIT_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "GetObject with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockObjectRepository(t)
+				return world.NewService(world.ServiceConfig{
+					ObjectRepo: mockRepo,
+					Engine:     engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				_, err := svc.GetObject(ctx, "", objID) // Empty subject
+				return err
+			},
+			expectedErrorCode: "OBJECT_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "MoveCharacter with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockCharRepo := worldtest.NewMockCharacterRepository(t)
+				mockLocRepo := worldtest.NewMockLocationRepository(t)
+				return world.NewService(world.ServiceConfig{
+					CharacterRepo: mockCharRepo,
+					LocationRepo:  mockLocRepo,
+					Engine:        engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				return svc.MoveCharacter(ctx, "", charID, locID) // Empty subject
+			},
+			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "GetCharacter with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockCharacterRepository(t)
+				return world.NewService(world.ServiceConfig{
+					CharacterRepo: mockRepo,
+					Engine:        engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				_, err := svc.GetCharacter(ctx, "", charID) // Empty subject
+				return err
+			},
+			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "DeleteLocation with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockLocRepo := worldtest.NewMockLocationRepository(t)
+				mockPropRepo := worldtest.NewMockPropertyRepository(t)
+				mockTransactor := &mockTransactor{}
+				return world.NewService(world.ServiceConfig{
+					LocationRepo: mockLocRepo,
+					PropertyRepo: mockPropRepo,
+					Engine:       engine,
+					Transactor:   mockTransactor,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				return svc.DeleteLocation(ctx, "", locID) // Empty subject
+			},
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "AddSceneParticipant with empty subject fails closed",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockSceneRepository(t)
+				return world.NewService(world.ServiceConfig{
+					SceneRepo: mockRepo,
+					Engine:    engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				sceneID := ulid.Make()
+				return svc.AddSceneParticipant(ctx, "", sceneID, charID, world.RoleMember) // Empty subject
+			},
+			expectedErrorCode: "SCENE_ACCESS_EVALUATION_FAILED",
+		},
+		{
+			name: "GetCharactersByLocation - valid subject but tests access check boundary",
+			setupService: func() *world.Service {
+				engine := policytest.NewGrantEngine()
+				mockRepo := worldtest.NewMockCharacterRepository(t)
+				// Grant access so we can verify the operation would work with valid params
+				engine.Grant(validSubjectID, "list_characters", access.LocationResource(locID.String()))
+				return world.NewService(world.ServiceConfig{
+					CharacterRepo: mockRepo,
+					Engine:        engine,
+				})
+			},
+			invokeOperation: func(svc *world.Service) error {
+				// Test with empty subject to trigger NewAccessRequest failure
+				_, err := svc.GetCharactersByLocation(ctx, "", locID, world.ListOptions{})
+				return err
+			},
+			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := tt.setupService()
+			err := tt.invokeOperation(svc)
+
+			// Verify the operation failed
+			require.Error(t, err, "operation with malformed access params should fail")
+
+			// Verify it's classified as an evaluation failure (fail-closed)
+			assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+				"malformed access params should return ErrAccessEvaluationFailed")
+
+			// Verify it's NOT a permission denial (which implies auth check succeeded)
+			assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+				"malformed params should not be reported as permission denial")
+
+			// Verify the correct error code
+			errutil.AssertErrorCode(t, err, tt.expectedErrorCode)
+		})
+	}
+}
