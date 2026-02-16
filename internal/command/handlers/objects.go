@@ -68,14 +68,16 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 	}
 
 	if err := exec.Services().World().CreateObject(ctx, subjectID, obj); err != nil {
+		// Preserve access evaluation failures with their specific codes
+		// (already logged by checkAccess helper in world service)
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
+		// Log non-engine errors (unexpected failures)
 		slog.ErrorContext(ctx, "create object: CreateObject failed",
 			"character_id", exec.CharacterID(),
 			"object_name", name,
 			"error", err)
-		// Preserve access evaluation failures with their specific codes
-		if errors.Is(err, world.ErrAccessEvaluationFailed) {
-			return err //nolint:wrapcheck // preserve oops error code from world service
-		}
 		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create object.", err)
 	}
 
@@ -94,14 +96,16 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 	}
 
 	if err := exec.Services().World().CreateLocation(ctx, subjectID, loc); err != nil {
+		// Preserve access evaluation failures with their specific codes
+		// (already logged by checkAccess helper in world service)
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
+		// Log non-engine errors (unexpected failures)
 		slog.ErrorContext(ctx, "create location: CreateLocation failed",
 			"character_id", exec.CharacterID(),
 			"location_name", name,
 			"error", err)
-		// Preserve access evaluation failures with their specific codes
-		if errors.Is(err, world.ErrAccessEvaluationFailed) {
-			return err //nolint:wrapcheck // preserve oops error code from world service
-		}
 		return writeOutputWithWorldError(ctx, exec, "create", "Failed to create location.", err)
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
 )
@@ -114,7 +115,7 @@ func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULI
 	if s.locationRepo == nil {
 		return nil, oops.Code("LOCATION_GET_FAILED").Errorf("location repository not configured")
 	}
-	resource := fmt.Sprintf("location:%s", id.String())
+	resource := access.LocationResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "LOCATION"); err != nil {
 		return nil, err
 	}
@@ -163,7 +164,7 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if loc == nil {
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
 	}
-	resource := fmt.Sprintf("location:%s", loc.ID.String())
+	resource := access.LocationResource(loc.ID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "LOCATION"); err != nil {
 		return err
 	}
@@ -192,7 +193,7 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if s.transactor == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
-	resource := fmt.Sprintf("location:%s", id.String())
+	resource := access.LocationResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, "LOCATION"); err != nil {
 		return err
 	}
@@ -221,7 +222,7 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_GET_FAILED").Errorf("exit repository not configured")
 	}
-	resource := fmt.Sprintf("exit:%s", id.String())
+	resource := access.ExitResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "EXIT"); err != nil {
 		return nil, err
 	}
@@ -276,7 +277,7 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if exit == nil {
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
 	}
-	resource := fmt.Sprintf("exit:%s", exit.ID.String())
+	resource := access.ExitResource(exit.ID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "EXIT"); err != nil {
 		return err
 	}
@@ -300,7 +301,7 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_DELETE_FAILED").Errorf("exit repository not configured")
 	}
-	resource := fmt.Sprintf("exit:%s", id.String())
+	resource := access.ExitResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, "EXIT"); err != nil {
 		return err
 	}
@@ -338,7 +339,7 @@ func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, loca
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
 	}
-	resource := fmt.Sprintf("location:%s", locationID.String())
+	resource := access.LocationResource(locationID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "EXIT"); err != nil {
 		return nil, err
 	}
@@ -354,7 +355,7 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 	if s.objectRepo == nil {
 		return nil, oops.Code("OBJECT_GET_FAILED").Errorf("object repository not configured")
 	}
-	resource := fmt.Sprintf("object:%s", id.String())
+	resource := access.ObjectResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "OBJECT"); err != nil {
 		return nil, err
 	}
@@ -406,7 +407,7 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if obj == nil {
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
 	}
-	resource := fmt.Sprintf("object:%s", obj.ID.String())
+	resource := access.ObjectResource(obj.ID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "OBJECT"); err != nil {
 		return err
 	}
@@ -438,7 +439,7 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if s.transactor == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
-	resource := fmt.Sprintf("object:%s", id.String())
+	resource := access.ObjectResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, "OBJECT"); err != nil {
 		return err
 	}
@@ -479,7 +480,7 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
 	}
-	resource := fmt.Sprintf("object:%s", id.String())
+	resource := access.ObjectResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "OBJECT"); err != nil {
 		return err
 	}
@@ -538,7 +539,7 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	if s.transactor == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
-	resource := fmt.Sprintf("character:%s", id.String())
+	resource := access.CharacterResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "delete", resource, "CHARACTER"); err != nil {
 		return err
 	}
@@ -567,7 +568,7 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
 	}
-	resource := fmt.Sprintf("character:%s", id.String())
+	resource := access.CharacterResource(id.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "CHARACTER"); err != nil {
 		return nil, err
 	}
@@ -589,7 +590,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
-	resource := fmt.Sprintf("location:%s", locationID.String())
+	resource := access.LocationResource(locationID.String())
 	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, "CHARACTER"); err != nil {
 		return nil, err
 	}
@@ -606,7 +607,7 @@ func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sce
 	if s.sceneRepo == nil {
 		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").Errorf("scene repository not configured")
 	}
-	resource := fmt.Sprintf("scene:%s", sceneID.String())
+	resource := access.SceneResource(sceneID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "SCENE"); err != nil {
 		return err
 	}
@@ -627,7 +628,7 @@ func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, 
 	if s.sceneRepo == nil {
 		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").Errorf("scene repository not configured")
 	}
-	resource := fmt.Sprintf("scene:%s", sceneID.String())
+	resource := access.SceneResource(sceneID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "SCENE"); err != nil {
 		return err
 	}
@@ -645,7 +646,7 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 	if s.sceneRepo == nil {
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Errorf("scene repository not configured")
 	}
-	resource := fmt.Sprintf("scene:%s", sceneID.String())
+	resource := access.SceneResource(sceneID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "SCENE"); err != nil {
 		return nil, err
 	}
@@ -676,7 +677,7 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
 	}
-	resource := fmt.Sprintf("character:%s", characterID.String())
+	resource := access.CharacterResource(characterID.String())
 	if err := s.checkAccess(ctx, subjectID, "write", resource, "CHARACTER"); err != nil {
 		return err
 	}
@@ -773,7 +774,7 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 	}
 
 	// Check authorization to read the target
-	resource := fmt.Sprintf("location:%s", targetLocationID.String())
+	resource := access.LocationResource(targetLocationID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "EXAMINE"); err != nil {
 		return err
 	}
@@ -831,7 +832,7 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 	}
 
 	// Check authorization to read the target
-	resource := fmt.Sprintf("object:%s", targetObjectID.String())
+	resource := access.ObjectResource(targetObjectID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "EXAMINE"); err != nil {
 		return err
 	}
@@ -886,7 +887,7 @@ func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, charac
 	}
 
 	// Check authorization to read the target
-	resource := fmt.Sprintf("character:%s", targetCharacterID.String())
+	resource := access.CharacterResource(targetCharacterID.String())
 	if err := s.checkAccess(ctx, subjectID, "read", resource, "EXAMINE"); err != nil {
 		return err
 	}

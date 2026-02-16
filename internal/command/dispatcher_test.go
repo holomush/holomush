@@ -263,6 +263,53 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 	assert.Equal(t, "EMPTY_INPUT", oopsErr.Code())
 }
 
+func TestDispatch_InvalidAccessRequest_ReturnsAccessEvaluationFailed(t *testing.T) {
+	reg := NewRegistry()
+	mockAccess := policytest.NewGrantEngine()
+
+	// Register command with empty capability string (invalid for NewAccessRequest)
+	err := reg.Register(CommandEntry{
+		Name:         "badcap",
+		capabilities: []string{""}, // Empty capability will trigger NewAccessRequest failure
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Get baseline for engine_failure metric
+	engineFailureBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "badcap", "source": "core", "status": StatusEngineFailure,
+	}))
+
+	err = dispatcher.Dispatch(context.Background(), "badcap", exec)
+	require.Error(t, err)
+
+	// Verify error code using errutil helper
+	errutil.AssertErrorCode(t, err, CodeAccessEvaluationFailed)
+
+	// Verify error context
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "badcap", oopsErr.Context()["command"])
+	assert.Equal(t, "", oopsErr.Context()["capability"])
+
+	// Verify metric
+	engineFailureAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "badcap", "source": "core", "status": StatusEngineFailure,
+	}))
+	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should have engine_failure status")
+}
+
 func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
