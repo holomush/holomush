@@ -26,6 +26,9 @@ type Engine struct {
 	audit    *audit.Logger
 }
 
+// Compile-time check that Engine implements AccessPolicyEngine.
+var _ types.AccessPolicyEngine = (*Engine)(nil)
+
 // NewEngine creates a new policy engine with the given dependencies.
 func NewEngine(resolver *attribute.Resolver, cache *Cache, sessions SessionResolver, auditLogger *audit.Logger) *Engine {
 	return &Engine{
@@ -127,7 +130,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			Timestamp:  time.Now(),
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-			_ = auditErr
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 		}
 		RecordEvaluationMetrics(time.Since(start), decision.Effect())
 		return decision, nil

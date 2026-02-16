@@ -234,7 +234,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 	}{
 		{
 			name:       "valid character resource",
-			resourceID: access.CharacterSubject(charID.String()),
+			resourceID: access.CharacterResource(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return &world.Character{
@@ -267,7 +267,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:       "repository error",
-			resourceID: access.CharacterSubject(charID.String()),
+			resourceID: access.CharacterResource(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return nil, errors.New("repo error")

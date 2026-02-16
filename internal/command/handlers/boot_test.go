@@ -318,8 +318,6 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Contains(t, logOutput, subjectID, "log should contain subject")
 	assert.Contains(t, logOutput, "execute", "log should contain action")
 	assert.Contains(t, logOutput, "admin.boot", "log should contain resource (capability)")
-	assert.Contains(t, logOutput, "Troublemaker", "log should contain target_name")
-	assert.Contains(t, logOutput, targetID.String(), "log should contain target_char_id")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
@@ -1266,6 +1264,104 @@ func TestBootHandler_SkipsCharacterWithEngineErrorDuringLookup(t *testing.T) {
 	if strings.Contains(logOutput, "access evaluation failed") {
 		// If engine error occurred during iteration, verify it was logged
 		assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
+	}
+}
+
+func TestCheckCapability(t *testing.T) {
+	ctx := context.Background()
+	executorID := ulid.Make()
+	subjectID := access.CharacterSubject(executorID.String())
+
+	tests := []struct {
+		name           string
+		engine         types.AccessPolicyEngine
+		subject        string
+		capability     string
+		cmdName        string
+		expectedError  string
+		expectedCode   string
+		checkLogs      bool
+		expectedLogMsg string
+	}{
+		{
+			name:          "permission granted",
+			engine:        policytest.AllowAllEngine(),
+			subject:       subjectID,
+			capability:    "admin.boot",
+			cmdName:       "boot",
+			expectedError: "",
+			expectedCode:  "",
+		},
+		{
+			name:          "permission denied",
+			engine:        policytest.DenyAllEngine(),
+			subject:       subjectID,
+			capability:    "admin.boot",
+			cmdName:       "boot",
+			expectedError: "permission denied",
+			expectedCode:  command.CodePermissionDenied,
+		},
+		{
+			name:           "engine evaluation failure",
+			engine:         policytest.NewErrorEngine(errors.New("policy store unavailable")),
+			subject:        subjectID,
+			capability:     "admin.boot",
+			cmdName:        "boot",
+			expectedError:  "policy store unavailable",
+			expectedCode:   command.CodeAccessEvaluationFailed,
+			checkLogs:      true,
+			expectedLogMsg: "boot access evaluation failed",
+		},
+		{
+			name:           "request construction failure - empty subject",
+			engine:         policytest.AllowAllEngine(),
+			subject:        "",
+			capability:     "admin.boot",
+			cmdName:        "boot",
+			expectedError:  "subject must not be empty",
+			expectedCode:   command.CodeAccessEvaluationFailed,
+			checkLogs:      true,
+			expectedLogMsg: "boot access request construction failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture logs if needed
+			var logBuf bytes.Buffer
+			var oldLogger *slog.Logger
+			if tt.checkLogs {
+				oldLogger = slog.Default()
+				testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelError}))
+				slog.SetDefault(testLogger)
+				defer slog.SetDefault(oldLogger)
+			}
+
+			err := checkCapability(ctx, tt.engine, tt.subject, tt.capability, tt.cmdName)
+
+			if tt.expectedError == "" {
+				require.NoError(t, err)
+				return
+			}
+
+			// Expect an error
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedError)
+
+			// Check error code
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, tt.expectedCode, oopsErr.Code())
+
+			// Check logs if needed
+			if tt.checkLogs {
+				logOutput := logBuf.String()
+				assert.Contains(t, logOutput, tt.expectedLogMsg, "log should contain expected message")
+				assert.Contains(t, logOutput, tt.subject, "log should contain subject")
+				assert.Contains(t, logOutput, "execute", "log should contain action")
+				assert.Contains(t, logOutput, tt.capability, "log should contain capability")
+			}
+		})
 	}
 }
 

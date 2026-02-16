@@ -449,3 +449,100 @@ func TestStreamResource_EmptyID_Panics(t *testing.T) {
 		access.StreamResource("")
 	})
 }
+
+func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
+	// This test verifies that knownPrefixes (the internal validation list) covers
+	// all prefix constants that should be known. SubjectSystem is intentionally
+	// excluded since it doesn't have the ":" suffix and is handled specially
+	// in ParseEntityRef.
+	tests := []struct {
+		name     string
+		constant string
+		desc     string
+	}{
+		// Subject prefixes (that should be in knownPrefixes)
+		{
+			name:     "subject character prefix",
+			constant: access.SubjectCharacter,
+			desc:     "SubjectCharacter",
+		},
+		{
+			name:     "subject plugin prefix",
+			constant: access.SubjectPlugin,
+			desc:     "SubjectPlugin",
+		},
+		{
+			name:     "subject session prefix",
+			constant: access.SubjectSession,
+			desc:     "SubjectSession",
+		},
+		// Resource prefixes
+		{
+			name:     "resource character prefix",
+			constant: access.ResourceCharacter,
+			desc:     "ResourceCharacter",
+		},
+		{
+			name:     "resource location prefix",
+			constant: access.ResourceLocation,
+			desc:     "ResourceLocation",
+		},
+		{
+			name:     "resource object prefix",
+			constant: access.ResourceObject,
+			desc:     "ResourceObject",
+		},
+		{
+			name:     "resource command prefix",
+			constant: access.ResourceCommand,
+			desc:     "ResourceCommand",
+		},
+		{
+			name:     "resource property prefix",
+			constant: access.ResourceProperty,
+			desc:     "ResourceProperty",
+		},
+		{
+			name:     "resource stream prefix",
+			constant: access.ResourceStream,
+			desc:     "ResourceStream",
+		},
+		{
+			name:     "resource exit prefix",
+			constant: access.ResourceExit,
+			desc:     "ResourceExit",
+		},
+		{
+			name:     "resource scene prefix",
+			constant: access.ResourceScene,
+			desc:     "ResourceScene",
+		},
+	}
+
+	// Verify each constant is in the internal knownPrefixes list
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// ParseEntityRef uses the internal knownPrefixes slice to validate
+			// prefixes. We test that each prefix constant can be parsed correctly,
+			// which proves it's in knownPrefixes.
+			typeName, id, err := access.ParseEntityRef(tt.constant + "test-id")
+			require.NoError(t, err, "prefix should be recognized: %s", tt.desc)
+			assert.NotEmpty(t, typeName, "typeName should be extracted from prefix")
+			assert.Equal(t, "test-id", id, "ID should be extracted correctly")
+		})
+	}
+
+	// Verify SubjectSystem is NOT in knownPrefixes (it's handled specially)
+	t.Run("system subject special case", func(t *testing.T) {
+		typeName, id, err := access.ParseEntityRef(access.SubjectSystem)
+		require.NoError(t, err)
+		assert.Equal(t, "system", typeName)
+		assert.Equal(t, "", id)
+	})
+
+	// Verify that ParseEntityRef rejects unknown prefixes
+	t.Run("unknown prefix rejected", func(t *testing.T) {
+		_, _, err := access.ParseEntityRef("unknown:test-id")
+		errutil.AssertErrorCode(t, err, "INVALID_ENTITY_REF")
+	})
+}

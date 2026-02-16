@@ -20,6 +20,46 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
+// checkCapability evaluates whether the subject can execute a given capability.
+// It handles request construction errors, engine evaluation errors, and denial
+// with consistent logging, metrics, and error codes.
+func checkCapability(ctx context.Context, engine types.AccessPolicyEngine, subject, capability, cmdName string) error {
+	req, reqErr := types.NewAccessRequest(subject, "execute", capability)
+	if reqErr != nil {
+		slog.ErrorContext(ctx, cmdName+" access request construction failed",
+			"subject", subject,
+			"action", "execute",
+			"resource", capability,
+			"error", reqErr,
+		)
+		observability.RecordEngineFailure(cmdName + "_access_check")
+		return oops.Wrapf(command.ErrAccessEvaluationFailed(cmdName, reqErr), "access request creation failed")
+	}
+
+	decision, evalErr := engine.Evaluate(ctx, req)
+	if evalErr != nil {
+		slog.ErrorContext(ctx, cmdName+" access evaluation failed",
+			"subject", subject,
+			"action", "execute",
+			"resource", capability,
+			"error", evalErr,
+		)
+		observability.RecordEngineFailure(cmdName + "_access_check")
+		return oops.Wrapf(command.ErrAccessEvaluationFailed(cmdName, evalErr), "access evaluation failed")
+	}
+
+	if !decision.IsAllowed() {
+		return oops.Code(command.CodePermissionDenied).
+			With("command", cmdName).
+			With("capability", capability).
+			With("reason", decision.Reason).
+			With("policy_id", decision.PolicyID).
+			Errorf("permission denied for command %s", cmdName)
+	}
+
+	return nil
+}
+
 // BootHandler disconnects a target player from the server.
 // Self-boot bypasses the admin.boot capability check (implemented in handler),
 // allowing any user to boot themselves (like "quit with reason").
@@ -52,48 +92,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		req, reqErr := types.NewAccessRequest(subjectID, "execute", "admin.boot")
-		if reqErr != nil {
-			slog.ErrorContext(ctx, "boot access request construction failed",
-				"subject", subjectID,
-				"action", "execute",
-				"resource", "admin.boot",
-				"target_name", targetName,
-				"target_char_id", targetCharID.String(),
-				"error", reqErr,
-			)
-			observability.RecordEngineFailure("boot_access_check")
-			err := oops.Code(command.CodeAccessEvaluationFailed).
-				With("command", "boot").
-				With("capability", "admin.boot").
-				Wrap(reqErr)
-			return err
-		}
-
-		decision, evalErr := exec.Services().Engine().Evaluate(ctx, req)
-		if evalErr != nil {
-			slog.ErrorContext(ctx, "boot access evaluation failed",
-				"subject", subjectID,
-				"action", "execute",
-				"resource", "admin.boot",
-				"target_name", targetName,
-				"target_char_id", targetCharID.String(),
-				"error", evalErr,
-			)
-			observability.RecordEngineFailure("boot_access_check")
-			err := oops.Code(command.CodeAccessEvaluationFailed).
-				With("command", "boot").
-				With("capability", "admin.boot").
-				Wrap(evalErr)
-			return err
-		}
-		if !decision.IsAllowed() {
-			err := oops.Code(command.CodePermissionDenied).
-				With("command", "boot").
-				With("capability", "admin.boot").
-				With("reason", decision.Reason).
-				With("policy_id", decision.PolicyID).
-				Errorf("permission denied for command boot")
+		if err := checkCapability(ctx, exec.Services().Engine(), subjectID, "admin.boot", "boot"); err != nil {
 			return err
 		}
 	}
