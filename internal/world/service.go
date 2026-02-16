@@ -13,6 +13,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/observability"
 )
 
 // ErrPermissionDenied is returned when an operation is not authorized.
@@ -89,16 +90,17 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource, en
 	if reqErr != nil {
 		slog.ErrorContext(ctx, "invalid access request",
 			"error", reqErr, "subject", subject, "action", action, "resource", resource)
-		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").Wrap(
-			fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, reqErr),
-		)
+		observability.RecordEngineFailure(entityPrefix + "_access_check")
+		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").
+			Wrap(fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, reqErr))
 	}
 	decision, err := s.engine.Evaluate(ctx, req)
 	if err != nil {
 		slog.ErrorContext(ctx, "access evaluation failed",
 			"error", err, "subject", subject, "action", action, "resource", resource)
-		evalErr := fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, err)
-		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").Wrap(evalErr)
+		observability.RecordEngineFailure(entityPrefix + "_access_check")
+		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").
+			Wrap(fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, err))
 	}
 	if !decision.IsAllowed() {
 		deniedErr := oops.With("reason", decision.Reason).With("policy_id", decision.PolicyID).Wrap(ErrPermissionDenied)

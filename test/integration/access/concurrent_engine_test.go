@@ -293,7 +293,7 @@ var _ = Describe("Concurrent engine failures and recovery", func() {
 			// Some calls should have failed, some succeeded
 			Expect(failureCount.Load()).To(BeNumerically(">", 0), "expected some failures during transient period")
 			Expect(successCount.Load()).To(BeNumerically(">", 0), "expected some successes after recovery")
-			Expect(int(failureCount.Load()+successCount.Load())).To(Equal(totalCalls))
+			Expect(int(failureCount.Load() + successCount.Load())).To(Equal(totalCalls))
 
 			// Post-recovery: all subsequent calls should succeed
 			for i := range 20 {

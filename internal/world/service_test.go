@@ -5983,6 +5983,656 @@ func TestWorldService_DeleteCharacter_VerifiesAccessRequest(t *testing.T) {
 	assert.Equal(t, "character:"+charID.String(), capturedRequest.Resource, "resource should be character:<id>")
 }
 
+// --- Exit VerifiesAccessRequest tests ---
+
+func TestWorldService_GetExit_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	exitID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockExitRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ExitRepo: mockRepo,
+		Engine:   mockEngine,
+	})
+
+	expectedExit := &world.Exit{ID: exitID, Name: "North"}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Get(ctx, exitID).Return(expectedExit, nil)
+
+	_, err := svc.GetExit(ctx, subjectID, exitID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "exit:"+exitID.String(), capturedRequest.Resource, "resource should be exit:<id>")
+}
+
+func TestWorldService_UpdateExit_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockExitRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ExitRepo: mockRepo,
+		Engine:   mockEngine,
+	})
+
+	exit := &world.Exit{
+		ID:             ulid.Make(),
+		Name:           "North",
+		Aliases:        []string{"n"},
+		FromLocationID: fromLocID,
+		ToLocationID:   toLocID,
+		Visibility:     world.VisibilityAll,
+	}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Update(ctx, exit).Return(nil)
+
+	err := svc.UpdateExit(ctx, subjectID, exit)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "exit:"+exit.ID.String(), capturedRequest.Resource, "resource should be exit:<id>")
+}
+
+func TestWorldService_GetExitsByLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	locationID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockExitRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ExitRepo: mockRepo,
+		Engine:   mockEngine,
+	})
+
+	expectedExits := []*world.Exit{{ID: ulid.Make(), Name: "North"}}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().ListFromLocation(ctx, locationID).Return(expectedExits, nil)
+
+	_, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "location:"+locationID.String(), capturedRequest.Resource, "resource should be location:<id>")
+}
+
+// --- Object VerifiesAccessRequest tests ---
+
+func TestWorldService_GetObject_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockObjectRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo: mockRepo,
+		Engine:     mockEngine,
+	})
+
+	expectedObj := &world.Object{ID: objID, Name: "Sword"}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Get(ctx, objID).Return(expectedObj, nil)
+
+	_, err := svc.GetObject(ctx, subjectID, objID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "object:"+objID.String(), capturedRequest.Resource, "resource should be object:<id>")
+}
+
+func TestWorldService_CreateObject_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+	locID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockObjectRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo: mockRepo,
+		Engine:     mockEngine,
+	})
+
+	obj, objErr := world.NewObject("Sword", world.InLocation(locID))
+	require.NoError(t, objErr)
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Create(ctx, mock.Anything).Return(nil)
+
+	err := svc.CreateObject(ctx, subjectID, obj)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "object:*", capturedRequest.Resource, "resource should be object:*")
+}
+
+func TestWorldService_UpdateObject_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+	locID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockObjectRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo: mockRepo,
+		Engine:     mockEngine,
+	})
+
+	objID := ulid.Make()
+	obj, objErr := world.NewObjectWithID(objID, "Sword", world.InLocation(locID))
+	require.NoError(t, objErr)
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Update(ctx, obj).Return(nil)
+
+	err := svc.UpdateObject(ctx, subjectID, obj)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "object:"+objID.String(), capturedRequest.Resource, "resource should be object:<id>")
+}
+
+func TestWorldService_DeleteObject_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockObjRepo := worldtest.NewMockObjectRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	mockTransactor := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo:   mockObjRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       mockEngine,
+		Transactor:   mockTransactor,
+	})
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "object", objID).Return(nil)
+	mockObjRepo.EXPECT().Delete(ctx, objID).Return(nil)
+
+	err := svc.DeleteObject(ctx, subjectID, objID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "delete", capturedRequest.Action, "action should be 'delete'")
+	assert.Equal(t, "object:"+objID.String(), capturedRequest.Resource, "resource should be object:<id>")
+}
+
+func TestWorldService_MoveObject_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	objID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+	fromLocID := ulid.Make()
+	toLocID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockObjRepo := worldtest.NewMockObjectRepository(t)
+	emitter := &mockEventEmitter{}
+
+	svc := world.NewService(world.ServiceConfig{
+		ObjectRepo:   mockObjRepo,
+		Engine:       mockEngine,
+		EventEmitter: emitter,
+	})
+
+	existingObj, objErr := world.NewObjectWithID(objID, "Sword", world.InLocation(fromLocID))
+	require.NoError(t, objErr)
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockObjRepo.EXPECT().Get(ctx, objID).Return(existingObj, nil)
+	mockObjRepo.EXPECT().Move(ctx, objID, world.InLocation(toLocID)).Return(nil)
+
+	err := svc.MoveObject(ctx, subjectID, objID, world.InLocation(toLocID))
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "object:"+objID.String(), capturedRequest.Resource, "resource should be object:<id>")
+}
+
+// --- Scene VerifiesAccessRequest tests ---
+
+func TestWorldService_AddSceneParticipant_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	characterID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockSceneRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		SceneRepo: mockRepo,
+		Engine:    mockEngine,
+	})
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().AddParticipant(ctx, sceneID, characterID, world.RoleMember).Return(nil)
+
+	err := svc.AddSceneParticipant(ctx, subjectID, sceneID, characterID, world.RoleMember)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "scene:"+sceneID.String(), capturedRequest.Resource, "resource should be scene:<id>")
+}
+
+func TestWorldService_RemoveSceneParticipant_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	characterID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockSceneRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		SceneRepo: mockRepo,
+		Engine:    mockEngine,
+	})
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().RemoveParticipant(ctx, sceneID, characterID).Return(nil)
+
+	err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, characterID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "scene:"+sceneID.String(), capturedRequest.Resource, "resource should be scene:<id>")
+}
+
+func TestWorldService_ListSceneParticipants_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockSceneRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		SceneRepo: mockRepo,
+		Engine:    mockEngine,
+	})
+
+	expectedParticipants := []world.SceneParticipant{{CharacterID: ulid.Make(), Role: world.RoleMember}}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().ListParticipants(ctx, sceneID).Return(expectedParticipants, nil)
+
+	_, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "scene:"+sceneID.String(), capturedRequest.Resource, "resource should be scene:<id>")
+}
+
+// --- Location VerifiesAccessRequest tests (additional) ---
+
+func TestWorldService_UpdateLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockLocationRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo: mockRepo,
+		Engine:       mockEngine,
+	})
+
+	loc := &world.Location{
+		ID:          ulid.Make(),
+		Name:        "Updated Room",
+		Description: "A modified room",
+		Type:        world.LocationTypePersistent,
+	}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Update(ctx, loc).Return(nil)
+
+	err := svc.UpdateLocation(ctx, subjectID, loc)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
+	assert.Equal(t, "location:"+loc.ID.String(), capturedRequest.Resource, "resource should be location:<id>")
+}
+
+func TestWorldService_DeleteLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockLocRepo := worldtest.NewMockLocationRepository(t)
+	mockPropRepo := worldtest.NewMockPropertyRepository(t)
+	mockTransactor := &mockTransactor{}
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo: mockLocRepo,
+		PropertyRepo: mockPropRepo,
+		Engine:       mockEngine,
+		Transactor:   mockTransactor,
+	})
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockPropRepo.EXPECT().DeleteByParent(ctx, "location", locID).Return(nil)
+	mockLocRepo.EXPECT().Delete(ctx, locID).Return(nil)
+
+	err := svc.DeleteLocation(ctx, subjectID, locID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "delete", capturedRequest.Action, "action should be 'delete'")
+	assert.Equal(t, "location:"+locID.String(), capturedRequest.Resource, "resource should be location:<id>")
+}
+
+func TestWorldService_FindLocationByName_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	subjectID := access.CharacterSubject(charID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockLocationRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo: mockRepo,
+		Engine:       mockEngine,
+	})
+
+	expectedLoc := &world.Location{ID: ulid.Make(), Name: "Town Square"}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().FindByName(ctx, "Town Square").Return(expectedLoc, nil)
+
+	_, err := svc.FindLocationByName(ctx, subjectID, "Town Square")
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "location:*", capturedRequest.Resource, "resource should be location:*")
+}
+
+func TestWorldService_ExamineLocation_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	callerID := ulid.Make()
+	subjectID := access.CharacterSubject(callerID.String())
+	locID := ulid.Make()
+	targetLocID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	mockLocRepo := worldtest.NewMockLocationRepository(t)
+	emitter := &mockEventEmitter{}
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		LocationRepo:  mockLocRepo,
+		Engine:        mockEngine,
+		EventEmitter:  emitter,
+	})
+
+	existingChar := &world.Character{
+		ID:         charID,
+		Name:       "Test Character",
+		LocationID: &locID,
+	}
+	targetLoc := &world.Location{ID: targetLocID, Name: "Target Room"}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
+	mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+
+	err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "location:"+targetLocID.String(), capturedRequest.Resource, "resource should be location:<id>")
+}
+
+// --- Character VerifiesAccessRequest tests (additional) ---
+
+func TestWorldService_GetCharacter_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	callerID := ulid.Make()
+	subjectID := access.CharacterSubject(callerID.String())
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockRepo := worldtest.NewMockCharacterRepository(t)
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockRepo,
+		Engine:        mockEngine,
+	})
+
+	expectedChar := &world.Character{ID: charID, Name: "Test Character"}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockRepo.EXPECT().Get(ctx, charID).Return(expectedChar, nil)
+
+	_, err := svc.GetCharacter(ctx, subjectID, charID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "character:"+charID.String(), capturedRequest.Resource, "resource should be character:<id>")
+}
+
+func TestWorldService_ExamineCharacter_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	callerID := ulid.Make()
+	subjectID := access.CharacterSubject(callerID.String())
+	locID := ulid.Make()
+	targetCharID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	emitter := &mockEventEmitter{}
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		Engine:        mockEngine,
+		EventEmitter:  emitter,
+	})
+
+	existingChar := &world.Character{
+		ID:         charID,
+		Name:       "Examiner",
+		LocationID: &locID,
+	}
+	targetChar := &world.Character{
+		ID:   targetCharID,
+		Name: "Target Character",
+	}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
+	mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+
+	err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "character:"+targetCharID.String(), capturedRequest.Resource, "resource should be character:<id>")
+}
+
+func TestWorldService_ExamineObject_VerifiesAccessRequest(t *testing.T) {
+	ctx := context.Background()
+	charID := ulid.Make()
+	callerID := ulid.Make()
+	subjectID := access.CharacterSubject(callerID.String())
+	locID := ulid.Make()
+	targetObjID := ulid.Make()
+
+	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	mockCharRepo := worldtest.NewMockCharacterRepository(t)
+	mockObjRepo := worldtest.NewMockObjectRepository(t)
+	emitter := &mockEventEmitter{}
+
+	svc := world.NewService(world.ServiceConfig{
+		CharacterRepo: mockCharRepo,
+		ObjectRepo:    mockObjRepo,
+		Engine:        mockEngine,
+		EventEmitter:  emitter,
+	})
+
+	existingChar := &world.Character{
+		ID:         charID,
+		Name:       "Examiner",
+		LocationID: &locID,
+	}
+	targetObj := &world.Object{
+		ID:   targetObjID,
+		Name: "Mysterious Artifact",
+	}
+
+	var capturedRequest types.AccessRequest
+	mockEngine.EXPECT().Evaluate(mock.Anything, mock.MatchedBy(func(req types.AccessRequest) bool {
+		capturedRequest = req
+		return true
+	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
+
+	mockCharRepo.EXPECT().Get(ctx, charID).Return(existingChar, nil)
+	mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+
+	err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
+	require.NoError(t, err)
+
+	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
+	assert.Equal(t, "read", capturedRequest.Action, "action should be 'read'")
+	assert.Equal(t, "object:"+targetObjID.String(), capturedRequest.Resource, "resource should be object:<id>")
+}
+
 // TestWorldService_ErrorCodePropagation verifies that error codes propagate correctly
 // through actual service methods when access checks fail. This tests end-to-end that:
 //   - Engine errors (ErrAccessEvaluationFailed) result in *_ACCESS_EVALUATION_FAILED codes

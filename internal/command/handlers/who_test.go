@@ -680,7 +680,7 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 
 func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 	// With 5 sessions all returning ErrAccessEvaluationFailed, the circuit breaker
-	// should trip after 3 consecutive failures, leaving 2 sessions unqueried.
+	// should trip after 3 total failures, leaving 2 sessions unqueried.
 	executor := testutil.RegularPlayer()
 
 	// Create 5 sessions that will all fail with engine errors.
@@ -732,12 +732,12 @@ func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 	// Verify the circuit breaker warning was logged.
 	logOutput := logBuf.String()
 	assert.Contains(t, logOutput, "circuit breaker tripped")
-	assert.Contains(t, logOutput, "consecutive_failures=3")
+	assert.Contains(t, logOutput, "engine_failures=3")
 }
 
 func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
 	// 4 sessions all returning non-engine errors (database timeout).
-	// The circuit breaker should NOT trip because consecutiveEngineErrors
+	// The circuit breaker should NOT trip because engineErrorCount
 	// only increments for ErrAccessEvaluationFailed.
 	executor := testutil.RegularPlayer()
 
@@ -796,8 +796,7 @@ func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
 
 func TestWhoHandler_SuccessResetsConsecutiveEngineErrorCounter(t *testing.T) {
 	// With 2 engine-error sessions and 3 successful sessions, the circuit breaker
-	// should never trip regardless of iteration order (max possible consecutive
-	// engine errors is 2, below the threshold of 3).
+	// should never trip (only 2 total engine errors, below the threshold of 3).
 	executor := testutil.RegularPlayer()
 	playerID := ulid.Make()
 
@@ -879,5 +878,88 @@ func TestWhoHandler_SuccessResetsConsecutiveEngineErrorCounter(t *testing.T) {
 	// all 5 sessions were processed (no circuit breaker).
 	logOutput := logBuf.String()
 	assert.NotContains(t, logOutput, "circuit breaker tripped",
-		"circuit breaker should not trip with only 2 possible consecutive engine errors")
+		"circuit breaker should not trip with only 2 total engine errors")
+}
+
+func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
+	// With 3 engine errors and 2 non-engine errors, the circuit breaker
+	// should trip after accumulating 3 engine errors, regardless of interleaving.
+	executor := testutil.RegularPlayer()
+
+	// Create 5 sessions: 3 will fail with engine errors, 2 with DB errors.
+	engineFailIDs := make([]ulid.ULID, 3)
+	dbFailIDs := make([]ulid.ULID, 2)
+	sessionMgr := core.NewSessionManager()
+	for i := range engineFailIDs {
+		engineFailIDs[i] = ulid.Make()
+		sessionMgr.Connect(engineFailIDs[i], ulid.Make())
+	}
+	for i := range dbFailIDs {
+		dbFailIDs[i] = ulid.Make()
+		sessionMgr.Connect(dbFailIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+
+	// Engine error characters.
+	for _, charID := range engineFailIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterSubject(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Maybe()
+	}
+
+	// DB error characters.
+	dbErr := errors.New("database connection timeout")
+	for _, charID := range dbFailIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterSubject(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil).
+			Maybe()
+		fixture.Mocks.CharacterRepo.EXPECT().
+			Get(mock.Anything, charID).
+			Return(nil, dbErr).
+			Maybe()
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Circuit breaker should trip after 3 engine errors.
+	// The exact error count depends on iteration order, but should be at least 3.
+	assert.Contains(t, output, "No players online")
+	assert.Contains(t, output, "could not be displayed due to system error")
+
+	// Verify the circuit breaker warning was logged.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "circuit breaker tripped",
+		"circuit breaker should trip after 3 engine errors even with interleaved non-engine errors")
+	assert.Contains(t, logOutput, "engine_failures=3")
 }
