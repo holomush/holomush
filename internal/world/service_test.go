@@ -138,6 +138,32 @@ func TestWorldService_GetLocation(t *testing.T) {
 			"engine error must not be reported as permission denied")
 	})
 
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		// Infrastructure failures (session invalid, DB errors, etc.) return deny decisions
+		// with PolicyID starting with "infra:" and should be treated as evaluation failures,
+		// not permission denials.
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			LocationRepo: mockRepo,
+			Engine:       engine,
+		})
+
+		loc, err := svc.GetLocation(ctx, subjectID, locID)
+		assert.Nil(t, loc)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		mockRepo.AssertNotCalled(t, "Get")
+
+		// Verify oops context contains decision details
+		errutil.AssertErrorContext(t, err, "reason", "session invalid")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+	})
+
 	t.Run("logs error when Evaluate fails", func(t *testing.T) {
 		// Capture log output
 		var logBuf bytes.Buffer

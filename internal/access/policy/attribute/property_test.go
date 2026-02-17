@@ -287,7 +287,7 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:          "wrong entity type - character",
-			resourceID:    access.CharacterSubject(propID.String()),
+			resourceID:    access.CharacterResource(propID.String()),
 			expectedAttrs: nil,
 		},
 		{

@@ -609,7 +609,7 @@ func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 	// Verify log output contains error and context (logged by world.Service.checkAccess)
 	logOutput := logBuf.String()
 	subjectID := access.CharacterSubject(executor.CharacterID.String())
-	resourceID := access.CharacterSubject(evalFailCharID.String())
+	resourceID := access.CharacterResource(evalFailCharID.String())
 	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
 	assert.Contains(t, logOutput, subjectID, "log should contain subject")
 	assert.Contains(t, logOutput, "read", "log should contain action")
@@ -672,8 +672,8 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 	assert.Contains(t, logOutput, "read", "log should contain action")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 	// Should have logged both failures (check for both resource IDs)
-	resource1 := access.CharacterSubject(evalFail1ID.String())
-	resource2 := access.CharacterSubject(evalFail2ID.String())
+	resource1 := access.CharacterResource(evalFail1ID.String())
+	resource2 := access.CharacterResource(evalFail2ID.String())
 	assert.True(t, strings.Contains(logOutput, resource1) || strings.Contains(logOutput, resource2),
 		"log should contain at least one character resource ID")
 }

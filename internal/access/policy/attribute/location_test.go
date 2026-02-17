@@ -207,7 +207,7 @@ func TestLocationProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:        "wrong entity type (character)",
-			resourceID:  access.CharacterSubject(ulid.Make().String()),
+			resourceID:  access.CharacterResource(ulid.Make().String()),
 			setupMock:   func(_ *mockLocationRepository) {},
 			expectNil:   true,
 			expectError: false,

@@ -124,6 +124,13 @@ func (d Decision) Effect() Effect {
 	return d.effect
 }
 
+// IsInfraFailure returns true if this decision represents an infrastructure
+// failure (session resolution error, DB error, etc.) rather than a policy denial.
+// Infrastructure failures use PolicyID with the "infra:" prefix.
+func (d Decision) IsInfraFailure() bool {
+	return len(d.PolicyID) >= 6 && d.PolicyID[:6] == "infra:"
+}
+
 // Validate checks that the Decision invariant holds: the allowed field
 // must be consistent with the effect. Returns an error if the invariant
 // is violated. This should be called at engine return boundaries.

@@ -6,7 +6,6 @@ package world
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
@@ -87,25 +86,42 @@ func NewService(cfg ServiceConfig) *Service {
 // Unknown errors (context errors, DB failures, etc.) are classified as evaluation
 // failures rather than denials to avoid poisoning metrics and user feedback.
 func (s *Service) checkAccess(ctx context.Context, subject, action, resource, entityPrefix string) error {
+	metricKey := entityPrefix + "_access_check"
+	failCode := entityPrefix + "_ACCESS_EVALUATION_FAILED"
+	denyCode := entityPrefix + "_ACCESS_DENIED"
+
 	req, reqErr := types.NewAccessRequest(subject, action, resource)
 	if reqErr != nil {
 		slog.ErrorContext(ctx, "invalid access request",
 			"error", reqErr, "subject", subject, "action", action, "resource", resource)
-		observability.RecordEngineFailure(entityPrefix + "_access_check")
-		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").
-			Wrap(fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, reqErr))
+		observability.RecordEngineFailure(metricKey)
+		return oops.Code(failCode).
+			Wrap(errors.Join(ErrAccessEvaluationFailed, reqErr))
 	}
 	decision, err := s.engine.Evaluate(ctx, req)
 	if err != nil {
 		slog.ErrorContext(ctx, "access evaluation failed",
 			"error", err, "subject", subject, "action", action, "resource", resource)
-		observability.RecordEngineFailure(entityPrefix + "_access_check")
-		return oops.Code(entityPrefix + "_ACCESS_EVALUATION_FAILED").
-			Wrap(fmt.Errorf("%w: %w", ErrAccessEvaluationFailed, err))
+		observability.RecordEngineFailure(metricKey)
+		return oops.Code(failCode).
+			Wrap(errors.Join(ErrAccessEvaluationFailed, err))
 	}
 	if !decision.IsAllowed() {
+		// Infrastructure failures (session resolution, DB errors) should return
+		// ErrAccessEvaluationFailed, not ErrPermissionDenied, so callers and users
+		// can distinguish transient failures from policy denials.
+		if decision.IsInfraFailure() {
+			slog.ErrorContext(ctx, "access check infrastructure failure",
+				"policy_id", decision.PolicyID, "reason", decision.Reason,
+				"subject", subject, "action", action, "resource", resource)
+			observability.RecordEngineFailure(metricKey)
+			return oops.Code(failCode).
+				With("reason", decision.Reason).
+				With("policy_id", decision.PolicyID).
+				Wrap(ErrAccessEvaluationFailed)
+		}
 		deniedErr := oops.With("reason", decision.Reason).With("policy_id", decision.PolicyID).Wrap(ErrPermissionDenied)
-		return oops.Code(entityPrefix + "_ACCESS_DENIED").Wrap(deniedErr)
+		return oops.Code(denyCode).Wrap(deniedErr)
 	}
 	return nil
 }
