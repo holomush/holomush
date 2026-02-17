@@ -809,6 +809,61 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 	assert.Len(t, names, 1, "only commands without capability requirements should be included")
 }
 
+func TestListCommands_InfraFailure_SetsIncompleteTrue(t *testing.T) {
+	// Given: commands with capabilities and an engine that returns infra failure decisions
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	infraEngine := policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver")
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(infraEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: list_commands is called
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: commands with capabilities are hidden (fail-closed, same as engine error)
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	commands := L.GetField(resultTbl, "commands")
+	require.NotEqual(t, lua.LNil, commands, "commands field should exist")
+
+	tbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", commands)
+
+	var names []string
+	tbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+
+	assert.Contains(t, names, "look", "commands without capabilities should still appear")
+	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden during infra failure")
+
+	// Verify incomplete=true (the key distinction from explicit deny)
+	incomplete := L.GetField(resultTbl, "incomplete")
+	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when infra failure occurs")
+}
+
 func TestListCommands_ThreadsLuaContext(t *testing.T) {
 	// Given: a registry with a command requiring capabilities
 	registry := &mockCommandRegistry{

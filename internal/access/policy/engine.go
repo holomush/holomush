@@ -104,7 +104,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		req.Subject = access.CharacterSubject(characterID)
 	}
 
-	// Step 3: Eager attribute resolution (non-fatal; bags may be nil/partial on error)
+	// Step 3: Eager attribute resolution (non-fatal; bags may be partial when providers fail)
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
 		slog.WarnContext(ctx, "attribute resolution failed", "error", resolveErr)

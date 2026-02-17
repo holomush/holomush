@@ -328,7 +328,8 @@ func TestResolver_Resolve_ProviderError(t *testing.T) {
 	}
 
 	bags, err := resolver.Resolve(context.Background(), req)
-	require.NoError(t, err) // Should not error, just skip failing provider
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "database error")
 
 	// Working provider's data should be present
 	assert.Equal(t, "user", bags.Subject["working.role"])
@@ -363,7 +364,8 @@ func TestResolver_Resolve_ProviderPanic(t *testing.T) {
 
 	// Should not panic, just skip the panicking provider
 	bags, err := resolver.Resolve(context.Background(), req)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "panicked")
 
 	// Working provider's data should be present
 	assert.Equal(t, "user", bags.Subject["working.role"])
@@ -422,9 +424,10 @@ func TestResolver_Resolve_ReEntranceGuard(t *testing.T) {
 		Resource: "room:01XYZ",
 	}
 
-	// Re-entrance panic is caught by safeResolve's recovery — outer call succeeds
+	// Re-entrance panic is caught by safeResolve's recovery — outer call returns error
 	bags, err := resolver.Resolve(context.Background(), req)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "panicked")
 
 	// Reentrant provider's attributes should be empty (its call was recovered)
 	_, exists := bags.Subject["reentrant.test"]

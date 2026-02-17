@@ -321,6 +321,77 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
+func TestBootHandler_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
+	executorID := ulid.Make()
+	targetID := ulid.Make()
+	execConn := ulid.Make()
+	targetConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(targetID, targetConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "RegularUser",
+	}
+	targetChar := &world.Character{
+		ID:       targetID,
+		PlayerID: playerID,
+		Name:     "Troublemaker",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	// Use a grant engine for world service (character lookups succeed)
+	worldEngine := policytest.NewGrantEngine()
+	worldEngine.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String())
+	worldEngine.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String())
+
+	// Session iteration order is non-deterministic
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, targetID).
+		Return(targetChar, nil)
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		Engine:        worldEngine,
+	})
+
+	// Use infra failure engine for the command's access check
+	infraEngine := policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver")
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID:   executorID,
+		CharacterName: "RegularUser",
+		PlayerID:      playerID,
+		Args:          "Troublemaker",
+		Output:        &buf,
+		Services: command.NewTestServices(command.ServicesConfig{
+			Session: sessionMgr,
+			World:   worldService,
+			Engine:  infraEngine,
+		}),
+	})
+
+	err := BootHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	// Verify ACCESS_EVALUATION_FAILED code (NOT PERMISSION_DENIED)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, command.CodeAccessEvaluationFailed, oopsErr.Code())
+
+	// Verify target session still exists (was not booted)
+	targetSession := sessionMgr.GetSession(targetID)
+	assert.NotNil(t, targetSession, "Target session should still exist")
+}
+
 func TestBootHandler_TargetNotFound(t *testing.T) {
 	executorID := ulid.Make()
 	execConn := ulid.Make()
