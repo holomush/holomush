@@ -291,3 +291,58 @@ func TestAttributeSchema_NewEmpty(t *testing.T) {
 	require.NotNil(t, schema)
 	assert.Empty(t, schema.namespaces)
 }
+
+func TestDecision_IsInfraFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		decision Decision
+		expected bool
+	}{
+		{
+			name:     "session invalid is infra failure",
+			decision: NewDecision(EffectDefaultDeny, "session invalid", "infra:session-invalid"),
+			expected: true,
+		},
+		{
+			name:     "session store error is infra failure",
+			decision: NewDecision(EffectDefaultDeny, "session store error", "infra:session-store-error"),
+			expected: true,
+		},
+		{
+			name:     "policy denial is not infra failure",
+			decision: NewDecision(EffectDeny, "forbidden", "pol-123"),
+			expected: false,
+		},
+		{
+			name:     "default deny with no policy is not infra failure",
+			decision: NewDecision(EffectDefaultDeny, "no match", ""),
+			expected: false,
+		},
+		{
+			name:     "empty policyID is not infra failure",
+			decision: NewDecision(EffectDefaultDeny, "unknown", ""),
+			expected: false,
+		},
+		{
+			name:     "short policyID is not infra failure",
+			decision: NewDecision(EffectDefaultDeny, "unknown", "infra"),
+			expected: false,
+		},
+		{
+			name:     "infra prefix with content is infra failure",
+			decision: NewDecision(EffectDefaultDeny, "unknown", "infra:db-timeout"),
+			expected: true,
+		},
+		{
+			name:     "allow decision cannot be infra failure",
+			decision: NewDecision(EffectAllow, "allowed", "infra:should-not-happen"),
+			expected: true, // still detects prefix even if semantically wrong
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.decision.IsInfraFailure())
+		})
+	}
+}

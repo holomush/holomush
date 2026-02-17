@@ -1453,8 +1453,8 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	assert.Contains(t, logOutput, "read", "log should contain action")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 	// Should have logged at least one character lookup failure
-	resource1 := access.CharacterSubject(evalFail1ID.String())
-	resource2 := access.CharacterSubject(evalFail2ID.String())
+	resource1 := access.CharacterResource(evalFail1ID.String())
+	resource2 := access.CharacterResource(evalFail2ID.String())
 	assert.True(t, strings.Contains(logOutput, resource1) || strings.Contains(logOutput, resource2),
 		"log should contain at least one character resource ID")
 }

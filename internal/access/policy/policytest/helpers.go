@@ -16,7 +16,6 @@ import (
 func AllowAllEngine() *MockAccessPolicyEngine {
 	m := &MockAccessPolicyEngine{}
 	m.On("Evaluate", mock.Anything, mock.Anything).
-		Maybe().
 		Return(types.NewDecision(types.EffectAllow, "test-allow-all", ""), nil)
 	return m
 }
@@ -25,7 +24,6 @@ func AllowAllEngine() *MockAccessPolicyEngine {
 func DenyAllEngine() *MockAccessPolicyEngine {
 	m := &MockAccessPolicyEngine{}
 	m.On("Evaluate", mock.Anything, mock.Anything).
-		Maybe().
 		Return(types.NewDecision(types.EffectDeny, "test-deny-all", ""), nil)
 	return m
 }
@@ -52,7 +50,7 @@ func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (type
 	if g.grants[key] {
 		return types.NewDecision(types.EffectAllow, "test-grant", ""), nil
 	}
-	return types.NewDecision(types.EffectDeny, "test-deny", ""), nil
+	return types.NewDecision(types.EffectDefaultDeny, "test-no-grant", ""), nil
 }
 
 // ErrorEngine is a test types.AccessPolicyEngine that always returns the configured error.
@@ -69,4 +67,22 @@ func NewErrorEngine(err error) *ErrorEngine {
 // Evaluate returns a zero-value decision and the configured error.
 func (e *ErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
 	return types.Decision{}, e.err
+}
+
+// InfraFailureEngine is a test types.AccessPolicyEngine that returns deny decisions
+// with infrastructure failure indicators (PolicyID starting with "infra:").
+// Used to test the handling of session resolution errors and other infrastructure failures.
+type InfraFailureEngine struct {
+	reason   string
+	policyID string
+}
+
+// NewInfraFailureEngine creates an engine that returns infrastructure failure decisions.
+func NewInfraFailureEngine(reason, policyID string) *InfraFailureEngine {
+	return &InfraFailureEngine{reason: reason, policyID: policyID}
+}
+
+// Evaluate returns a deny decision with the infra: policy ID prefix.
+func (e *InfraFailureEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
+	return types.NewDecision(types.EffectDefaultDeny, e.reason, e.policyID), nil
 }

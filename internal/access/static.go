@@ -166,9 +166,10 @@ func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, re
 		if resolvedPattern != perm.pattern {
 			g, err := glob.Compile(resolvedPattern, ':')
 			if err != nil {
-				// Log at debug level - could happen with unusual subject/location IDs
-				slog.Debug("failed to compile resolved permission pattern",
+				// Log at warn level - pattern compilation failure causes silent permission denial
+				slog.Warn("failed to compile resolved permission pattern",
 					"subject", subject,
+					"action", action,
 					"pattern", perm.pattern,
 					"resolved", resolvedPattern,
 					"error", err)
@@ -187,11 +188,8 @@ func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, re
 
 // resolveTokens replaces $self and $here with actual values.
 func (s *StaticAccessControl) resolveTokens(pattern, subjectID, locationID string) string {
-	result := strings.ReplaceAll(pattern, "$self", subjectID)
-	if locationID != "" {
-		result = strings.ReplaceAll(result, "$here", locationID)
-	}
-	return result
+	r := strings.NewReplacer("$self", subjectID, "$here", locationID)
+	return r.Replace(pattern)
 }
 
 // resolveCurrentLocation gets the character's current location.
