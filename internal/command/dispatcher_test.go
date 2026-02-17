@@ -241,6 +241,54 @@ func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should have engine_failure status")
 }
 
+func TestDispatcher_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
+	reg := NewRegistry()
+	infraEngine := policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver")
+
+	err := reg.Register(CommandEntry{
+		Name:         "admin",
+		capabilities: []string{"admin.manage"},
+		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
+		Source:       "core",
+	})
+	require.NoError(t, err)
+
+	dispatcher, err := NewDispatcher(reg, infraEngine)
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &output,
+		Services:    stubServices(),
+	})
+
+	// Get baseline for engine_failure metric
+	engineFailureBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
+	}))
+
+	err = dispatcher.Dispatch(context.Background(), "admin", exec)
+	require.Error(t, err)
+
+	// Verify ACCESS_EVALUATION_FAILED error code (NOT PERMISSION_DENIED)
+	errutil.AssertErrorCode(t, err, CodeAccessEvaluationFailed)
+
+	// Verify error context includes infra failure details
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "admin", oopsErr.Context()["command"])
+	assert.Equal(t, "admin.manage", oopsErr.Context()["capability"])
+	assert.Equal(t, "session resolution failed", oopsErr.Context()["reason"])
+	assert.Equal(t, "infra:session-resolver", oopsErr.Context()["policy_id"])
+
+	// Verify engine_failure metric incremented
+	engineFailureAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
+	}))
+	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should record engine_failure status for infra failures")
+}
+
 func TestDispatcher_EmptyInput(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
