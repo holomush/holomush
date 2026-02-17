@@ -154,6 +154,17 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 			return false, hadError
 		}
 		if !decision.IsAllowed() {
+			if decision.IsInfraFailure() {
+				slog.ErrorContext(ctx, "access check infrastructure failure",
+					"subject", subject,
+					"action", "execute",
+					"resource", cap,
+					"reason", decision.Reason(),
+					"policy_id", decision.PolicyID(),
+				)
+				observability.RecordEngineFailure("command_capability_check")
+				hadError = true
+			}
 			return false, hadError
 		}
 	}

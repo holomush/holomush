@@ -201,12 +201,30 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 			return err
 		}
 		if !decision.IsAllowed() {
+			if decision.IsInfraFailure() {
+				slog.ErrorContext(ctx, "access check infrastructure failure",
+					"subject", subject,
+					"action", "execute",
+					"resource", cap,
+					"reason", decision.Reason(),
+					"policy_id", decision.PolicyID(),
+				)
+				observability.RecordEngineFailure("dispatcher_capability_check")
+				metrics.SetStatus(StatusEngineFailure)
+				err = oops.Code(CodeAccessEvaluationFailed).
+					With("command", parsed.Name).
+					With("capability", cap).
+					With("reason", decision.Reason()).
+					With("policy_id", decision.PolicyID()).
+					Errorf("infrastructure failure during access check for command %s", parsed.Name)
+				return err
+			}
 			metrics.SetStatus(StatusPermissionDenied)
 			err = oops.Code(CodePermissionDenied).
 				With("command", parsed.Name).
 				With("capability", cap).
-				With("reason", decision.Reason).
-				With("policy_id", decision.PolicyID).
+				With("reason", decision.Reason()).
+				With("policy_id", decision.PolicyID()).
 				Errorf("permission denied for command %s", parsed.Name)
 			return err
 		}

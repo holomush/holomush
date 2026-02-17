@@ -49,11 +49,22 @@ func checkCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 	}
 
 	if !decision.IsAllowed() {
+		if decision.IsInfraFailure() {
+			slog.ErrorContext(ctx, cmdName+" access check infrastructure failure",
+				"subject", subject,
+				"action", "execute",
+				"resource", capability,
+				"reason", decision.Reason(),
+				"policy_id", decision.PolicyID(),
+			)
+			observability.RecordEngineFailure(cmdName + "_access_check")
+			return oops.Wrapf(command.ErrAccessEvaluationFailed(cmdName, errors.New(decision.Reason())), "infrastructure failure during access check")
+		}
 		return oops.Code(command.CodePermissionDenied).
 			With("command", cmdName).
 			With("capability", capability).
-			With("reason", decision.Reason).
-			With("policy_id", decision.PolicyID).
+			With("reason", decision.Reason()).
+			With("policy_id", decision.PolicyID()).
 			Errorf("permission denied for command %s", cmdName)
 	}
 
