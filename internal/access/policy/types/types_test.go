@@ -58,8 +58,8 @@ func TestNewDecision_Invariant(t *testing.T) {
 			d := NewDecision(tt.effect, tt.reason, tt.policyID)
 			assert.Equal(t, tt.expectedAllowed, d.IsAllowed())
 			assert.Equal(t, tt.effect, d.Effect())
-			assert.Equal(t, tt.reason, d.Reason)
-			assert.Equal(t, tt.policyID, d.PolicyID)
+			assert.Equal(t, tt.reason, d.Reason())
+			assert.Equal(t, tt.policyID, d.PolicyID())
 			// Verify unexported fields directly
 			assert.Equal(t, tt.expectedAllowed, d.allowed)
 			assert.Equal(t, tt.effect, d.effect)
@@ -75,42 +75,42 @@ func TestDecision_Validate(t *testing.T) {
 	}{
 		{
 			name:      "valid allow decision",
-			decision:  Decision{allowed: true, effect: EffectAllow, Reason: "ok"},
+			decision:  Decision{allowed: true, effect: EffectAllow, reason: "ok"},
 			expectErr: false,
 		},
 		{
 			name:      "valid system bypass decision",
-			decision:  Decision{allowed: true, effect: EffectSystemBypass, Reason: "system"},
+			decision:  Decision{allowed: true, effect: EffectSystemBypass, reason: "system"},
 			expectErr: false,
 		},
 		{
 			name:      "valid deny decision",
-			decision:  Decision{allowed: false, effect: EffectDeny, Reason: "forbidden"},
+			decision:  Decision{allowed: false, effect: EffectDeny, reason: "forbidden"},
 			expectErr: false,
 		},
 		{
 			name:      "valid default deny decision",
-			decision:  Decision{allowed: false, effect: EffectDefaultDeny, Reason: "no match"},
+			decision:  Decision{allowed: false, effect: EffectDefaultDeny, reason: "no match"},
 			expectErr: false,
 		},
 		{
 			name:      "invalid: allowed true but effect deny",
-			decision:  Decision{allowed: true, effect: EffectDeny, Reason: "broken"},
+			decision:  Decision{allowed: true, effect: EffectDeny, reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed true but effect default deny",
-			decision:  Decision{allowed: true, effect: EffectDefaultDeny, Reason: "broken"},
+			decision:  Decision{allowed: true, effect: EffectDefaultDeny, reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed false but effect allow",
-			decision:  Decision{allowed: false, effect: EffectAllow, Reason: "broken"},
+			decision:  Decision{allowed: false, effect: EffectAllow, reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed false but effect system bypass",
-			decision:  Decision{allowed: false, effect: EffectSystemBypass, Reason: "broken"},
+			decision:  Decision{allowed: false, effect: EffectSystemBypass, reason: "broken"},
 			expectErr: true,
 		},
 	}
@@ -163,6 +163,36 @@ func TestPolicyEffect_String(t *testing.T) {
 	}
 }
 
+func TestParsePolicyEffect(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  PolicyEffect
+		expectErr bool
+	}{
+		{"valid permit", "permit", PolicyEffectPermit, false},
+		{"valid forbid", "forbid", PolicyEffectForbid, false},
+		{"invalid empty", "", PolicyEffect(""), true},
+		{"invalid gibberish", "allow", PolicyEffect(""), true},
+		{"invalid case sensitive", "Permit", PolicyEffect(""), true},
+		{"invalid whitespace", " permit", PolicyEffect(""), true},
+		{"invalid typo", "permits", PolicyEffect(""), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParsePolicyEffect(tt.input)
+			if tt.expectErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid policy effect")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
 	// The zero value of Decision must deny access (fail-closed).
 	// This is critical for safety: if code uses Decision{} as a fallback
@@ -170,8 +200,8 @@ func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
 	var d Decision
 	assert.False(t, d.IsAllowed(), "zero-value Decision must deny access (fail-closed)")
 	assert.Equal(t, EffectDefaultDeny, d.Effect(), "zero-value Decision effect must be default_deny")
-	assert.Empty(t, d.Reason)
-	assert.Empty(t, d.PolicyID)
+	assert.Empty(t, d.Reason())
+	assert.Empty(t, d.PolicyID())
 
 	// Validate should pass because allowed=false is consistent with EffectDefaultDeny
 	assert.NoError(t, d.Validate(), "zero-value Decision should be internally consistent")

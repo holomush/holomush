@@ -87,8 +87,10 @@ See ADR #76 (Compound Resource Decomposition During Migration) for full decision
 
 **Call site counts verified (as of 2026-02-07):**
 
-- Production: 29 call sites (3 in command, 25 in world, 1 in plugin)
+- Production: 30 call sites (3 in command, 26 in world, 1 in plugin)
 - Tests: 57 call sites in `internal/access/static_test.go` + ~20 in `internal/plugin/capability/enforcer_test.go` (Task 29)
+
+**Note on examine operations:** The world call site count includes separate calls for examine operations (ExamineLocation, ExamineObject, ExamineCharacter) which use a distinct EXAMINE entity prefix in the implementation. This accounts for the higher count compared to initial estimates.
 
 ### T28-pkg1: Command Package (3 call sites)
 
