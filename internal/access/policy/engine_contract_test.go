@@ -153,8 +153,8 @@ func TestContract_EmptyPolicyCache(t *testing.T) {
 
 	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "no applicable policies", decision.Reason)
-	assert.Empty(t, decision.PolicyID)
+	assert.Equal(t, "no applicable policies", decision.Reason())
+	assert.Empty(t, decision.PolicyID())
 }
 
 // TestContract_EmptyPolicyCache_AllSubjectTypes verifies default deny for
@@ -242,8 +242,8 @@ func TestContract_ErrorCodePreservation(t *testing.T) {
 
 			assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 			assert.False(t, decision.IsAllowed())
-			assert.Equal(t, tt.wantReason, decision.Reason)
-			assert.Equal(t, tt.wantPolicyID, decision.PolicyID)
+			assert.Equal(t, tt.wantReason, decision.Reason())
+			assert.Equal(t, tt.wantPolicyID, decision.PolicyID())
 		})
 	}
 }

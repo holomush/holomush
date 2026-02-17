@@ -115,7 +115,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// Step 3b: Staleness check — fail-closed when cache is stale
 	if e.cache.IsStale() {
 		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "")
-		decision.Attributes = bags
+		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
@@ -143,7 +143,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// If no candidates, default deny
 	if len(candidates) == 0 {
 		decision := types.NewDecision(types.EffectDefaultDeny, "no applicable policies", "")
-		decision.Attributes = bags
+		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
@@ -181,7 +181,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 6: Deny-overrides combination
 	decision := e.combineDecisions(satisfied)
-	decision.Attributes = bags
+	decision.SetAttributes(bags)
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
 	}
@@ -192,8 +192,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		Action:     req.Action,
 		Resource:   req.Resource,
 		Effect:     decision.Effect(),
-		PolicyID:   decision.PolicyID,
-		PolicyName: policyNameFromMatches(decision.PolicyID, decision.Policies),
+		PolicyID:   decision.PolicyID(),
+		PolicyName: policyNameFromMatches(decision.PolicyID(), decision.Policies()),
 		DurationUS: time.Since(start).Microseconds(),
 		Timestamp:  time.Now(),
 	}
@@ -331,7 +331,7 @@ func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision 
 	for _, match := range satisfied {
 		if match.ConditionsMet && match.Effect == types.EffectDeny {
 			decision := types.NewDecision(types.EffectDeny, "forbid policy satisfied", match.PolicyID)
-			decision.Policies = satisfied
+			decision.SetPolicies(satisfied)
 			return decision
 		}
 	}
@@ -340,13 +340,13 @@ func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision 
 	for _, match := range satisfied {
 		if match.ConditionsMet && match.Effect == types.EffectAllow {
 			decision := types.NewDecision(types.EffectAllow, "permit policy satisfied", match.PolicyID)
-			decision.Policies = satisfied
+			decision.SetPolicies(satisfied)
 			return decision
 		}
 	}
 
 	// No policies had conditions satisfied - default deny
 	decision := types.NewDecision(types.EffectDefaultDeny, "no policies satisfied", "")
-	decision.Policies = satisfied
+	decision.SetPolicies(satisfied)
 	return decision
 }

@@ -51,6 +51,22 @@ func (pe PolicyEffect) String() string {
 	return string(pe)
 }
 
+// ParsePolicyEffect validates the input string and returns a PolicyEffect constant
+// or an error if the input is not a valid policy effect value.
+// Valid values are "permit" and "forbid". This function MUST be used when deserializing
+// PolicyEffect values from external sources (DB, API, files) to prevent invalid
+// values from circulating in the system.
+func ParsePolicyEffect(s string) (PolicyEffect, error) {
+	switch s {
+	case "permit":
+		return PolicyEffectPermit, nil
+	case "forbid":
+		return PolicyEffectForbid, nil
+	default:
+		return "", oops.In("access").With("valid", "permit,forbid").Errorf("invalid policy effect: %q", s)
+	}
+}
+
 // ToEffect converts a PolicyEffect to the runtime Effect type.
 // Permit maps to EffectAllow, Forbid maps to EffectDeny,
 // and any unknown value maps to EffectDefaultDeny.
@@ -92,14 +108,14 @@ func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
 }
 
 // Decision is the result of evaluating an access request against the policy engine.
-// The allowed and effect fields are deliberately unexported; use NewDecision() and accessor methods.
+// All fields are deliberately unexported; use NewDecision() and accessor methods.
 type Decision struct {
 	allowed    bool
 	effect     Effect
-	Reason     string
-	PolicyID   string
-	Policies   []PolicyMatch
-	Attributes *AttributeBags
+	reason     string
+	policyID   string
+	policies   []PolicyMatch
+	attributes *AttributeBags
 }
 
 // NewDecision creates a Decision with the allowed field set consistently
@@ -109,8 +125,8 @@ func NewDecision(effect Effect, reason, policyID string) Decision {
 	return Decision{
 		allowed:  allowed,
 		effect:   effect,
-		Reason:   reason,
-		PolicyID: policyID,
+		reason:   reason,
+		policyID: policyID,
 	}
 }
 
@@ -124,11 +140,49 @@ func (d Decision) Effect() Effect {
 	return d.effect
 }
 
+// Reason returns the human-readable explanation for this decision.
+func (d Decision) Reason() string {
+	return d.reason
+}
+
+// PolicyID returns the ID of the policy that made this decision.
+func (d Decision) PolicyID() string {
+	return d.policyID
+}
+
+// Policies returns a defensive copy of the policy matches that contributed to this decision.
+func (d Decision) Policies() []PolicyMatch {
+	if d.policies == nil {
+		return nil
+	}
+	cp := make([]PolicyMatch, len(d.policies))
+	copy(cp, d.policies)
+	return cp
+}
+
+// Attributes returns the attribute bags used during evaluation.
+// The returned pointer is not modified after the decision is created.
+func (d Decision) Attributes() *AttributeBags {
+	return d.attributes
+}
+
+// SetPolicies sets the policy matches for this decision.
+// This is intended for use by the policy engine during evaluation.
+func (d *Decision) SetPolicies(p []PolicyMatch) {
+	d.policies = p
+}
+
+// SetAttributes sets the attribute bags for this decision.
+// This is intended for use by the policy engine during evaluation.
+func (d *Decision) SetAttributes(a *AttributeBags) {
+	d.attributes = a
+}
+
 // IsInfraFailure returns true if this decision represents an infrastructure
 // failure (session resolution error, DB error, etc.) rather than a policy denial.
 // Infrastructure failures use PolicyID with the "infra:" prefix.
 func (d Decision) IsInfraFailure() bool {
-	return len(d.PolicyID) >= 6 && d.PolicyID[:6] == "infra:"
+	return len(d.policyID) >= 6 && d.policyID[:6] == "infra:"
 }
 
 // Validate checks that the Decision invariant holds: the allowed field
