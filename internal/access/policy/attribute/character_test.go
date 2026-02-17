@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
@@ -19,6 +20,18 @@ import (
 // mockCharacterRepository is a simple mock for testing.
 type mockCharacterRepository struct {
 	getFunc func(ctx context.Context, id ulid.ULID) (*world.Character, error)
+}
+
+// mockRoleResolver is a simple mock for testing role resolution.
+type mockRoleResolver struct {
+	roles map[string]string
+}
+
+func (m *mockRoleResolver) GetRole(subject string) string {
+	if m.roles == nil {
+		return ""
+	}
+	return m.roles[subject]
 }
 
 func (m *mockCharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Character, error) {
@@ -54,14 +67,14 @@ func (m *mockCharacterRepository) IsOwnedByPlayer(_ context.Context, _, _ ulid.U
 
 func TestCharacterProvider_Namespace(t *testing.T) {
 	repo := &mockCharacterRepository{}
-	provider := NewCharacterProvider(repo)
+	provider := NewCharacterProvider(repo, nil)
 
 	assert.Equal(t, "character", provider.Namespace())
 }
 
 func TestCharacterProvider_Schema(t *testing.T) {
 	repo := &mockCharacterRepository{}
-	provider := NewCharacterProvider(repo)
+	provider := NewCharacterProvider(repo, nil)
 
 	schema := provider.Schema()
 	require.NotNil(t, schema)
@@ -95,7 +108,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 	}{
 		{
 			name:      "valid character ID",
-			subjectID: "character:" + charID.String(),
+			subjectID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, id ulid.ULID) (*world.Character, error) {
 					assert.Equal(t, charID, id)
@@ -122,7 +135,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 		},
 		{
 			name:      "character without location",
-			subjectID: "character:" + charID.String(),
+			subjectID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return &world.Character{
@@ -176,7 +189,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 		},
 		{
 			name:      "repository error",
-			subjectID: "character:" + charID.String(),
+			subjectID: access.CharacterSubject(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return nil, errors.New("database connection failed")
@@ -191,7 +204,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockCharacterRepository{}
 			tt.setupMock(repo)
-			provider := NewCharacterProvider(repo)
+			provider := NewCharacterProvider(repo, nil)
 
 			attrs, err := provider.ResolveSubject(context.Background(), tt.subjectID)
 
@@ -216,6 +229,84 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 	}
 }
 
+func TestCharacterProvider_RoleResolution(t *testing.T) {
+	charID := ulid.Make()
+	playerID := ulid.Make()
+	locationID := ulid.Make()
+	createdAt := time.Now().UTC()
+
+	tests := []struct {
+		name         string
+		roleResolver RoleResolver
+		expectedRole string
+	}{
+		{
+			name:         "nil role resolver defaults to player",
+			roleResolver: nil,
+			expectedRole: "player",
+		},
+		{
+			name: "empty role from resolver defaults to player",
+			roleResolver: &mockRoleResolver{
+				roles: map[string]string{},
+			},
+			expectedRole: "player",
+		},
+		{
+			name: "admin role from resolver",
+			roleResolver: &mockRoleResolver{
+				roles: map[string]string{
+					"character:" + charID.String(): "admin",
+				},
+			},
+			expectedRole: "admin",
+		},
+		{
+			name: "builder role from resolver",
+			roleResolver: &mockRoleResolver{
+				roles: map[string]string{
+					"character:" + charID.String(): "builder",
+				},
+			},
+			expectedRole: "builder",
+		},
+		{
+			name: "storyteller role from resolver",
+			roleResolver: &mockRoleResolver{
+				roles: map[string]string{
+					"character:" + charID.String(): "storyteller",
+				},
+			},
+			expectedRole: "storyteller",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockCharacterRepository{
+				getFunc: func(_ context.Context, id ulid.ULID) (*world.Character, error) {
+					assert.Equal(t, charID, id)
+					return &world.Character{
+						ID:          charID,
+						PlayerID:    playerID,
+						Name:        "TestChar",
+						Description: "A test character",
+						LocationID:  &locationID,
+						CreatedAt:   createdAt,
+					}, nil
+				},
+			}
+
+			provider := NewCharacterProvider(repo, tt.roleResolver)
+
+			attrs, err := provider.ResolveSubject(context.Background(), access.CharacterSubject(charID.String()))
+			require.NoError(t, err)
+			require.NotNil(t, attrs)
+			assert.Equal(t, tt.expectedRole, attrs["role"])
+		})
+	}
+}
+
 func TestCharacterProvider_ResolveResource(t *testing.T) {
 	charID := ulid.Make()
 	playerID := ulid.Make()
@@ -233,7 +324,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 	}{
 		{
 			name:       "valid character resource",
-			resourceID: "character:" + charID.String(),
+			resourceID: access.CharacterResource(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return &world.Character{
@@ -266,7 +357,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 		},
 		{
 			name:       "repository error",
-			resourceID: "character:" + charID.String(),
+			resourceID: access.CharacterResource(charID.String()),
 			setupMock: func(m *mockCharacterRepository) {
 				m.getFunc = func(_ context.Context, _ ulid.ULID) (*world.Character, error) {
 					return nil, errors.New("repo error")
@@ -281,7 +372,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockCharacterRepository{}
 			tt.setupMock(repo)
-			provider := NewCharacterProvider(repo)
+			provider := NewCharacterProvider(repo, nil)
 
 			attrs, err := provider.ResolveResource(context.Background(), tt.resourceID)
 

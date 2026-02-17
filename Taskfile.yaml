@@ -186,6 +186,8 @@ tasks:
       - task: lint:markdown
       - task: lint:yaml
       - task: lint:actions
+      - task: lint:access-migration
+      - task: lint:test-helpers
 
   lint:go:
     desc: Lint Go code
@@ -207,6 +209,63 @@ tasks:
     desc: Lint GitHub Actions workflows
     cmds:
       - actionlint
+
+  lint:access-migration:
+    desc: Verify no legacy AccessControl.Check() calls remain
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Search for legacy AccessControl.Check(ctx, ...) calls in production code.
+        # Pattern: AccessControl\.Check\(ctx, — specifically targets AccessControl.Check(ctx, subject, action, resource)
+        # This avoids false positives from other Check() methods (e.g., capability.Enforcer.Check).
+        # Exclude test files (_test.go), generated files (*.pb.go), and comments.
+        LEGACY_CALLS=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E 'AccessControl\.Check\(ctx,' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' || true)
+
+        if [ -n "$LEGACY_CALLS" ]; then
+          echo "ERROR: Found legacy AccessControl.Check() calls in production code:"
+          echo "$LEGACY_CALLS"
+          echo ""
+          echo "All access checks must use AccessPolicyEngine.Evaluate() instead."
+          echo "See docs/plans/2026-02-06-full-abac-phase-7.6.md or internal/world/service.go checkAccess() helper"
+          exit 1
+        fi
+
+        echo "✓ No legacy AccessControl.Check() calls found"
+
+  lint:test-helpers:
+    desc: Verify no test helper imports in production code
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Search for imports of test helper packages in production code.
+        # Blocked packages: policytest (access policy test helpers)
+        # These should only be imported in *_test.go files or testutil packages for testing purposes.
+        # Pattern: "holomush/internal/access/policy/policytest" or just "policytest"
+        # Excludes: *_test.go files, testutil/* packages, *.pb.go files
+        TEST_HELPER_IMPORTS=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E '(import|").*policytest' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '/testutil/' || true)
+
+        if [ -n "$TEST_HELPER_IMPORTS" ]; then
+          echo "ERROR: Found test helper package imports in production code:"
+          echo "$TEST_HELPER_IMPORTS"
+          echo ""
+          echo "Test helper packages (policytest) must only be imported in *_test.go files or testutil packages."
+          echo "These packages contain test engines and mock implementations that should not be used in production."
+          exit 1
+        fi
+
+        echo "✓ No test helper package imports found in production code"
 
   # Formatting
   fmt:

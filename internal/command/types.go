@@ -14,7 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -297,15 +297,15 @@ const (
 
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
-	World            WorldService         // world model queries and mutations
-	Session          core.SessionService  // session management
-	Access           access.AccessControl // authorization checks
-	Events           core.EventStore      // event persistence
-	Broadcaster      EventBroadcaster     // event broadcasting
-	AliasCache       *AliasCache          // alias management (optional)
-	AliasRepo        AliasWriter          // alias persistence (optional, for alias handlers)
-	Registry         *Registry            // command registry (optional)
-	PropertyRegistry *property.Registry   // property registry (optional)
+	World            WorldService             // world model queries and mutations
+	Session          core.SessionService      // session management
+	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
+	Events           core.EventStore          // event persistence
+	Broadcaster      EventBroadcaster         // event broadcasting
+	AliasCache       *AliasCache              // alias management (optional)
+	AliasRepo        AliasWriter              // alias persistence (optional, for alias handlers)
+	Registry         *Registry                // command registry (optional)
+	PropertyRegistry *property.Registry       // property registry (optional)
 }
 
 // Services provides access to core services for command handlers.
@@ -317,15 +317,15 @@ type ServicesConfig struct {
 // the command handler's execution context. The Services struct is shared
 // across all command executions.
 type Services struct {
-	world            WorldService         // world model queries and mutations
-	session          core.SessionService  // session management
-	access           access.AccessControl // authorization checks
-	events           core.EventStore      // event persistence
-	broadcaster      EventBroadcaster     // event broadcasting
-	aliasCache       *AliasCache          // alias management (optional, for alias commands)
-	aliasRepo        AliasWriter          // alias persistence (optional, for alias handlers)
-	registry         *Registry            // command registry (optional, for alias shadow detection)
-	propertyRegistry *property.Registry   // property registry (optional, for property handlers)
+	world            WorldService             // world model queries and mutations
+	session          core.SessionService      // session management
+	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
+	events           core.EventStore          // event persistence
+	broadcaster      EventBroadcaster         // event broadcasting
+	aliasCache       *AliasCache              // alias management (optional, for alias commands)
+	aliasRepo        AliasWriter              // alias persistence (optional, for alias handlers)
+	registry         *Registry                // command registry (optional, for alias shadow detection)
+	propertyRegistry *property.Registry       // property registry (optional, for property handlers)
 }
 
 // World returns the world service for model queries and mutations.
@@ -334,8 +334,8 @@ func (s *Services) World() WorldService { return s.world }
 // Session returns the session service for session management.
 func (s *Services) Session() core.SessionService { return s.session }
 
-// Access returns the access control service for authorization checks.
-func (s *Services) Access() access.AccessControl { return s.access }
+// Engine returns the ABAC policy engine for authorization checks.
+func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }
 
 // Events returns the event store for event persistence.
 func (s *Services) Events() core.EventStore { return s.events }
@@ -368,10 +368,10 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 			With("service", "Session").
 			Errorf("Session service is required")
 	}
-	if cfg.Access == nil {
+	if cfg.Engine == nil {
 		return nil, oops.Code(CodeNilService).
-			With("service", "Access").
-			Errorf("Access service is required")
+			With("service", "Engine").
+			Errorf("Engine service is required")
 	}
 	if cfg.Events == nil {
 		return nil, oops.Code(CodeNilService).
@@ -390,7 +390,7 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 	return &Services{
 		world:            cfg.World,
 		session:          cfg.Session,
-		access:           cfg.Access,
+		engine:           cfg.Engine,
 		events:           cfg.Events,
 		broadcaster:      cfg.Broadcaster,
 		aliasCache:       cfg.AliasCache,
@@ -442,7 +442,7 @@ func NewTestServices(cfg ServicesConfig) *Services {
 	return &Services{
 		world:            cfg.World,
 		session:          cfg.Session,
-		access:           cfg.Access,
+		engine:           cfg.Engine,
 		events:           cfg.Events,
 		broadcaster:      cfg.Broadcaster,
 		aliasCache:       cfg.AliasCache,

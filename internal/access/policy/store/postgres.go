@@ -44,7 +44,11 @@ func scanPolicy(row pgx.Row) (*StoredPolicy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy row: %w", err)
 	}
-	p.Effect = types.PolicyEffect(effect)
+	parsedEffect, err := types.ParsePolicyEffect(effect)
+	if err != nil {
+		return nil, oops.In("access").With("policy_id", p.ID).With("raw_effect", effect).Wrap(err)
+	}
+	p.Effect = parsedEffect
 	p.CompiledAST = json.RawMessage(ast)
 	return &p, nil
 }
@@ -65,7 +69,11 @@ func scanPolicies(rows pgx.Rows) ([]*StoredPolicy, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scanning policy row: %w", err)
 		}
-		p.Effect = types.PolicyEffect(effect)
+		parsedEffect, err := types.ParsePolicyEffect(effect)
+		if err != nil {
+			return nil, oops.In("access").With("policy_id", p.ID).With("raw_effect", effect).Wrap(err)
+		}
+		p.Effect = parsedEffect
 		p.CompiledAST = json.RawMessage(ast)
 		policies = append(policies, &p)
 	}

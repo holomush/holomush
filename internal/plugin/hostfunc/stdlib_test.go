@@ -519,7 +519,7 @@ func TestEmitCharacter(t *testing.T) {
 	assert.Equal(t, 1, tbl.Len())
 
 	event := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "char:01DEF456ABC789", event.RawGetString("stream").String())
+	assert.Equal(t, "character:01DEF456ABC789", event.RawGetString("stream").String())
 	assert.Equal(t, "tell", event.RawGetString("type").String())
 }
 
@@ -575,7 +575,7 @@ func TestEmitFlush_MultipleEvents(t *testing.T) {
 	assert.Equal(t, "location:01ABC", event1.RawGetString("stream").String())
 
 	event2 := tbl.RawGetInt(2).(*lua.LTable)
-	assert.Equal(t, "char:01DEF", event2.RawGetString("stream").String())
+	assert.Equal(t, "character:01DEF", event2.RawGetString("stream").String())
 
 	event3 := tbl.RawGetInt(3).(*lua.LTable)
 	assert.Equal(t, "global", event3.RawGetString("stream").String())
@@ -842,7 +842,7 @@ func TestIntegration_WhoCommand(t *testing.T) {
 	assert.Equal(t, 1, tbl.Len())
 
 	event := tbl.RawGetInt(1).(*lua.LTable)
-	assert.Equal(t, "char:01CHAR123ABC456", event.RawGetString("stream").String())
+	assert.Equal(t, "character:01CHAR123ABC456", event.RawGetString("stream").String())
 	assert.Equal(t, "system", event.RawGetString("type").String())
 
 	payload := event.RawGetString("payload").String()

@@ -17,6 +17,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -44,7 +45,7 @@ type Functions struct {
 	enforcer         CapabilityChecker
 	worldMutator     WorldMutator
 	commandRegistry  CommandRegistry
-	access           AccessControl
+	engine           types.AccessPolicyEngine
 	propertyRegistry *property.Registry
 }
 

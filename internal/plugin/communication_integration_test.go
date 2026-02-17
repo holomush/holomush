@@ -165,7 +165,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01ABC",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -188,7 +188,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01DEF",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -199,7 +199,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(emits[0].Stream).To(Equal("character:char123"))
 				Expect(string(emits[0].Type)).To(Equal("error"))
 				Expect(emits[0].Payload).To(ContainSubstring("What do you want to say?"))
 			})
@@ -212,7 +212,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -235,7 +235,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI1",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -256,7 +256,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI2A",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -278,7 +278,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				// Tests primary path: prefix alias sets invoked_as, args has no prefix marker
 				event := pluginsdk.Event{
 					ID:        "01GHI3",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -297,7 +297,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI4",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -318,7 +318,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI2",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -329,7 +329,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(emits[0].Stream).To(Equal("character:char123"))
 				Expect(string(emits[0].Type)).To(Equal("error"))
 				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
 			})
@@ -340,7 +340,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI5",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -351,7 +351,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(emits[0].Stream).To(Equal("character:char123"))
 				Expect(string(emits[0].Type)).To(Equal("error"))
 				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
 			})
@@ -360,7 +360,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01GHI6",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -371,7 +371,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(emits[0].Stream).To(Equal("character:char123"))
 				Expect(string(emits[0].Type)).To(Equal("error"))
 				Expect(emits[0].Payload).To(ContainSubstring("What do you want to do?"))
 			})
@@ -384,7 +384,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01JKL",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -406,7 +406,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				ctx := context.Background()
 				event := pluginsdk.Event{
 					ID:        "01JKL2",
-					Stream:    "char:char123",
+					Stream:    "character:char123",
 					Type:      pluginsdk.EventType("command"),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
@@ -417,7 +417,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
-				Expect(emits[0].Stream).To(Equal("char:char123"))
+				Expect(emits[0].Stream).To(Equal("character:char123"))
 				Expect(string(emits[0].Type)).To(Equal("error"))
 				Expect(emits[0].Payload).To(ContainSubstring("What do you want to emit?"))
 			})

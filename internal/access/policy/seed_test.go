@@ -97,11 +97,11 @@ func TestSeedPolicies_ExpectedNames(t *testing.T) {
 		"seed:property-restricted-visible-to",
 		"seed:property-restricted-excluded",
 		// Gap-fill policies (T22b)
-		"seed:player-exit-read",                  // G1
-		"seed:builder-exit-write",                // G2
-		"seed:player-location-list-characters",   // G3
-		"seed:player-scene-participant",          // G4
-		"seed:player-scene-read",                 // G4
+		"seed:player-exit-read",                // G1
+		"seed:builder-exit-write",              // G2
+		"seed:player-location-list-characters", // G3
+		"seed:player-scene-participant",        // G4
+		"seed:player-scene-read",               // G4
 	}
 
 	seeds := SeedPolicies()

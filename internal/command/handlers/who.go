@@ -12,9 +12,15 @@ import (
 	"sort"
 	"time"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
 )
+
+// maxEngineErrors is the circuit breaker threshold for the who handler.
+// After this many total engine errors (access evaluation failures), the handler stops
+// querying the engine to prevent amplifying load on a degraded system.
+const maxEngineErrors = 3
 
 // playerInfo holds display information for a connected player.
 type playerInfo struct {
@@ -33,29 +39,47 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		return nil
 	}
 
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 	now := time.Now()
 
 	// Collect visible players
 	players := make([]playerInfo, 0, len(sessions))
 	var errorCount int
-	for _, session := range sessions {
+	var engineErrorCount int
+	for i, session := range sessions {
+		// Circuit breaker: stop querying if the engine is consistently failing.
+		if engineErrorCount >= maxEngineErrors {
+			slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after engine failures",
+				"engine_failures", engineErrorCount,
+				"threshold", maxEngineErrors,
+				"skipped_sessions", len(sessions)-i,
+			)
+			break
+		}
+
 		// Try to get character info - skip if not accessible
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
+			// - permission denied and not found are expected, don't log or count
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
+			// Access evaluation failures are already logged by the WorldService.checkAccess method.
+			// Count them (but don't re-log) so users see the error notice.
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				errorCount++
+				engineErrorCount++
+				continue
+			}
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
-			slog.Error("unexpected error looking up character in who list",
+			slog.ErrorContext(ctx, "unexpected error looking up character in who list",
 				"session_char_id", session.CharacterID.String(),
 				"error", err,
 			)
 			errorCount++
 			continue
 		}
-
 		idleTime := now.Sub(session.LastActivity)
 		players = append(players, playerInfo{
 			Name:     char.Name,
@@ -71,9 +95,9 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Output write errors are logged but don't fail the command.
 	if errorCount > 0 {
 		if errorCount == 1 {
-			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to an error)")
+			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to a system error)")
 		} else {
-			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to errors)\n", errorCount)
+			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to system errors)\n", errorCount)
 		}
 	}
 	return nil

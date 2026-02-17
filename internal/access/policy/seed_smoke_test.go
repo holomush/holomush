@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/stretchr/testify/assert"
@@ -130,12 +131,12 @@ func TestSeedSmoke_PlayerSelfAccess(t *testing.T) {
 
 	// Character reading itself → permit (seed:player-self-access)
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
-		Resource: "character:" + charID,
+		Resource: access.CharacterResource(charID),
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should read own character; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should read own character; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerLocationRead(t *testing.T) {
@@ -156,7 +157,7 @@ func TestSeedSmoke_PlayerLocationRead(t *testing.T) {
 		Resource: "location:" + locID,
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should read current location; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should read current location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerColocatedCharacter(t *testing.T) {
@@ -176,7 +177,7 @@ func TestSeedSmoke_PlayerColocatedCharacter(t *testing.T) {
 		Resource: "character:01CHAR_B",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should read co-located character; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should read co-located character; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerColocatedObject(t *testing.T) {
@@ -197,7 +198,7 @@ func TestSeedSmoke_PlayerColocatedObject(t *testing.T) {
 		Resource: "object:01OBJ001",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should read co-located object; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should read co-located object; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerStreamEmit(t *testing.T) {
@@ -218,7 +219,7 @@ func TestSeedSmoke_PlayerStreamEmit(t *testing.T) {
 		Resource: "stream:location-01LOC000",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should emit to co-located stream; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should emit to co-located stream; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerMovement(t *testing.T) {
@@ -237,7 +238,7 @@ func TestSeedSmoke_PlayerMovement(t *testing.T) {
 		Resource: "location:01LOC_B",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should enter location; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should enter location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerExitUse(t *testing.T) {
@@ -255,7 +256,7 @@ func TestSeedSmoke_PlayerExitUse(t *testing.T) {
 		Resource: "exit:01EXIT01",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should use exit; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should use exit; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerBasicCommands(t *testing.T) {
@@ -276,7 +277,7 @@ func TestSeedSmoke_PlayerBasicCommands(t *testing.T) {
 				Resource: "command:" + cmd,
 			})
 			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "player should execute %s; got: %s — %s", cmd, decision.Effect, decision.Reason)
+			assert.True(t, decision.IsAllowed(), "player should execute %s; got: %s — %s", cmd, decision.Effect(), decision.Reason())
 		})
 	}
 }
@@ -299,7 +300,7 @@ func TestSeedSmoke_PlayerDeniedBuilderCommands(t *testing.T) {
 				Resource: "command:" + cmd,
 			})
 			require.NoError(t, err)
-			assert.False(t, decision.IsAllowed(), "player should NOT execute builder command %s; got: %s — %s", cmd, decision.Effect, decision.Reason)
+			assert.False(t, decision.IsAllowed(), "player should NOT execute builder command %s; got: %s — %s", cmd, decision.Effect(), decision.Reason())
 		})
 	}
 }
@@ -319,7 +320,7 @@ func TestSeedSmoke_BuilderLocationWrite(t *testing.T) {
 		Resource: "location:01LOC001",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "builder should write locations; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "builder should write locations; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_BuilderCommands(t *testing.T) {
@@ -340,7 +341,7 @@ func TestSeedSmoke_BuilderCommands(t *testing.T) {
 				Resource: "command:" + cmd,
 			})
 			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "builder should execute %s; got: %s — %s", cmd, decision.Effect, decision.Reason)
+			assert.True(t, decision.IsAllowed(), "builder should execute %s; got: %s — %s", cmd, decision.Effect(), decision.Reason())
 		})
 	}
 }
@@ -377,7 +378,7 @@ func TestSeedSmoke_AdminFullAccess(t *testing.T) {
 				Resource: tt.resource,
 			})
 			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "admin should have access to %s; got: %s — %s", tt.name, decision.Effect, decision.Reason)
+			assert.True(t, decision.IsAllowed(), "admin should have access to %s; got: %s — %s", tt.name, decision.Effect(), decision.Reason())
 		})
 	}
 }
@@ -397,8 +398,8 @@ func TestSeedSmoke_DefaultDenyNoMatchingPolicy(t *testing.T) {
 		Resource: "location:01LOC001",
 	})
 	require.NoError(t, err)
-	assert.False(t, decision.IsAllowed(), "default deny should apply; got: %s — %s", decision.Effect, decision.Reason)
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.False(t, decision.IsAllowed(), "default deny should apply; got: %s — %s", decision.Effect(), decision.Reason())
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 }
 
 func TestSeedSmoke_PropertyPublicRead(t *testing.T) {
@@ -422,7 +423,7 @@ func TestSeedSmoke_PropertyPublicRead(t *testing.T) {
 		Resource: "property:01PROP01",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "co-located player should read public property; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "co-located player should read public property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
@@ -440,12 +441,12 @@ func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
 	})
 
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
 		Resource: "property:01PROP01",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "owner should read private property; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "owner should read private property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PropertyPrivateReadDeniedNonOwner(t *testing.T) {
@@ -466,7 +467,7 @@ func TestSeedSmoke_PropertyPrivateReadDeniedNonOwner(t *testing.T) {
 		Resource: "property:01PROP01",
 	})
 	require.NoError(t, err)
-	assert.False(t, decision.IsAllowed(), "non-owner should NOT read private property; got: %s — %s", decision.Effect, decision.Reason)
+	assert.False(t, decision.IsAllowed(), "non-owner should NOT read private property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PropertyRestrictedForbid(t *testing.T) {
@@ -487,12 +488,12 @@ func TestSeedSmoke_PropertyRestrictedForbid(t *testing.T) {
 
 	// Character is in both visible_to and excluded_from — forbid overrides permit
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "read",
 		Resource: "property:01PROP01",
 	})
 	require.NoError(t, err)
-	assert.False(t, decision.IsAllowed(), "forbid should override permit for excluded character; got: %s — %s", decision.Effect, decision.Reason)
+	assert.False(t, decision.IsAllowed(), "forbid should override permit for excluded character; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
@@ -509,12 +510,12 @@ func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
 	})
 
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:" + charID,
+		Subject:  access.CharacterSubject(charID),
 		Action:   "write",
 		Resource: "property:01PROP01",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "owner should write property; got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "owner should write property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerExitRead(t *testing.T) {
@@ -532,7 +533,7 @@ func TestSeedSmoke_PlayerExitRead(t *testing.T) {
 		Resource: "exit:01EXIT01",
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should read exit (G1); got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should read exit (G1); got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_BuilderExitWrite(t *testing.T) {
@@ -551,7 +552,7 @@ func TestSeedSmoke_BuilderExitWrite(t *testing.T) {
 				Resource: "exit:01EXIT01",
 			})
 			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "builder should %s exit (G2); got: %s — %s", action, decision.Effect, decision.Reason)
+			assert.True(t, decision.IsAllowed(), "builder should %s exit (G2); got: %s — %s", action, decision.Effect(), decision.Reason())
 		})
 	}
 }
@@ -574,7 +575,7 @@ func TestSeedSmoke_PlayerLocationListCharacters(t *testing.T) {
 		Resource: "location:" + locID,
 	})
 	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "player should list characters at current location (G3); got: %s — %s", decision.Effect, decision.Reason)
+	assert.True(t, decision.IsAllowed(), "player should list characters at current location (G3); got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
@@ -594,7 +595,7 @@ func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 				Resource: "scene:01SCENE01",
 			})
 			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "player should %s scene (G4); got: %s — %s", action, decision.Effect, decision.Reason)
+			assert.True(t, decision.IsAllowed(), "player should %s scene (G4); got: %s — %s", action, decision.Effect(), decision.Reason())
 		})
 	}
 }
@@ -615,7 +616,7 @@ func TestSeedSmoke_PlayerDeniedLocationWrite(t *testing.T) {
 		Resource: "location:01LOC001",
 	})
 	require.NoError(t, err)
-	assert.False(t, decision.IsAllowed(), "player should NOT write location; got: %s — %s", decision.Effect, decision.Reason)
+	assert.False(t, decision.IsAllowed(), "player should NOT write location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
 func TestSeedSmoke_PlayerDeniedOtherLocationRead(t *testing.T) {
@@ -634,5 +635,5 @@ func TestSeedSmoke_PlayerDeniedOtherLocationRead(t *testing.T) {
 		Resource: "location:01LOC_B0",
 	})
 	require.NoError(t, err)
-	assert.False(t, decision.IsAllowed(), "player should NOT read non-current location; got: %s — %s", decision.Effect, decision.Reason)
+	assert.False(t, decision.IsAllowed(), "player should NOT read non-current location; got: %s — %s", decision.Effect(), decision.Reason())
 }

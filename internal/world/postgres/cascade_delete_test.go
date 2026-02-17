@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/postgres"
 )
@@ -318,13 +318,13 @@ func TestWorldService_DeleteLocation_Integration(t *testing.T) {
 	locRepo := postgres.NewLocationRepository(testPool)
 	propRepo := postgres.NewPropertyRepository(testPool)
 	tx := postgres.NewTransactor(testPool)
-	ac := access.NewStaticAccessControl(nil, nil)
+	ac := policytest.AllowAllEngine()
 
 	svc := world.NewService(world.ServiceConfig{
-		LocationRepo:  locRepo,
-		PropertyRepo:  propRepo,
-		AccessControl: ac,
-		Transactor:    tx,
+		LocationRepo: locRepo,
+		PropertyRepo: propRepo,
+		Engine:       ac,
+		Transactor:   tx,
 	})
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "location", locID), "property should exist before delete")
@@ -356,13 +356,13 @@ func TestWorldService_DeleteObject_Integration(t *testing.T) {
 	objRepo := postgres.NewObjectRepository(testPool)
 	propRepo := postgres.NewPropertyRepository(testPool)
 	tx := postgres.NewTransactor(testPool)
-	ac := access.NewStaticAccessControl(nil, nil)
+	ac := policytest.AllowAllEngine()
 
 	svc := world.NewService(world.ServiceConfig{
-		ObjectRepo:    objRepo,
-		PropertyRepo:  propRepo,
-		AccessControl: ac,
-		Transactor:    tx,
+		ObjectRepo:   objRepo,
+		PropertyRepo: propRepo,
+		Engine:       ac,
+		Transactor:   tx,
 	})
 
 	assert.Equal(t, 1, countPropertiesForParent(ctx, t, "object", objID), "property should exist before delete")
@@ -394,12 +394,12 @@ func TestWorldService_DeleteCharacter_Integration(t *testing.T) {
 	charRepo := postgres.NewCharacterRepository(testPool)
 	propRepo := postgres.NewPropertyRepository(testPool)
 	tx := postgres.NewTransactor(testPool)
-	ac := access.NewStaticAccessControl(nil, nil)
+	ac := policytest.AllowAllEngine()
 
 	svc := world.NewService(world.ServiceConfig{
 		CharacterRepo: charRepo,
 		PropertyRepo:  propRepo,
-		AccessControl: ac,
+		Engine:        ac,
 		Transactor:    tx,
 	})
 

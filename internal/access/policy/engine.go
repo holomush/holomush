@@ -5,29 +5,29 @@ package policy
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-// AccessPolicyEngine is the main entry point for policy-based authorization.
-type AccessPolicyEngine interface {
-	Evaluate(ctx context.Context, request types.AccessRequest) (types.Decision, error)
-}
-
-// Engine implements AccessPolicyEngine.
+// Engine implements types.AccessPolicyEngine.
 type Engine struct {
 	resolver *attribute.Resolver
 	cache    *Cache
 	sessions SessionResolver
 	audit    *audit.Logger
 }
+
+// Compile-time check that Engine implements AccessPolicyEngine.
+var _ types.AccessPolicyEngine = (*Engine)(nil)
 
 // NewEngine creates a new policy engine with the given dependencies.
 func NewEngine(resolver *attribute.Resolver, cache *Cache, sessions SessionResolver, auditLogger *audit.Logger) *Engine {
@@ -69,7 +69,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if err := e.audit.Log(ctx, entry); err != nil {
 			// Log error but don't fail the decision
-			_ = err
+			slog.WarnContext(ctx, "audit log failed", "error", err)
 		}
 
 		return decision, nil
@@ -101,21 +101,19 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 
 		// Rewrite subject to character: format
-		req.Subject = "character:" + characterID
+		req.Subject = access.CharacterSubject(characterID)
 	}
 
-	// Step 3: Eager attribute resolution
-	bags, err := e.resolver.Resolve(ctx, req)
-	if err != nil {
-		// Provider errors don't fail evaluation — continue with what we have
-		// (resolver already logs errors internally)
-		bags = types.NewAttributeBags()
+	// Step 3: Eager attribute resolution (non-fatal; bags may be partial when providers fail)
+	bags, resolveErr := e.resolver.Resolve(ctx, req)
+	if resolveErr != nil {
+		slog.WarnContext(ctx, "attribute resolution failed", "error", resolveErr)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
 	if e.cache.IsStale() {
 		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "")
-		decision.Attributes = bags
+		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
@@ -130,9 +128,9 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			Timestamp:  time.Now(),
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-			_ = auditErr
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 		}
-		RecordEvaluationMetrics(time.Since(start), decision.Effect)
+		RecordEvaluationMetrics(time.Since(start), decision.Effect())
 		return decision, nil
 	}
 
@@ -143,7 +141,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// If no candidates, default deny
 	if len(candidates) == 0 {
 		decision := types.NewDecision(types.EffectDefaultDeny, "no applicable policies", "")
-		decision.Attributes = bags
+		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
@@ -161,7 +159,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			// Log error but don't fail the decision
-			_ = auditErr
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 		}
 
 		return decision, nil
@@ -181,7 +179,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 6: Deny-overrides combination
 	decision := e.combineDecisions(satisfied)
-	decision.Attributes = bags
+	decision.SetAttributes(bags)
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
 	}
@@ -191,18 +189,18 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		Subject:    req.Subject,
 		Action:     req.Action,
 		Resource:   req.Resource,
-		Effect:     decision.Effect,
-		PolicyID:   decision.PolicyID,
-		PolicyName: policyNameFromMatches(decision.PolicyID, decision.Policies),
+		Effect:     decision.Effect(),
+		PolicyID:   decision.PolicyID(),
+		PolicyName: policyNameFromMatches(decision.PolicyID(), decision.Policies()),
 		DurationUS: time.Since(start).Microseconds(),
 		Timestamp:  time.Now(),
 	}
 	if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-		_ = auditErr
+		slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 	}
 
 	// Record metrics
-	RecordEvaluationMetrics(time.Since(start), decision.Effect)
+	RecordEvaluationMetrics(time.Since(start), decision.Effect())
 
 	return decision, nil
 }
@@ -331,7 +329,7 @@ func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision 
 	for _, match := range satisfied {
 		if match.ConditionsMet && match.Effect == types.EffectDeny {
 			decision := types.NewDecision(types.EffectDeny, "forbid policy satisfied", match.PolicyID)
-			decision.Policies = satisfied
+			decision.SetPolicies(satisfied)
 			return decision
 		}
 	}
@@ -340,13 +338,13 @@ func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision 
 	for _, match := range satisfied {
 		if match.ConditionsMet && match.Effect == types.EffectAllow {
 			decision := types.NewDecision(types.EffectAllow, "permit policy satisfied", match.PolicyID)
-			decision.Policies = satisfied
+			decision.SetPolicies(satisfied)
 			return decision
 		}
 	}
 
 	// No policies had conditions satisfied - default deny
 	decision := types.NewDecision(types.EffectDefaultDeny, "no policies satisfied", "")
-	decision.Policies = satisfied
+	decision.SetPolicies(satisfied)
 	return decision
 }

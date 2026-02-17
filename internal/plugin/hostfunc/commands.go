@@ -5,11 +5,15 @@ package hostfunc
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/observability"
 )
 
 // CommandRegistry provides read-only access to registered commands.
@@ -20,13 +24,6 @@ type CommandRegistry interface {
 	Get(name string) (command.CommandEntry, bool)
 }
 
-// AccessControl checks if a subject can perform an action on a resource.
-// This is used to filter commands based on character capabilities.
-type AccessControl interface {
-	// Check returns true if subject can perform action on resource.
-	Check(ctx context.Context, subject, action, resource string) bool
-}
-
 // WithCommandRegistry sets the command registry for command-related host functions.
 func WithCommandRegistry(reg CommandRegistry) Option {
 	return func(f *Functions) {
@@ -34,20 +31,21 @@ func WithCommandRegistry(reg CommandRegistry) Option {
 	}
 }
 
-// WithAccessControl sets the access control for capability filtering.
-func WithAccessControl(ac AccessControl) Option {
+// WithEngine sets the access policy engine for capability filtering.
+func WithEngine(engine types.AccessPolicyEngine) Option {
 	return func(f *Functions) {
-		f.access = ac
+		f.engine = engine
 	}
 }
 
 // listCommandsFn returns the list_commands host function.
 // Args: character_id (string) - the character whose capabilities determine visible commands
-// Returns: (commands table, error string)
+// Returns: ({commands: [...], incomplete: bool}, error string)
 //
 // Commands are filtered by capability:
 //   - Commands with no capabilities (nil or empty slice) are always included
 //   - Commands with capabilities require ALL capabilities to be granted (AND logic)
+//   - incomplete field is true if any engine errors occurred during filtering
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		charIDStr := L.CheckString(1)
@@ -68,26 +66,34 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			return 2
 		}
 
-		if f.access == nil {
+		if f.engine == nil {
 			L.Push(lua.LNil)
-			L.Push(lua.LString("access control not available"))
+			L.Push(lua.LString("access engine not available"))
 			return 2
 		}
 
 		commands := f.commandRegistry.All()
-		subject := "char:" + charID.String()
-		ctx := context.Background()
+		subject := access.CharacterSubject(charID.String())
+		ctx := L.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
 
 		// Filter commands by character capabilities
 		var filtered []command.CommandEntry
+		var hadEngineError bool
 		for _, cmd := range commands {
-			if f.canExecuteCommand(ctx, subject, cmd) {
+			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
+			if hadError {
+				hadEngineError = true
+			}
+			if allowed {
 				filtered = append(filtered, cmd)
 			}
 		}
 
-		// Create result table
-		tbl := L.NewTable()
+		// Create commands array
+		commandsTbl := L.NewTable()
 		for i, cmd := range filtered {
 			cmdTbl := L.NewTable()
 			L.SetField(cmdTbl, "name", lua.LString(cmd.Name))
@@ -96,31 +102,73 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			L.SetField(cmdTbl, "source", lua.LString(cmd.Source))
 
 			// Add to array (1-indexed for Lua)
-			L.SetTable(tbl, lua.LNumber(i+1), cmdTbl)
+			L.SetTable(commandsTbl, lua.LNumber(i+1), cmdTbl)
 		}
 
-		L.Push(tbl)
-		L.Push(lua.LNil) // no error
+		// Create result table with commands and incomplete metadata
+		resultTbl := L.NewTable()
+		L.SetField(resultTbl, "commands", commandsTbl)
+		if hadEngineError {
+			L.SetField(resultTbl, "incomplete", lua.LTrue)
+		} else {
+			L.SetField(resultTbl, "incomplete", lua.LFalse)
+		}
+
+		L.Push(resultTbl)
+		if hadEngineError {
+			L.Push(lua.LString("some commands may be hidden due to a system error; try again or contact an admin if the problem persists"))
+		} else {
+			L.Push(lua.LNil) // no error
+		}
 		return 2
 	}
 }
 
 // canExecuteCommand checks if subject has all required capabilities for a command.
-// Returns true if command has no capabilities or subject has ALL required capabilities.
-func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) bool {
+// Returns (allowed bool, hadError bool) where:
+//   - allowed is true if command has no capabilities or subject has ALL required capabilities
+//   - hadError is true if any engine.Evaluate call returned an error
+func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
 	caps := cmd.GetCapabilities()
 	// Commands with no capabilities are always available
 	if len(caps) == 0 {
-		return true
+		return true, false
 	}
 
-	// Check ALL capabilities (AND logic)
+	// Check ALL capabilities (AND logic) — fail-closed on errors
 	for _, cap := range caps {
-		if !f.access.Check(ctx, subject, "execute", cap) {
-			return false
+		req, err := types.NewAccessRequest(subject, "execute", cap)
+		if err != nil {
+			slog.ErrorContext(ctx, "access request construction failed",
+				"error", err, "subject", subject, "action", "execute", "resource", cap)
+			hadError = true
+			return false, hadError
+		}
+
+		decision, err := f.engine.Evaluate(ctx, req)
+		if err != nil {
+			slog.ErrorContext(ctx, "access evaluation failed",
+				"error", err, "subject", subject, "action", "execute", "resource", cap)
+			observability.RecordEngineFailure("command_capability_check")
+			hadError = true
+			return false, hadError
+		}
+		if !decision.IsAllowed() {
+			if decision.IsInfraFailure() {
+				slog.ErrorContext(ctx, "access check infrastructure failure",
+					"subject", subject,
+					"action", "execute",
+					"resource", cap,
+					"reason", decision.Reason(),
+					"policy_id", decision.PolicyID(),
+				)
+				observability.RecordEngineFailure("command_capability_check")
+				hadError = true
+			}
+			return false, hadError
 		}
 	}
-	return true
+	return true, hadError
 }
 
 // getCommandHelpFn returns the get_command_help host function.

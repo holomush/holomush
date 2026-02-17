@@ -13,14 +13,27 @@ import (
 	"github.com/samber/oops"
 )
 
+// RoleResolver resolves roles for subjects.
+// This interface allows CharacterProvider to resolve actual roles
+// without taking a direct dependency on StaticAccessControl.
+type RoleResolver interface {
+	// GetRole returns the role assigned to a subject, or empty string if none.
+	GetRole(subject string) string
+}
+
 // CharacterProvider resolves attributes for character entities.
 type CharacterProvider struct {
-	repo world.CharacterRepository
+	repo         world.CharacterRepository
+	roleResolver RoleResolver
 }
 
 // NewCharacterProvider creates a new character attribute provider.
-func NewCharacterProvider(repo world.CharacterRepository) *CharacterProvider {
-	return &CharacterProvider{repo: repo}
+// roleResolver may be nil, in which case all characters default to "player" role.
+func NewCharacterProvider(repo world.CharacterRepository, roleResolver RoleResolver) *CharacterProvider {
+	return &CharacterProvider{
+		repo:         repo,
+		roleResolver: roleResolver,
+	}
 }
 
 // Namespace returns "character".
@@ -80,13 +93,23 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 			Wrapf(err, "failed to fetch character")
 	}
 
+	// Resolve role from role resolver
+	role := "player" // default fallback
+	if p.roleResolver != nil {
+		// Build subject ID for role lookup: "character:ULID"
+		subjectID := "character:" + char.ID.String()
+		if resolvedRole := p.roleResolver.GetRole(subjectID); resolvedRole != "" {
+			role = resolvedRole
+		}
+	}
+
 	// Map character fields to attributes
 	attrs := map[string]any{
 		"id":          char.ID.String(),
 		"player_id":   char.PlayerID.String(),
 		"name":        char.Name,
 		"description": char.Description,
-		"role":        "player", // TODO: resolve from DB when role column is added
+		"role":        role,
 	}
 
 	// Handle optional location — expose as both "location_id" (raw) and "location" (for seed policies)

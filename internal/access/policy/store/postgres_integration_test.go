@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -145,7 +146,9 @@ var _ = Describe("PostgresStore", func() {
 			}
 			err := ps.Create(ctx, p)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("POLICY_SOURCE_MISMATCH"))
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "expected oops error")
+			Expect(oopsErr.Code()).To(Equal("POLICY_SOURCE_MISMATCH"))
 		})
 
 		It("accepts seed-prefixed names with seed source", func() {
@@ -196,7 +199,9 @@ var _ = Describe("PostgresStore", func() {
 			ctx := context.Background()
 			_, err := ps.Get(ctx, "nonexistent")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("POLICY_NOT_FOUND"))
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "expected oops error")
+			Expect(oopsErr.Code()).To(Equal("POLICY_NOT_FOUND"))
 		})
 	})
 
@@ -223,7 +228,9 @@ var _ = Describe("PostgresStore", func() {
 			ctx := context.Background()
 			_, err := ps.GetByID(ctx, "01NONEXISTENT")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("POLICY_NOT_FOUND"))
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "expected oops error")
+			Expect(oopsErr.Code()).To(Equal("POLICY_NOT_FOUND"))
 		})
 	})
 
@@ -282,12 +289,19 @@ var _ = Describe("PostgresStore", func() {
 		It("returns POLICY_NOT_FOUND for missing policy", func() {
 			ctx := context.Background()
 			p := &store.StoredPolicy{
-				Name:   "nonexistent",
-				Source: "admin",
+				Name:        "nonexistent",
+				Source:      "admin",
+				Effect:      types.PolicyEffectPermit,
+				DSLText:     "permit(principal, action, resource);",
+				CompiledAST: sampleAST(),
+				Enabled:     true,
+				CreatedBy:   "system",
 			}
 			err := ps.Update(ctx, p)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("POLICY_NOT_FOUND"))
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "expected oops error")
+			Expect(oopsErr.Code()).To(Equal("POLICY_NOT_FOUND"))
 		})
 	})
 
@@ -315,7 +329,9 @@ var _ = Describe("PostgresStore", func() {
 
 			_, err := ps.Get(ctx, "delete-test")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("POLICY_NOT_FOUND"))
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "expected oops error")
+			Expect(oopsErr.Code()).To(Equal("POLICY_NOT_FOUND"))
 
 			// CASCADE should have removed version history.
 			var historyCount int
@@ -330,7 +346,9 @@ var _ = Describe("PostgresStore", func() {
 			ctx := context.Background()
 			err := ps.Delete(ctx, "nonexistent")
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("POLICY_NOT_FOUND"))
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "expected oops error")
+			Expect(oopsErr.Code()).To(Equal("POLICY_NOT_FOUND"))
 		})
 	})
 
@@ -493,6 +511,13 @@ var _ = Describe("PostgresStore", func() {
 		It("sends notification on delete", func() {
 			ctx := context.Background()
 
+			conn, err := pool.Acquire(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Release()
+
+			_, err = conn.Exec(ctx, "LISTEN policy_changed")
+			Expect(err).NotTo(HaveOccurred())
+
 			p := &store.StoredPolicy{
 				Name:        "notify-delete",
 				Effect:      types.PolicyEffectPermit,
@@ -505,12 +530,11 @@ var _ = Describe("PostgresStore", func() {
 			Expect(ps.Create(ctx, p)).To(Succeed())
 			policyID := p.ID
 
-			conn, err := pool.Acquire(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			defer conn.Release()
-
-			_, err = conn.Exec(ctx, "LISTEN policy_changed")
-			Expect(err).NotTo(HaveOccurred())
+			// Drain the notification from the Create operation.
+			drainCtx, drainCancel := context.WithTimeout(ctx, 1*time.Second)
+			_, drainErr := conn.Conn().WaitForNotification(drainCtx)
+			drainCancel()
+			Expect(drainErr).NotTo(HaveOccurred())
 
 			Expect(ps.Delete(ctx, "notify-delete")).To(Succeed())
 
