@@ -112,15 +112,15 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource, en
 		// can distinguish transient failures from policy denials.
 		if decision.IsInfraFailure() {
 			slog.ErrorContext(ctx, "access check infrastructure failure",
-				"policy_id", decision.PolicyID, "reason", decision.Reason,
+				"policy_id", decision.PolicyID(), "reason", decision.Reason(),
 				"subject", subject, "action", action, "resource", resource)
 			observability.RecordEngineFailure(metricKey)
 			return oops.Code(failCode).
-				With("reason", decision.Reason).
-				With("policy_id", decision.PolicyID).
+				With("reason", decision.Reason()).
+				With("policy_id", decision.PolicyID()).
 				Wrap(ErrAccessEvaluationFailed)
 		}
-		deniedErr := oops.With("reason", decision.Reason).With("policy_id", decision.PolicyID).Wrap(ErrPermissionDenied)
+		deniedErr := oops.With("reason", decision.Reason()).With("policy_id", decision.PolicyID()).Wrap(ErrPermissionDenied)
 		return oops.Code(denyCode).Wrap(deniedErr)
 	}
 	return nil
