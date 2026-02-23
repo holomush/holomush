@@ -11,19 +11,20 @@ import (
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand    = "UNKNOWN_COMMAND"
-	CodePermissionDenied  = "PERMISSION_DENIED"
-	CodeInvalidArgs       = "INVALID_ARGS"
-	CodeWorldError        = "WORLD_ERROR"
-	CodeRateLimited       = "RATE_LIMITED"
-	CodeCircularAlias     = "CIRCULAR_ALIAS"
-	CodeAliasConflict     = "ALIAS_CONFLICT"
-	CodeNoCharacter       = "NO_CHARACTER"
-	CodeTargetNotFound    = "TARGET_NOT_FOUND"
-	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
-	CodeNilServices       = "NIL_SERVICES"
-	CodeInvalidName       = "INVALID_NAME"
-	CodeNoAliasCache      = "NO_ALIAS_CACHE"
+	CodeUnknownCommand         = "UNKNOWN_COMMAND"
+	CodePermissionDenied       = "PERMISSION_DENIED"
+	CodeAccessEvaluationFailed = "ACCESS_EVALUATION_FAILED"
+	CodeInvalidArgs            = "INVALID_ARGS"
+	CodeWorldError             = "WORLD_ERROR"
+	CodeRateLimited            = "RATE_LIMITED"
+	CodeCircularAlias          = "CIRCULAR_ALIAS"
+	CodeAliasConflict          = "ALIAS_CONFLICT"
+	CodeNoCharacter            = "NO_CHARACTER"
+	CodeTargetNotFound         = "TARGET_NOT_FOUND"
+	CodeShutdownRequested      = "SHUTDOWN_REQUESTED"
+	CodeNilServices            = "NIL_SERVICES"
+	CodeInvalidName            = "INVALID_NAME"
+	CodeNoAliasCache           = "NO_ALIAS_CACHE"
 )
 
 // Sentinel errors for special conditions.
@@ -41,8 +42,11 @@ var (
 	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
 	ErrNilRegistry = oops.Errorf("registry cannot be nil")
 
-	// ErrNilAccessControl is returned when creating a dispatcher with nil access control.
-	ErrNilAccessControl = oops.Errorf("access control cannot be nil")
+	// ErrNilEngine is returned when creating a dispatcher with a nil policy engine.
+	ErrNilEngine = oops.Errorf("policy engine cannot be nil")
+
+	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
+	ErrNilRateLimiter = oops.Errorf("rate limiter cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
@@ -58,6 +62,13 @@ func ErrPermissionDenied(cmd, capability string) error {
 		With("command", cmd).
 		With("capability", capability).
 		Errorf("permission denied for command %s", cmd)
+}
+
+// ErrAccessEvaluationFailed creates an error for access evaluation failures.
+func ErrAccessEvaluationFailed(cmd string, cause error) error {
+	return oops.Code(CodeAccessEvaluationFailed).
+		With("command", cmd).
+		Wrap(cause)
 }
 
 // ErrInvalidArgs creates an error for invalid arguments.
@@ -147,6 +158,8 @@ func PlayerMessage(err error) string {
 		return "Unknown command. Try 'help'."
 	case CodePermissionDenied:
 		return "You don't have permission to do that."
+	case CodeAccessEvaluationFailed:
+		return "Permission check failed. Please try again or contact an administrator."
 	case CodeInvalidArgs:
 		if usage, ok := oopsErr.Context()["usage"].(string); ok && usage != "" {
 			return "Usage: " + usage

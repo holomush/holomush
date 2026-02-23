@@ -109,8 +109,8 @@ var _ = Describe("Seed Command", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Second run - should log warning about mismatch
-			cmd2 := exec.CommandContext(ctx, "go", "run", ".", "seed")
+			// Second run - should log warning about mismatch (with --no-strict to allow mismatch)
+			cmd2 := exec.CommandContext(ctx, "go", "run", ".", "seed", "--no-strict")
 			cmd2.Dir = "../../../cmd/holomush"
 			cmd2.Env = append(cmd2.Environ(), "DATABASE_URL="+env.connStr)
 

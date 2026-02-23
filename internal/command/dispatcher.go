@@ -8,12 +8,15 @@ import (
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/observability"
 )
 
 var tracer = otel.Tracer("holomush/command")
@@ -21,9 +24,10 @@ var tracer = otel.Tracer("holomush/command")
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
 	registry    *Registry
-	access      access.AccessControl
+	engine      types.AccessPolicyEngine
 	aliasCache  *AliasCache          // optional, can be nil
 	rateLimiter *RateLimitMiddleware // optional, can be nil
+	optErr      error                // error from applying options
 }
 
 // DispatcherOption configures a Dispatcher during construction.
@@ -41,25 +45,35 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 // If not provided, rate limiting is disabled.
 func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 	return func(d *Dispatcher) {
-		d.rateLimiter = NewRateLimitMiddleware(rl, d.access)
+		if rl != nil {
+			middleware, err := NewRateLimitMiddleware(rl, d.engine)
+			if err != nil {
+				d.optErr = err
+				return
+			}
+			d.rateLimiter = middleware
+		}
 	}
 }
 
 // NewDispatcher creates a new command dispatcher with the given registry
-// and access control. Returns an error if registry or ac is nil.
-func NewDispatcher(registry *Registry, ac access.AccessControl, opts ...DispatcherOption) (*Dispatcher, error) {
+// and policy engine. Returns an error if registry or engine is nil.
+func NewDispatcher(registry *Registry, engine types.AccessPolicyEngine, opts ...DispatcherOption) (*Dispatcher, error) {
 	if registry == nil {
 		return nil, ErrNilRegistry
 	}
-	if ac == nil {
-		return nil, ErrNilAccessControl
+	if engine == nil {
+		return nil, ErrNilEngine
 	}
 	d := &Dispatcher{
 		registry: registry,
-		access:   ac,
+		engine:   engine,
 	}
 	for _, opt := range opts {
 		opt(d)
+		if d.optErr != nil {
+			return nil, d.optErr
+		}
 	}
 	return d, nil
 }
@@ -132,7 +146,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
-	subject := "char:" + exec.CharacterID().String()
+	subject := access.CharacterSubject(exec.CharacterID().String())
 	if d.rateLimiter != nil {
 		if rateErr := d.rateLimiter.Enforce(ctx, exec, parsed.Name, span); rateErr != nil {
 			metrics.SetStatus(StatusRateLimited)
@@ -154,9 +168,64 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
-		if !d.access.Check(ctx, subject, "execute", cap) {
+		req, reqErr := types.NewAccessRequest(subject, "execute", cap)
+		if reqErr != nil {
+			slog.ErrorContext(ctx, "invalid access request",
+				"error", reqErr,
+				"subject", subject,
+				"action", "execute",
+				"resource", cap,
+			)
+			observability.RecordEngineFailure("dispatcher_capability_check")
+			metrics.SetStatus(StatusEngineFailure)
+			err = oops.Code(CodeAccessEvaluationFailed).
+				With("command", parsed.Name).
+				With("capability", cap).
+				Wrap(reqErr)
+			return err
+		}
+		decision, evalErr := d.engine.Evaluate(ctx, req)
+		if evalErr != nil {
+			slog.ErrorContext(ctx, "access evaluation failed",
+				"subject", subject,
+				"action", "execute",
+				"resource", cap,
+				"error", evalErr,
+			)
+			observability.RecordEngineFailure("dispatcher_capability_check")
+			metrics.SetStatus(StatusEngineFailure)
+			err = oops.Code(CodeAccessEvaluationFailed).
+				With("command", parsed.Name).
+				With("capability", cap).
+				Wrap(evalErr)
+			return err
+		}
+		if !decision.IsAllowed() {
+			if decision.IsInfraFailure() {
+				slog.ErrorContext(ctx, "access check infrastructure failure",
+					"subject", subject,
+					"action", "execute",
+					"resource", cap,
+					"reason", decision.Reason(),
+					"policy_id", decision.PolicyID(),
+				)
+				observability.RecordEngineFailure("dispatcher_capability_check")
+				metrics.SetStatus(StatusEngineFailure)
+				err = oops.Code(CodeAccessEvaluationFailed).
+					With("command", parsed.Name).
+					With("capability", cap).
+					With("reason", decision.Reason()).
+					With("policy_id", decision.PolicyID()).
+					Errorf("infrastructure failure during access check for command %s", parsed.Name)
+				return err
+			}
 			metrics.SetStatus(StatusPermissionDenied)
-			err = ErrPermissionDenied(parsed.Name, cap)
+			err = oops.Code(CodePermissionDenied).
+				With("command", parsed.Name).
+				With("capability", cap).
+				With("reason", decision.Reason()).
+				With("policy_id", decision.PolicyID()).
+				Errorf("permission denied for command %s", parsed.Name)
 			return err
 		}
 	}

@@ -151,6 +151,7 @@ All tasks MUST be reviewed before completion. See
 - Errors are values - handle them explicitly
 - Use context for cancellation and timeouts
 - Prefer composition over inheritance
+- When using accessor methods (e.g., `decision.Reason()`), always include `()` — without parens, Go creates a method value (func pointer) that compiles silently when passed to `...any` parameters (`oops.With`, `slog`)
 
 ### Error Handling
 

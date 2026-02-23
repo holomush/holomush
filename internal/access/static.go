@@ -103,7 +103,11 @@ func (s *StaticAccessControl) Check(ctx context.Context, subject, action, resour
 	switch prefix {
 	case "plugin":
 		return s.checkPlugin(id, action, resource)
-	case "char", "session":
+	case "char", "character", "session":
+		// Migration note: During the Phase 7.6 migration to AccessPolicyEngine, both
+		// "char:" and "character:" subject prefixes are accepted. New code MUST use
+		// the SubjectCharacter constant ("character:"). The legacy "char:" prefix is
+		// scheduled for removal in Phase 7.7 (tracked by holomush-c6qch).
 		return s.checkRole(ctx, subject, action, resource)
 	default:
 		return false
@@ -162,9 +166,10 @@ func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, re
 		if resolvedPattern != perm.pattern {
 			g, err := glob.Compile(resolvedPattern, ':')
 			if err != nil {
-				// Log at debug level - could happen with unusual subject/location IDs
-				slog.Debug("failed to compile resolved permission pattern",
+				// Log at warn level - pattern compilation failure causes silent permission denial
+				slog.Warn("failed to compile resolved permission pattern",
 					"subject", subject,
+					"action", action,
 					"pattern", perm.pattern,
 					"resolved", resolvedPattern,
 					"error", err)
@@ -183,11 +188,8 @@ func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, re
 
 // resolveTokens replaces $self and $here with actual values.
 func (s *StaticAccessControl) resolveTokens(pattern, subjectID, locationID string) string {
-	result := strings.ReplaceAll(pattern, "$self", subjectID)
-	if locationID != "" {
-		result = strings.ReplaceAll(result, "$here", locationID)
-	}
-	return result
+	r := strings.NewReplacer("$self", subjectID, "$here", locationID)
+	return r.Replace(pattern)
 }
 
 // resolveCurrentLocation gets the character's current location.

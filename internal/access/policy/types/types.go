@@ -4,7 +4,12 @@
 // Package types defines the core types for the ABAC policy engine.
 package types
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/samber/oops"
+)
 
 // Effect represents the evaluated outcome of an access control decision.
 type Effect int
@@ -46,6 +51,22 @@ func (pe PolicyEffect) String() string {
 	return string(pe)
 }
 
+// ParsePolicyEffect validates the input string and returns a PolicyEffect constant
+// or an error if the input is not a valid policy effect value.
+// Valid values are "permit" and "forbid". This function MUST be used when deserializing
+// PolicyEffect values from external sources (DB, API, files) to prevent invalid
+// values from circulating in the system.
+func ParsePolicyEffect(s string) (PolicyEffect, error) {
+	switch s {
+	case "permit":
+		return PolicyEffectPermit, nil
+	case "forbid":
+		return PolicyEffectForbid, nil
+	default:
+		return "", oops.In("access").With("valid", "permit,forbid").Errorf("invalid policy effect: %q", s)
+	}
+}
+
 // ToEffect converts a PolicyEffect to the runtime Effect type.
 // Permit maps to EffectAllow, Forbid maps to EffectDeny,
 // and any unknown value maps to EffectDefaultDeny.
@@ -67,15 +88,34 @@ type AccessRequest struct {
 	Resource string // "location:01XYZ", "command:dig", "property:01DEF"
 }
 
+// NewAccessRequest creates a validated AccessRequest. Returns an error if any
+// field is empty, preventing silent misuse at access control boundaries.
+func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
+	if subject == "" {
+		return AccessRequest{}, oops.In("access").With("field", "subject").Errorf("access request: subject must not be empty")
+	}
+	if action == "" {
+		return AccessRequest{}, oops.In("access").With("field", "action").Errorf("access request: action must not be empty")
+	}
+	if resource == "" {
+		return AccessRequest{}, oops.In("access").With("field", "resource").Errorf("access request: resource must not be empty")
+	}
+	return AccessRequest{
+		Subject:  subject,
+		Action:   action,
+		Resource: resource,
+	}, nil
+}
+
 // Decision is the result of evaluating an access request against the policy engine.
-// The allowed field is unexported to prevent invariant bypass.
+// All fields are deliberately unexported; use NewDecision() and accessor methods.
 type Decision struct {
 	allowed    bool
-	Effect     Effect
-	Reason     string
-	PolicyID   string
-	Policies   []PolicyMatch
-	Attributes *AttributeBags
+	effect     Effect
+	reason     string
+	policyID   string
+	policies   []PolicyMatch
+	attributes *AttributeBags
 }
 
 // NewDecision creates a Decision with the allowed field set consistently
@@ -84,9 +124,9 @@ func NewDecision(effect Effect, reason, policyID string) Decision {
 	allowed := effect == EffectAllow || effect == EffectSystemBypass
 	return Decision{
 		allowed:  allowed,
-		Effect:   effect,
-		Reason:   reason,
-		PolicyID: policyID,
+		effect:   effect,
+		reason:   reason,
+		policyID: policyID,
 	}
 }
 
@@ -95,15 +135,65 @@ func (d Decision) IsAllowed() bool {
 	return d.allowed
 }
 
+// Effect returns the evaluated effect of this decision.
+func (d Decision) Effect() Effect {
+	return d.effect
+}
+
+// Reason returns the human-readable explanation for this decision.
+func (d Decision) Reason() string {
+	return d.reason
+}
+
+// PolicyID returns the ID of the policy that made this decision.
+func (d Decision) PolicyID() string {
+	return d.policyID
+}
+
+// Policies returns a defensive copy of the policy matches that contributed to this decision.
+func (d Decision) Policies() []PolicyMatch {
+	if d.policies == nil {
+		return nil
+	}
+	cp := make([]PolicyMatch, len(d.policies))
+	copy(cp, d.policies)
+	return cp
+}
+
+// Attributes returns the attribute bags used during evaluation.
+// The returned pointer is not modified after the decision is created.
+func (d Decision) Attributes() *AttributeBags {
+	return d.attributes
+}
+
+// SetPolicies sets the policy matches for this decision.
+// This is intended for use by the policy engine during evaluation.
+func (d *Decision) SetPolicies(p []PolicyMatch) {
+	d.policies = p
+}
+
+// SetAttributes sets the attribute bags for this decision.
+// This is intended for use by the policy engine during evaluation.
+func (d *Decision) SetAttributes(a *AttributeBags) {
+	d.attributes = a
+}
+
+// IsInfraFailure returns true if this decision represents an infrastructure
+// failure (session resolution error, DB error, etc.) rather than a policy denial.
+// Infrastructure failures use PolicyID with the "infra:" prefix.
+func (d Decision) IsInfraFailure() bool {
+	return len(d.policyID) >= 6 && d.policyID[:6] == "infra:"
+}
+
 // Validate checks that the Decision invariant holds: the allowed field
-// must be consistent with the Effect. Returns an error if the invariant
+// must be consistent with the effect. Returns an error if the invariant
 // is violated. This should be called at engine return boundaries.
 func (d Decision) Validate() error {
-	expectAllowed := d.Effect == EffectAllow || d.Effect == EffectSystemBypass
+	expectAllowed := d.effect == EffectAllow || d.effect == EffectSystemBypass
 	if d.allowed != expectAllowed {
 		return fmt.Errorf(
 			"decision invariant violated: allowed=%v but effect=%s",
-			d.allowed, d.Effect,
+			d.allowed, d.effect,
 		)
 	}
 	return nil
@@ -235,3 +325,15 @@ const (
 	EntityTypeLocation  EntityType = "location"
 	EntityTypeObject    EntityType = "object"
 )
+
+// AccessPolicyEngine defines the interface for ABAC policy evaluation.
+// Implementations MUST return an error or a deny decision for unknown/unmatched requests (fail-closed).
+// This ensures that missing policies result in access denial rather than unexpected grants.
+//
+// This interface is defined here (in types package) to avoid import cycles:
+// - world package needs to call the engine
+// - policy/attribute package needs to query world repositories
+// By defining the interface with the types it uses, both can import types without a cycle.
+type AccessPolicyEngine interface {
+	Evaluate(ctx context.Context, request AccessRequest) (Decision, error)
+}

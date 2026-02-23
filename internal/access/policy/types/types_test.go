@@ -57,11 +57,12 @@ func TestNewDecision_Invariant(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewDecision(tt.effect, tt.reason, tt.policyID)
 			assert.Equal(t, tt.expectedAllowed, d.IsAllowed())
-			assert.Equal(t, tt.effect, d.Effect)
-			assert.Equal(t, tt.reason, d.Reason)
-			assert.Equal(t, tt.policyID, d.PolicyID)
-			// Verify unexported field directly
+			assert.Equal(t, tt.effect, d.Effect())
+			assert.Equal(t, tt.reason, d.Reason())
+			assert.Equal(t, tt.policyID, d.PolicyID())
+			// Verify unexported fields directly
 			assert.Equal(t, tt.expectedAllowed, d.allowed)
+			assert.Equal(t, tt.effect, d.effect)
 		})
 	}
 }
@@ -74,42 +75,42 @@ func TestDecision_Validate(t *testing.T) {
 	}{
 		{
 			name:      "valid allow decision",
-			decision:  Decision{allowed: true, Effect: EffectAllow, Reason: "ok"},
+			decision:  Decision{allowed: true, effect: EffectAllow, reason: "ok"},
 			expectErr: false,
 		},
 		{
 			name:      "valid system bypass decision",
-			decision:  Decision{allowed: true, Effect: EffectSystemBypass, Reason: "system"},
+			decision:  Decision{allowed: true, effect: EffectSystemBypass, reason: "system"},
 			expectErr: false,
 		},
 		{
 			name:      "valid deny decision",
-			decision:  Decision{allowed: false, Effect: EffectDeny, Reason: "forbidden"},
+			decision:  Decision{allowed: false, effect: EffectDeny, reason: "forbidden"},
 			expectErr: false,
 		},
 		{
 			name:      "valid default deny decision",
-			decision:  Decision{allowed: false, Effect: EffectDefaultDeny, Reason: "no match"},
+			decision:  Decision{allowed: false, effect: EffectDefaultDeny, reason: "no match"},
 			expectErr: false,
 		},
 		{
 			name:      "invalid: allowed true but effect deny",
-			decision:  Decision{allowed: true, Effect: EffectDeny, Reason: "broken"},
+			decision:  Decision{allowed: true, effect: EffectDeny, reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed true but effect default deny",
-			decision:  Decision{allowed: true, Effect: EffectDefaultDeny, Reason: "broken"},
+			decision:  Decision{allowed: true, effect: EffectDefaultDeny, reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed false but effect allow",
-			decision:  Decision{allowed: false, Effect: EffectAllow, Reason: "broken"},
+			decision:  Decision{allowed: false, effect: EffectAllow, reason: "broken"},
 			expectErr: true,
 		},
 		{
 			name:      "invalid: allowed false but effect system bypass",
-			decision:  Decision{allowed: false, Effect: EffectSystemBypass, Reason: "broken"},
+			decision:  Decision{allowed: false, effect: EffectSystemBypass, reason: "broken"},
 			expectErr: true,
 		},
 	}
@@ -162,6 +163,50 @@ func TestPolicyEffect_String(t *testing.T) {
 	}
 }
 
+func TestParsePolicyEffect(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  PolicyEffect
+		expectErr bool
+	}{
+		{"valid permit", "permit", PolicyEffectPermit, false},
+		{"valid forbid", "forbid", PolicyEffectForbid, false},
+		{"invalid empty", "", PolicyEffect(""), true},
+		{"invalid gibberish", "allow", PolicyEffect(""), true},
+		{"invalid case sensitive", "Permit", PolicyEffect(""), true},
+		{"invalid whitespace", " permit", PolicyEffect(""), true},
+		{"invalid typo", "permits", PolicyEffect(""), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParsePolicyEffect(tt.input)
+			if tt.expectErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid policy effect")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
+	// The zero value of Decision must deny access (fail-closed).
+	// This is critical for safety: if code uses Decision{} as a fallback
+	// or returns it from an error path, access must be denied.
+	var d Decision
+	assert.False(t, d.IsAllowed(), "zero-value Decision must deny access (fail-closed)")
+	assert.Equal(t, EffectDefaultDeny, d.Effect(), "zero-value Decision effect must be default_deny")
+	assert.Empty(t, d.Reason())
+	assert.Empty(t, d.PolicyID())
+
+	// Validate should pass because allowed=false is consistent with EffectDefaultDeny
+	assert.NoError(t, d.Validate(), "zero-value Decision should be internally consistent")
+}
+
 func TestAccessRequest_Fields(t *testing.T) {
 	req := AccessRequest{
 		Subject:  "character:01ABC",
@@ -171,6 +216,36 @@ func TestAccessRequest_Fields(t *testing.T) {
 	assert.Equal(t, "character:01ABC", req.Subject)
 	assert.Equal(t, "read", req.Action)
 	assert.Equal(t, "location:01XYZ", req.Resource)
+}
+
+func TestNewAccessRequest_Valid(t *testing.T) {
+	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	require.NoError(t, err)
+	assert.Equal(t, "character:01ABC", req.Subject)
+	assert.Equal(t, "read", req.Action)
+	assert.Equal(t, "location:01XYZ", req.Resource)
+}
+
+func TestNewAccessRequest_EmptyFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		subject  string
+		action   string
+		resource string
+		wantMsg  string
+	}{
+		{"empty subject", "", "read", "location:01XYZ", "subject"},
+		{"empty action", "character:01ABC", "", "location:01XYZ", "action"},
+		{"empty resource", "character:01ABC", "read", "", "resource"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewAccessRequest(tt.subject, tt.action, tt.resource)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantMsg)
+		})
+	}
 }
 
 func TestAttributeBags_Initialization(t *testing.T) {
@@ -245,4 +320,59 @@ func TestAttributeSchema_NewEmpty(t *testing.T) {
 	schema := NewAttributeSchema()
 	require.NotNil(t, schema)
 	assert.Empty(t, schema.namespaces)
+}
+
+func TestDecision_IsInfraFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		decision Decision
+		expected bool
+	}{
+		{
+			name:     "session invalid is infra failure",
+			decision: NewDecision(EffectDefaultDeny, "session invalid", "infra:session-invalid"),
+			expected: true,
+		},
+		{
+			name:     "session store error is infra failure",
+			decision: NewDecision(EffectDefaultDeny, "session store error", "infra:session-store-error"),
+			expected: true,
+		},
+		{
+			name:     "policy denial is not infra failure",
+			decision: NewDecision(EffectDeny, "forbidden", "pol-123"),
+			expected: false,
+		},
+		{
+			name:     "default deny with no policy is not infra failure",
+			decision: NewDecision(EffectDefaultDeny, "no match", ""),
+			expected: false,
+		},
+		{
+			name:     "empty policyID is not infra failure",
+			decision: NewDecision(EffectDefaultDeny, "unknown", ""),
+			expected: false,
+		},
+		{
+			name:     "short policyID is not infra failure",
+			decision: NewDecision(EffectDefaultDeny, "unknown", "infra"),
+			expected: false,
+		},
+		{
+			name:     "infra prefix with content is infra failure",
+			decision: NewDecision(EffectDefaultDeny, "unknown", "infra:db-timeout"),
+			expected: true,
+		},
+		{
+			name:     "allow decision cannot be infra failure",
+			decision: NewDecision(EffectAllow, "allowed", "infra:should-not-happen"),
+			expected: true, // still detects prefix even if semantically wrong
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.decision.IsInfraFailure())
+		})
+	}
 }

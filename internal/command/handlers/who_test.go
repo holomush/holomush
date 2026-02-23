@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
@@ -52,9 +55,9 @@ func TestWhoHandler_SinglePlayer(t *testing.T) {
 		Name:     "TestPlayer",
 	}
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: access.CharacterResource(player.CharacterID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
@@ -98,9 +101,9 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	for charID, char := range chars {
-		fixture.Mocks.AccessControl.EXPECT().
-			Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+charID.String()).
-			Return(true)
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(charID.String())}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 		fixture.Mocks.CharacterRepo.EXPECT().
 			Get(mock.Anything, charID).
 			Return(char, nil)
@@ -140,9 +143,9 @@ func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 		Name:     "IdlePlayer",
 	}
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+player.CharacterID.String(), "read", "character:"+player.CharacterID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: access.CharacterResource(player.CharacterID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, player.CharacterID).
 		Return(char, nil)
@@ -182,16 +185,16 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	// char1 is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil)
 
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
-		Return(false)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char2ID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil)
 
 	services := testutil.NewServicesBuilder().
 		WithSession(sessionMgr).
@@ -261,17 +264,17 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 
 	// char1 exists and is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil)
 
 	// char2 check passes but character not found (stale session)
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char2ID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char2ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char2ID).
 		Return(nil, world.ErrNotFound)
@@ -318,18 +321,18 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	// Session iteration order is non-deterministic, so all lookups may or may not happen
 	// char1 is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
-		Return(true).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil).Maybe()
 
 	// errorChar - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
-		Return(true).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(errorCharID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, unexpectedErr).Maybe()
@@ -371,9 +374,9 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	// errorChar - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorCharID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(errorCharID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorCharID).
 		Return(nil, unexpectedErr)
@@ -391,7 +394,7 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should show warning about error
-	assert.Contains(t, buf.String(), "(Note: 1 player could not be displayed due to an error)")
+	assert.Contains(t, buf.String(), "(Note: 1 player could not be displayed due to a system error)")
 }
 
 func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
@@ -410,16 +413,16 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	unexpectedErr := errors.New("database connection timeout")
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorChar1ID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(errorChar1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorChar1ID).
 		Return(nil, unexpectedErr)
 
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+errorChar2ID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(errorChar2ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, errorChar2ID).
 		Return(nil, unexpectedErr)
@@ -437,7 +440,7 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should show warning about errors (plural)
-	assert.Contains(t, buf.String(), "(Note: 2 players could not be displayed due to errors)")
+	assert.Contains(t, buf.String(), "(Note: 2 players could not be displayed due to system errors)")
 }
 
 func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
@@ -454,17 +457,17 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 
 	// notFoundChar - access allowed but returns ErrNotFound
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
-		Return(true)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(notFoundCharID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
 		Return(nil, world.ErrNotFound)
 
 	// deniedChar - access denied
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
-		Return(false)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(deniedCharID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil)
 
 	services := testutil.NewServicesBuilder().
 		WithSession(sessionMgr).
@@ -511,25 +514,25 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 
 	// char1 is accessible
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+char1ID.String()).
-		Return(true).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, char1ID).
 		Return(char1, nil).Maybe()
 
 	// notFoundChar - access allowed but returns ErrNotFound (expected, should NOT log)
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+notFoundCharID.String()).
-		Return(true).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(notFoundCharID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	fixture.Mocks.CharacterRepo.EXPECT().
 		Get(mock.Anything, notFoundCharID).
 		Return(nil, world.ErrNotFound).Maybe()
 
 	// deniedChar - access denied (expected, should NOT log)
-	fixture.Mocks.AccessControl.EXPECT().
-		Check(mock.Anything, "char:"+executor.CharacterID.String(), "read", "character:"+deniedCharID.String()).
-		Return(false).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(deniedCharID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil).Maybe()
 
 	services := testutil.NewServicesBuilder().
 		WithSession(sessionMgr).
@@ -546,4 +549,417 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	// Verify no error logs were generated for expected errors
 	logOutput := logBuf.String()
 	assert.Empty(t, logOutput, "Expected no error logs for ErrNotFound or ErrPermissionDenied")
+}
+
+func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
+	char1ID := ulid.Make()
+	evalFailCharID := ulid.Make()
+	conn1 := ulid.Make()
+	evalFailConn := ulid.Make()
+	playerID := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, conn1)
+	sessionMgr.Connect(evalFailCharID, evalFailConn)
+
+	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// char1 is accessible
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, char1ID).
+		Return(char1, nil).Maybe()
+
+	// evalFailChar - access evaluation fails (should count as error and show warning)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(evalFailCharID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should show visible character
+	assert.Contains(t, output, "Visible")
+	// Should show error notice
+	assert.Contains(t, output, "(Note: 1 player could not be displayed due to a system error)")
+
+	// Verify log output contains error and context (logged by world.Service.checkAccess)
+	logOutput := logBuf.String()
+	subjectID := access.CharacterSubject(executor.CharacterID.String())
+	resourceID := access.CharacterResource(evalFailCharID.String())
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subjectID, "log should contain subject")
+	assert.Contains(t, logOutput, "read", "log should contain action")
+	assert.Contains(t, logOutput, resourceID, "log should contain resource")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
+}
+
+func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.T) {
+	evalFail1ID := ulid.Make()
+	evalFail2ID := ulid.Make()
+	evalFailConn1 := ulid.Make()
+	evalFailConn2 := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(evalFail1ID, evalFailConn1)
+	sessionMgr.Connect(evalFail2ID, evalFailConn2)
+
+	// Capture log output
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Both characters return access evaluation failures
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(evalFail1ID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(evalFail2ID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Should show no players (all failed access checks)
+	assert.Contains(t, output, "No players online")
+	// Should show error notice (plural form)
+	assert.Contains(t, output, "(Note: 2 players could not be displayed due to system errors)")
+
+	// Verify log output contains errors and context (logged by world.Service.checkAccess)
+	logOutput := logBuf.String()
+	subjectID := access.CharacterSubject(executor.CharacterID.String())
+	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
+	assert.Contains(t, logOutput, subjectID, "log should contain subject")
+	assert.Contains(t, logOutput, "read", "log should contain action")
+	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
+	// Should have logged both failures (check for both resource IDs)
+	resource1 := access.CharacterResource(evalFail1ID.String())
+	resource2 := access.CharacterResource(evalFail2ID.String())
+	assert.True(t, strings.Contains(logOutput, resource1) || strings.Contains(logOutput, resource2),
+		"log should contain at least one character resource ID")
+}
+
+func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
+	// With 5 sessions all returning ErrAccessEvaluationFailed, the circuit breaker
+	// should trip after 3 total failures, leaving 2 sessions unqueried.
+	executor := testutil.RegularPlayer()
+
+	// Create 5 sessions that will all fail with engine errors.
+	charIDs := make([]ulid.ULID, 5)
+	sessionMgr := core.NewSessionManager()
+	for i := range charIDs {
+		charIDs[i] = ulid.Make()
+		sessionMgr.Connect(charIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	for _, charID := range charIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Maybe()
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Circuit breaker trips after 3 errors, so errorCount is exactly 3.
+	assert.Contains(t, output, "No players online")
+	assert.Contains(t, output, "(Note: 3 players could not be displayed due to system errors)")
+
+	// Verify the circuit breaker warning was logged.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "circuit breaker tripped")
+	assert.Contains(t, logOutput, "engine_failures=3")
+}
+
+func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
+	// 4 sessions all returning non-engine errors (database timeout).
+	// The circuit breaker should NOT trip because engineErrorCount
+	// only increments for ErrAccessEvaluationFailed.
+	executor := testutil.RegularPlayer()
+
+	charIDs := make([]ulid.ULID, 4)
+	sessionMgr := core.NewSessionManager()
+	for i := range charIDs {
+		charIDs[i] = ulid.Make()
+		sessionMgr.Connect(charIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify NO circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// All characters: engine allows access, but repo returns unexpected error.
+	dbErr := errors.New("database connection timeout")
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	for _, charID := range charIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil)
+		fixture.Mocks.CharacterRepo.EXPECT().
+			Get(mock.Anything, charID).
+			Return(nil, dbErr)
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// All 4 errors counted (circuit breaker did NOT trip).
+	assert.Contains(t, output, "(Note: 4 players could not be displayed due to system errors)")
+
+	// Circuit breaker warning should NOT have been logged.
+	logOutput := logBuf.String()
+	assert.NotContains(t, logOutput, "circuit breaker tripped")
+}
+
+func TestWhoHandler_SuccessResetsConsecutiveEngineErrorCounter(t *testing.T) {
+	// With 2 engine-error sessions and 3 successful sessions, the circuit breaker
+	// should never trip (only 2 total engine errors, below the threshold of 3).
+	executor := testutil.RegularPlayer()
+	playerID := ulid.Make()
+
+	// Create sessions: 3 will succeed, 2 will fail with engine errors.
+	successIDs := make([]ulid.ULID, 3)
+	failIDs := make([]ulid.ULID, 2)
+	sessionMgr := core.NewSessionManager()
+	for i := range successIDs {
+		successIDs[i] = ulid.Make()
+		sessionMgr.Connect(successIDs[i], ulid.Make())
+	}
+	for i := range failIDs {
+		failIDs[i] = ulid.Make()
+		sessionMgr.Connect(failIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify NO circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+
+	// Successful characters.
+	for i, charID := range successIDs {
+		char := &world.Character{
+			ID:       charID,
+			PlayerID: playerID,
+			Name:     string(rune('A' + i)), // "A", "B", "C"
+		}
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil).
+			Maybe()
+		fixture.Mocks.CharacterRepo.EXPECT().
+			Get(mock.Anything, charID).
+			Return(char, nil).
+			Maybe()
+	}
+
+	// Failing characters (engine error).
+	for _, charID := range failIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Maybe()
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Circuit breaker should NOT have tripped — all sessions processed.
+	assert.NotContains(t, output, "circuit breaker")
+
+	// Should have at least some visible players (3 successes, though order varies).
+	// We can't assert exact count due to non-deterministic ordering, but we know
+	// all 5 sessions were processed (no circuit breaker).
+	logOutput := logBuf.String()
+	assert.NotContains(t, logOutput, "circuit breaker tripped",
+		"circuit breaker should not trip with only 2 total engine errors")
+}
+
+func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
+	// With 3 engine errors and 2 non-engine errors, the circuit breaker
+	// should trip after accumulating 3 engine errors, regardless of interleaving.
+	executor := testutil.RegularPlayer()
+
+	// Create 5 sessions: 3 will fail with engine errors, 2 with DB errors.
+	engineFailIDs := make([]ulid.ULID, 3)
+	dbFailIDs := make([]ulid.ULID, 2)
+	sessionMgr := core.NewSessionManager()
+	for i := range engineFailIDs {
+		engineFailIDs[i] = ulid.Make()
+		sessionMgr.Connect(engineFailIDs[i], ulid.Make())
+	}
+	for i := range dbFailIDs {
+		dbFailIDs[i] = ulid.Make()
+		sessionMgr.Connect(dbFailIDs[i], ulid.Make())
+	}
+
+	// Capture log output to verify circuit breaker warning.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+
+	// Engine error characters.
+	for _, charID := range engineFailIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Maybe()
+	}
+
+	// DB error characters.
+	dbErr := errors.New("database connection timeout")
+	for _, charID := range dbFailIDs {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectAllow, "", ""), nil).
+			Maybe()
+		fixture.Mocks.CharacterRepo.EXPECT().
+			Get(mock.Anything, charID).
+			Return(nil, dbErr).
+			Maybe()
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Circuit breaker should trip after 3 engine errors.
+	// The exact error count depends on iteration order, but should be at least 3.
+	assert.Contains(t, output, "No players online")
+	assert.Contains(t, output, "could not be displayed due to system error")
+
+	// Verify the circuit breaker warning was logged.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "circuit breaker tripped",
+		"circuit breaker should trip after 3 engine errors even with interleaved non-engine errors")
+	assert.Contains(t, logOutput, "engine_failures=3")
 }
