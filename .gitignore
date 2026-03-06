@@ -77,3 +77,7 @@ site/build/
 site/.venv/
 *.egg-info/
 .ansible/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
