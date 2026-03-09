@@ -399,26 +399,26 @@ the cache.
 
 2. **For player aliases**, delete from database:
 
-   ```sql
+    ```sql
    DELETE FROM player_aliases
    WHERE player_id = '<player_id>' AND alias = '<alias_name>';
-   ```
+    ```
 
 3. **For system aliases**, delete from database:
 
-   ```sql
+    ```sql
    DELETE FROM system_aliases WHERE alias = '<alias_name>';
-   ```
+    ```
 
 4. **Verify cleanup:**
 
-   ```sql
+    ```sql
    -- Check player aliases
    SELECT * FROM player_aliases WHERE alias = '<alias_name>';
 
    -- Check system aliases
    SELECT * FROM system_aliases WHERE alias = '<alias_name>';
-   ```
+    ```
 
 5. **No restart required** - the cache does not contain the alias, so removing
    it from the database prevents it from being loaded on the next restart.

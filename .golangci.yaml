@@ -54,6 +54,12 @@ linters:
           - wrapcheck
           - errcheck
 
+      # Test password hashes are not real credentials
+      - path: '_test\.go'
+        linters:
+          - gosec
+        text: 'G101'
+
       # Main package doesn't need to wrap errors
       - path: cmd/
         linters:

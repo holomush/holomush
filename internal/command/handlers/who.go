@@ -49,11 +49,6 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	for i, session := range sessions {
 		// Circuit breaker: stop querying if the engine is consistently failing.
 		if engineErrorCount >= maxEngineErrors {
-			slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after engine failures",
-				"engine_failures", engineErrorCount,
-				"threshold", maxEngineErrors,
-				"skipped_sessions", len(sessions)-i,
-			)
 			break
 		}
 
@@ -70,6 +65,13 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			if errors.Is(err, world.ErrAccessEvaluationFailed) {
 				errorCount++
 				engineErrorCount++
+				if engineErrorCount >= maxEngineErrors {
+					slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after engine failures",
+						"engine_failures", engineErrorCount,
+						"threshold", maxEngineErrors,
+						"skipped_sessions", len(sessions)-i-1,
+					)
+				}
 				continue
 			}
 			// Log unexpected errors (database failures, timeouts, etc.) but continue

@@ -527,7 +527,7 @@ func parseAutoMigrate() bool {
 	}
 
 	// Unrecognized value - warn and default to true for safety
-	slog.Warn("unrecognized HOLOMUSH_DB_AUTO_MIGRATE value, defaulting to true",
+	slog.Warn("unrecognized HOLOMUSH_DB_AUTO_MIGRATE value, defaulting to true", //nolint:gosec // G706: val from os.Getenv in structured slog attribute, not injectable
 		"value", val,
 		"valid_values", "true, false, 1, 0")
 	return true
