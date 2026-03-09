@@ -119,6 +119,7 @@ linters:
     gosec:
       excludes:
         - G104 # Audit errors not checked (handled by errcheck)
+        - G706 # Structured slog prevents log injection; false positive on env var values
 
     wrapcheck:
       ignore-sigs:
