@@ -71,6 +71,14 @@ linters:
           - revive
         text: var-naming
 
+      # G706 (log injection) is a false positive when using structured slog: key-value pairs
+      # prevent injection regardless of whether values are user-controlled. All Go source
+      # files in this project use log/slog exclusively.
+      - path: '\.go$'
+        linters:
+          - gosec
+        text: G706
+
   settings:
     errcheck:
       check-type-assertions: true
@@ -119,7 +127,6 @@ linters:
     gosec:
       excludes:
         - G104 # Audit errors not checked (handled by errcheck)
-        - G706 # Structured slog prevents log injection; false positive on env var values
 
     wrapcheck:
       ignore-sigs:

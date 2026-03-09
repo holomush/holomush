@@ -214,6 +214,28 @@ func TestCheckAccess(t *testing.T) {
 		engine.AssertNotCalled(t, "Evaluate") // engine should never be called
 	})
 
+	t.Run("returns evaluation failure on infrastructure failure decision", func(t *testing.T) {
+		// Infrastructure failures return a deny Decision without a Go error.
+		// checkAccess must detect IsInfraFailure() and return ErrAccessEvaluationFailed
+		// (not ErrPermissionDenied) so callers can distinguish transient failures from policy denials.
+		infraDecision := types.NewDecision(types.EffectDefaultDeny, "session store unavailable", "infra:session-store-error")
+		engine := new(MockAccessPolicyEngine)
+		engine.On("Evaluate", ctx, types.AccessRequest{
+			Subject: subject, Action: action, Resource: resource,
+		}).Return(infraDecision, nil)
+
+		svc := &Service{engine: engine}
+		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+
+		assert.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		assert.ErrorIs(t, err, ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed, not ErrPermissionDenied")
+		assert.NotErrorIs(t, err, ErrPermissionDenied,
+			"infrastructure failure must not be classified as permission denied")
+		engine.AssertExpectations(t)
+	})
+
 	t.Run("logs structured fields on engine error", func(t *testing.T) {
 		// Set up log capture
 		capture := &logCapture{}

@@ -188,8 +188,11 @@ func (s *StaticAccessControl) checkRole(ctx context.Context, subject, action, re
 
 // resolveTokens replaces $self and $here with actual values.
 func (s *StaticAccessControl) resolveTokens(pattern, subjectID, locationID string) string {
-	r := strings.NewReplacer("$self", subjectID, "$here", locationID)
-	return r.Replace(pattern)
+	result := strings.ReplaceAll(pattern, "$self", subjectID)
+	if locationID != "" {
+		result = strings.ReplaceAll(result, "$here", locationID)
+	}
+	return result
 }
 
 // resolveCurrentLocation gets the character's current location.

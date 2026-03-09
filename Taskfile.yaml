@@ -238,6 +238,24 @@ tasks:
 
         echo "✓ No legacy AccessControl.Check() calls found"
 
+        # Check for legacy "char:" prefix usage (must be "character:").
+        CHAR_PREFIX=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E '"char:' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '"character:' || true)
+
+        if [ -n "$CHAR_PREFIX" ]; then
+          echo "ERROR: Found legacy \"char:\" prefix in production code:"
+          echo "$CHAR_PREFIX"
+          echo ""
+          echo "Migrate all occurrences to the \"character:\" prefix."
+          exit 1
+        fi
+
+        echo "✓ No legacy char: prefix found"
+
   lint:test-helpers:
     desc: Verify no test helper imports in production code
     cmds:

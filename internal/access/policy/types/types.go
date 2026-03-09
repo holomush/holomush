@@ -7,6 +7,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/samber/oops"
 )
@@ -168,6 +169,11 @@ func (d Decision) Attributes() *AttributeBags {
 
 // SetPolicies sets the policy matches for this decision.
 // This is intended for use by the policy engine during evaluation.
+// Note: this setter exists because Decision lives in the types package while
+// the engine that populates it lives in the policy package. A NewDecisionWithDetails
+// constructor is not practical because the engine builds decisions incrementally
+// (attributes first, then policies after evaluation). Consider consolidating
+// packages if this design becomes a maintenance burden.
 func (d *Decision) SetPolicies(p []PolicyMatch) {
 	d.policies = p
 }
@@ -182,7 +188,7 @@ func (d *Decision) SetAttributes(a *AttributeBags) {
 // failure (session resolution error, DB error, etc.) rather than a policy denial.
 // Infrastructure failures use PolicyID with the "infra:" prefix.
 func (d Decision) IsInfraFailure() bool {
-	return len(d.policyID) >= 6 && d.policyID[:6] == "infra:"
+	return strings.HasPrefix(d.policyID, "infra:")
 }
 
 // Validate checks that the Decision invariant holds: the allowed field
@@ -329,6 +335,13 @@ const (
 // AccessPolicyEngine defines the interface for ABAC policy evaluation.
 // Implementations MUST return an error or a deny decision for unknown/unmatched requests (fail-closed).
 // This ensures that missing policies result in access denial rather than unexpected grants.
+//
+// Fail-closed guarantee: the engine MUST deny access whenever it cannot produce a
+// reliable decision. Callers MUST treat any non-nil error from Evaluate as a denial
+// and MUST NOT grant access. When the returned Decision indicates infrastructure
+// failure (IsInfraFailure), the engine has already denied the request. The engine
+// never returns a permissive Decision alongside an error; on error paths the
+// returned Decision is always the zero value (EffectDefaultDeny, allowed=false).
 //
 // This interface is defined here (in types package) to avoid import cycles:
 // - world package needs to call the engine

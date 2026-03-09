@@ -16,7 +16,6 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/observability"
 )
 
 var tracer = otel.Tracer("holomush/command")
@@ -168,64 +167,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
-		req, reqErr := types.NewAccessRequest(subject, "execute", cap)
-		if reqErr != nil {
-			slog.ErrorContext(ctx, "invalid access request",
-				"error", reqErr,
-				"subject", subject,
-				"action", "execute",
-				"resource", cap,
-			)
-			observability.RecordEngineFailure("dispatcher_capability_check")
-			metrics.SetStatus(StatusEngineFailure)
-			err = oops.Code(CodeAccessEvaluationFailed).
-				With("command", parsed.Name).
-				With("capability", cap).
-				Wrap(reqErr)
-			return err
-		}
-		decision, evalErr := d.engine.Evaluate(ctx, req)
-		if evalErr != nil {
-			slog.ErrorContext(ctx, "access evaluation failed",
-				"subject", subject,
-				"action", "execute",
-				"resource", cap,
-				"error", evalErr,
-			)
-			observability.RecordEngineFailure("dispatcher_capability_check")
-			metrics.SetStatus(StatusEngineFailure)
-			err = oops.Code(CodeAccessEvaluationFailed).
-				With("command", parsed.Name).
-				With("capability", cap).
-				Wrap(evalErr)
-			return err
-		}
-		if !decision.IsAllowed() {
-			if decision.IsInfraFailure() {
-				slog.ErrorContext(ctx, "access check infrastructure failure",
-					"subject", subject,
-					"action", "execute",
-					"resource", cap,
-					"reason", decision.Reason(),
-					"policy_id", decision.PolicyID(),
-				)
-				observability.RecordEngineFailure("dispatcher_capability_check")
+		if capErr := CheckCapability(ctx, d.engine, subject, cap, parsed.Name); capErr != nil {
+			oopsErr, _ := oops.AsOops(capErr)
+			if oopsErr.Code() == CodePermissionDenied {
+				metrics.SetStatus(StatusPermissionDenied)
+			} else {
 				metrics.SetStatus(StatusEngineFailure)
-				err = oops.Code(CodeAccessEvaluationFailed).
-					With("command", parsed.Name).
-					With("capability", cap).
-					With("reason", decision.Reason()).
-					With("policy_id", decision.PolicyID()).
-					Errorf("infrastructure failure during access check for command %s", parsed.Name)
-				return err
 			}
-			metrics.SetStatus(StatusPermissionDenied)
-			err = oops.Code(CodePermissionDenied).
-				With("command", parsed.Name).
-				With("capability", cap).
-				With("reason", decision.Reason()).
-				With("policy_id", decision.PolicyID()).
-				Errorf("permission denied for command %s", parsed.Name)
+			err = capErr
 			return err
 		}
 	}

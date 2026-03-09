@@ -14,62 +14,9 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access"
-	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/world"
 )
-
-// checkCapability evaluates whether the subject can execute a given capability.
-// It handles request construction errors, engine evaluation errors, and denial
-// with consistent logging, metrics, and error codes.
-func checkCapability(ctx context.Context, engine types.AccessPolicyEngine, subject, capability, cmdName string) error {
-	req, reqErr := types.NewAccessRequest(subject, "execute", capability)
-	if reqErr != nil {
-		slog.ErrorContext(ctx, cmdName+" access request construction failed",
-			"subject", subject,
-			"action", "execute",
-			"resource", capability,
-			"error", reqErr,
-		)
-		observability.RecordEngineFailure(cmdName + "_access_check")
-		return oops.Wrapf(command.ErrAccessEvaluationFailed(cmdName, reqErr), "access request creation failed")
-	}
-
-	decision, evalErr := engine.Evaluate(ctx, req)
-	if evalErr != nil {
-		slog.ErrorContext(ctx, cmdName+" access evaluation failed",
-			"subject", subject,
-			"action", "execute",
-			"resource", capability,
-			"error", evalErr,
-		)
-		observability.RecordEngineFailure(cmdName + "_access_check")
-		return oops.Wrapf(command.ErrAccessEvaluationFailed(cmdName, evalErr), "access evaluation failed")
-	}
-
-	if !decision.IsAllowed() {
-		if decision.IsInfraFailure() {
-			slog.ErrorContext(ctx, cmdName+" access check infrastructure failure",
-				"subject", subject,
-				"action", "execute",
-				"resource", capability,
-				"reason", decision.Reason(),
-				"policy_id", decision.PolicyID(),
-			)
-			observability.RecordEngineFailure(cmdName + "_access_check")
-			return oops.Wrapf(command.ErrAccessEvaluationFailed(cmdName, errors.New(decision.Reason())), "infrastructure failure during access check")
-		}
-		return oops.Code(command.CodePermissionDenied).
-			With("command", cmdName).
-			With("capability", capability).
-			With("reason", decision.Reason()).
-			With("policy_id", decision.PolicyID()).
-			Errorf("permission denied for command %s", cmdName)
-	}
-
-	return nil
-}
 
 // BootHandler disconnects a target player from the server.
 // Self-boot bypasses the admin.boot capability check (implemented in handler),
@@ -103,7 +50,8 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		if err := checkCapability(ctx, exec.Services().Engine(), subjectID, "admin.boot", "boot"); err != nil {
+		if err := command.CheckCapability(ctx, exec.Services().Engine(), subjectID, "admin.boot", "boot"); err != nil {
+			//nolint:wrapcheck // CheckCapability returns structured oops errors with code and context
 			return err
 		}
 	}

@@ -160,7 +160,10 @@ func splitEntityID(entityID string) (entityType, id string) {
 	return parts[0], parts[1]
 }
 
-// resolveEntity resolves attributes for a single entity (subject or resource)
+// resolveEntity resolves attributes for a single entity (subject or resource).
+// It iterates all registered providers and merges their attributes into bag.
+// Returns an error wrapping all individual provider errors; partial results
+// from successful providers are still written to bag before the error is returned.
 func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID string, bag map[string]any) error {
 	cache := getCacheFromContext(ctx)
 

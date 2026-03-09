@@ -1,3 +1,5 @@
+//go:build integration
+
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
@@ -204,6 +206,38 @@ func TestMigrationEquivalence(t *testing.T) {
 			subject:  "character:player-01DEF",
 			action:   "write",
 			resource: "exit:*",
+		},
+
+		// Read/examine operations - players can read characters, locations, objects, exits, scenes
+		{
+			name:     "player - read character (examine)",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "character:player-01DEF",
+		},
+		{
+			name:     "player - read other character (examine)",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "character:admin-01ABC",
+		},
+		{
+			name:     "player - read location (look)",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "location:01JKL",
+		},
+		{
+			name:     "player - read object (examine)",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "object:01VWX",
+		},
+		{
+			name:     "player - read scene",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "scene:01MNO",
 		},
 
 		// Command execution - basic commands allowed

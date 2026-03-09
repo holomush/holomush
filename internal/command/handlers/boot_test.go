@@ -257,7 +257,10 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	// Use a grant engine for world service (character lookups succeed)
+	// Two engines: WorldService gets a grant engine so character lookups succeed,
+	// while the boot capability check (exec.Services().Engine()) gets an error engine
+	// to simulate a policy store outage. This tests that boot-specific capability
+	// failures surface correctly even when world-level access checks pass.
 	worldEngine := policytest.NewGrantEngine()
 	worldEngine.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+executorID.String())
 	worldEngine.Grant(access.SubjectCharacter+executorID.String(), "read", "character:"+targetID.String())
@@ -275,7 +278,6 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 		Engine:        worldEngine,
 	})
 
-	// Use ErrorEngine for the boot capability check (exec.Services().Engine())
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
 
@@ -1408,7 +1410,7 @@ func TestCheckCapability(t *testing.T) {
 				defer slog.SetDefault(oldLogger)
 			}
 
-			err := checkCapability(ctx, tt.engine, tt.subject, tt.capability, tt.cmdName)
+			err := command.CheckCapability(ctx, tt.engine, tt.subject, tt.capability, tt.cmdName)
 
 			if tt.expectedError == "" {
 				require.NoError(t, err)
