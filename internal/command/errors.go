@@ -5,6 +5,7 @@ package command
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/samber/oops"
 )
@@ -42,7 +43,9 @@ var (
 	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
 	ErrNilRegistry = oops.Errorf("registry cannot be nil")
 
-	// ErrNilEngine is returned when creating a dispatcher with a nil policy engine.
+	// ErrNilEngine is returned when creating a dispatcher or rate limit middleware
+	// with a nil policy engine. Shared sentinel — callers should not distinguish
+	// which constructor failed based on this error alone.
 	ErrNilEngine = oops.Errorf("policy engine cannot be nil")
 
 	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
@@ -146,7 +149,19 @@ func PlayerMessage(err error) string {
 		return "Something went wrong. Try again."
 	}
 
-	switch oopsErr.Code() {
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		code = ""
+	}
+
+	// Handle entity-scoped access evaluation failures from the world service.
+	// These codes (e.g., LOCATION_ACCESS_EVALUATION_FAILED, CHARACTER_ACCESS_EVALUATION_FAILED)
+	// share the same player-facing message as the command-layer ACCESS_EVALUATION_FAILED.
+	if strings.HasSuffix(code, "_ACCESS_EVALUATION_FAILED") {
+		return "Permission check failed. Please try again or contact an administrator."
+	}
+
+	switch code {
 	case CodeUnknownCommand:
 		return "Unknown command. Try 'help'."
 	case CodePermissionDenied:
@@ -191,7 +206,7 @@ func PlayerMessage(err error) string {
 		return "Alias system is not available. Contact the server administrator."
 	default:
 		slog.Warn("unhandled error code in PlayerMessage",
-			"code", oopsErr.Code(),
+			"code", code,
 			"error", err)
 		return "Something went wrong. Try again."
 	}

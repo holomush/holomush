@@ -250,6 +250,45 @@ func TestRateLimitMiddleware_Enforce_NilMiddleware(t *testing.T) {
 	assert.NoError(t, err, "nil middleware should return nil (safe no-op)")
 }
 
+
+func TestRateLimitMiddleware_Enforce_InfraFailure(t *testing.T) {
+	// Engine returns an infra failure decision (PolicyID starting with "infra:")
+	// rather than a Go error. The middleware should treat this as fail-closed:
+	// the bypass is denied and rate limiting is still applied.
+	infraEngine := policytest.NewInfraFailureEngine("session store unavailable", "infra:session-store-error")
+
+	ratelimiter := NewRateLimiter(RateLimiterConfig{
+		BurstCapacity: 1,
+		SustainedRate: 0.1,
+	})
+	defer ratelimiter.Close()
+
+	middleware, err := NewRateLimitMiddleware(ratelimiter, infraEngine)
+	require.NoError(t, err)
+
+	charID := ulid.Make()
+	sessionID := ulid.Make()
+	exec := NewTestExecution(CommandExecutionConfig{
+		CharacterID: charID,
+		SessionID:   sessionID,
+		Output:      &bytes.Buffer{},
+		Services:    stubServices(),
+	})
+
+	ctx := context.Background()
+	_, span := noop.NewTracerProvider().Tracer("test").Start(ctx, "test")
+
+	// First call: infra failure -> bypass denied (fail-closed) -> rate limit applied -> has token -> succeeds
+	err = middleware.Enforce(ctx, exec, "test-command", span)
+	require.NoError(t, err, "first call should succeed (infra failure -> no bypass -> rate limit token consumed)")
+
+	// Second call: infra failure -> bypass denied (fail-closed) -> rate limit applied -> no token -> rate limited
+	err = middleware.Enforce(ctx, exec, "test-command", span)
+	require.Error(t, err, "second call should be rate limited (infra failure -> no bypass -> token exhausted)")
+
+	errutil.AssertErrorCode(t, err, CodeRateLimited)
+}
+
 func TestDispatcher_WithRateLimiter_ConstructorError(t *testing.T) {
 	// Verify that dispatcher properly propagates constructor errors from WithRateLimiter.
 	// The error path occurs when NewRateLimitMiddleware is called with invalid arguments.

@@ -1830,11 +1830,11 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		assert.Nil(t, exits)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 		mockExitRepo.AssertNotCalled(t, "ListFromLocation")
 	})
 
-	t.Run("returns EXIT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockExitRepo := worldtest.NewMockExitRepository(t)
 
@@ -1846,7 +1846,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 		exits, err := svc.GetExitsByLocation(ctx, subjectID, locationID)
 		assert.Nil(t, exits)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 		mockExitRepo.AssertNotCalled(t, "ListFromLocation")
 	})

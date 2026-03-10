@@ -358,7 +358,7 @@ func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, loca
 		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, "EXIT"); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", resource, "LOCATION"); err != nil {
 		return nil, err
 	}
 	exits, err := s.exitRepo.ListFromLocation(ctx, locationID)

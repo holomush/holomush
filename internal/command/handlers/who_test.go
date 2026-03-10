@@ -586,7 +586,7 @@ func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 	// evalFailChar - access evaluation fails (should count as error and show warning)
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(evalFailCharID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	services := testutil.NewServicesBuilder().
 		WithSession(sessionMgr).
@@ -641,10 +641,10 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(evalFail1ID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(evalFail2ID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	services := testutil.NewServicesBuilder().
 		WithSession(sessionMgr).
@@ -708,7 +708,7 @@ func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 				Action:   "read",
 				Resource: access.CharacterResource(charID.String()),
 			}).
-			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Return(types.Decision{}, errors.New("policy store unavailable")).
 			Maybe()
 	}
 
@@ -761,7 +761,7 @@ func TestWhoHandler_CircuitBreakerTripsAtExactlyThreeErrors(t *testing.T) {
 	// The circuit breaker must stop after maxEngineErrors=3, not at 1 or 2.
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, mock.Anything).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+		Return(types.Decision{}, errors.New("policy store unavailable")).
 		Times(3)
 
 	services := testutil.NewServicesBuilder().
@@ -904,7 +904,7 @@ func TestWhoHandler_SuccessResetsConsecutiveEngineErrorCounter(t *testing.T) {
 				Action:   "read",
 				Resource: access.CharacterResource(charID.String()),
 			}).
-			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Return(types.Decision{}, errors.New("policy store unavailable")).
 			Maybe()
 	}
 
@@ -969,7 +969,7 @@ func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
 				Action:   "read",
 				Resource: access.CharacterResource(charID.String()),
 			}).
-			Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+			Return(types.Decision{}, errors.New("policy store unavailable")).
 			Maybe()
 	}
 

@@ -1295,7 +1295,7 @@ func TestBootHandler_SkipsCharacterWithEngineErrorDuringLookup(t *testing.T) {
 	// One character lookup fails with engine error - should be counted and skipped
 	accessControl.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(evalFailID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
@@ -1407,6 +1407,17 @@ func TestCheckCapability(t *testing.T) {
 			checkLogs:      true,
 			expectedLogMsg: "boot access check infrastructure failure",
 		},
+		{
+			name:           "request construction failure - empty capability",
+			engine:         policytest.AllowAllEngine(),
+			subject:        subjectID,
+			capability:     "",
+			cmdName:        "test",
+			expectedError:  "resource must not be empty",
+			expectedCode:   command.CodeAccessEvaluationFailed,
+			checkLogs:      true,
+			expectedLogMsg: "test access request construction failed",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1508,10 +1519,10 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	// All character lookups fail with access evaluation errors
 	accessControl.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(evalFail1ID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 	accessControl.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(evalFail2ID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).Maybe()
+		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
