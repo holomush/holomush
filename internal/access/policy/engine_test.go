@@ -121,9 +121,9 @@ func TestEngine_SystemBypass_RejectedWithoutSystemContext(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "SYSTEM_SUBJECT_REJECTED", oopsErr.Code())
-	assert.Equal(t, types.EffectDeny, decision.Effect())
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "ingress_guard", decision.PolicyID())
+	assert.Empty(t, decision.PolicyID())
 }
 
 func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {

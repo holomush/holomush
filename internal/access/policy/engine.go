@@ -61,7 +61,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 				"action", req.Action,
 				"resource", req.Resource,
 			)
-			return types.NewDecision(types.EffectDeny, "system subject requires system context", "ingress_guard"),
+			return types.Decision{},
 				oops.Code("SYSTEM_SUBJECT_REJECTED").Errorf("system subject is only allowed from system context")
 		}
 		decision := types.NewDecision(types.EffectSystemBypass, "system bypass", "")
@@ -139,7 +139,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
 	if e.cache.IsStale() {
-		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "")
+		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "infra:policy-cache-stale")
 		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
@@ -149,7 +149,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			PolicyID:   "",
+			PolicyID:   "infra:policy-cache-stale",
 			PolicyName: "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
