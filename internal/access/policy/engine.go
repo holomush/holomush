@@ -49,8 +49,21 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		return types.Decision{}, oops.Wrapf(err, "context cancelled before evaluation")
 	}
 
-	// Step 1: System bypass (before input validation — system always passes)
+	// Step 1: System bypass — defense-in-depth (S1)
+	// The "system" subject bypasses all policy evaluation. To prevent accidental
+	// or malicious use, we require the context to be marked as a system operation
+	// via access.WithSystemSubject(ctx). External request contexts are never marked
+	// as system, so this blocks any attempt to inject the system subject from
+	// gRPC, WebSocket, or other external ingress points.
 	if req.Subject == "system" {
+		if !access.IsSystemContext(ctx) {
+			slog.ErrorContext(ctx, "system subject used without system context (S1 violation)",
+				"action", req.Action,
+				"resource", req.Resource,
+			)
+			return types.NewDecision(types.EffectDeny, "system subject requires system context", "ingress_guard"),
+				oops.Code("SYSTEM_SUBJECT_REJECTED").Errorf("system subject is only allowed from system context")
+		}
 		decision := types.NewDecision(types.EffectSystemBypass, "system bypass", "")
 		if err := decision.Validate(); err != nil {
 			return decision, oops.Wrapf(err, "decision validation failed")
@@ -104,10 +117,20 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		req.Subject = access.CharacterSubject(characterID)
 	}
 
-	// Step 3: Eager attribute resolution (non-fatal; bags may be partial when providers fail)
+	// Step 3: Eager attribute resolution — bags may be partial when providers fail.
+	// Design: evaluation proceeds with partial bags rather than failing hard.
+	// This means policies evaluate against incomplete data on provider errors,
+	// which may cause incorrect allow/deny decisions. The partial-bag approach
+	// was chosen to avoid total service outage when a single provider fails.
+	// resolveErr is logged but does not abort evaluation.
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
-		slog.WarnContext(ctx, "attribute resolution failed", "error", resolveErr)
+		slog.WarnContext(ctx, "attribute resolution partial failure",
+			"error", resolveErr,
+			"subject", req.Subject,
+			"action", req.Action,
+			"resource", req.Resource,
+		)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale

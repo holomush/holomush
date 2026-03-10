@@ -21,15 +21,15 @@ This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering s
 
 **Acceptance Criteria:**
 
-- [x] Per-package atomic migration: DI wiring + call sites migrated together, each commit compiles and passes `task build` [DEFERRED: holomush-ur6c]
-- [x] `AccessControl` replaced with `*policy.Engine` in dependency graph [DEFERRED: holomush-ur6c]
-- [x] `AttributeResolver` wired with all registered providers [DEFERRED: holomush-ur6c]
-- [x] `PolicyCache` wired and `Listen()` called for NOTIFY subscription [DEFERRED: holomush-ur6c]
-- [x] `SessionResolver` wired [DEFERRED: holomush-ur6c]
-- [x] `AuditLogger` wired [DEFERRED: holomush-ur6c]
+- [ ] Per-package atomic migration: DI wiring + call sites migrated together, each commit compiles and passes `task build` [DEFERRED: holomush-ur6c]
+- [ ] `AccessControl` replaced with `*policy.Engine` in dependency graph [DEFERRED: holomush-ur6c]
+- [ ] `AttributeResolver` wired with all registered providers [DEFERRED: holomush-ur6c]
+- [ ] `PolicyCache` wired and `Listen()` called for NOTIFY subscription [DEFERRED: holomush-ur6c]
+- [ ] `SessionResolver` wired [DEFERRED: holomush-ur6c]
+- [ ] `AuditLogger` wired [DEFERRED: holomush-ur6c]
 - [ ] `Bootstrap()` called at startup to seed policies
 - [x] **Security (S1):** API ingress validation added to prevent external requests from using system subject or `WithSystemSubject(ctx)` bypass mechanism [DEFERRED: holomush-dpsd]
-- [ ] **Security (S8 - holomush-5k1.355):** A static analysis rule or go vet check MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST enforce this check. Migration checklist MUST include per-site verification.
+- [x] **Security (S8 - holomush-5k1.355):** A static analysis rule or go vet check MUST verify no remaining `AccessControl.Check()` calls post-migration. CI MUST enforce this check. Migration checklist MUST include per-site verification.
 - [ ] ALL **29 production call sites** migrated from `AccessControl.Check()` to `engine.Evaluate()`:
   - [ ] 3 call sites in command package (T28-pkg1)
   - [ ] 6 call sites in world: locations (T28-pkg2)
@@ -43,9 +43,9 @@ This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering s
 - [ ] All subject strings use `character:` prefix (not legacy `char:`)
 - [ ] **All migrated call sites MUST use `SubjectCharacter` constant, not `char:` prefix** (per ADR #13 prefix normalization)
 - [ ] **Static analysis check for remaining `char:` prefix usage** — verify no call sites use legacy `char:` prefix after migration
-- [x] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names) [DEFERRED: holomush-39vv]
+- [ ] Prefix migration strategy: EventStore accepts both `char:` and `character:` prefixes during transition (backward compatibility for existing event stream names) [DEFERRED: holomush-39vv]
 - [ ] Audit logs are immutable: old entries keep `char:` prefix, new entries use `character:` prefix
-- [x] Tests verify both prefix variants are accepted by EventStore during migration period [DEFERRED: holomush-39vv]
+- [ ] Tests verify both prefix variants are accepted by EventStore during migration period [DEFERRED: holomush-39vv]
 - [ ] Tests updated to mock `AccessPolicyEngine` instead of `AccessControl`
 - [ ] **Per-package error-path tests:** Each migrated package MUST have tests verifying:
   1. Correct `AccessRequest` construction (subject, action, resource populated)
@@ -332,7 +332,7 @@ func TestAccessRequest_Construction(t *testing.T) {
 
 If serious issues are discovered after Task 28 migration, rollback is performed via `git revert` and down migrations (documented in [Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)):
 
-1. **Revert Task 28 commit(s)** — This restores all 29 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-4) can be reverted independently or together.
+1. **Revert Task 28 commit(s)** — This restores all 29 `AccessControl.Check()` call sites and removes `AccessPolicyEngine.Evaluate()` wiring. Each package migration commit (Package 1-5) can be reverted independently or together.
 2. **Run database down migrations** — Roll back 3 migration files in reverse order (000017 → 000016 → 000015) to remove ABAC tables. See [Decision #65 Database Migration Rollback Procedure](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md#database-migration-rollback-procedure) for detailed steps including required backup procedures and down-migration order.
 3. **Do NOT revert Task 29** — Task 29 removes code that still exists at Task 28. If Task 28 is reverted, Task 29's commit should not exist yet (it depends on Task 28 completion). If Task 29 has already been committed, it MUST be reverted first before reverting Task 28.
 
@@ -804,7 +804,7 @@ This test MUST pass with zero unjustified divergences before Task 29 proceeds. A
 - [ ] `AccessControl` interface removed from `access.go` and `internal/plugin/hostfunc/commands.go`
 - [ ] `capability.Enforcer` and `capability.CapabilityChecker` removed (capabilities now seed policies)
 - [ ] `internal/plugin/hostfunc/functions.go` — Remove `CapabilityChecker` field and `wrap()` capability checks (plugin capabilities now enforced via ABAC policies)
-- [ ] **Security (S8 - holomush-5k1.355):** Static analysis rule added to CI via `go vet` or custom linter to detect remaining `AccessControl.Check()` calls
+- [x] **Security (S8 - holomush-5k1.355):** Static analysis rule added to CI via `go vet` or custom linter to detect remaining `AccessControl.Check()` calls
 - [ ] Zero references to `AccessControl` in codebase (`grep` clean)
 - [ ] Zero references to `StaticAccessControl` in codebase
 - [ ] Zero references to `CapabilityChecker` or `capability.Enforcer` in codebase

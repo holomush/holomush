@@ -48,7 +48,11 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	var engineErrorCount int
 	for i, session := range sessions {
 		// Circuit breaker: stop querying if the engine is consistently failing.
+		// Include skipped sessions in errorCount so the user-visible message
+		// reflects ALL players that couldn't be displayed, not just those
+		// where errors were actually observed.
 		if engineErrorCount >= maxEngineErrors {
+			errorCount += len(sessions) - i
 			break
 		}
 

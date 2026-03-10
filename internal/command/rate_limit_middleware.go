@@ -5,8 +5,9 @@ package command
 
 import (
 	"context"
-	"github.com/samber/oops"
 	"log/slog"
+
+	"github.com/samber/oops"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"

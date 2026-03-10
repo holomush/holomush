@@ -120,8 +120,10 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource, en
 				With("policy_id", decision.PolicyID()).
 				Wrap(ErrAccessEvaluationFailed)
 		}
-		deniedErr := oops.With("reason", decision.Reason()).With("policy_id", decision.PolicyID()).Wrap(ErrPermissionDenied)
-		return oops.Code(denyCode).Wrap(deniedErr)
+		return oops.Code(denyCode).
+			With("reason", decision.Reason()).
+			With("policy_id", decision.PolicyID()).
+			Wrap(ErrPermissionDenied)
 	}
 	return nil
 }

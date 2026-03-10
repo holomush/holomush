@@ -231,7 +231,11 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 				"entity_id", entityID,
 				"panic", recovered,
 			)
-			retErr = fmt.Errorf("provider %s panicked during resolution", provider.Namespace())
+			retErr = oops.
+				With("namespace", provider.Namespace()).
+				With("resolve_type", resolveType).
+				With("entity_id", entityID).
+				Errorf("provider %s panicked during %s resolution", provider.Namespace(), resolveType)
 		}
 	}()
 
@@ -265,9 +269,13 @@ func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider Environm
 		if recovered := recover(); recovered != nil {
 			r.logger.Error("environment provider panicked during resolution",
 				"namespace", provider.Namespace(),
+				"provider_type", "environment",
 				"panic", recovered,
 			)
-			retErr = fmt.Errorf("provider %s panicked during resolution", provider.Namespace())
+			retErr = oops.
+				With("namespace", provider.Namespace()).
+				With("provider_type", "environment").
+				Errorf("environment provider %s panicked during resolution", provider.Namespace())
 		}
 	}()
 

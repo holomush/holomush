@@ -40,12 +40,22 @@ func WithEngine(engine types.AccessPolicyEngine) Option {
 
 // listCommandsFn returns the list_commands host function.
 // Args: character_id (string) - the character whose capabilities determine visible commands
-// Returns: ({commands: [...], incomplete: bool}, error string)
+// Returns: (result table, error string or nil)
+//
+// Result table structure:
+//   - commands: array of {name, help, usage, source} tables
+//   - incomplete: bool — true if engine errors prevented some commands from being evaluated
+//
+// Contract for callers:
+//   - When incomplete is false: the command list is authoritative
+//   - When incomplete is true: some commands may be hidden due to access evaluation errors.
+//     Callers SHOULD display the available commands AND indicate to the user that the list
+//     may be incomplete (e.g., show the error string from the second return value).
+//   - The error string (second return) is non-nil only when incomplete is true.
 //
 // Commands are filtered by capability:
 //   - Commands with no capabilities (nil or empty slice) are always included
 //   - Commands with capabilities require ALL capabilities to be granted (AND logic)
-//   - incomplete field is true if any engine errors occurred during filtering
 func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		charIDStr := L.CheckString(1)

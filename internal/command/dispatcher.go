@@ -168,8 +168,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
 		if capErr := CheckCapability(ctx, d.engine, subject, cap, parsed.Name); capErr != nil {
-			oopsErr, _ := oops.AsOops(capErr)
-			if oopsErr.Code() == CodePermissionDenied {
+			oopsErr, ok := oops.AsOops(capErr)
+			if ok && oopsErr.Code() == CodePermissionDenied {
 				metrics.SetStatus(StatusPermissionDenied)
 			} else {
 				metrics.SetStatus(StatusEngineFailure)

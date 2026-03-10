@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -259,7 +260,7 @@ func TestContract_SystemBypass_SkipsValidation(t *testing.T) {
 		Resource: "", // would normally fail validation
 	}
 
-	decision, err := engine.Evaluate(context.Background(), req)
+	decision, err := engine.Evaluate(access.WithSystemSubject(context.Background()), req)
 	require.NoError(t, err)
 
 	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
@@ -295,7 +296,11 @@ func TestContract_ValidSubjectFormats(t *testing.T) {
 				Resource: "location:01XYZ",
 			}
 
-			_, err := engine.Evaluate(context.Background(), req)
+			ctx := context.Background()
+			if tt.subject == "system" {
+				ctx = access.WithSystemSubject(ctx)
+			}
+			_, err := engine.Evaluate(ctx, req)
 			require.NoError(t, err, "valid subject %q should not error", tt.subject)
 		})
 	}

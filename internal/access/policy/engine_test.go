@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -95,12 +96,34 @@ func TestEngine_SystemBypass(t *testing.T) {
 		Resource: "location:01ABC",
 	}
 
-	decision, err := engine.Evaluate(context.Background(), req)
+	ctx := access.WithSystemSubject(context.Background())
+	decision, err := engine.Evaluate(ctx, req)
 	require.NoError(t, err)
 
 	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 	assert.Equal(t, "system bypass", decision.Reason())
+}
+
+func TestEngine_SystemBypass_RejectedWithoutSystemContext(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	req := types.AccessRequest{
+		Subject:  "system",
+		Action:   "write",
+		Resource: "location:01ABC",
+	}
+
+	// Use plain context (no system marker) — should be rejected
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SYSTEM_SUBJECT_REJECTED", oopsErr.Code())
+	assert.Equal(t, types.EffectDeny, decision.Effect())
+	assert.False(t, decision.IsAllowed())
+	assert.Equal(t, "ingress_guard", decision.PolicyID())
 }
 
 func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {
@@ -112,7 +135,8 @@ func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {
 		Resource: "location:01ABC",
 	}
 
-	decision, err := engine.Evaluate(context.Background(), req)
+	ctx := access.WithSystemSubject(context.Background())
+	decision, err := engine.Evaluate(ctx, req)
 	require.NoError(t, err)
 
 	assert.NoError(t, decision.Validate())
@@ -127,7 +151,7 @@ func TestEngine_SystemBypass_Audited(t *testing.T) {
 		Resource: "location:01ABC",
 	}
 
-	_, err := engine.Evaluate(context.Background(), req)
+	_, err := engine.Evaluate(access.WithSystemSubject(context.Background()), req)
 	require.NoError(t, err)
 
 	entries := mockWriter.getEntries()
@@ -338,7 +362,11 @@ func TestEngine_AllDecisionsValidate(t *testing.T) {
 				Resource: "location:01XYZ",
 			}
 
-			decision, err := engine.Evaluate(context.Background(), req)
+			ctx := context.Background()
+			if tt.subject == "system" {
+				ctx = access.WithSystemSubject(ctx)
+			}
+			decision, err := engine.Evaluate(ctx, req)
 			require.NoError(t, err)
 
 			assert.NoError(t, decision.Validate(),
@@ -389,7 +417,7 @@ func TestEngine_AuditLoggerCleanup(t *testing.T) {
 	_ = NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
 	// Trigger a write to create the WAL file
-	ctx := context.Background()
+	ctx := access.WithSystemSubject(context.Background())
 	req := types.AccessRequest{
 		Subject:  "system",
 		Action:   "write",

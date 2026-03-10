@@ -83,6 +83,10 @@ func (pe PolicyEffect) ToEffect() Effect {
 }
 
 // AccessRequest represents a subject attempting an action on a resource.
+//
+// Fields are exported for test assertion readability (mock.MatchedBy comparisons
+// and struct literal matching). Production code MUST use NewAccessRequest() which
+// validates all fields are non-empty.
 type AccessRequest struct {
 	Subject  string // "character:01ABC", "plugin:echo-bot", "system"
 	Action   string // "read", "write", "delete", "enter", "execute", "emit"
@@ -162,7 +166,7 @@ func (d Decision) Policies() []PolicyMatch {
 }
 
 // Attributes returns the attribute bags used during evaluation.
-// The returned pointer is not modified after the decision is created.
+// The returned pointer may be set via SetAttributes during engine evaluation.
 func (d Decision) Attributes() *AttributeBags {
 	return d.attributes
 }

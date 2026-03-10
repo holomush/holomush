@@ -161,6 +161,11 @@ func TestPlayerMessage(t *testing.T) {
 			err:      oops.Code(CodeNoAliasCache).Errorf("alias operations require a configured alias cache"),
 			expected: "Alias system is not available. Contact the server administrator.",
 		},
+		{
+			name:     "access evaluation failed",
+			err:      oops.Code(CodeAccessEvaluationFailed).Errorf("engine error"),
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
 	}
 
 	for _, tt := range tests {

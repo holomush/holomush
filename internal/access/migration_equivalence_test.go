@@ -30,7 +30,7 @@ import (
 // existing authorization behavior. Any divergence must be explicitly documented
 // with a justification in the test case's comment field.
 //
-// Coverage: This test exercises representative samples from all 30 production call sites
+// Coverage: This test exercises representative samples from all 29 production call sites
 // identified in docs/plans/2026-02-06-full-abac-phase-7.6.md Task 28.5.
 //
 // LIMITATION: The static engine's player role uses location-based permissions ($here token)
