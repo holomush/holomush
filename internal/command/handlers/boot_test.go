@@ -1396,6 +1396,17 @@ func TestCheckCapability(t *testing.T) {
 			checkLogs:      true,
 			expectedLogMsg: "boot access request construction failed",
 		},
+		{
+			name:           "infrastructure failure decision",
+			engine:         policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver"),
+			subject:        subjectID,
+			capability:     "admin.boot",
+			cmdName:        "boot",
+			expectedError:  "capability check failed",
+			expectedCode:   command.CodeAccessEvaluationFailed,
+			checkLogs:      true,
+			expectedLogMsg: "boot access check infrastructure failure",
+		},
 	}
 
 	for _, tt := range tests {

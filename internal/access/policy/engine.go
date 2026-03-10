@@ -104,6 +104,10 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			if ok && oopsErr.Code() == "SESSION_INVALID" {
 				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
 			} else {
+				slog.ErrorContext(ctx, "session resolution failed",
+					"session_id", sessionID,
+					"error", err,
+				)
 				decision = types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error")
 			}
 

@@ -14,6 +14,11 @@ import (
 	"github.com/holomush/holomush/internal/observability"
 )
 
+// ErrCapabilityCheckFailed is a sentinel for infrastructure failures in capability checks.
+// Callers can use errors.Is(err, ErrCapabilityCheckFailed) to detect infra failures
+// as distinct from policy denials (CodePermissionDenied).
+var ErrCapabilityCheckFailed = errors.New("capability check failed")
+
 // CheckCapability evaluates whether a subject can execute a given capability
 // using the ABAC policy engine. It handles request construction errors, engine
 // evaluation errors, infrastructure failures, and permission denial with
@@ -70,7 +75,7 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 				With("capability", capability).
 				With("reason", decision.Reason()).
 				With("policy_id", decision.PolicyID()).
-				Wrap(errors.New(decision.Reason()))
+				Wrap(errors.Join(ErrCapabilityCheckFailed, errors.New(decision.Reason())))
 		}
 		return oops.Code(CodePermissionDenied).
 			With("command", cmdName).
