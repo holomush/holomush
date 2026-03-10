@@ -92,6 +92,23 @@ func TestLookHandler(t *testing.T) {
 					"handler should preserve world service's specific code, not wrap as WORLD_ERROR")
 			},
 		},
+		{
+			name: "returns LOCATION_ACCESS_EVALUATION_FAILED on infrastructure failure decision",
+			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
+				fixture.Mocks.Engine.EXPECT().
+					Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: "location:" + location.ID.String()}).
+					Return(types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid"), nil)
+			},
+			assertion: func(t *testing.T, _ string, err error) {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+					"infra failure decision should be treated as evaluation failure, not permission denial")
+				oopsErr, ok := oops.AsOops(err)
+				require.True(t, ok, "error should be an oops error")
+				assert.Equal(t, "LOCATION_ACCESS_EVALUATION_FAILED", oopsErr.Code(),
+					"handler should preserve world service's infra failure code")
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -3858,6 +3858,26 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockRepo,
+			Engine:        engine,
+		})
+
+		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
+		assert.Nil(t, chars)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		errutil.AssertErrorContext(t, err, "reason", "session invalid")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+	})
+
 	t.Run("returns error when repository not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 

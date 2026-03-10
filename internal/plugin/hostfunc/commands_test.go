@@ -558,6 +558,78 @@ func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
 	assert.Len(t, names, 1)
 }
 
+func TestListCommands_CircuitBreakerTripsAfterThreeErrors(t *testing.T) {
+	// Given: 6 commands each requiring a capability, and an engine that always errors.
+	// The circuit breaker should trip after exactly 3 errors, leaving remaining commands
+	// unqueried. This verifies the maxEngineErrors=3 threshold behavior.
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd1", Help: "Command 1", Capabilities: []string{"cap.one"}, Source: "test"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd2", Help: "Command 2", Capabilities: []string{"cap.two"}, Source: "test"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd3", Help: "Command 3", Capabilities: []string{"cap.three"}, Source: "test"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd4", Help: "Command 4", Capabilities: []string{"cap.four"}, Source: "test"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd5", Help: "Command 5", Capabilities: []string{"cap.five"}, Source: "test"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "cmd6", Help: "Command 6", Capabilities: []string{"cap.six"}, Source: "test"}),
+		},
+	}
+
+	enforcer := capability.NewEnforcer()
+	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
+
+	charID := ulid.Make()
+	errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+
+	// Capture log output to verify circuit breaker warning
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`
+		result, err = holomush.list_commands("` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// All 6 capability commands should be hidden (fail-closed)
+	result := L.GetGlobal("result")
+	require.NotEqual(t, lua.LNil, result)
+
+	resultTbl, ok := result.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", result)
+
+	commands := L.GetField(resultTbl, "commands")
+	tbl, ok := commands.(*lua.LTable)
+	require.True(t, ok, "expected table, got %T", commands)
+
+	var names []string
+	tbl.ForEach(func(_, v lua.LValue) {
+		if cmdTbl, ok := v.(*lua.LTable); ok {
+			names = append(names, L.GetField(cmdTbl, "name").String())
+		}
+	})
+	assert.Empty(t, names, "all capability commands should be hidden when engine errors")
+
+	// Verify the incomplete flag is set
+	incomplete := L.GetField(resultTbl, "incomplete")
+	assert.Equal(t, lua.LTrue, incomplete, "result should be marked incomplete when circuit breaker trips")
+
+	// Verify the circuit breaker warning was logged with correct threshold
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "circuit breaker tripped",
+		"circuit breaker warning should be logged")
+	assert.Contains(t, logOutput, "engine_failures=3",
+		"log should show exactly 3 engine failures before tripping")
+}
+
 func TestListCommands_InvalidCharacterID(t *testing.T) {
 	// Given: valid setup
 	registry := &mockCommandRegistry{

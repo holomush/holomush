@@ -736,6 +736,56 @@ func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 	assert.Contains(t, logOutput, "engine_failures=3")
 }
 
+func TestWhoHandler_CircuitBreakerTripsAtExactlyThreeErrors(t *testing.T) {
+	// Verify the circuit breaker trips after exactly maxEngineErrors (3) calls,
+	// not fewer or more. Uses Times(3) instead of Maybe() to assert precision.
+	executor := testutil.RegularPlayer()
+
+	charIDs := make([]ulid.ULID, 6)
+	sessionMgr := core.NewSessionManager()
+	for i := range charIDs {
+		charIDs[i] = ulid.Make()
+		sessionMgr.Connect(charIDs[i], ulid.Make())
+	}
+
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	// Use a single catch-all expectation with Times(3) to verify exactly 3 engine calls.
+	// The circuit breaker must stop after maxEngineErrors=3, not at 1 or 2.
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectDeny, "", ""), errors.New("policy store unavailable")).
+		Times(3)
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// All 6 sessions should be reported as failures (3 engine errors + 3 skipped by circuit breaker).
+	assert.Contains(t, output, "6 players could not be displayed due to system errors")
+
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "circuit breaker tripped")
+	assert.Contains(t, logOutput, "engine_failures=3")
+	// testify/mock will fail the test if Evaluate is called more than 3 times (Times(3) assertion).
+}
+
 func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
 	// 4 sessions all returning non-engine errors (database timeout).
 	// The circuit breaker should NOT trip because engineErrorCount

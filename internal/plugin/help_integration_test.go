@@ -546,6 +546,50 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 			Expect(combined).NotTo(ContainSubstring("incomplete"))
 			Expect(combined).NotTo(ContainSubstring("hidden"))
 		})
+
+		It("shows warning when search_commands returns incomplete results", func() {
+			errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+			fixture, err := setupHelpTestWithEngine(errorEngine)
+			Expect(err).NotTo(HaveOccurred())
+			defer fixture.Cleanup()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Use "help search <term>" to exercise the search_commands path
+			event := pluginsdk.Event{
+				ID:        "01HTEST",
+				Stream:    "character:01HTEST000000000000000CHAR",
+				Type:      pluginsdk.EventType("command"),
+				Timestamp: time.Now().UnixMilli(),
+				ActorKind: pluginsdk.ActorCharacter,
+				ActorID:   "01HTEST000000000000000CHAR",
+				Payload:   makeCommandPayload("help", "search look"),
+			}
+
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+
+			var combined string
+			for _, ev := range result {
+				p := parsePayload(ev.Payload)
+				if msg, ok := p["message"].(string); ok {
+					combined += msg + "\n"
+				}
+			}
+
+			// "look" has no capabilities, so it should match the search term
+			Expect(combined).To(ContainSubstring("look"),
+				"commands without capabilities should still appear in search results when engine errors")
+
+			// There should be some indication that search results may be incomplete
+			Expect(combined).To(SatisfyAny(
+				ContainSubstring("incomplete"),
+				ContainSubstring("hidden"),
+				ContainSubstring("some commands"),
+			), "should warn user that search results may be incomplete due to engine errors")
+		})
 	})
 })
 
