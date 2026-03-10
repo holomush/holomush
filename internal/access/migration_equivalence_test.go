@@ -1,5 +1,3 @@
-//go:build integration
-
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
@@ -220,24 +218,28 @@ func TestMigrationEquivalence(t *testing.T) {
 			subject:  "character:player-01DEF",
 			action:   "read",
 			resource: "character:admin-01ABC",
+			comment:  "EXPECTED DIVERGENCE: static engine uses $here token requiring LocationResolver; policy engine permits without location context",
 		},
 		{
 			name:     "player - read location (look)",
 			subject:  "character:player-01DEF",
 			action:   "read",
 			resource: "location:01JKL",
+			comment:  "EXPECTED DIVERGENCE: static engine uses $here token requiring LocationResolver; policy engine permits without location context",
 		},
 		{
 			name:     "player - read object (examine)",
 			subject:  "character:player-01DEF",
 			action:   "read",
 			resource: "object:01VWX",
+			comment:  "EXPECTED DIVERGENCE: static engine uses $here token requiring LocationResolver; policy engine permits without location context",
 		},
 		{
 			name:     "player - read scene",
 			subject:  "character:player-01DEF",
 			action:   "read",
 			resource: "scene:01MNO",
+			comment:  "EXPECTED DIVERGENCE: static engine uses $here token requiring LocationResolver; policy engine permits without location context",
 		},
 
 		// Command execution - basic commands allowed

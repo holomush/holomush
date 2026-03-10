@@ -6,7 +6,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -168,6 +167,14 @@ func SetHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Apply the property change
 	if err := applyProperty(ctx, exec, entityType, entityID, entry.Name, entry.Definition, value); err != nil {
+		// Preserve access evaluation failures with their specific codes
+		// instead of masking them as generic WORLD_ERROR
+		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err
+		}
+		if errors.Is(err, world.ErrPermissionDenied) {
+			return err
+		}
 		slog.ErrorContext(ctx, "set: apply property failed",
 			"character_id", exec.CharacterID(),
 			"entity_type", entityType,
@@ -257,7 +264,7 @@ func applyProperty(ctx context.Context, exec *command.CommandExecution, entityTy
 	}
 
 	if err := definition.Set(ctx, querier, mutator, subjectID, entityType, entityID, value); err != nil {
-		return fmt.Errorf("set property: %w", err)
+		return oops.Wrapf(err, "set property")
 	}
 	return nil
 }
@@ -274,6 +281,9 @@ func (q propertyQuerier) GetLocation(ctx context.Context, id ulid.ULID) (*world.
 		if errors.Is(err, world.ErrAccessEvaluationFailed) {
 			return nil, err //nolint:wrapcheck // preserve oops error code from world service
 		}
+		if errors.Is(err, world.ErrPermissionDenied) {
+			return nil, err //nolint:wrapcheck // preserve permission denied for command framework
+		}
 		return nil, oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
 			With("entity_id", id.String()).
@@ -289,6 +299,9 @@ func (q propertyQuerier) GetObject(ctx context.Context, id ulid.ULID) (*world.Ob
 		// Preserve access evaluation failures with their specific codes
 		if errors.Is(err, world.ErrAccessEvaluationFailed) {
 			return nil, err //nolint:wrapcheck // preserve oops error code from world service
+		}
+		if errors.Is(err, world.ErrPermissionDenied) {
+			return nil, err //nolint:wrapcheck // preserve permission denied for command framework
 		}
 		return nil, oops.Code(command.CodeWorldError).
 			With("entity_type", "object").
@@ -310,6 +323,9 @@ func (m propertyMutator) UpdateLocation(ctx context.Context, subjectID string, l
 		if errors.Is(err, world.ErrAccessEvaluationFailed) {
 			return err //nolint:wrapcheck // preserve oops error code from world service
 		}
+		if errors.Is(err, world.ErrPermissionDenied) {
+			return err //nolint:wrapcheck // preserve permission denied for command framework
+		}
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "location").
 			With("entity_id", loc.ID.String()).
@@ -325,6 +341,9 @@ func (m propertyMutator) UpdateObject(ctx context.Context, subjectID string, obj
 		// Preserve access evaluation failures with their specific codes
 		if errors.Is(err, world.ErrAccessEvaluationFailed) {
 			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
+		if errors.Is(err, world.ErrPermissionDenied) {
+			return err //nolint:wrapcheck // preserve permission denied for command framework
 		}
 		return oops.Code(command.CodeWorldError).
 			With("entity_type", "object").

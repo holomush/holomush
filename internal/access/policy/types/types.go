@@ -179,7 +179,8 @@ func (d Decision) Attributes() *AttributeBags {
 // (attributes first, then policies after evaluation). Consider consolidating
 // packages if this design becomes a maintenance burden.
 func (d *Decision) SetPolicies(p []PolicyMatch) {
-	d.policies = p
+	d.policies = make([]PolicyMatch, len(p))
+	copy(d.policies, p)
 }
 
 // SetAttributes sets the attribute bags for this decision.

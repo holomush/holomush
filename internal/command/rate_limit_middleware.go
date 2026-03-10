@@ -81,14 +81,14 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject string) (bool, error) {
 	req, err := types.NewAccessRequest(subject, "execute", CapabilityRateLimitBypass)
 	if err != nil {
-		//nolint:wrapcheck // Constructor error, will be wrapped by caller
+		//nolint:wrapcheck // Error is logged and dropped by caller (fail-closed to rate limiting)
 		return false, err
 	}
 
 	decision, err := r.engine.Evaluate(ctx, req)
 	// On engine error, return (false, err) so Enforce can log and apply fail-closed rate limiting.
 	if err != nil {
-		//nolint:wrapcheck // Engine error, will be wrapped by caller
+		//nolint:wrapcheck // Error is logged and dropped by caller (fail-closed to rate limiting)
 		return false, err
 	}
 
