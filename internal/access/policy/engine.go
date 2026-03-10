@@ -121,20 +121,19 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		req.Subject = access.CharacterSubject(characterID)
 	}
 
-	// Step 3: Eager attribute resolution — bags may be partial when providers fail.
-	// Design: evaluation proceeds with partial bags rather than failing hard.
-	// This means policies evaluate against incomplete data on provider errors,
-	// which may cause incorrect allow/deny decisions. The partial-bag approach
-	// was chosen to avoid total service outage when a single provider fails.
-	// resolveErr is logged but does not abort evaluation.
+	// Step 3: Eager attribute resolution — fail-closed on provider errors.
+	// If any attribute provider fails, the engine returns an error rather than
+	// evaluating policies against incomplete data. Callers treat non-nil error
+	// as denial, consistent with the AccessPolicyEngine interface contract.
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
-		slog.WarnContext(ctx, "attribute resolution partial failure",
+		slog.WarnContext(ctx, "attribute resolution failed — fail-closed",
 			"error", resolveErr,
 			"subject", req.Subject,
 			"action", req.Action,
 			"resource", req.Resource,
 		)
+		return types.Decision{}, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
