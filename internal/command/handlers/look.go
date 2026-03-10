@@ -21,9 +21,9 @@ func LookHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	loc, err := exec.Services().World().GetLocation(ctx, subjectID, exec.LocationID())
 	if err != nil {
-		// Preserve access evaluation failures with their specific codes (e.g., LOCATION_ACCESS_EVALUATION_FAILED)
+		// Preserve access errors with their specific codes (e.g., LOCATION_ACCESS_EVALUATION_FAILED, LOCATION_ACCESS_DENIED)
 		// instead of masking them as generic WORLD_ERROR
-		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+		if errors.Is(err, world.ErrAccessEvaluationFailed) || errors.Is(err, world.ErrPermissionDenied) {
 			return err //nolint:wrapcheck // preserve oops error code from world service
 		}
 		return oops.Code(command.CodeWorldError).

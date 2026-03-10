@@ -114,6 +114,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			if valErr := decision.Validate(); valErr != nil {
 				return decision, oops.Wrapf(valErr, "decision validation failed")
 			}
+			RecordEvaluationMetrics(time.Since(start), decision.Effect())
 			return decision, nil
 		}
 
@@ -127,7 +128,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// as denial, consistent with the AccessPolicyEngine interface contract.
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
-		slog.WarnContext(ctx, "attribute resolution failed — fail-closed",
+		slog.ErrorContext(ctx, "attribute resolution failed — fail-closed",
 			"error", resolveErr,
 			"subject", req.Subject,
 			"action", req.Action,

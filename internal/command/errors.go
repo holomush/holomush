@@ -161,6 +161,13 @@ func PlayerMessage(err error) string {
 		return "Permission check failed. Please try again or contact an administrator."
 	}
 
+	// Handle entity-scoped access denied errors from the world service.
+	// These codes (e.g., LOCATION_ACCESS_DENIED, CHARACTER_ACCESS_DENIED)
+	// share the same player-facing message as the command-layer PERMISSION_DENIED.
+	if strings.HasSuffix(code, "_ACCESS_DENIED") {
+		return "You don't have permission to do that."
+	}
+
 	switch code {
 	case CodeUnknownCommand:
 		return "Unknown command. Try 'help'."

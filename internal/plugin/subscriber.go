@@ -136,7 +136,7 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 		// Emit response events
 		for _, emit := range emits {
 			if err := s.emitter.EmitPluginEvent(tctx, pluginName, emit); err != nil {
-				slog.Error("failed to emit plugin event",
+				slog.ErrorContext(tctx, "failed to emit plugin event",
 					"plugin", pluginName,
 					"stream", emit.Stream,
 					"error", err)

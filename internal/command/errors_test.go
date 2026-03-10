@@ -175,3 +175,50 @@ func TestPlayerMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestPlayerMessage_SuffixMatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "LOCATION_ACCESS_EVALUATION_FAILED suffix",
+			code:     "LOCATION_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
+		{
+			name:     "CHARACTER_ACCESS_EVALUATION_FAILED suffix",
+			code:     "CHARACTER_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
+		{
+			name:     "LOCATION_ACCESS_DENIED suffix",
+			code:     "LOCATION_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "OBJECT_ACCESS_DENIED suffix",
+			code:     "OBJECT_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "CHARACTER_ACCESS_DENIED suffix",
+			code:     "CHARACTER_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "EXIT_ACCESS_DENIED suffix",
+			code:     "EXIT_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := oops.Code(tt.code).Errorf("test error")
+			msg := PlayerMessage(err)
+			assert.Equal(t, tt.expected, msg)
+		})
+	}
+}

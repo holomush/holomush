@@ -4573,7 +4573,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
 
-	t.Run("returns EXAMINE_ACCESS_DENIED when not authorized", func(t *testing.T) {
+	t.Run("returns LOCATION_ACCESS_DENIED when not authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -4600,10 +4600,10 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 	})
 
-	t.Run("returns EXAMINE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -4629,7 +4629,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_EVALUATION_FAILED")
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
@@ -4825,7 +4825,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "OBJECT_NOT_FOUND")
 	})
 
-	t.Run("returns EXAMINE_ACCESS_DENIED when not authorized", func(t *testing.T) {
+	t.Run("returns OBJECT_ACCESS_DENIED when not authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -4852,10 +4852,10 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_DENIED")
 	})
 
-	t.Run("returns EXAMINE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+	t.Run("returns OBJECT_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
@@ -4881,7 +4881,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_EVALUATION_FAILED")
+		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
@@ -5095,7 +5095,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		errutil.AssertErrorCode(t, err, "CHARACTER_NOT_FOUND")
 	})
 
-	t.Run("returns EXAMINE_ACCESS_DENIED when not authorized", func(t *testing.T) {
+	t.Run("returns CHARACTER_ACCESS_DENIED when not authorized", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
@@ -5120,10 +5120,10 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_DENIED")
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
 	})
 
-	t.Run("returns EXAMINE_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
@@ -5147,7 +5147,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "EXAMINE_ACCESS_EVALUATION_FAILED")
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 

@@ -468,3 +468,76 @@ func createCacheWithEquivalentPolicies(t *testing.T) *policy.Cache {
 	// Use the test helper to set snapshot
 	return policy.NewCacheWithPoliciesForTest(policies)
 }
+
+func TestPolicyEngine_PlayerLocationPermissions(t *testing.T) {
+	// Unit test verifying the policy engine correctly handles player location
+	// read/write operations. This covers the gap where the static engine uses
+	// $here tokens requiring a LocationResolver, but the policy engine evaluates
+	// based on role attributes alone.
+	ctx := context.Background()
+	policyEngine := bootstrapPolicyEngine(t)
+
+	tests := []struct {
+		name    string
+		subject string
+		action  string
+		resource string
+		allowed bool
+	}{
+		{
+			name:     "player can read own location",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "location:01JKL",
+			allowed:  true,
+		},
+		{
+			name:     "player can read any location",
+			subject:  "character:player-01DEF",
+			action:   "read",
+			resource: "location:other-room",
+			allowed:  true,
+		},
+		{
+			name:     "player cannot write location",
+			subject:  "character:player-01DEF",
+			action:   "write",
+			resource: "location:01JKL",
+			allowed:  false,
+		},
+		{
+			name:     "player cannot delete location",
+			subject:  "character:player-01DEF",
+			action:   "delete",
+			resource: "location:01JKL",
+			allowed:  false,
+		},
+		{
+			name:     "builder can read location",
+			subject:  "character:builder-01GHI",
+			action:   "read",
+			resource: "location:01JKL",
+			allowed:  true,
+		},
+		{
+			name:     "builder can write location",
+			subject:  "character:builder-01GHI",
+			action:   "write",
+			resource: "location:01JKL",
+			allowed:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := types.NewAccessRequest(tt.subject, tt.action, tt.resource)
+			require.NoError(t, err)
+
+			decision, err := policyEngine.Evaluate(ctx, req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.allowed, decision.IsAllowed(),
+				"subject=%s action=%s resource=%s: expected allowed=%v, got %v (reason: %s)",
+				tt.subject, tt.action, tt.resource, tt.allowed, decision.IsAllowed(), decision.Reason())
+		})
+	}
+}

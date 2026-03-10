@@ -1567,3 +1567,54 @@ func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "character:01ABC", entries[0].Subject) // Resolved subject
 }
+
+// failingProvider is a mock attribute provider that always returns an error.
+type failingProvider struct {
+	namespace string
+	err       error
+}
+
+func (f *failingProvider) Namespace() string { return f.namespace }
+func (f *failingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	return nil, f.err
+}
+func (f *failingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (f *failingProvider) Schema() *types.NamespaceSchema { return nil }
+
+func TestEngine_ResolverError_FailsClosed(t *testing.T) {
+	// When an attribute provider returns an error, the engine must fail closed:
+	// return a zero-value Decision (denied) and propagate the error.
+	providerErr := fmt.Errorf("database connection lost")
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterProvider(&failingProvider{
+		namespace: "character",
+		err:       providerErr,
+	})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "resolver error must propagate as engine error")
+	assert.ErrorContains(t, evalErr, "database connection lost")
+	assert.Equal(t, types.Decision{}, decision, "decision must be zero-value on resolver error")
+	assert.False(t, decision.IsAllowed(), "zero-value decision must deny access")
+}

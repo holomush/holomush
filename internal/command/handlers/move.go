@@ -32,7 +32,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 	exits, err := exec.Services().World().GetExitsByLocation(ctx, subjectID, exec.LocationID())
 	if err != nil {
 		// Preserve access evaluation failures with their specific codes
-		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+		if errors.Is(err, world.ErrAccessEvaluationFailed) || errors.Is(err, world.ErrPermissionDenied) {
 			return err //nolint:wrapcheck // preserve oops error code from world service
 		}
 		return oops.Code(command.CodeWorldError).
@@ -56,7 +56,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 		// Move the character
 		if err := exec.Services().World().MoveCharacter(ctx, subjectID, exec.CharacterID(), exit.ToLocationID); err != nil {
 			// Preserve access evaluation failures with their specific codes
-			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			if errors.Is(err, world.ErrAccessEvaluationFailed) || errors.Is(err, world.ErrPermissionDenied) {
 				return err //nolint:wrapcheck // preserve oops error code from world service
 			}
 			return oops.Code(command.CodeWorldError).
@@ -68,7 +68,7 @@ func MoveHandler(ctx context.Context, exec *command.CommandExecution) error {
 		loc, err := exec.Services().World().GetLocation(ctx, subjectID, exit.ToLocationID)
 		if err != nil {
 			// Preserve access evaluation failures with their specific codes
-			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			if errors.Is(err, world.ErrAccessEvaluationFailed) || errors.Is(err, world.ErrPermissionDenied) {
 				return err //nolint:wrapcheck // preserve oops error code from world service
 			}
 			return oops.Code(command.CodeWorldError).
