@@ -5,7 +5,7 @@ package command
 
 import (
 	"context"
-	"fmt"
+	"github.com/samber/oops"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -96,7 +96,7 @@ func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject string) (bo
 	// Infrastructure failures (session resolution errors, DB outages) return a deny
 	// decision without a Go error. Surface these to the caller so Enforce can log them.
 	if decision.IsInfraFailure() {
-		return false, fmt.Errorf("infrastructure failure during bypass check: %s", decision.Reason())
+		return false, oops.Errorf("infrastructure failure during bypass check: %s", decision.Reason())
 	}
 
 	return decision.IsAllowed(), nil
