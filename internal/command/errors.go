@@ -64,7 +64,6 @@ func ErrPermissionDenied(cmd, capability string) error {
 		Errorf("permission denied for command %s", cmd)
 }
 
-
 // ErrInvalidArgs creates an error for invalid arguments.
 func ErrInvalidArgs(cmd, usage string) error {
 	return oops.Code(CodeInvalidArgs).

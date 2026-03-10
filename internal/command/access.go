@@ -57,7 +57,7 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 		return oops.Code(CodeAccessEvaluationFailed).
 			With("command", cmdName).
 			With("capability", capability).
-			Wrap(evalErr)
+			Wrap(errors.Join(ErrCapabilityCheckFailed, evalErr))
 	}
 
 	if !decision.IsAllowed() {

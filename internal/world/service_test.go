@@ -1098,6 +1098,42 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
 	})
+
+	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
+		engineErr := errors.New("policy store unavailable")
+		engine := policytest.NewErrorEngine(engineErr)
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"engine error must not be reported as permission denied")
+		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		err := svc.AddSceneParticipant(ctx, subjectID, sceneID, charID, world.RoleMember)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		mockSceneRepo.AssertNotCalled(t, "AddParticipant")
+	})
 }
 
 func TestWorldService_RemoveSceneParticipant(t *testing.T) {
@@ -1152,6 +1188,42 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
+		engineErr := errors.New("policy store unavailable")
+		engine := policytest.NewErrorEngine(engineErr)
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"engine error must not be reported as permission denied")
+		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		err := svc.RemoveSceneParticipant(ctx, subjectID, sceneID, charID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		mockSceneRepo.AssertNotCalled(t, "RemoveParticipant")
 	})
 }
 
@@ -1214,6 +1286,44 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 		mockSceneRepo.AssertNotCalled(t, "ListParticipants")
 		assert.False(t, errors.Is(err, world.ErrAccessEvaluationFailed),
 			"explicit deny must not be reported as evaluation error")
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed when engine errors", func(t *testing.T) {
+		engineErr := errors.New("policy store unavailable")
+		engine := policytest.NewErrorEngine(engineErr)
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		assert.Nil(t, participants)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"engine error must not be reported as permission denied")
+		mockSceneRepo.AssertNotCalled(t, "ListParticipants")
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockSceneRepo := worldtest.NewMockSceneRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			SceneRepo: mockSceneRepo,
+			Engine:    engine,
+		})
+
+		participants, err := svc.ListSceneParticipants(ctx, subjectID, sceneID)
+		assert.Nil(t, participants)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		mockSceneRepo.AssertNotCalled(t, "ListParticipants")
 	})
 }
 

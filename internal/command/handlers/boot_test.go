@@ -1449,6 +1449,22 @@ func TestCheckCapability(t *testing.T) {
 	}
 }
 
+
+func TestCheckCapability_EvalErr_IncludesErrCapabilityCheckFailed(t *testing.T) {
+	ctx := context.Background()
+	subjectID := access.CharacterSubject(ulid.Make().String())
+
+	// Engine returns a Go error (evalErr != nil path)
+	engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
+
+	err := command.CheckCapability(ctx, engine, subjectID, "admin.boot", "boot")
+	require.Error(t, err)
+
+	// After the fix, errors.Is should match ErrCapabilityCheckFailed
+	assert.ErrorIs(t, err, command.ErrCapabilityCheckFailed,
+		"evalErr branch should include ErrCapabilityCheckFailed in the error chain")
+}
+
 func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	executorID := ulid.Make()
 	evalFail1ID := ulid.Make()

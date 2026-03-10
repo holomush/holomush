@@ -280,10 +280,11 @@ func TestMigrationEquivalence(t *testing.T) {
 					"Decision mismatch: static=%v, policy=%v (subject=%s, action=%s, resource=%s, reason=%s, effect=%s)",
 					staticResult, policyResult, tt.subject, tt.action, tt.resource, decision.Reason(), decision.Effect())
 			} else {
-				// Documented divergence - log and skip assertion
-				if staticResult != policyResult {
-					t.Logf("Expected divergence: %s (static=%v, policy=%v)", tt.comment, staticResult, policyResult)
-				}
+				// Documented divergence — assert the direction: new engine is MORE permissive
+				assert.False(t, staticResult,
+					"expected divergence: static engine should deny (got allow) for: %s", tt.name)
+				assert.True(t, policyResult,
+					"expected divergence: policy engine should allow (got deny) for: %s — %s", tt.name, tt.comment)
 			}
 		})
 	}
