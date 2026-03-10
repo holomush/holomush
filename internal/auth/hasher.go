@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,7 +37,7 @@ const (
 )
 
 // ErrEmptyPassword is returned when attempting to hash an empty password.
-var ErrEmptyPassword = oops.Code("AUTH_EMPTY_PASSWORD").Errorf("password cannot be empty")
+var ErrEmptyPassword = errors.New("password cannot be empty")
 
 // PasswordHasher provides password hashing and verification.
 type PasswordHasher interface {

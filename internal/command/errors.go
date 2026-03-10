@@ -4,6 +4,7 @@
 package command
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/samber/oops"
@@ -27,22 +28,26 @@ const (
 )
 
 // Sentinel errors for special conditions.
+// These use errors.New so they work reliably with errors.Is/errors.As.
+// When structured context is needed, wrap the sentinel with oops at the call site:
+//
+//	oops.Code(CodeShutdownRequested).Wrap(ErrShutdownRequested)
 var (
 	// ErrShutdownRequested signals that a graceful shutdown has been requested.
 	// Command dispatchers should check for this error and initiate shutdown.
-	ErrShutdownRequested = oops.Code(CodeShutdownRequested).Errorf("shutdown requested")
+	ErrShutdownRequested = errors.New("shutdown requested")
 
 	// ErrEmptyCommandName is returned when registering a command with an empty name.
-	ErrEmptyCommandName = oops.Errorf("command name cannot be empty")
+	ErrEmptyCommandName = errors.New("command name cannot be empty")
 
 	// ErrNilHandler is returned when registering a command with a nil handler.
-	ErrNilHandler = oops.Errorf("command handler cannot be nil")
+	ErrNilHandler = errors.New("command handler cannot be nil")
 
 	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
-	ErrNilRegistry = oops.Errorf("registry cannot be nil")
+	ErrNilRegistry = errors.New("registry cannot be nil")
 
 	// ErrNilAccessControl is returned when creating a dispatcher with nil access control.
-	ErrNilAccessControl = oops.Errorf("access control cannot be nil")
+	ErrNilAccessControl = errors.New("access control cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
