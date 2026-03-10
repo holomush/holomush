@@ -299,6 +299,178 @@ var _ = Describe("Location-based permission equivalence", func() {
 	})
 })
 
+	Describe("Player self-write equivalence", func() {
+		It("both engines allow writing own character", func() {
+			charIDStr := charID.String()
+			subject := access.CharacterSubject(charIDStr)
+
+			// --- Static engine: write:character:$self -> write:character:<charID> ---
+			staticEngine := access.NewStaticAccessControl(nil, nil)
+			err := staticEngine.AssignRole(subject, "player")
+			Expect(err).NotTo(HaveOccurred())
+
+			staticAllowed := staticEngine.Check(ctx, subject, "write", "character:"+charIDStr)
+
+			// --- ABAC engine: policy checks resource.character.id == principal.character.id ---
+			charProvider := &testLocationCharProvider{
+				roles:     map[string]string{charIDStr: "player"},
+				locations: map[string]string{},
+			}
+
+			resolver := buildTestResolver(charProvider)
+
+			selfWritePolicy := `permit(principal is character, action in ["write"], resource is character) when { resource.character.id == principal.character.id };`
+			schema := types.NewAttributeSchema()
+			compiler := policy.NewCompiler(schema)
+			compiled, _, compileErr := compiler.Compile(selfWritePolicy)
+			Expect(compileErr).NotTo(HaveOccurred())
+
+			cache := policy.NewCacheWithPoliciesForTest([]policy.CachedPolicy{
+				{ID: "self-write-1", Name: "seed:player-self-write", Compiled: compiled},
+			})
+
+			tmpDir := GinkgoT().TempDir()
+			auditLogger := audit.NewLogger(audit.ModeMinimal, &discardAuditWriter{}, tmpDir+"/wal.jsonl")
+			defer auditLogger.Close()
+
+			engine := policy.NewEngine(resolver, cache, nil, auditLogger)
+
+			req, reqErr := types.NewAccessRequest(subject, "write", "character:"+charIDStr)
+			Expect(reqErr).NotTo(HaveOccurred())
+
+			decision, evalErr := engine.Evaluate(ctx, req)
+			Expect(evalErr).NotTo(HaveOccurred())
+
+			abacAllowed := decision.IsAllowed()
+
+			// Both engines MUST agree: self-write is allowed
+			Expect(abacAllowed).To(Equal(staticAllowed),
+				"Static engine: %v, ABAC engine: %v (reason: %s)", staticAllowed, abacAllowed, decision.Reason())
+			Expect(staticAllowed).To(BeTrue(), "Player should be allowed to write own character")
+		})
+
+		It("both engines deny writing another character", func() {
+			charIDStr := charID.String()
+			otherCharID := ulid.Make().String()
+			subject := access.CharacterSubject(charIDStr)
+
+			// Static engine: write:character:$self only matches own character
+			staticEngine := access.NewStaticAccessControl(nil, nil)
+			err := staticEngine.AssignRole(subject, "player")
+			Expect(err).NotTo(HaveOccurred())
+
+			staticAllowed := staticEngine.Check(ctx, subject, "write", "character:"+otherCharID)
+
+			// ABAC engine: self-write policy won't match different character ID
+			charProvider := &testLocationCharProvider{
+				roles:     map[string]string{charIDStr: "player", otherCharID: "player"},
+				locations: map[string]string{},
+			}
+
+			resolver := buildTestResolver(charProvider)
+
+			selfWritePolicy := `permit(principal is character, action in ["write"], resource is character) when { resource.character.id == principal.character.id };`
+			schema := types.NewAttributeSchema()
+			compiler := policy.NewCompiler(schema)
+			compiled, _, compileErr := compiler.Compile(selfWritePolicy)
+			Expect(compileErr).NotTo(HaveOccurred())
+
+			cache := policy.NewCacheWithPoliciesForTest([]policy.CachedPolicy{
+				{ID: "self-write-1", Name: "seed:player-self-write", Compiled: compiled},
+			})
+
+			tmpDir := GinkgoT().TempDir()
+			auditLogger := audit.NewLogger(audit.ModeMinimal, &discardAuditWriter{}, tmpDir+"/wal.jsonl")
+			defer auditLogger.Close()
+
+			engine := policy.NewEngine(resolver, cache, nil, auditLogger)
+
+			req, reqErr := types.NewAccessRequest(subject, "write", "character:"+otherCharID)
+			Expect(reqErr).NotTo(HaveOccurred())
+
+			decision, evalErr := engine.Evaluate(ctx, req)
+			Expect(evalErr).NotTo(HaveOccurred())
+
+			abacAllowed := decision.IsAllowed()
+
+			// Both engines MUST agree: writing another character is denied
+			Expect(abacAllowed).To(Equal(staticAllowed),
+				"Static engine: %v, ABAC engine: %v (reason: %s)", staticAllowed, abacAllowed, decision.Reason())
+			Expect(staticAllowed).To(BeFalse(), "Player should NOT be allowed to write another character")
+		})
+	})
+
+	Describe("Co-location character read - known divergence", func() {
+		// The static engine's read:character:$here:* expands to read:character:<locationID>:*
+		// which does NOT match the resource format character:<charID> used by GetCharacter.
+		// The ABAC engine CAN support co-location reads via attribute comparison.
+		// This test documents the known divergence; both behaviors are independently correct
+		// for their respective resolution mechanisms.
+
+		It("static engine denies read:character:<otherCharID> (pattern mismatch)", func() {
+			charIDStr := charID.String()
+			locIDStr := locID.String()
+			otherCharID := ulid.Make().String()
+			subject := access.CharacterSubject(charIDStr)
+
+			locResolver := &testLocationResolver{
+				locations: map[string]string{
+					charIDStr:   locIDStr,
+					otherCharID: locIDStr, // co-located
+				},
+			}
+			staticEngine := access.NewStaticAccessControl(locResolver, nil)
+			err := staticEngine.AssignRole(subject, "player")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Static engine: read:character:$here:* -> read:character:<locID>:*
+			// Resource: character:<otherCharID> -- does NOT match character:<locID>:* pattern
+			staticAllowed := staticEngine.Check(ctx, subject, "read", "character:"+otherCharID)
+			Expect(staticAllowed).To(BeFalse(),
+				"Static engine denies co-located character read because $here:* pattern does not match character:<charID> format")
+		})
+
+		It("ABAC engine allows co-located character read via attribute comparison", func() {
+			charIDStr := charID.String()
+			locIDStr := locID.String()
+			otherCharID := ulid.Make().String()
+			subject := access.CharacterSubject(charIDStr)
+
+			charProvider := &testLocationCharProvider{
+				roles:     map[string]string{charIDStr: "player", otherCharID: "player"},
+				locations: map[string]string{charIDStr: locIDStr, otherCharID: locIDStr},
+			}
+
+			resolver := buildTestResolver(charProvider)
+
+			colocationPolicy := `permit(principal is character, action in ["read"], resource is character) when { resource.character.location == principal.character.location && resource.character.has_location == true };`
+			schema := types.NewAttributeSchema()
+			compiler := policy.NewCompiler(schema)
+			compiled, _, compileErr := compiler.Compile(colocationPolicy)
+			Expect(compileErr).NotTo(HaveOccurred())
+
+			cache := policy.NewCacheWithPoliciesForTest([]policy.CachedPolicy{
+				{ID: "coloc-read-1", Name: "seed:player-character-colocation", Compiled: compiled},
+			})
+
+			tmpDir := GinkgoT().TempDir()
+			auditLogger := audit.NewLogger(audit.ModeMinimal, &discardAuditWriter{}, tmpDir+"/wal.jsonl")
+			defer auditLogger.Close()
+
+			engine := policy.NewEngine(resolver, cache, nil, auditLogger)
+
+			req, reqErr := types.NewAccessRequest(subject, "read", "character:"+otherCharID)
+			Expect(reqErr).NotTo(HaveOccurred())
+
+			decision, evalErr := engine.Evaluate(ctx, req)
+			Expect(evalErr).NotTo(HaveOccurred())
+
+			Expect(decision.IsAllowed()).To(BeTrue(),
+				"ABAC engine should allow reading co-located character via attribute comparison (reason: %s)", decision.Reason())
+		})
+	})
+})
+
 // --- Helpers ---
 
 // buildTestResolver creates an attribute.Resolver with the given providers registered.

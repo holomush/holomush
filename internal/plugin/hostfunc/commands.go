@@ -89,13 +89,25 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 			ctx = context.Background()
 		}
 
-		// Filter commands by character capabilities
+		// Filter commands by character capabilities.
+		// Circuit breaker: stop after repeated engine failures to avoid
+		// O(n_commands * n_capabilities) calls against a degraded engine.
+		const maxEngineErrors = 3
 		var filtered []command.CommandEntry
 		var hadEngineError bool
+		var engineErrorCount int
 		for _, cmd := range commands {
 			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
 			if hadError {
 				hadEngineError = true
+				engineErrorCount++
+				if engineErrorCount >= maxEngineErrors {
+					slog.WarnContext(ctx, "command list circuit breaker tripped",
+						"engine_failures", engineErrorCount,
+						"threshold", maxEngineErrors,
+					)
+					break
+				}
 			}
 			if allowed {
 				filtered = append(filtered, cmd)
@@ -137,7 +149,7 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 // canExecuteCommand checks if subject has all required capabilities for a command.
 // Returns (allowed bool, hadError bool) where:
 //   - allowed is true if command has no capabilities or subject has ALL required capabilities
-//   - hadError is true if any engine.Evaluate call returned an error
+//   - hadError is true if any engine evaluation failed (returned error or indicated infrastructure failure)
 func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
 	caps := cmd.GetCapabilities()
 	// Commands with no capabilities are always available
