@@ -15,8 +15,8 @@ import (
 )
 
 // RoleResolver resolves roles for subjects.
-// This interface allows CharacterProvider to resolve actual roles
-// without taking a direct dependency on StaticAccessControl.
+// This interface allows CharacterProvider to resolve roles without
+// coupling to a specific access control implementation.
 //
 // When GetRole returns an empty string, CharacterProvider treats it the same
 // as a nil resolver: the character falls back to the default "player" role.

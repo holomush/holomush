@@ -5,11 +5,17 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -124,7 +130,7 @@ func TestAuditLogger_MinimalMode_Deny_LoggedSync(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_MinimalMode_SystemBypass_LoggedSync(t *testing.T) {
+func TestAuditLogger_MinimalMode_SystemBypass_NotLogged(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
@@ -144,9 +150,8 @@ func TestAuditLogger_MinimalMode_SystemBypass_LoggedSync(t *testing.T) {
 	err := logger.Log(context.Background(), entry)
 	require.NoError(t, err)
 
-	syncWrites := writer.getSyncWrites()
-	require.Len(t, syncWrites, 1)
-	assert.Equal(t, entry.Effect, syncWrites[0].Effect)
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
 }
 
 func TestAuditLogger_DenialsOnlyMode_Allow_NotLogged(t *testing.T) {
@@ -434,4 +439,125 @@ func TestAuditLogger_EntryContainsAllFields(t *testing.T) {
 	assert.Equal(t, now, logged.Timestamp)
 	assert.NotNil(t, logged.Attributes)
 	assert.Equal(t, "builder", logged.Attributes["role"])
+}
+
+// selectiveFailWriter fails WriteSync for specific PolicyIDs.
+type selectiveFailWriter struct {
+	mu            sync.Mutex
+	syncWrites    []Entry
+	failPolicyIDs map[string]bool
+}
+
+func (s *selectiveFailWriter) WriteSync(_ context.Context, entry Entry) error {
+	if s.failPolicyIDs[entry.PolicyID] {
+		return fmt.Errorf("write failed for policy %s", entry.PolicyID)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.syncWrites = append(s.syncWrites, entry)
+	return nil
+}
+
+func (s *selectiveFailWriter) WriteAsync(_ Entry) error { return nil }
+func (s *selectiveFailWriter) Close() error             { return nil }
+
+func (s *selectiveFailWriter) getSyncWrites() []Entry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Entry{}, s.syncWrites...)
+}
+
+func TestAuditLogger_ReplayWAL_PartialFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	walPath := filepath.Join(tmpDir, "audit-wal.jsonl")
+
+	// Write 3 entries to WAL (using a writer that always fails sync)
+	writer1 := &mockWriter{failSync: true}
+	logger1 := NewLogger(ModeMinimal, writer1, walPath)
+
+	entries := []Entry{
+		{Subject: "character:1", Action: "read", Resource: "loc:1", Effect: types.EffectDeny, PolicyID: "policy-ok-1", PolicyName: "p1", Attributes: map[string]any{}, DurationUS: 100, Timestamp: time.Now()},
+		{Subject: "character:2", Action: "write", Resource: "loc:2", Effect: types.EffectDeny, PolicyID: "policy-fail", PolicyName: "p2", Attributes: map[string]any{}, DurationUS: 200, Timestamp: time.Now()},
+		{Subject: "character:3", Action: "delete", Resource: "loc:3", Effect: types.EffectDeny, PolicyID: "policy-ok-2", PolicyName: "p3", Attributes: map[string]any{}, DurationUS: 300, Timestamp: time.Now()},
+	}
+	for _, e := range entries {
+		logger1.Log(context.Background(), e)
+	}
+	logger1.Close()
+
+	// Replay with a writer that fails only for "policy-fail"
+	writer2 := &selectiveFailWriter{failPolicyIDs: map[string]bool{"policy-fail": true}}
+	logger2 := NewLogger(ModeMinimal, writer2, walPath)
+	defer logger2.Close()
+
+	err := logger2.ReplayWAL(context.Background())
+	require.Error(t, err)
+
+	var partialErr *PartialReplayError
+	require.True(t, errors.As(err, &partialErr), "error must be *PartialReplayError")
+	assert.Equal(t, 1, partialErr.FailedCount)
+	assert.Equal(t, 2, partialErr.ReplayedCount)
+	assert.Equal(t, 3, partialErr.TotalCount)
+
+	// WAL should contain exactly 1 line (the failed entry)
+	data, err := os.ReadFile(walPath)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 1, "WAL should contain only the failed entry")
+
+	// Verify the failed entry's PolicyID
+	var walEntry Entry
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &walEntry))
+	assert.Equal(t, "policy-fail", walEntry.PolicyID)
+
+	// Verify the 2 successful entries were written
+	syncWrites := writer2.getSyncWrites()
+	assert.Len(t, syncWrites, 2)
+}
+
+func TestAuditLogger_ReplayWAL_AllFail(t *testing.T) {
+	tmpDir := t.TempDir()
+	walPath := filepath.Join(tmpDir, "audit-wal.jsonl")
+
+	// Write 2 entries to WAL
+	writer1 := &mockWriter{failSync: true}
+	logger1 := NewLogger(ModeMinimal, writer1, walPath)
+
+	for i := range 2 {
+		logger1.Log(context.Background(), Entry{
+			Subject: fmt.Sprintf("character:%d", i), Action: "read", Resource: "loc:1",
+			Effect: types.EffectDeny, PolicyID: fmt.Sprintf("policy-%d", i),
+			PolicyName: "p", Attributes: map[string]any{}, DurationUS: 100, Timestamp: time.Now(),
+		})
+	}
+	logger1.Close()
+
+	// Replay with a writer that fails everything
+	writer2 := &mockWriter{failSync: true}
+	logger2 := NewLogger(ModeMinimal, writer2, walPath)
+	defer logger2.Close()
+
+	err := logger2.ReplayWAL(context.Background())
+	require.Error(t, err)
+
+	var partialErr *PartialReplayError
+	require.True(t, errors.As(err, &partialErr), "error must be *PartialReplayError")
+	assert.Equal(t, 2, partialErr.FailedCount)
+	assert.Equal(t, 0, partialErr.ReplayedCount)
+
+	// WAL should still contain both entries
+	data, err := os.ReadFile(walPath)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	assert.Len(t, lines, 2, "WAL should contain all failed entries")
+}
+
+func TestRecordEngineAuditFailure_IncrementsCounter(t *testing.T) {
+	before := promtestutil.ToFloat64(engineAuditFailuresCounter)
+
+	RecordEngineAuditFailure()
+	RecordEngineAuditFailure()
+
+	after := promtestutil.ToFloat64(engineAuditFailuresCounter)
+	assert.Equal(t, before+2, after, "counter should increment by 2")
 }

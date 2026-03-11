@@ -4,23 +4,11 @@
 package access_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/stretchr/testify/assert"
 )
-
-func TestAccessControl_Interface(_ *testing.T) {
-	// Verify interface can be implemented
-	var _ access.AccessControl = (*mockAccessControl)(nil)
-}
-
-type mockAccessControl struct{}
-
-func (m *mockAccessControl) Check(_ context.Context, _, _, _ string) bool {
-	return true
-}
 
 func TestParseSubject(t *testing.T) {
 	tests := []struct {
@@ -29,7 +17,7 @@ func TestParseSubject(t *testing.T) {
 		expectedPrefix string
 		expectedID     string
 	}{
-		{"character", "char:01ABC", "char", "01ABC"},
+		{"character", "character:01ABC", "character", "01ABC"},
 		{"session", "session:01XYZ", "session", "01XYZ"},
 		{"plugin", "plugin:echo-bot", "plugin", "echo-bot"},
 		{"system", "system", "system", ""},

@@ -26,8 +26,8 @@ type Mode string
 
 // Audit logging modes.
 const (
-	ModeMinimal     Mode = "minimal"      // system bypasses + denials
-	ModeDenialsOnly Mode = "denials_only" // denials + default_deny + system_bypass
+	ModeMinimal     Mode = "minimal"      // Logs denials and default denials only (sync)
+	ModeDenialsOnly Mode = "denials_only" // Logs all denials, default denials, and system bypasses (sync)
 	ModeAll         Mode = "all"          // everything
 )
 
@@ -177,9 +177,9 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 func (l *Logger) shouldLog(effect types.Effect) (shouldLog, useSync bool) {
 	switch l.mode {
 	case ModeMinimal:
-		// Log: deny, default_deny, system_bypass (all sync)
+		// Log: deny, default_deny only (no system_bypass — minimal mode)
 		switch effect {
-		case types.EffectDeny, types.EffectDefaultDeny, types.EffectSystemBypass:
+		case types.EffectDeny, types.EffectDefaultDeny:
 			shouldLog, useSync = true, true
 		default:
 			shouldLog, useSync = false, false

@@ -10,22 +10,8 @@
 package access
 
 import (
-	"context"
 	"strings"
 )
-
-// AccessControl checks permissions for all subjects in HoloMUSH.
-// This is the legacy interface retained for backward compatibility during the Phase 7.6 migration
-// to AccessPolicyEngine. Scheduled for removal in Phase 7.7 (tracked by holomush-c6qch).
-// New code should use types.AccessPolicyEngine.Evaluate() directly.
-// See StaticAccessControl for dual-prefix migration details during Phase 7.6.
-//
-//nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
-type AccessControl interface {
-	// Check returns true if subject is allowed to perform action on resource.
-	// Returns false for unknown subjects or denied permissions (deny by default).
-	Check(ctx context.Context, subject, action, resource string) bool
-}
 
 // ParseSubject splits a subject string into prefix and ID.
 // Returns ("system", "") for "system".

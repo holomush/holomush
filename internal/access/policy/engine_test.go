@@ -1644,3 +1644,94 @@ func TestEngine_ResolverError_FailsClosed(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "resolver error decision must deny access")
 	assert.Equal(t, types.Decision{}, decision, "resolver error must return zero Decision")
 }
+
+// failingEnvProvider is an EnvironmentProvider whose Resolve returns an error.
+type failingEnvProvider struct {
+	namespace string
+	err       error
+}
+
+func (f *failingEnvProvider) Namespace() string                            { return f.namespace }
+func (f *failingEnvProvider) Resolve(_ context.Context) (map[string]any, error) { return nil, f.err }
+func (f *failingEnvProvider) Schema() *types.NamespaceSchema               { return nil }
+
+func TestEngine_EnvironmentResolverError_FailsClosed(t *testing.T) {
+	// When an environment provider returns an error, the engine must fail closed:
+	// return a zero-value Decision and propagate the error.
+	envErr := fmt.Errorf("environment provider unavailable")
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterEnvironmentProvider(&failingEnvProvider{
+		namespace: "env",
+		err:       envErr,
+	})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "environment resolver error must propagate")
+	assert.ErrorContains(t, evalErr, "environment provider unavailable")
+	assert.False(t, decision.IsAllowed(), "must deny on environment resolver error")
+	assert.Equal(t, types.Decision{}, decision, "must return zero Decision")
+}
+
+// panickingProvider is an AttributeProvider whose ResolveSubject panics.
+type panickingProvider struct {
+	namespace string
+}
+
+func (p *panickingProvider) Namespace() string { return p.namespace }
+func (p *panickingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	panic("intentional test panic")
+}
+func (p *panickingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (p *panickingProvider) Schema() *types.NamespaceSchema { return nil }
+
+func TestEngine_ResolverPanic_FailsClosed(t *testing.T) {
+	// When a provider panics, safeResolve recovers the panic and returns an error.
+	// The engine must fail closed: zero Decision + propagated error.
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterProvider(&panickingProvider{namespace: "character"})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "panic-recovered error must propagate")
+	assert.ErrorContains(t, evalErr, "panicked")
+	assert.False(t, decision.IsAllowed(), "must deny on provider panic")
+	assert.Equal(t, types.Decision{}, decision, "must return zero Decision")
+}

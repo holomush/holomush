@@ -216,12 +216,8 @@ func (pc *Cache) IsStale() bool {
 //
 // The connStr should be a PostgreSQL connection string for a dedicated (non-pooled)
 // connection. The goroutine exits when the context is cancelled.
-func (pc *Cache) Start(_ context.Context, connStr string) error {
-	// This method would create a real PgListener. For now, it's a placeholder
-	// that production code will wire up. Tests use StartWithListener instead.
-	_ = connStr
-	slog.Warn("Cache.Start called without real PG listener implementation")
-	return nil
+func (pc *Cache) Start(_ context.Context, _ string) error {
+	return fmt.Errorf("Cache.Start is not implemented — use StartWithListener with a concrete Listener")
 }
 
 // StartWithListener spawns the background LISTEN/NOTIFY goroutine using the
