@@ -257,7 +257,7 @@ func TestEngine_SessionInvalid(t *testing.T) {
 	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
 	assert.Equal(t, "session invalid", decision.Reason())
-	assert.Equal(t, "infra:session-invalid", decision.PolicyID())
+	assert.Equal(t, "deny:session-invalid", decision.PolicyID())
 }
 
 func TestEngine_SessionStoreError(t *testing.T) {

@@ -54,7 +54,8 @@ linters:
           - wrapcheck
           - errcheck
 
-      # Test password hashes are not real credentials
+      # Test password hashes (argon2id fixtures) are not real credentials.
+      # G101 fires on struct literals containing PasswordHash fields.
       - path: '_test\.go'
         linters:
           - gosec

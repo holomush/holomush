@@ -158,7 +158,7 @@ func TestResourcePrefixConstants(t *testing.T) {
 }
 
 func TestSessionErrorCodeConstants(t *testing.T) {
-	assert.Equal(t, "infra:session-invalid", access.ErrCodeSessionInvalid)
+	assert.Equal(t, "deny:session-invalid", access.ErrCodeSessionInvalid)
 	assert.Equal(t, "infra:session-store-error", access.ErrCodeSessionStoreError)
 }
 

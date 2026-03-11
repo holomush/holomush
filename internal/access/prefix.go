@@ -29,9 +29,11 @@ const (
 	ResourceScene     = "scene:"
 )
 
-// Session error code constants for infrastructure-level session errors.
+// Session error code constants.
+// ErrCodeSessionInvalid uses "deny:" (not "infra:") because session expiry is
+// expected behavior, not an infrastructure failure.
 const (
-	ErrCodeSessionInvalid    = "infra:session-invalid"
+	ErrCodeSessionInvalid    = "deny:session-invalid"
 	ErrCodeSessionStoreError = "infra:session-store-error"
 )
 

@@ -139,10 +139,10 @@ func TestWorldService_GetLocation(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		// Infrastructure failures (session invalid, DB errors, etc.) return deny decisions
+		// Infrastructure failures (DB errors, session store errors, etc.) return deny decisions
 		// with PolicyID starting with "infra:" and should be treated as evaluation failures,
 		// not permission denials.
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -160,8 +160,8 @@ func TestWorldService_GetLocation(t *testing.T) {
 		mockRepo.AssertNotCalled(t, "Get")
 
 		// Verify oops context contains decision details
-		errutil.AssertErrorContext(t, err, "reason", "session invalid")
-		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+		errutil.AssertErrorContext(t, err, "reason", "session store error")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-store-error")
 	})
 
 	t.Run("logs error when Evaluate fails", func(t *testing.T) {
@@ -1118,7 +1118,7 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -1209,7 +1209,7 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -1308,7 +1308,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -3969,7 +3969,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -3984,8 +3984,8 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 			"infrastructure failure should return ErrAccessEvaluationFailed")
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"infrastructure failure must not be reported as permission denied")
-		errutil.AssertErrorContext(t, err, "reason", "session invalid")
-		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+		errutil.AssertErrorContext(t, err, "reason", "session store error")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-store-error")
 	})
 
 	t.Run("returns error when repository not configured", func(t *testing.T) {
@@ -4634,7 +4634,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
@@ -4663,8 +4663,8 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			"infrastructure failure should return ErrAccessEvaluationFailed")
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"infrastructure failure must not be reported as permission denied")
-		errutil.AssertErrorContext(t, err, "reason", "session invalid")
-		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+		errutil.AssertErrorContext(t, err, "reason", "session store error")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-store-error")
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
@@ -4950,7 +4950,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
@@ -4979,8 +4979,8 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			"infrastructure failure should return ErrAccessEvaluationFailed")
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"infrastructure failure must not be reported as permission denied")
-		errutil.AssertErrorContext(t, err, "reason", "session invalid")
-		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+		errutil.AssertErrorContext(t, err, "reason", "session store error")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-store-error")
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
@@ -5250,7 +5250,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -5277,8 +5277,8 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			"infrastructure failure should return ErrAccessEvaluationFailed")
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"infrastructure failure must not be reported as permission denied")
-		errutil.AssertErrorContext(t, err, "reason", "session invalid")
-		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+		errutil.AssertErrorContext(t, err, "reason", "session store error")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-store-error")
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
@@ -5518,7 +5518,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}
@@ -5536,8 +5536,8 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 			"infrastructure failure should return ErrAccessEvaluationFailed")
 		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
 			"infrastructure failure must not be reported as permission denied")
-		errutil.AssertErrorContext(t, err, "reason", "session invalid")
-		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+		errutil.AssertErrorContext(t, err, "reason", "session store error")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-store-error")
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND for ErrNotFound", func(t *testing.T) {

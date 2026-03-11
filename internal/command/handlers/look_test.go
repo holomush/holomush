@@ -97,7 +97,7 @@ func TestLookHandler(t *testing.T) {
 			setup: func(_ *testing.T, fixture *testutil.WorldServiceFixture) {
 				fixture.Mocks.Engine.EXPECT().
 					Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(player.CharacterID.String()), Action: "read", Resource: "location:" + location.ID.String()}).
-					Return(types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid"), nil)
+					Return(types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error"), nil)
 			},
 			assertion: func(t *testing.T, _ string, err error) {
 				require.Error(t, err)

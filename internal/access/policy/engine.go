@@ -108,7 +108,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 					"session_id", sessionID,
 					"error", err,
 				)
-				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
+				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "deny:session-invalid")
 			} else {
 				errutil.LogErrorContext(ctx, "session resolution failed",
 					err, "session_id", sessionID,
