@@ -97,17 +97,33 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		}
 
 		// Filter commands by character capabilities.
-		// Circuit breaker: stop after repeated engine failures to avoid
+		// Circuit breaker: stop querying the engine after repeated failures to avoid
 		// O(n_commands * n_capabilities) calls against a degraded engine.
-		// After this many per-command engine errors, stop querying.
 		// Each command contributes at most 1 to the count regardless of how many capabilities it has.
 		// Note: intentionally independent from the identical constant in handlers/who.go —
 		// the two circuit breakers protect different code paths and may diverge.
+		//
+		// Invariant: commands with no capabilities are ALWAYS included, even when the
+		// circuit breaker has tripped. The circuit breaker only suppresses engine calls;
+		// no-capability commands do not require an engine call, so they are unaffected.
 		const maxEngineErrors = 3
 		var filtered []command.CommandEntry
 		var hadEngineError bool
 		var engineErrorCount int
+		circuitTripped := false
 		for _, cmd := range commands {
+			// No-capability commands are always visible — skip engine entirely.
+			if len(cmd.GetCapabilities()) == 0 {
+				filtered = append(filtered, cmd)
+				continue
+			}
+
+			// Circuit breaker has tripped: skip capability-gated commands rather than
+			// querying a degraded engine. The list will be marked incomplete.
+			if circuitTripped {
+				continue
+			}
+
 			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
 			if hadError {
 				hadEngineError = true
@@ -117,7 +133,7 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 						"engine_failures", engineErrorCount,
 						"threshold", maxEngineErrors,
 					)
-					break
+					circuitTripped = true
 				}
 			}
 			if allowed {
