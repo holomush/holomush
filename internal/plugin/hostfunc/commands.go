@@ -31,6 +31,9 @@ func WithCommandRegistry(reg CommandRegistry) Option {
 	}
 }
 
+// AccessPolicyEngine is a type alias re-exported for integration test convenience.
+type AccessPolicyEngine = types.AccessPolicyEngine
+
 // WithEngine sets the access policy engine for capability filtering.
 func WithEngine(engine types.AccessPolicyEngine) Option {
 	return func(f *Functions) {

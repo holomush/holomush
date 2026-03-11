@@ -297,7 +297,6 @@ var _ = Describe("Location-based permission equivalence", func() {
 			Expect(staticAllowed).To(BeTrue(), "Player should be allowed to emit to current location stream")
 		})
 	})
-})
 
 	Describe("Player self-write equivalence", func() {
 		It("both engines allow writing own character", func() {
