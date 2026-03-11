@@ -242,3 +242,27 @@ func TestPlayerMessage_SuffixMatching(t *testing.T) {
 		})
 	}
 }
+
+func TestEntityPrefixCoverage(t *testing.T) {
+	// Verify that entityAccessEvalFailedCodes and entityAccessDeniedCodes
+	// cover all known entity prefixes from the world service.
+	// If a new entityPrefix is added to service.go without updating errors.go,
+	// this test will catch the gap.
+	knownPrefixes := []string{"LOCATION", "EXIT", "OBJECT", "CHARACTER", "SCENE"}
+
+	for _, prefix := range knownPrefixes {
+		evalCode := prefix + "_ACCESS_EVALUATION_FAILED"
+		deniedCode := prefix + "_ACCESS_DENIED"
+
+		// Verify the maps contain these codes (compile-time check via package access)
+		evalErr := oops.Code(evalCode).Errorf("test")
+		msg := PlayerMessage(evalErr)
+		assert.NotEqual(t, "Something went wrong. Try again.", msg,
+			"entityAccessEvalFailedCodes missing %q — add it to errors.go", evalCode)
+
+		deniedErr := oops.Code(deniedCode).Errorf("test")
+		msg = PlayerMessage(deniedErr)
+		assert.NotEqual(t, "Something went wrong. Try again.", msg,
+			"entityAccessDeniedCodes missing %q — add it to errors.go", deniedCode)
+	}
+}

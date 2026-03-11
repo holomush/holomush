@@ -153,9 +153,11 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 	// If unexpected errors occurred and no match was found, report system error
 	// rather than "not found" to avoid misleading the user.
 	if errorCount > 0 {
-		// When all errors were engine failures, propagate ACCESS_EVALUATION_FAILED
+		// When any errors were engine failures, propagate ACCESS_EVALUATION_FAILED
 		// so callers and PlayerMessage can distinguish engine outages from world errors.
-		if accessEvalFailedCount > 0 && accessEvalFailedCount == errorCount {
+		// This applies to mixed failures too — the engine outage signal takes priority
+		// for monitoring/alerting purposes.
+		if accessEvalFailedCount > 0 {
 			return ulid.ULID{}, "", oops.Code(command.CodeAccessEvaluationFailed).
 				Errorf("Unable to search for player due to a temporary system error. Please try again shortly.")
 		}
