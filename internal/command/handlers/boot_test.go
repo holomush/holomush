@@ -1548,13 +1548,12 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 
-	// Should return system error, not "target not found"
-	assert.Equal(t, command.CodeWorldError, oopsErr.Code())
+	// Should return ACCESS_EVALUATION_FAILED when all errors are engine failures
+	assert.Equal(t, command.CodeAccessEvaluationFailed, oopsErr.Code())
 
-	// Verify user-facing message
+	// Verify user-facing message maps to the access evaluation failure message
 	playerMsg := command.PlayerMessage(err)
-	assert.Contains(t, playerMsg, "system error")
-	assert.Contains(t, playerMsg, "Please try again shortly")
+	assert.Contains(t, playerMsg, "Permission check failed")
 
 	// Verify log output contains errors and context (logged by world.Service.checkAccess)
 	logOutput := logBuf.String()

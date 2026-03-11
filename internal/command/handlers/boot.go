@@ -114,6 +114,7 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 	sessions := exec.Services().Session().ListActiveSessions()
 
 	var errorCount int
+	var accessEvalFailedCount int
 
 	for _, session := range sessions {
 		// Get character info for this session
@@ -125,8 +126,9 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 				continue
 			}
 			// Access evaluation failures are already logged by checkAccess helper.
-			// Count them (but don't re-log) so system errors are surfaced.
+			// Count them separately so callers can distinguish engine outages.
 			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				accessEvalFailedCount++
 				errorCount++
 				continue
 			}
@@ -150,9 +152,13 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 
 	// If unexpected errors occurred and no match was found, report system error
 	// rather than "not found" to avoid misleading the user.
-	// Note: We don't wrap lastErr because oops preserves the inner error's code,
-	// and we need WORLD_ERROR code for PlayerMessage to return our custom message.
 	if errorCount > 0 {
+		// When all errors were engine failures, propagate ACCESS_EVALUATION_FAILED
+		// so callers and PlayerMessage can distinguish engine outages from world errors.
+		if accessEvalFailedCount > 0 && accessEvalFailedCount == errorCount {
+			return ulid.ULID{}, "", oops.Code(command.CodeAccessEvaluationFailed).
+				Errorf("Unable to search for player due to a temporary system error. Please try again shortly.")
+		}
 		//nolint:wrapcheck // WorldError creates a structured oops error
 		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a temporary system error. Please try again shortly.", nil)
 	}
