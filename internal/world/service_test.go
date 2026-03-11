@@ -7639,3 +7639,33 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 		})
 	}
 }
+
+// TestWorldService_GetLocation_AllowWithInfraPrefix verifies that checkAccess
+// honors allow decisions even if the policyID has an "infra:" prefix. Since
+// IsInfraFailure() is only checked inside the !IsAllowed() branch, an allow
+// decision with infra: prefix must succeed. This test documents that invariant.
+func TestWorldService_GetLocation_AllowWithInfraPrefix(t *testing.T) {
+	ctx := context.Background()
+	locID := ulid.Make()
+	subjectID := access.CharacterSubject(ulid.Make().String())
+
+	// Engine returns EffectAllow with an infra: prefix policyID.
+	// In production this shouldn't happen, but we verify the code
+	// handles it safely (allow takes precedence).
+	mockEngine := &policytest.MockAccessPolicyEngine{}
+	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectAllow, "allowed", "infra:should-not-happen"), nil)
+
+	mockRepo := worldtest.NewMockLocationRepository(t)
+	expectedLoc := &world.Location{ID: locID, Name: "Test Room"}
+	mockRepo.EXPECT().Get(ctx, locID).Return(expectedLoc, nil)
+
+	svc := world.NewService(world.ServiceConfig{
+		LocationRepo: mockRepo,
+		Engine:       mockEngine,
+	})
+
+	loc, err := svc.GetLocation(ctx, subjectID, locID)
+	require.NoError(t, err, "allow decision must succeed even with infra: prefix policyID")
+	assert.Equal(t, expectedLoc, loc)
+}

@@ -990,6 +990,8 @@ func TestWhoHandler_AllDenied_LogsMisconfigurationWarning(t *testing.T) {
 	// Anomaly detection must log the misconfiguration warning.
 	logOutput := logBuf.String()
 	assert.Contains(t, logOutput, "all sessions denied by policy engine")
+	assert.Contains(t, logOutput, "total_sessions=2")
+	assert.Contains(t, logOutput, "permission_denied_count=2")
 }
 
 func TestWhoHandler_AllEngineFailures_LogsOutageWarning(t *testing.T) {

@@ -578,6 +578,46 @@ func TestSeedSmoke_PlayerLocationListCharacters(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should list characters at current location (G3); got: %s — %s", decision.Effect(), decision.Reason())
 }
 
+func TestSeedSmoke_AdminLocationListCharacters(t *testing.T) {
+	locID := "01LOC000FFFFFFFFFFFFFFFF"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01ADMIN1", "role": "admin", "location": locID},
+			nil,
+		),
+		locationProvider(map[string]any{"id": locID, "name": "Plaza"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01ADMIN1",
+		Action:   "list_characters",
+		Resource: "location:" + locID,
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "admin should list characters at location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmoke_BuilderLocationListCharacters(t *testing.T) {
+	locID := "01LOC000FFFFFFFFFFFFFFFF"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01BUILD1", "role": "builder", "location": locID},
+			nil,
+		),
+		locationProvider(map[string]any{"id": locID, "name": "Plaza"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01BUILD1",
+		Action:   "list_characters",
+		Resource: "location:" + locID,
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "builder should list characters at location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
 func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
