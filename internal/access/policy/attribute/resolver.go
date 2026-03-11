@@ -251,12 +251,6 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 	}
 
 	if err != nil {
-		r.logger.Error("provider error during resolution",
-			"namespace", provider.Namespace(),
-			"resolve_type", resolveType,
-			"entity_id", entityID,
-			"error", err,
-		)
 		return nil, oops.With("namespace", provider.Namespace()).With("resolve_type", resolveType).With("entity_id", entityID).Wrap(err)
 	}
 
@@ -282,10 +276,6 @@ func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider Environm
 	var err error
 	attrs, err = provider.Resolve(ctx)
 	if err != nil {
-		r.logger.Error("environment provider error during resolution",
-			"namespace", provider.Namespace(),
-			"error", err,
-		)
 		return nil, oops.With("namespace", provider.Namespace()).Wrap(err)
 	}
 
