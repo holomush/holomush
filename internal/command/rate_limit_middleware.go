@@ -30,7 +30,7 @@ func NewRateLimitMiddleware(limiter *RateLimiter, engine types.AccessPolicyEngin
 		return nil, ErrNilRateLimiter
 	}
 	if engine == nil {
-		return nil, ErrNilEngine
+		return nil, ErrNilRateLimiterEngine
 	}
 	return &RateLimitMiddleware{
 		limiter: limiter,
@@ -47,8 +47,14 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 	subject := access.CharacterSubject(exec.CharacterID().String())
 	bypass, err := r.hasBypass(ctx, subject)
 	if err != nil {
-		// Fail-closed on evaluation error: apply rate limiting rather than bypassing
-		slog.WarnContext(ctx, "rate limit bypass check failed",
+		// Fail-closed on evaluation error: apply rate limiting rather than bypassing.
+		// The error is intentionally not returned to the caller because:
+		// 1. The primary purpose of Enforce is rate limiting, not bypass evaluation.
+		// 2. Returning an error here would prevent the command from executing entirely,
+		//    which is worse than applying rate limits to a potentially exempt user.
+		// 3. The error is logged at Warn level and recorded as a metric so operators
+		//    can detect persistent engine failures via monitoring.
+		slog.WarnContext(ctx, "rate limit bypass check failed, applying rate limiting (fail-closed)",
 			"subject", subject,
 			"action", "execute",
 			"resource", CapabilityRateLimitBypass,
@@ -56,7 +62,6 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 			"error", err,
 		)
 		observability.RecordEngineFailure("rate_limit_bypass")
-		// Continue to rate limiting check below (fail-closed)
 	} else if bypass {
 		return nil
 	}

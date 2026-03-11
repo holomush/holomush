@@ -43,10 +43,11 @@ var (
 	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
 	ErrNilRegistry = oops.Errorf("registry cannot be nil")
 
-	// ErrNilEngine is returned when creating a dispatcher or rate limit middleware
-	// with a nil policy engine. Shared sentinel — callers should not distinguish
-	// which constructor failed based on this error alone.
-	ErrNilEngine = oops.Errorf("policy engine cannot be nil")
+	// ErrNilDispatcherEngine is returned when creating a dispatcher with a nil policy engine.
+	ErrNilDispatcherEngine = oops.Errorf("dispatcher: policy engine cannot be nil")
+
+	// ErrNilRateLimiterEngine is returned when creating rate limit middleware with a nil policy engine.
+	ErrNilRateLimiterEngine = oops.Errorf("rate limit middleware: policy engine cannot be nil")
 
 	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
 	ErrNilRateLimiter = oops.Errorf("rate limiter cannot be nil")

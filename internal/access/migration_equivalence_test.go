@@ -300,10 +300,14 @@ func TestMigrationEquivalence(t *testing.T) {
 					"Decision mismatch: static=%v, policy=%v (subject=%s, action=%s, resource=%s, reason=%s, effect=%s)",
 					staticResult, policyResult, tt.subject, tt.action, tt.resource, decision.Reason(), decision.Effect())
 			} else {
-				// Documented divergence — assert the direction: new engine is MORE permissive
-				assert.False(t, staticResult,
+				// Documented divergence — assert the direction: new engine is MORE permissive.
+				// All known divergences are new-engine-more-permissive because they involve
+				// decomposed actions (e.g., list_characters) or simplified location handling
+				// that the static engine doesn't support. If a future divergence is
+				// new-engine-more-restrictive, add a separate divergence category here.
+				require.False(t, staticResult,
 					"expected divergence: static engine should deny (got allow) for: %s", tt.name)
-				assert.True(t, policyResult,
+				require.True(t, policyResult,
 					"expected divergence: policy engine should allow (got deny) for: %s — %s", tt.name, tt.comment)
 			}
 		})

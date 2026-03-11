@@ -607,7 +607,7 @@ func TestNewDispatcher_NilEngine(t *testing.T) {
 	dispatcher, err := NewDispatcher(reg, nil)
 	require.Error(t, err)
 	assert.Nil(t, dispatcher)
-	assert.Equal(t, ErrNilEngine, err)
+	assert.Equal(t, ErrNilDispatcherEngine, err)
 }
 
 func TestNewDispatcher_WithAliasCache(t *testing.T) {
@@ -1520,7 +1520,7 @@ func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
 	dispatcher, err := NewDispatcher(reg, nil, WithRateLimiter(rl))
 	assert.Error(t, err)
 	assert.Nil(t, dispatcher)
-	assert.Equal(t, ErrNilEngine, err, "should fail on nil engine validation before applying options")
+	assert.Equal(t, ErrNilDispatcherEngine, err, "should fail on nil engine validation before applying options")
 
 	// Now test the case where engine is set but the rate limiter middleware creation fails
 	// We can't easily test this without a mock, but the error path is covered by the optErr field

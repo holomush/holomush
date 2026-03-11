@@ -27,6 +27,7 @@ func TestCheckCapability(t *testing.T) {
 		cmdName      string
 		setupEngine  func() *policytest.GrantEngine
 		useErrEngine bool
+		infraEngine  bool
 		expectedCode string
 		expectNil    bool
 	}{
@@ -63,6 +64,7 @@ func TestCheckCapability(t *testing.T) {
 			subject:      "character:01ABC",
 			capability:   "cmd:say",
 			cmdName:      "say",
+			infraEngine:  true,
 			expectedCode: command.CodeAccessEvaluationFailed,
 		},
 	}
@@ -75,7 +77,7 @@ func TestCheckCapability(t *testing.T) {
 			case tt.useErrEngine:
 				engine := policytest.NewErrorEngine(errors.New("db unavailable"))
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
-			case tt.name == "infra failure — returns ACCESS_EVALUATION_FAILED":
+			case tt.infraEngine:
 				engine := policytest.NewInfraFailureEngine("cache stale", "infra:cache-stale")
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
 			default:
@@ -90,6 +92,11 @@ func TestCheckCapability(t *testing.T) {
 
 			require.Error(t, err)
 			errutil.AssertErrorCode(t, err, tt.expectedCode)
+
+			if tt.expectedCode == command.CodeAccessEvaluationFailed {
+				assert.ErrorIs(t, err, command.ErrCapabilityCheckFailed,
+					"error and infra-failure paths should include ErrCapabilityCheckFailed in error chain")
+			}
 
 			oopsErr, ok := oops.AsOops(err)
 			require.True(t, ok, "error should be an oops error")

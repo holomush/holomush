@@ -57,7 +57,7 @@ func TestNewRateLimitMiddleware_NilEngine(t *testing.T) {
 	middleware, err := NewRateLimitMiddleware(ratelimiter, nil)
 	require.Error(t, err)
 	assert.Nil(t, middleware)
-	assert.Equal(t, ErrNilEngine, err)
+	assert.Equal(t, ErrNilRateLimiterEngine, err)
 }
 
 func TestRateLimitMiddleware_Enforce(t *testing.T) {

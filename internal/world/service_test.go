@@ -4633,6 +4633,40 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			Engine:        engine,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetLoc := &world.Location{
+			ID:   targetLocID,
+			Name: "Grand Hall",
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+
+		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		errutil.AssertErrorContext(t, err, "reason", "session invalid")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+	})
+
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -4883,6 +4917,40 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "OBJECT_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockObjRepo := worldtest.NewMockObjectRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			ObjectRepo:    mockObjRepo,
+			Engine:        engine,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetObj := &world.Object{
+			ID:   targetObjID,
+			Name: "Ancient Chest",
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+
+		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		errutil.AssertErrorContext(t, err, "reason", "session invalid")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
 	})
 
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
@@ -5151,6 +5219,38 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			Engine:        engine,
+		})
+
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+		targetChar := &world.Character{
+			ID:   targetCharID,
+			Name: "Mysterious Stranger",
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+
+		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		errutil.AssertErrorContext(t, err, "reason", "session invalid")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
+	})
+
 	t.Run("returns ErrNoEventEmitter when emitter not configured", func(t *testing.T) {
 		engine := policytest.NewGrantEngine()
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
@@ -5385,6 +5485,29 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
+	})
+
+	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
+		engine := policytest.NewInfraFailureEngine("session invalid", "infra:session-invalid")
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockPropRepo := worldtest.NewMockPropertyRepository(t)
+		tx := &mockTransactor{}
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			PropertyRepo:  mockPropRepo,
+			Engine:        engine,
+			Transactor:    tx,
+		})
+
+		err := svc.DeleteCharacter(ctx, subjectID, charID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed,
+			"infrastructure failure should return ErrAccessEvaluationFailed")
+		assert.False(t, errors.Is(err, world.ErrPermissionDenied),
+			"infrastructure failure must not be reported as permission denied")
+		errutil.AssertErrorContext(t, err, "reason", "session invalid")
+		errutil.AssertErrorContext(t, err, "policy_id", "infra:session-invalid")
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND for ErrNotFound", func(t *testing.T) {

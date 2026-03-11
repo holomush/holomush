@@ -83,7 +83,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.NewDecision(types.EffectAllow, "policy matched", "policy-1"), nil)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		assert.NoError(t, err)
 		engine.AssertExpectations(t)
@@ -96,7 +96,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.NewDecision(types.EffectDefaultDeny, "no policy match", ""), nil)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
@@ -112,7 +112,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.Decision{}, engineErr)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -127,7 +127,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.NewDecision(types.EffectDeny, "denied", "policy-2"), nil)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "EXIT")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixExit)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
@@ -142,7 +142,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.Decision{}, context.Canceled)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -157,7 +157,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.Decision{}, context.DeadlineExceeded)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -173,7 +173,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(types.Decision{}, inner)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "EXIT")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixExit)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_EVALUATION_FAILED")
@@ -184,7 +184,7 @@ func TestCheckAccess(t *testing.T) {
 	t.Run("returns evaluation failure for empty subject", func(t *testing.T) {
 		engine := new(MockAccessPolicyEngine)
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, "", action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, "", action, resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -195,7 +195,7 @@ func TestCheckAccess(t *testing.T) {
 	t.Run("returns evaluation failure for empty action", func(t *testing.T) {
 		engine := new(MockAccessPolicyEngine)
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, "", resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, "", resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -206,7 +206,7 @@ func TestCheckAccess(t *testing.T) {
 	t.Run("returns evaluation failure for empty resource", func(t *testing.T) {
 		engine := new(MockAccessPolicyEngine)
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, "", "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, "", prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -225,7 +225,7 @@ func TestCheckAccess(t *testing.T) {
 		}).Return(infraDecision, nil)
 
 		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		assert.Error(t, err)
 		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
@@ -251,7 +251,7 @@ func TestCheckAccess(t *testing.T) {
 		engine.On("Evaluate", ctx, expectedReq).Return(types.Decision{}, engineErr)
 
 		svc := &Service{engine: engine}
-		_ = svc.checkAccess(ctx, subject, action, resource, "LOCATION")
+		_ = svc.checkAccess(ctx, subject, action, resource, prefixLocation)
 
 		// Verify log record exists with correct message
 		record := capture.findRecord("access evaluation failed")

@@ -48,13 +48,20 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	players := make([]playerInfo, 0, len(sessions))
 	var errorCount int
 	var engineErrorCount int
+	var permDeniedCount int
 	for i, session := range sessions {
 		// Circuit breaker: stop querying if the engine is consistently failing.
 		// Include skipped sessions in errorCount so the user-visible message
 		// reflects ALL players that couldn't be displayed, not just those
 		// where errors were actually observed.
 		if engineErrorCount >= maxEngineErrors {
-			errorCount += len(sessions) - i
+			skipped := len(sessions) - i
+			errorCount += skipped
+			slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after engine failures",
+				"engine_failures", engineErrorCount,
+				"threshold", maxEngineErrors,
+				"skipped_sessions", skipped,
+			)
 			break
 		}
 
@@ -63,7 +70,11 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
 			// - permission denied and not found are expected, don't log or count
-			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
+			if errors.Is(err, world.ErrPermissionDenied) {
+				permDeniedCount++
+				continue
+			}
+			if errors.Is(err, world.ErrNotFound) {
 				continue
 			}
 			// Access evaluation failures are already logged by the WorldService.checkAccess method.
@@ -71,13 +82,6 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			if errors.Is(err, world.ErrAccessEvaluationFailed) {
 				errorCount++
 				engineErrorCount++
-				if engineErrorCount >= maxEngineErrors {
-					slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after engine failures",
-						"engine_failures", engineErrorCount,
-						"threshold", maxEngineErrors,
-						"skipped_sessions", len(sessions)-i-1,
-					)
-				}
 				continue
 			}
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
@@ -93,6 +97,16 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			Name:     char.Name,
 			IdleTime: idleTime,
 		})
+	}
+
+	// Anomaly detection: if ALL sessions were denied by the policy engine,
+	// this likely indicates a broken policy seed rather than expected behavior.
+	if permDeniedCount > 0 && permDeniedCount == len(sessions) {
+		slog.WarnContext(ctx, "who handler: all sessions denied by policy engine — possible policy misconfiguration",
+			"total_sessions", len(sessions),
+			"permission_denied_count", permDeniedCount,
+			"subject", subjectID,
+		)
 	}
 
 	if n, err := writeWhoOutput(exec.Output(), players); err != nil {

@@ -42,7 +42,7 @@ func TestNewRateLimitMiddleware(t *testing.T) {
 				SustainedRate: 0.1,
 			}),
 			engine:      nil,
-			wantErr:     ErrNilEngine,
+			wantErr:     ErrNilRateLimiterEngine,
 			description: "should return error with nil engine",
 		},
 		{
@@ -316,7 +316,7 @@ func TestDispatcher_WithRateLimiter_ConstructorError(t *testing.T) {
 				SustainedRate: 0.1,
 			}),
 			engine:      nil,
-			expectedErr: ErrNilEngine,
+			expectedErr: ErrNilRateLimiterEngine,
 			description: "should reject nil engine",
 		},
 	}
