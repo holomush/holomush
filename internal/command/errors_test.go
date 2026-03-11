@@ -223,14 +223,14 @@ func TestPlayerMessage_SuffixMatching(t *testing.T) {
 			expected: "Permission check failed. Please try again or contact an administrator.",
 		},
 		{
-			name:     "arbitrary suffix match ACCESS_DENIED",
+			name:     "unknown code with ACCESS_DENIED suffix falls through to default",
 			code:     "CUSTOM_ACCESS_DENIED",
-			expected: "You don't have permission to do that.",
+			expected: "Something went wrong. Try again.",
 		},
 		{
-			name:     "arbitrary suffix match ACCESS_EVALUATION_FAILED",
+			name:     "unknown code with ACCESS_EVALUATION_FAILED suffix falls through to default",
 			code:     "CUSTOM_ACCESS_EVALUATION_FAILED",
-			expected: "Permission check failed. Please try again or contact an administrator.",
+			expected: "Something went wrong. Try again.",
 		},
 	}
 

@@ -5,7 +5,6 @@ package command
 
 import (
 	"log/slog"
-	"strings"
 
 	"github.com/samber/oops"
 )
@@ -140,6 +139,26 @@ func ErrNilServices() error {
 		Errorf("command execution context missing services")
 }
 
+// entityAccessEvalFailedCodes is the explicit set of entity-scoped access
+// evaluation failure codes. Using an allowlist instead of suffix matching
+// ensures unknown codes fall through to the default warning log.
+var entityAccessEvalFailedCodes = map[string]struct{}{
+	"LOCATION_ACCESS_EVALUATION_FAILED":  {},
+	"EXIT_ACCESS_EVALUATION_FAILED":      {},
+	"OBJECT_ACCESS_EVALUATION_FAILED":    {},
+	"CHARACTER_ACCESS_EVALUATION_FAILED": {},
+	"SCENE_ACCESS_EVALUATION_FAILED":     {},
+}
+
+// entityAccessDeniedCodes is the explicit set of entity-scoped access denied codes.
+var entityAccessDeniedCodes = map[string]struct{}{
+	"LOCATION_ACCESS_DENIED":  {},
+	"EXIT_ACCESS_DENIED":      {},
+	"OBJECT_ACCESS_DENIED":    {},
+	"CHARACTER_ACCESS_DENIED": {},
+	"SCENE_ACCESS_DENIED":     {},
+}
+
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
 	if err == nil {
@@ -158,14 +177,14 @@ func PlayerMessage(err error) string {
 	// Handle entity-scoped access evaluation failures from the world service.
 	// These codes (e.g., LOCATION_ACCESS_EVALUATION_FAILED, CHARACTER_ACCESS_EVALUATION_FAILED)
 	// share the same player-facing message as the command-layer ACCESS_EVALUATION_FAILED.
-	if strings.HasSuffix(code, "_ACCESS_EVALUATION_FAILED") {
+	if _, ok := entityAccessEvalFailedCodes[code]; ok {
 		return "Permission check failed. Please try again or contact an administrator."
 	}
 
 	// Handle entity-scoped access denied errors from the world service.
 	// These codes (e.g., LOCATION_ACCESS_DENIED, CHARACTER_ACCESS_DENIED)
 	// share the same player-facing message as the command-layer PERMISSION_DENIED.
-	if strings.HasSuffix(code, "_ACCESS_DENIED") {
+	if _, ok := entityAccessDeniedCodes[code]; ok {
 		return "You don't have permission to do that."
 	}
 
