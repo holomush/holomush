@@ -845,9 +845,9 @@ func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
 	assert.NotContains(t, logOutput, "circuit breaker tripped")
 }
 
-func TestWhoHandler_SuccessResetsConsecutiveEngineErrorCounter(t *testing.T) {
+func TestWhoHandler_TwoCumulativeEngineErrorsBelowThreshold(t *testing.T) {
 	// With 2 engine-error sessions and 3 successful sessions, the circuit breaker
-	// should never trip (only 2 total engine errors, below the threshold of 3).
+	// should never trip: only 2 cumulative engine errors, below the threshold of 3.
 	executor := testutil.RegularPlayer()
 	playerID := ulid.Make()
 
