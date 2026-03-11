@@ -109,6 +109,15 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		)
 	}
 
+	// Symmetric anomaly detection for engine errors: if ALL sessions failed
+	// with engine errors, this indicates a possible engine outage.
+	if engineErrorCount > 0 && engineErrorCount == len(sessions) {
+		slog.WarnContext(ctx, "who handler: all sessions failed with engine errors — possible engine outage",
+			"total_sessions", len(sessions),
+			"engine_error_count", engineErrorCount,
+		)
+	}
+
 	if n, err := writeWhoOutput(exec.Output(), players); err != nil {
 		logOutputError(ctx, "who", exec.CharacterID().String(), n, err)
 	}

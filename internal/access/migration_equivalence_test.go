@@ -277,6 +277,26 @@ func TestMigrationEquivalence(t *testing.T) {
 			action:   "execute",
 			resource: "capability:rate_limit_bypass",
 		},
+
+		// === Guest role tests (uses player role, verify equivalence) ===
+		{
+			name:    "guest - cannot write locations",
+			subject: "character:guest-01GHI",
+			action:  "write",
+			resource: "location:*",
+		},
+		{
+			name:    "guest - can execute basic commands",
+			subject: "character:guest-01GHI",
+			action:  "execute",
+			resource: "capability:comms.say",
+		},
+		{
+			name:    "guest - cannot delete locations (denied)",
+			subject: "character:guest-01GHI",
+			action:  "delete",
+			resource: "location:01JKL",
+		},
 	}
 
 	for _, tt := range tests {

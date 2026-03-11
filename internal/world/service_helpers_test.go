@@ -12,22 +12,12 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/pkg/errutil"
 )
-
-// MockAccessPolicyEngine is a mock for testing checkAccess.
-type MockAccessPolicyEngine struct {
-	mock.Mock
-}
-
-func (m *MockAccessPolicyEngine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
-	args := m.Called(ctx, req)
-	return args.Get(0).(types.Decision), args.Error(1)
-}
 
 // logCapture is a test slog handler that captures log records.
 type logCapture struct {
@@ -77,7 +67,7 @@ func TestCheckAccess(t *testing.T) {
 	resource := "location:456"
 
 	t.Run("returns nil when access is allowed", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(types.NewDecision(types.EffectAllow, "policy matched", "policy-1"), nil)
@@ -90,7 +80,7 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("returns LOCATION_ACCESS_DENIED when permission denied", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(types.NewDecision(types.EffectDefaultDeny, "no policy match", ""), nil)
@@ -106,7 +96,7 @@ func TestCheckAccess(t *testing.T) {
 
 	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED on engine error", func(t *testing.T) {
 		engineErr := errors.New("policy engine down")
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(types.Decision{}, engineErr)
@@ -134,7 +124,7 @@ func TestCheckAccess(t *testing.T) {
 
 		for _, tt := range prefixes {
 			t.Run(string(tt.prefix), func(t *testing.T) {
-				engine := new(MockAccessPolicyEngine)
+				engine := policytest.NewMockAccessPolicyEngine(t)
 				engine.On("Evaluate", ctx, types.AccessRequest{
 					Subject: subject, Action: action, Resource: resource,
 				}).Return(types.NewDecision(types.EffectDeny, "denied", "policy-2"), nil)
@@ -151,7 +141,7 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("wraps context.Canceled as evaluation failure", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(types.Decision{}, context.Canceled)
@@ -166,7 +156,7 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("wraps context.DeadlineExceeded as evaluation failure", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(types.Decision{}, context.DeadlineExceeded)
@@ -182,7 +172,7 @@ func TestCheckAccess(t *testing.T) {
 
 	t.Run("preserves oops error chain on engine error", func(t *testing.T) {
 		inner := oops.Errorf("inner problem")
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(types.Decision{}, inner)
@@ -197,7 +187,7 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("returns evaluation failure for empty subject", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		svc := &Service{engine: engine}
 		err := svc.checkAccess(ctx, "", action, resource, prefixLocation)
 
@@ -208,7 +198,7 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("returns evaluation failure for empty action", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		svc := &Service{engine: engine}
 		err := svc.checkAccess(ctx, subject, "", resource, prefixLocation)
 
@@ -219,7 +209,7 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("returns evaluation failure for empty resource", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		svc := &Service{engine: engine}
 		err := svc.checkAccess(ctx, subject, action, "", prefixLocation)
 
@@ -234,7 +224,7 @@ func TestCheckAccess(t *testing.T) {
 		// checkAccess must detect IsInfraFailure() and return ErrAccessEvaluationFailed
 		// (not ErrPermissionDenied) so callers can distinguish transient failures from policy denials.
 		infraDecision := types.NewDecision(types.EffectDefaultDeny, "session store unavailable", "infra:session-store-error")
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 		engine.On("Evaluate", ctx, types.AccessRequest{
 			Subject: subject, Action: action, Resource: resource,
 		}).Return(infraDecision, nil)
@@ -259,7 +249,7 @@ func TestCheckAccess(t *testing.T) {
 		defer slog.SetDefault(oldLogger)
 
 		engineErr := errors.New("policy engine timeout")
-		engine := new(MockAccessPolicyEngine)
+		engine := policytest.NewMockAccessPolicyEngine(t)
 
 		// Create the expected request using the constructor
 		expectedReq, _ := types.NewAccessRequest(subject, action, resource)
