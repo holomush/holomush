@@ -14,6 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // ErrPermissionDenied is returned when an operation is not authorized.
@@ -88,6 +89,7 @@ const (
 	prefixCharacter entityPrefix = "CHARACTER"
 	prefixScene     entityPrefix = "SCENE"
 )
+
 // checkAccess evaluates an access request using the ABAC policy engine.
 // Returns nil if allowed, or an error with appropriate oops error codes:
 //
@@ -105,16 +107,16 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 
 	req, reqErr := types.NewAccessRequest(subject, action, resource)
 	if reqErr != nil {
-		slog.ErrorContext(ctx, "invalid access request",
-			"error", reqErr, "subject", subject, "action", action, "resource", resource)
+		errutil.LogErrorContext(ctx, "invalid access request",
+			reqErr, "subject", subject, "action", action, "resource", resource)
 		observability.RecordEngineFailure(metricKey)
 		return oops.Code(failCode).
 			Wrap(errors.Join(ErrAccessEvaluationFailed, reqErr))
 	}
 	decision, err := s.engine.Evaluate(ctx, req)
 	if err != nil {
-		slog.ErrorContext(ctx, "access evaluation failed",
-			"error", err, "subject", subject, "action", action, "resource", resource)
+		errutil.LogErrorContext(ctx, "access evaluation failed",
+			err, "subject", subject, "action", action, "resource", resource)
 		observability.RecordEngineFailure(metricKey)
 		return oops.Code(failCode).
 			Wrap(errors.Join(ErrAccessEvaluationFailed, err))

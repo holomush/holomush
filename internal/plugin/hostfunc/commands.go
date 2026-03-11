@@ -92,6 +92,8 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		// Filter commands by character capabilities.
 		// Circuit breaker: stop after repeated engine failures to avoid
 		// O(n_commands * n_capabilities) calls against a degraded engine.
+		// Note: intentionally independent from the identical constant in handlers/who.go —
+		// the two circuit breakers protect different code paths and may diverge.
 		const maxEngineErrors = 3
 		var filtered []command.CommandEntry
 		var hadEngineError bool

@@ -12,6 +12,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // ErrCapabilityCheckFailed is a sentinel for infrastructure failures in capability checks.
@@ -32,11 +33,11 @@ var ErrCapabilityCheckFailed = errors.New("capability check failed")
 func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subject, capability, cmdName string) error {
 	req, reqErr := types.NewAccessRequest(subject, "execute", capability)
 	if reqErr != nil {
-		slog.ErrorContext(ctx, cmdName+" access request construction failed",
+		errutil.LogErrorContext(ctx, cmdName+" access request construction failed",
+			reqErr,
 			"subject", subject,
 			"action", "execute",
 			"resource", capability,
-			"error", reqErr,
 		)
 		observability.RecordEngineFailure(cmdName + "_access_check")
 		return oops.Code(CodeAccessEvaluationFailed).
@@ -47,11 +48,11 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 
 	decision, evalErr := engine.Evaluate(ctx, req)
 	if evalErr != nil {
-		slog.ErrorContext(ctx, cmdName+" access evaluation failed",
+		errutil.LogErrorContext(ctx, cmdName+" access evaluation failed",
+			evalErr,
 			"subject", subject,
 			"action", "execute",
 			"resource", capability,
-			"error", evalErr,
 		)
 		observability.RecordEngineFailure(cmdName + "_access_check")
 		return oops.Code(CodeAccessEvaluationFailed).
@@ -77,6 +78,12 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 				With("policy_id", decision.PolicyID()).
 				Wrap(errors.Join(ErrCapabilityCheckFailed, errors.New(decision.Reason())))
 		}
+		slog.DebugContext(ctx, cmdName+" permission denied",
+			"subject", subject,
+			"capability", capability,
+			"reason", decision.Reason(),
+			"policy_id", decision.PolicyID(),
+		)
 		return oops.Code(CodePermissionDenied).
 			With("command", cmdName).
 			With("capability", capability).

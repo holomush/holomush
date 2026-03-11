@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // Engine implements types.AccessPolicyEngine.
@@ -102,11 +103,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			oopsErr, ok := oops.AsOops(err)
 			var decision types.Decision
 			if ok && oopsErr.Code() == "SESSION_INVALID" {
-				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
-			} else {
-				slog.ErrorContext(ctx, "session resolution failed",
+				slog.DebugContext(ctx, "session invalid during resolution",
 					"session_id", sessionID,
 					"error", err,
+				)
+				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
+			} else {
+				errutil.LogErrorContext(ctx, "session resolution failed",
+					err, "session_id", sessionID,
 				)
 				decision = types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error")
 			}
@@ -128,8 +132,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// as denial, consistent with the AccessPolicyEngine interface contract.
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
-		slog.ErrorContext(ctx, "attribute resolution failed — fail-closed",
-			"error", resolveErr,
+		errutil.LogErrorContext(ctx, "attribute resolution failed — fail-closed",
+			resolveErr,
 			"subject", req.Subject,
 			"action", req.Action,
 			"resource", req.Resource,
@@ -140,6 +144,11 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
 	if e.cache.IsStale() {
+		slog.WarnContext(ctx, "policy cache stale — denying request fail-closed",
+			"subject", req.Subject,
+			"action", req.Action,
+			"resource", req.Resource,
+		)
 		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "infra:policy-cache-stale")
 		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {

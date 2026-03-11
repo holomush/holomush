@@ -147,12 +147,14 @@ func TestMigrationEquivalence(t *testing.T) {
 
 		// Exit operations
 		{
+			// Both engines deny — builders do NOT have write:exit:* in either engine.
 			name:     "builder - create exit",
 			subject:  "character:builder-01GHI",
 			action:   "write",
 			resource: "exit:*",
 		},
 		{
+			// Both engines deny — builders do NOT have write:exit:<id> in either engine.
 			name:     "builder - update exit",
 			subject:  "character:builder-01GHI",
 			action:   "write",

@@ -72,6 +72,9 @@ func createObject(ctx context.Context, exec *command.CommandExecution, subjectID
 		if errors.Is(err, world.ErrAccessEvaluationFailed) {
 			return err //nolint:wrapcheck // preserve oops error code from world service
 		}
+		if errors.Is(err, world.ErrPermissionDenied) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
 		// Log non-engine errors (unexpected failures)
 		slog.ErrorContext(ctx, "create object: CreateObject failed",
 			"character_id", exec.CharacterID(),
@@ -98,6 +101,9 @@ func createLocation(ctx context.Context, exec *command.CommandExecution, subject
 		// Preserve access evaluation failures with their specific codes
 		// (already logged by checkAccess helper in world service)
 		if errors.Is(err, world.ErrAccessEvaluationFailed) {
+			return err //nolint:wrapcheck // preserve oops error code from world service
+		}
+		if errors.Is(err, world.ErrPermissionDenied) {
 			return err //nolint:wrapcheck // preserve oops error code from world service
 		}
 		// Log non-engine errors (unexpected failures)
