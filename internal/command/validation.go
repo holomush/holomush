@@ -4,6 +4,7 @@
 package command
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -35,24 +36,30 @@ func ValidateAliasName(name string) error {
 func validateName(name, kind string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
+		msg := kind + " name cannot be empty"
 		return oops.Code(CodeInvalidName).
 			With("kind", kind).
-			Errorf("%s name cannot be empty", kind)
+			With("message", msg).
+			Errorf("%s", msg)
 	}
 
 	if len(trimmed) > MaxNameLength {
+		msg := fmt.Sprintf("%s name exceeds maximum length of %d", kind, MaxNameLength)
 		return oops.Code(CodeInvalidName).
 			With("kind", kind).
 			With("length", len(trimmed)).
 			With("max", MaxNameLength).
-			Errorf("%s name exceeds maximum length of %d", kind, MaxNameLength)
+			With("message", msg).
+			Errorf("%s", msg)
 	}
 
 	if !namePattern.MatchString(trimmed) {
+		msg := kind + " name must start with a letter and contain only letters, digits, or _!?@#$%^+-"
 		return oops.Code(CodeInvalidName).
 			With("kind", kind).
 			With("name", trimmed).
-			Errorf("%s name must start with a letter and contain only letters, digits, or _!?@#$%%^+-", kind)
+			With("message", msg).
+			Errorf("%s", msg)
 	}
 
 	return nil

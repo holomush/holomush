@@ -207,9 +207,10 @@ func PlayerMessage(err error) string {
 	case CodeNilServices:
 		return "Internal error: services unavailable."
 	case CodeInvalidName:
-		// INVALID_NAME errors contain helpful context in the message itself
-		// (e.g., "alias name cannot be empty", "alias name exceeds maximum length of 20")
-		return err.Error()
+		if msg, ok := oopsErr.Context()["message"].(string); ok && msg != "" {
+			return msg
+		}
+		return "Invalid name."
 	case CodeNoAliasCache:
 		return "Alias system is not available. Contact the server administrator."
 	default:
