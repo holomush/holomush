@@ -76,7 +76,6 @@ func NewService(cfg ServiceConfig) *Service {
 	}
 }
 
-
 // entityPrefix is a typed string for checkAccess error code prefixes.
 // Using a distinct type prevents typos in free-form prefix strings from
 // producing unhandled error codes.
