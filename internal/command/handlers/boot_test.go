@@ -1160,7 +1160,7 @@ func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
 	}
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
-	accessControl := worldtest.NewMockAccessControl(t)
+	accessControl := worldtest.NewMockAccessPolicyEngine(t)
 
 	// Suppress logs during test
 	var logBuf bytes.Buffer
@@ -1173,8 +1173,8 @@ func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
 
 	// Executor lookup - may or may not happen depending on iteration order
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(executorID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, executorID).
 		Return(execChar, nil).Maybe()
@@ -1182,8 +1182,8 @@ func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
 	// Engine-failure character: access allowed but world returns an ACCESS_EVALUATION_FAILED-coded error
 	engineErr := oops.Code("ACCESS_EVALUATION_FAILED").Errorf("access engine outage")
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+engineErrCharID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(engineErrCharID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, engineErrCharID).
 		Return(nil, engineErr).Maybe()
@@ -1191,15 +1191,15 @@ func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
 	// DB-failure character: access allowed but world returns a generic database error
 	dbErr := errors.New("database connection timeout")
 	accessControl.EXPECT().
-		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+dbErrCharID.String()).
-		Return(true).Maybe()
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(dbErrCharID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
 	characterRepo.EXPECT().
 		Get(mock.Anything, dbErrCharID).
 		Return(nil, dbErr).Maybe()
 
 	worldService := world.NewService(world.ServiceConfig{
 		CharacterRepo: characterRepo,
-		AccessControl: accessControl,
+		Engine:        accessControl,
 	})
 
 	var buf bytes.Buffer
