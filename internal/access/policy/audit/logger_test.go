@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -360,8 +361,9 @@ func TestAuditLogger_BothDBAndWALFail_EntryDropped(t *testing.T) {
 	}
 
 	err = logger.Log(context.Background(), entry)
-	// Should not error, but entry is dropped and metric incremented
-	require.NoError(t, err)
+	// Should return error when both DB and WAL fail (critical failure)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_WRITE_FAILED")
 }
 
 func TestAuditLogger_GracefulShutdown_FlushesBuffered(t *testing.T) {

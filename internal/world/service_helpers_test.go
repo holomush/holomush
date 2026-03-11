@@ -121,18 +121,33 @@ func TestCheckAccess(t *testing.T) {
 	})
 
 	t.Run("uses entity prefix to generate error codes", func(t *testing.T) {
-		engine := new(MockAccessPolicyEngine)
-		engine.On("Evaluate", ctx, types.AccessRequest{
-			Subject: subject, Action: action, Resource: resource,
-		}).Return(types.NewDecision(types.EffectDeny, "denied", "policy-2"), nil)
+		prefixes := []struct {
+			prefix       entityPrefix
+			expectedCode string
+		}{
+			{prefixLocation, "LOCATION_ACCESS_DENIED"},
+			{prefixExit, "EXIT_ACCESS_DENIED"},
+			{prefixObject, "OBJECT_ACCESS_DENIED"},
+			{prefixCharacter, "CHARACTER_ACCESS_DENIED"},
+			{prefixScene, "SCENE_ACCESS_DENIED"},
+		}
 
-		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, prefixExit)
+		for _, tt := range prefixes {
+			t.Run(string(tt.prefix), func(t *testing.T) {
+				engine := new(MockAccessPolicyEngine)
+				engine.On("Evaluate", ctx, types.AccessRequest{
+					Subject: subject, Action: action, Resource: resource,
+				}).Return(types.NewDecision(types.EffectDeny, "denied", "policy-2"), nil)
 
-		assert.Error(t, err)
-		errutil.AssertErrorCode(t, err, "EXIT_ACCESS_DENIED")
-		assert.ErrorIs(t, err, ErrPermissionDenied)
-		engine.AssertExpectations(t)
+				svc := &Service{engine: engine}
+				err := svc.checkAccess(ctx, subject, action, resource, tt.prefix)
+
+				assert.Error(t, err)
+				errutil.AssertErrorCode(t, err, tt.expectedCode)
+				assert.ErrorIs(t, err, ErrPermissionDenied)
+				engine.AssertExpectations(t)
+			})
+		}
 	})
 
 	t.Run("wraps context.Canceled as evaluation failure", func(t *testing.T) {

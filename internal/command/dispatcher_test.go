@@ -1526,6 +1526,16 @@ func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
 	// We can't easily test this without a mock, but the error path is covered by the optErr field
 }
 
+func TestNewDispatcher_WithRateLimiter_Nil_ReturnsError(t *testing.T) {
+	reg := NewRegistry()
+	engine := policytest.AllowAllEngine()
+
+	dispatcher, err := NewDispatcher(reg, engine, WithRateLimiter(nil))
+	assert.Error(t, err)
+	assert.Nil(t, dispatcher)
+	assert.Equal(t, ErrNilRateLimiter, err)
+}
+
 func TestNewDispatcher_MultipleOptionErrors_ReturnsFirstError(t *testing.T) {
 	tests := []struct {
 		name           string

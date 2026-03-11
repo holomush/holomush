@@ -212,6 +212,26 @@ func TestPlayerMessage_SuffixMatching(t *testing.T) {
 			code:     "EXIT_ACCESS_DENIED",
 			expected: "You don't have permission to do that.",
 		},
+		{
+			name:     "SCENE_ACCESS_DENIED suffix",
+			code:     "SCENE_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "SCENE_ACCESS_EVALUATION_FAILED suffix",
+			code:     "SCENE_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
+		{
+			name:     "arbitrary suffix match ACCESS_DENIED",
+			code:     "CUSTOM_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "arbitrary suffix match ACCESS_EVALUATION_FAILED",
+			code:     "CUSTOM_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
 	}
 
 	for _, tt := range tests {

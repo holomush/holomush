@@ -124,7 +124,7 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 		if err := l.writer.WriteSync(ctx, entry); err != nil {
 			// Fallback to WAL
 			if walErr := l.writeToWAL(entry); walErr != nil {
-				// Both failed - log error and drop entry
+				// Both failed - log error and return it to the caller
 				slog.Error("audit write failed: both DB and WAL failed",
 					"db_error", err,
 					"wal_error", walErr,
@@ -134,6 +134,13 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 					"effect", entry.Effect,
 				)
 				failuresCounter.WithLabelValues("wal_failed").Inc()
+				return oops.Code("AUDIT_WRITE_FAILED").
+					With("db_error", err).
+					With("wal_error", walErr).
+					With("subject", entry.Subject).
+					With("action", entry.Action).
+					With("resource", entry.Resource).
+					Errorf("audit write failed: both DB and WAL failed")
 			}
 		}
 		return nil
@@ -282,6 +289,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 
 	// Parse and replay entries
 	lines := 0
+	failures := 0
 	for _, line := range splitLines(string(data)) {
 		if line == "" {
 			continue
@@ -291,18 +299,28 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			slog.Error("failed to unmarshal WAL entry", "error", err, "line", line)
 			failuresCounter.WithLabelValues("wal_unmarshal_failed").Inc()
+			failures++
 			continue
 		}
 
 		if err := l.writer.WriteSync(ctx, entry); err != nil {
 			slog.Error("failed to replay WAL entry", "error", err, "entry", entry)
 			failuresCounter.WithLabelValues("wal_replay_failed").Inc()
-			// Continue with other entries
+			failures++
+			continue
 		}
 		lines++
 	}
 
-	// Truncate WAL on success
+	// Only truncate WAL if all entries replayed successfully.
+	// If any entries failed, preserve the WAL to prevent data loss.
+	if failures > 0 {
+		return oops.
+			With("succeeded", lines).
+			With("failed", failures).
+			Errorf("WAL replay partially failed: %d succeeded, %d failed", lines, failures)
+	}
+
 	if err := os.Truncate(l.walPath, 0); err != nil {
 		return oops.With("path", l.walPath).Wrap(err)
 	}

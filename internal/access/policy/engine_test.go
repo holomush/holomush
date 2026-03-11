@@ -162,6 +162,30 @@ func TestEngine_SystemBypass_Audited(t *testing.T) {
 	assert.Equal(t, types.EffectSystemBypass, entries[0].Effect)
 }
 
+func TestEngine_ContextCancelled(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately before calling Evaluate
+
+	req := types.AccessRequest{
+		Subject:  "player:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(ctx, req)
+
+	// Contract: context cancellation returns an error wrapping context.Canceled
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// Contract: returned Decision is zero-value — not allowed, not an infra-failure decision
+	assert.Equal(t, types.Decision{}, decision)
+	assert.False(t, decision.IsAllowed())
+	assert.False(t, decision.IsInfraFailure())
+}
+
 func TestEngine_SessionResolved(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, sessionID string) (string, error) {

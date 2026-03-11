@@ -86,14 +86,18 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		subject := access.CharacterSubject(charID.String())
 		ctx := L.Context()
 		if ctx == nil {
+			// Lua VM has no context — fall back to background context.
+			// This shouldn't happen when events are delivered via DeliverEvent,
+			// which always sets a context. Log a warning for visibility.
+			slog.Warn("lua VM context is nil in list_commands, using background context")
 			ctx = context.Background()
 		}
 
 		// Filter commands by character capabilities.
 		// Circuit breaker: stop after repeated engine failures to avoid
 		// O(n_commands * n_capabilities) calls against a degraded engine.
-		// After this many per-capability engine errors (not per-command), stop querying.
-		// A single command with multiple failing capabilities can trip this alone.
+		// After this many per-command engine errors, stop querying.
+		// Each command contributes at most 1 to the count regardless of how many capabilities it has.
 		// Note: intentionally independent from the identical constant in handlers/who.go —
 		// the two circuit breakers protect different code paths and may diverge.
 		const maxEngineErrors = 3
