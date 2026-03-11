@@ -1055,12 +1055,13 @@ func TestWhoHandler_AllEngineFailures_LogsOutageWarning(t *testing.T) {
 }
 
 func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
-	// With 3 engine errors and 2 non-engine errors, the circuit breaker
-	// should trip after accumulating 3 engine errors, regardless of interleaving.
+	// With 4 engine errors and 2 non-engine errors (6 sessions total), the circuit
+	// breaker trips regardless of map iteration order. Even worst case (2 DB first),
+	// the 4th remaining session triggers the check after 3 engine errors accumulated.
 	executor := testutil.RegularPlayer()
 
-	// Create 5 sessions: 3 will fail with engine errors, 2 with DB errors.
-	engineFailIDs := make([]ulid.ULID, 3)
+	// Create 6 sessions: 4 will fail with engine errors, 2 with DB errors.
+	engineFailIDs := make([]ulid.ULID, 4)
 	dbFailIDs := make([]ulid.ULID, 2)
 	sessionMgr := core.NewSessionManager()
 	for i := range engineFailIDs {
