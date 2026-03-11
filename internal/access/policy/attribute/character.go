@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
@@ -104,7 +105,7 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 	role := "player" // default fallback
 	if p.roleResolver != nil {
 		// Build subject ID for role lookup: "character:ULID"
-		subjectID := "character:" + char.ID.String()
+		subjectID := access.CharacterSubject(char.ID.String())
 		if resolvedRole := p.roleResolver.GetRole(subjectID); resolvedRole != "" {
 			role = resolvedRole
 		}

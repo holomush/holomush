@@ -5,7 +5,6 @@ package command
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/samber/oops"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // RateLimitMiddleware enforces per-session rate limiting.
@@ -39,11 +39,8 @@ func NewRateLimitMiddleware(limiter *RateLimiter, engine types.AccessPolicyEngin
 }
 
 // Enforce checks and enforces rate limits for the provided execution context.
+// Callers must not invoke Enforce on a nil receiver.
 func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecution, commandName string, span trace.Span) error {
-	if r == nil || r.limiter == nil {
-		return nil
-	}
-
 	subject := access.CharacterSubject(exec.CharacterID().String())
 	bypass, err := r.hasBypass(ctx, subject)
 	if err != nil {
@@ -52,14 +49,10 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 		// 1. The primary purpose of Enforce is rate limiting, not bypass evaluation.
 		// 2. Returning an error here would prevent the command from executing entirely,
 		//    which is worse than applying rate limits to a potentially exempt user.
-		// 3. The error is logged at Warn level and recorded as a metric so operators
+		// 3. The error is logged at Error level and recorded as a metric so operators
 		//    can detect persistent engine failures via monitoring.
-		slog.WarnContext(ctx, "rate limit bypass check failed, applying rate limiting (fail-closed)",
-			"subject", subject,
-			"action", "execute",
-			"resource", CapabilityRateLimitBypass,
-			"command", commandName,
-			"error", err,
+		errutil.LogErrorContext(ctx, "rate limit bypass check failed, applying rate limiting (fail-closed)",
+			err, "subject", subject, "action", "execute", "resource", CapabilityRateLimitBypass, "command", commandName,
 		)
 		observability.RecordEngineFailure("rate_limit_bypass")
 	} else if bypass {

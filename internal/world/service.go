@@ -631,7 +631,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixLocation); err != nil {
 		return nil, err
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
@@ -782,6 +782,15 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 // Emits an examine event for plugins after validation and authorization.
 // Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.
+// ExamineLocation checks whether the character can examine a target location and
+// sends detailed location information to them.
+//
+// Note: this method fetches the entity before checking authorization. This is
+// intentional — in a MUSH context, location and object existence is not sensitive
+// information (players can see rooms they're in), and fetching first lets us
+// provide better error messages and validate spatial constraints (e.g., character
+// must be in the world). An unauthorized caller can distinguish "not found" from
+// "access denied", which is acceptable for this domain.
 func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
@@ -837,6 +846,7 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 }
 
 // ExamineObject allows a character to examine an object.
+// Fetches the entity before checking authorization; see ExamineLocation for rationale.
 // Emits an examine event for plugins after validation and authorization.
 // Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.
@@ -895,6 +905,7 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 }
 
 // ExamineCharacter allows a character to examine another character.
+// Fetches the entity before checking authorization; see ExamineLocation for rationale.
 // Emits an examine event for plugins after validation and authorization.
 // Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.

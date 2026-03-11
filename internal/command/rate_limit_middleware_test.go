@@ -232,25 +232,6 @@ func TestRateLimitMiddleware_Enforce_AllowDecision(t *testing.T) {
 	}
 }
 
-func TestRateLimitMiddleware_Enforce_NilMiddleware(t *testing.T) {
-	// Nil receiver should return nil (safe no-op behavior)
-	var middleware *RateLimitMiddleware
-
-	ctx := context.Background()
-	_, span := noop.NewTracerProvider().Tracer("test").Start(ctx, "test")
-
-	exec := NewTestExecution(CommandExecutionConfig{
-		CharacterID: ulid.Make(),
-		SessionID:   ulid.Make(),
-		Output:      &bytes.Buffer{},
-		Services:    stubServices(),
-	})
-
-	err := middleware.Enforce(ctx, exec, "test-command", span)
-	assert.NoError(t, err, "nil middleware should return nil (safe no-op)")
-}
-
-
 func TestRateLimitMiddleware_Enforce_InfraFailure(t *testing.T) {
 	// Engine returns an infra failure decision (PolicyID starting with "infra:")
 	// rather than a Go error. The middleware should treat this as fail-closed:

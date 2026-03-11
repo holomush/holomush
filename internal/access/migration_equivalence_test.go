@@ -325,6 +325,10 @@ func TestMigrationEquivalence(t *testing.T) {
 				// decomposed actions (e.g., list_characters) or simplified location handling
 				// that the static engine doesn't support. If a future divergence is
 				// new-engine-more-restrictive, add a separate divergence category here.
+				//
+				// Full validation of these divergences (including boundary conditions for
+				// unknown subjects and admin bypass limits) is in the integration tests:
+				// test/integration/access/location_equivalence_test.go
 				require.False(t, staticResult,
 					"expected divergence: static engine should deny (got allow) for: %s", tt.name)
 				require.True(t, policyResult,

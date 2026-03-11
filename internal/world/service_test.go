@@ -3949,10 +3949,10 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 	})
 
-	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
@@ -3964,7 +3964,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
@@ -4758,6 +4758,36 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "EXAMINE_FAILED")
 		assert.Contains(t, err.Error(), "not in world")
+	})
+
+	t.Run("unauthorized on nonexistent location returns NOT_FOUND not ACCESS_DENIED", func(t *testing.T) {
+		// Documents intentional auth ordering: ExamineLocation fetches before
+		// checking authorization. An unauthorized caller on a nonexistent resource
+		// sees NOT_FOUND, not ACCESS_DENIED. This is acceptable in a MUSH context
+		// where entity existence is not sensitive.
+		engine := policytest.NewGrantEngine() // no grants → default deny
+		mockCharRepo := worldtest.NewMockCharacterRepository(t)
+		mockLocRepo := worldtest.NewMockLocationRepository(t)
+
+		svc := world.NewService(world.ServiceConfig{
+			CharacterRepo: mockCharRepo,
+			LocationRepo:  mockLocRepo,
+			Engine:        engine,
+		})
+
+		nonExistentLocID := ulid.Make()
+		examiner := &world.Character{
+			ID:         charID,
+			Name:       "Explorer",
+			LocationID: &charLocID,
+		}
+
+		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
+		mockLocRepo.EXPECT().Get(ctx, nonExistentLocID).Return(nil, world.ErrNotFound)
+
+		err := svc.ExamineLocation(ctx, subjectID, charID, nonExistentLocID)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
 	})
 }
 
@@ -7584,7 +7614,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				_, err := svc.GetCharactersByLocation(ctx, "", locID, world.ListOptions{})
 				return err
 			},
-			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
+			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
 		},
 	}
 
