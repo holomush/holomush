@@ -100,6 +100,15 @@ func TestMigrationEquivalence(t *testing.T) {
 			resource: "object:01VWX",
 		},
 
+		// Character listing (decomposed from legacy location:*:characters read)
+		{
+			name:     "admin - list characters at location",
+			subject:  "character:admin-01ABC",
+			action:   "list_characters",
+			resource: "location:01JKL",
+			comment:  "EXPECTED DIVERGENCE: list_characters is a new decomposed action not present in static engine",
+		},
+
 		// Character operations
 		{
 			name:     "admin - move other character",
@@ -182,6 +191,15 @@ func TestMigrationEquivalence(t *testing.T) {
 			subject:  "character:builder-01GHI",
 			action:   "execute",
 			resource: "command:dig",
+		},
+
+		// Character listing (decomposed from legacy location:*:characters read)
+		{
+			name:     "builder - list characters at location",
+			subject:  "character:builder-01GHI",
+			action:   "list_characters",
+			resource: "location:01JKL",
+			comment:  "EXPECTED DIVERGENCE: list_characters is a new decomposed action not present in static engine",
 		},
 
 		// === Player role tests (basic operations, no world modification) ===
@@ -425,6 +443,9 @@ func createCacheWithEquivalentPolicies(t *testing.T) *policy.Cache {
 		`permit(principal is character, action in ["read"], resource is exit) when { principal.character.role == "player" };`,
 		`permit(principal is character, action in ["read"], resource is scene) when { principal.character.role == "player" };`,
 
+		// Player role: list characters at location (decomposed from legacy location:*:characters read)
+		`permit(principal is character, action in ["list_characters"], resource is location) when { principal.character.role == "player" };`,
+
 		// Player role: write scenes
 		`permit(principal is character, action in ["write"], resource is scene) when { principal.character.role == "player" };`,
 
@@ -439,6 +460,9 @@ func createCacheWithEquivalentPolicies(t *testing.T) *policy.Cache {
 		`permit(principal is character, action in ["read"], resource is scene) when { principal.character.role == "builder" };`,
 		`permit(principal is character, action in ["write"], resource is scene) when { principal.character.role == "builder" };`,
 		`permit(principal is character, action in ["execute"], resource is command) when { principal.character.role == "builder" };`,
+
+		// Builder role: list characters at location (decomposed from legacy location:*:characters read)
+		`permit(principal is character, action in ["list_characters"], resource is location) when { principal.character.role == "builder" };`,
 
 		// Builder role: world modification
 		`permit(principal is character, action in ["write"], resource is location) when { principal.character.role == "builder" };`,

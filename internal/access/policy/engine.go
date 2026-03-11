@@ -134,7 +134,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			"action", req.Action,
 			"resource", req.Resource,
 		)
-		return types.Decision{}, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
+		d := types.NewDecision(types.EffectDefaultDeny, "attribute resolution failed", "infra:attribute-resolution-failed")
+		return d, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
