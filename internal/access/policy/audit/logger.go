@@ -281,9 +281,23 @@ func (l *Logger) writeToWAL(entry Entry) error {
 	return nil
 }
 
+// PartialReplayError indicates that some WAL entries were successfully replayed
+// but others failed. The WAL has been atomically rewritten to contain only the
+// failed entries, so retrying ReplayWAL is safe.
+type PartialReplayError struct {
+	FailedCount   int
+	TotalCount    int
+	ReplayedCount int
+}
+
+func (e *PartialReplayError) Error() string {
+	return fmt.Sprintf("WAL replay partially failed: %d of %d entries could not be written", e.FailedCount, e.TotalCount)
+}
+
 // ReplayWAL reads all entries from the WAL and writes them to the writer.
 // On full success, truncates the WAL file. On partial failure, rewrites the
 // WAL with only the entries that failed so they can be retried next time.
+// A *PartialReplayError return means the WAL was safely rewritten and retry is safe.
 func (l *Logger) ReplayWAL(ctx context.Context) error {
 	l.walMu.Lock()
 	defer l.walMu.Unlock()
@@ -351,7 +365,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		walEntriesGauge.Set(float64(len(failedLines)))
 		slog.Warn("partially replayed WAL entries; WAL rewritten with failed entries",
 			"replayed", replayed, "failed", len(failedLines))
-		return oops.Errorf("WAL replay partially failed: %d entries could not be written", len(failedLines))
+		return &PartialReplayError{FailedCount: len(failedLines), TotalCount: replayed + len(failedLines), ReplayedCount: replayed}
 	}
 
 	// All entries replayed — truncate the WAL.
