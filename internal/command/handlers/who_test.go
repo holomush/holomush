@@ -932,6 +932,128 @@ func TestWhoHandler_TwoCumulativeEngineErrorsBelowThreshold(t *testing.T) {
 		"circuit breaker should not trip with only 2 total engine errors")
 }
 
+func TestWhoHandler_AllDenied_LogsMisconfigurationWarning(t *testing.T) {
+	// When every session is denied by the policy engine (EffectDeny, no error),
+	// the anomaly detector should log a misconfiguration warning.
+	executor := testutil.RegularPlayer()
+
+	char1ID := ulid.Make()
+	char2ID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, ulid.Make())
+	sessionMgr.Connect(char2ID, ulid.Make())
+
+	// Capture warn-level logs.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	// Both sessions return EffectDeny — normal policy denial, not an engine error.
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{
+			Subject:  access.CharacterSubject(executor.CharacterID.String()),
+			Action:   "read",
+			Resource: access.CharacterResource(char1ID.String()),
+		}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil).
+		Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{
+			Subject:  access.CharacterSubject(executor.CharacterID.String()),
+			Action:   "read",
+			Resource: access.CharacterResource(char2ID.String()),
+		}).
+		Return(types.NewDecision(types.EffectDeny, "", ""), nil).
+		Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	// No players visible — all denied.
+	assert.Contains(t, buf.String(), "No players online")
+
+	// Anomaly detection must log the misconfiguration warning.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "all sessions denied by policy engine")
+}
+
+func TestWhoHandler_AllEngineFailures_LogsOutageWarning(t *testing.T) {
+	// When every session fails with an engine error (not EffectDeny), the anomaly
+	// detector should log an engine outage warning.  We use exactly 2 sessions so
+	// the circuit breaker (threshold=3) never fires, ensuring all sessions are
+	// processed and engineErrorCount == len(sessions).
+	executor := testutil.RegularPlayer()
+
+	char1ID := ulid.Make()
+	char2ID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, ulid.Make())
+	sessionMgr.Connect(char2ID, ulid.Make())
+
+	// Capture warn-level logs.
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	// Both sessions return an engine error — not a policy denial.
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{
+			Subject:  access.CharacterSubject(executor.CharacterID.String()),
+			Action:   "read",
+			Resource: access.CharacterResource(char1ID.String()),
+		}).
+		Return(types.Decision{}, errors.New("policy store unavailable")).
+		Maybe()
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{
+			Subject:  access.CharacterSubject(executor.CharacterID.String()),
+			Action:   "read",
+			Resource: access.CharacterResource(char2ID.String()),
+		}).
+		Return(types.Decision{}, errors.New("policy store unavailable")).
+		Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	// No players visible — all failed.
+	assert.Contains(t, buf.String(), "No players online")
+
+	// Anomaly detection must log the engine outage warning.
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, "all sessions failed with engine errors")
+}
+
 func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
 	// With 3 engine errors and 2 non-engine errors, the circuit breaker
 	// should trip after accumulating 3 engine errors, regardless of interleaving.
