@@ -1139,6 +1139,97 @@ func TestBootHandler_BootOthers_IncludesDecisionContext(t *testing.T) {
 	assert.NotNil(t, targetSession, "Target session should still exist")
 }
 
+func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
+	executorID := ulid.Make()
+	engineErrCharID := ulid.Make()
+	dbErrCharID := ulid.Make()
+	execConn := ulid.Make()
+	engineErrConn := ulid.Make()
+	dbErrConn := ulid.Make()
+	playerID := ulid.Make()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(executorID, execConn)
+	sessionMgr.Connect(engineErrCharID, engineErrConn)
+	sessionMgr.Connect(dbErrCharID, dbErrConn)
+
+	execChar := &world.Character{
+		ID:       executorID,
+		PlayerID: playerID,
+		Name:     "Admin",
+	}
+
+	characterRepo := worldtest.NewMockCharacterRepository(t)
+	accessControl := worldtest.NewMockAccessControl(t)
+
+	// Suppress logs during test
+	var logBuf bytes.Buffer
+	originalLogger := slog.Default()
+	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	slog.SetDefault(testLogger)
+	defer slog.SetDefault(originalLogger)
+
+	// Executor lookup - may or may not happen depending on iteration order
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+executorID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, executorID).
+		Return(execChar, nil).Maybe()
+
+	// Engine-failure character: access allowed but world returns an ACCESS_EVALUATION_FAILED-coded error
+	engineErr := oops.Code("ACCESS_EVALUATION_FAILED").Errorf("access engine outage")
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+engineErrCharID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, engineErrCharID).
+		Return(nil, engineErr).Maybe()
+
+	// DB-failure character: access allowed but world returns a generic database error
+	dbErr := errors.New("database connection timeout")
+	accessControl.EXPECT().
+		Check(mock.Anything, "char:"+executorID.String(), "read", "character:"+dbErrCharID.String()).
+		Return(true).Maybe()
+	characterRepo.EXPECT().
+		Get(mock.Anything, dbErrCharID).
+		Return(nil, dbErr).Maybe()
+
+	worldService := world.NewService(world.ServiceConfig{
+		CharacterRepo: characterRepo,
+		AccessControl: accessControl,
+	})
+
+	var buf bytes.Buffer
+	exec := command.NewTestExecution(command.CommandExecutionConfig{
+		CharacterID:   executorID,
+		CharacterName: "Admin",
+		PlayerID:      playerID,
+		Args:          "NonexistentPlayer", // Target not in any session
+		Output:        &buf,
+		Services: command.NewTestServices(command.ServicesConfig{
+			Session: sessionMgr,
+			World:   worldService,
+		}),
+	})
+
+	err := BootHandler(context.Background(), exec)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+
+	// Mixed engine + DB errors must fall through to CodeWorldError, not CodeAccessEvaluationFailed
+	assert.Equal(t, command.CodeWorldError, oopsErr.Code())
+
+	// Verify user-facing message indicates system error
+	playerMsg := command.PlayerMessage(err)
+	assert.Contains(t, playerMsg, "system error")
+	assert.Contains(t, playerMsg, "Try again")
+}
+
 func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
