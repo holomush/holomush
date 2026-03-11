@@ -84,6 +84,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		if err := e.audit.Log(ctx, entry); err != nil {
 			// Log error but don't fail the decision
 			slog.WarnContext(ctx, "audit log failed", "error", err)
+			audit.RecordEngineAuditFailure()
 		}
 
 		return decision, nil
@@ -138,8 +139,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			"action", req.Action,
 			"resource", req.Resource,
 		)
-		d := types.NewDecision(types.EffectDefaultDeny, "attribute resolution failed", "infra:attribute-resolution-failed")
-		return d, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
+		return types.Decision{}, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
@@ -166,6 +166,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+			audit.RecordEngineAuditFailure()
 		}
 		RecordEvaluationMetrics(time.Since(start), decision.Effect())
 		return decision, nil
@@ -197,6 +198,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			// Log error but don't fail the decision
 			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+			audit.RecordEngineAuditFailure()
 		}
 
 		return decision, nil
@@ -234,6 +236,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	}
 	if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 		slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+		audit.RecordEngineAuditFailure()
 	}
 
 	// Record metrics

@@ -1639,7 +1639,8 @@ func TestEngine_ResolverError_FailsClosed(t *testing.T) {
 	decision, evalErr := engine.Evaluate(context.Background(), req)
 	require.Error(t, evalErr, "resolver error must propagate as engine error")
 	assert.ErrorContains(t, evalErr, "database connection lost")
+	// With the zero-Decision return contract, callers treat non-nil error as
+	// evaluation failure. The Decision is a zero value, not a populated DefaultDeny.
 	assert.False(t, decision.IsAllowed(), "resolver error decision must deny access")
-	assert.True(t, decision.IsInfraFailure(), "resolver error decision must be an infrastructure failure")
-	assert.Equal(t, "infra:attribute-resolution-failed", decision.PolicyID(), "resolver error decision must have infra policy ID")
+	assert.Equal(t, types.Decision{}, decision, "resolver error must return zero Decision")
 }

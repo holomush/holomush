@@ -100,6 +100,10 @@ const (
 // The entityPrefix parameter determines the error code prefix (e.g., "LOCATION", "EXIT").
 // Unknown errors (context errors, DB failures, etc.) are classified as evaluation
 // failures rather than denials to avoid poisoning metrics and user feedback.
+//
+// Metrics: calls observability.RecordEngineFailure in all error paths. The
+// holomush_engine_failures_total counter uses a package-level Prometheus var
+// that is not exported; metric increments are verified by integration tests.
 func (s *Service) checkAccess(ctx context.Context, subject, action, resource string, prefix entityPrefix) error {
 	metricKey := string(prefix) + "_access_check"
 	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
@@ -107,6 +111,10 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 
 	req, reqErr := types.NewAccessRequest(subject, action, resource)
 	if reqErr != nil {
+		// Defensive: currently unreachable because all call sites use typed helpers
+		// (access.CharacterSubject, access.LocationResource, etc.) that panic on
+		// empty input, and action strings are hardcoded literals. Kept as defense
+		// in depth against future call sites that might bypass the typed helpers.
 		errutil.LogErrorContext(ctx, "invalid access request",
 			reqErr, "subject", subject, "action", action, "resource", resource)
 		observability.RecordEngineFailure(metricKey)

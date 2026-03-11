@@ -43,7 +43,7 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 		return oops.Code(CodeAccessEvaluationFailed).
 			With("command", cmdName).
 			With("capability", capability).
-			Wrap(reqErr)
+			Wrap(errors.Join(ErrCapabilityCheckFailed, reqErr))
 	}
 
 	decision, evalErr := engine.Evaluate(ctx, req)
@@ -76,7 +76,7 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 				With("capability", capability).
 				With("reason", decision.Reason()).
 				With("policy_id", decision.PolicyID()).
-				Wrap(errors.Join(ErrCapabilityCheckFailed, errors.New(decision.Reason())))
+				Wrap(ErrCapabilityCheckFailed)
 		}
 		slog.DebugContext(ctx, cmdName+" permission denied",
 			"subject", subject,

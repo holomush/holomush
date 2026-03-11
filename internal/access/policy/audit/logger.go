@@ -62,11 +62,26 @@ var (
 		Help: "Total number of audit logging failures",
 	}, []string{"reason"})
 
+	// engineAuditFailuresCounter tracks audit logging failures at the engine
+	// level (as opposed to writer-level failures tracked by failuresCounter).
+	// Exported via RecordEngineAuditFailure for use by the policy engine.
+	engineAuditFailuresCounter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "abac_audit_engine_failures_total",
+		Help: "Total number of audit logging failures at the engine evaluation level",
+	})
+
 	walEntriesGauge = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "abac_audit_wal_entries",
 		Help: "Current number of entries in the WAL",
 	})
 )
+
+// RecordEngineAuditFailure increments the engine-level audit failure counter.
+// Call this when audit.Log returns an error in the policy engine to give ops
+// teams an alertable metric for audit gaps.
+func RecordEngineAuditFailure() {
+	engineAuditFailuresCounter.Inc()
+}
 
 // Logger routes audit entries based on mode and effect.
 type Logger struct {
@@ -267,7 +282,8 @@ func (l *Logger) writeToWAL(entry Entry) error {
 }
 
 // ReplayWAL reads all entries from the WAL and writes them to the writer.
-// On success, truncates the WAL file.
+// On full success, truncates the WAL file. On partial failure, rewrites the
+// WAL with only the entries that failed so they can be retried next time.
 func (l *Logger) ReplayWAL(ctx context.Context) error {
 	l.walMu.Lock()
 	defer l.walMu.Unlock()
@@ -287,9 +303,9 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		return nil // Empty WAL
 	}
 
-	// Parse and replay entries
-	lines := 0
-	failures := 0
+	// Parse and replay entries; collect failed entries for WAL rewrite.
+	replayed := 0
+	var failedLines []string
 	for _, line := range splitLines(string(data)) {
 		if line == "" {
 			continue
@@ -299,34 +315,52 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			slog.Error("failed to unmarshal WAL entry", "error", err, "line", line)
 			failuresCounter.WithLabelValues("wal_unmarshal_failed").Inc()
-			failures++
+			// Keep the raw line so it is preserved for manual inspection.
+			failedLines = append(failedLines, line)
 			continue
 		}
 
 		if err := l.writer.WriteSync(ctx, entry); err != nil {
 			slog.Error("failed to replay WAL entry", "error", err, "entry", entry)
 			failuresCounter.WithLabelValues("wal_replay_failed").Inc()
-			failures++
+			// Re-marshal so the entry is preserved in the WAL for retry.
+			if raw, merr := json.Marshal(entry); merr == nil {
+				failedLines = append(failedLines, string(raw))
+			} else {
+				// Fall back to the original line if re-marshal fails.
+				failedLines = append(failedLines, line)
+			}
 			continue
 		}
-		lines++
+		replayed++
 	}
 
-	// Only truncate WAL if all entries replayed successfully.
-	// If any entries failed, preserve the WAL to prevent data loss.
-	if failures > 0 {
-		return oops.
-			With("succeeded", lines).
-			With("failed", failures).
-			Errorf("WAL replay partially failed: %d succeeded, %d failed", lines, failures)
+	if len(failedLines) > 0 {
+		// Rewrite WAL atomically with only the failed entries.
+		tmpPath := l.walPath + ".tmp"
+		var buf []byte
+		for _, fl := range failedLines {
+			buf = append(buf, []byte(fl+"\n")...)
+		}
+		if werr := os.WriteFile(tmpPath, buf, 0o600); werr != nil {
+			return oops.With("path", tmpPath).Wrap(werr)
+		}
+		if rerr := os.Rename(tmpPath, l.walPath); rerr != nil {
+			return oops.With("path", l.walPath).Wrap(rerr)
+		}
+		walEntriesGauge.Set(float64(len(failedLines)))
+		slog.Warn("partially replayed WAL entries; WAL rewritten with failed entries",
+			"replayed", replayed, "failed", len(failedLines))
+		return oops.Errorf("WAL replay partially failed: %d entries could not be written", len(failedLines))
 	}
 
+	// All entries replayed — truncate the WAL.
 	if err := os.Truncate(l.walPath, 0); err != nil {
 		return oops.With("path", l.walPath).Wrap(err)
 	}
 
 	walEntriesGauge.Set(0)
-	slog.Info("replayed WAL entries", "count", lines)
+	slog.Info("replayed WAL entries", "count", replayed)
 	return nil
 }
 

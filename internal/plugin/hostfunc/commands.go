@@ -171,6 +171,7 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 		if err != nil {
 			slog.ErrorContext(ctx, "access request construction failed",
 				"error", err, "subject", subject, "action", "execute", "resource", cap)
+			observability.RecordEngineFailure("command_capability_check")
 			hadError = true
 			return false, hadError
 		}
