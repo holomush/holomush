@@ -54,6 +54,7 @@ type cacheConfig struct {
 	reconnectMax       time.Duration
 	reconnectFactor    float64
 	lastUpdateGauge    prometheus.Gauge
+	initialSnapshot    *Snapshot
 }
 
 // WithStalenessThreshold sets the duration after which the cache is considered stale.
@@ -76,6 +77,15 @@ func WithReconnectConfig(initial, maxInterval time.Duration, factor float64) Cac
 func WithLastUpdateGauge(g prometheus.Gauge) CacheOption {
 	return func(c *cacheConfig) {
 		c.lastUpdateGauge = g
+	}
+}
+
+// WithInitialSnapshot pre-loads the cache with the given snapshot, bypassing the
+// normal store/compile flow. It marks the cache as non-stale by recording the
+// current time as the last update. This option is intended for testing.
+func WithInitialSnapshot(snap *Snapshot) CacheOption {
+	return func(c *cacheConfig) {
+		c.initialSnapshot = snap
 	}
 }
 
@@ -110,12 +120,22 @@ func NewCache(s store.PolicyStore, compiler *Compiler, opts ...CacheOption) *Cac
 		opt(&cfg)
 	}
 
+	snap := &Snapshot{} // empty, non-nil snapshot
+	if cfg.initialSnapshot != nil {
+		snap = cfg.initialSnapshot
+	}
+
 	pc := &Cache{
 		store:    s,
 		compiler: compiler,
 		cfg:      cfg,
-		snapshot: &Snapshot{}, // empty, non-nil snapshot
+		snapshot: snap,
 	}
+
+	if cfg.initialSnapshot != nil {
+		pc.lastUpdate.Store(time.Now().UnixNano())
+	}
+
 	return pc
 }
 

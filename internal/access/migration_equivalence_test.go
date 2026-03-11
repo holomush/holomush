@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -519,8 +520,18 @@ func createCacheWithEquivalentPolicies(t *testing.T) *policy.Cache {
 		})
 	}
 
-	// Use the test helper to set snapshot
-	return policy.NewCacheWithPoliciesForTest(policies)
+	// Seed the cache with the compiled policies using the test helper option.
+	return newCacheWithPoliciesForTest(policies)
+}
+
+// newCacheWithPoliciesForTest creates a Cache pre-loaded with the given compiled
+// policies for testing, bypassing the normal store/compile flow.
+func newCacheWithPoliciesForTest(policies []policy.CachedPolicy) *policy.Cache {
+	snap := &policy.Snapshot{
+		Policies:  policies,
+		CreatedAt: time.Now(),
+	}
+	return policy.NewCache(nil, nil, policy.WithInitialSnapshot(snap))
 }
 
 func TestPolicyEngine_PlayerLocationPermissions(t *testing.T) {
