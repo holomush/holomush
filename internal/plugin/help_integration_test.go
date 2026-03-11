@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/capability"
+	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -326,7 +327,7 @@ var _ = Describe("Help Plugin Integration", func() {
 })
 
 // setupHelpTestWithEngine creates help plugin fixture with a custom access engine.
-func setupHelpTestWithEngine(engine hostfunc.AccessPolicyEngine) (*helpFixture, error) {
+func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixture, error) {
 	pluginsDir, err := findPluginsDir()
 	if err != nil {
 		return nil, err

@@ -93,7 +93,7 @@ func (r *RateLimitMiddleware) hasBypass(ctx context.Context, subject string) (bo
 	// Infrastructure failures (session resolution errors, DB outages) return a deny
 	// decision without a Go error. Surface these to the caller so Enforce can log them.
 	if decision.IsInfraFailure() {
-		return false, oops.Errorf("infrastructure failure during bypass check: %s", decision.Reason())
+		return false, oops.With("reason", decision.Reason()).Errorf("infrastructure failure during bypass check")
 	}
 
 	return decision.IsAllowed(), nil

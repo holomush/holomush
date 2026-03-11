@@ -58,5 +58,7 @@
 //	logger.Log(ctx, entry)
 //
 //	// Replay WAL after recovery
-//	logger.ReplayWAL(ctx)
+//	if err := logger.ReplayWAL(ctx); err != nil {
+//		log.Printf("WAL replay: %v", err)
+//	}
 package audit

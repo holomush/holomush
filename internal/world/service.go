@@ -176,7 +176,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Errorf("location repository not configured")
 	}
-	if err := s.checkAccess(ctx, subjectID, "write", "location:*", prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", access.LocationResource("*"), prefixLocation); err != nil {
 		return err
 	}
 	if loc == nil {
@@ -286,7 +286,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
 	}
-	if err := s.checkAccess(ctx, subjectID, "write", "exit:*", prefixExit); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", access.ExitResource("*"), prefixExit); err != nil {
 		return err
 	}
 	if exit == nil {
@@ -967,7 +967,7 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 		return nil, oops.Code("LOCATION_FIND_FAILED").Errorf("location repository not configured")
 	}
 	// Check read authorization for location wildcard (searching locations)
-	if err := s.checkAccess(ctx, subjectID, "read", "location:*", prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "read", access.LocationResource("*"), prefixLocation); err != nil {
 		return nil, err
 	}
 	loc, err := s.locationRepo.FindByName(ctx, name)

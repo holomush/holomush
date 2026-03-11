@@ -49,18 +49,16 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	var errorCount int
 	var engineErrorCount int
 	var permDeniedCount int
+	var skippedCount int
 	for i, session := range sessions {
 		// Circuit breaker: stop querying if the engine is consistently failing.
-		// Include skipped sessions in errorCount so the user-visible message
-		// reflects ALL players that couldn't be displayed, not just those
-		// where errors were actually observed.
+		// Track skipped sessions separately from actual errors for accurate messaging.
 		if engineErrorCount >= maxEngineErrors {
-			skipped := len(sessions) - i
-			errorCount += skipped
+			skippedCount = len(sessions) - i
 			slog.WarnContext(ctx, "who handler circuit breaker tripped: aborting after engine failures",
 				"engine_failures", engineErrorCount,
 				"threshold", maxEngineErrors,
-				"skipped_sessions", skipped,
+				"skipped_sessions", skippedCount,
 			)
 			break
 		}
@@ -122,13 +120,21 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		logOutputError(ctx, "who", exec.CharacterID().String(), n, err)
 	}
 
-	// Warn user if any characters couldn't be displayed due to errors.
+	// Warn user if any characters couldn't be displayed due to errors or circuit breaker.
 	// Output write errors are logged but don't fail the command.
-	if errorCount > 0 {
-		if errorCount == 1 {
+	if errorCount > 0 || skippedCount > 0 {
+		switch {
+		case errorCount > 0 && skippedCount > 0:
+			writeOutputf(ctx, exec, "who",
+				"(Note: %d players could not be displayed due to system errors, %d skipped due to circuit breaker)\n",
+				errorCount, skippedCount)
+		case errorCount == 1:
 			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to a system error)")
-		} else {
+		case errorCount > 1:
 			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to system errors)\n", errorCount)
+		case skippedCount > 0:
+			writeOutputf(ctx, exec, "who",
+				"(Note: %d players skipped due to engine circuit breaker)\n", skippedCount)
 		}
 	}
 	return nil

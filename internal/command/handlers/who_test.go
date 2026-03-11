@@ -726,9 +726,10 @@ func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 
 	output := buf.String()
 	// Circuit breaker trips after 3 errors, skipping remaining 2 sessions.
-	// The user-visible count includes all 5 players (3 errors + 2 skipped).
+	// Error count and skipped count are reported separately.
 	assert.Contains(t, output, "No players online")
-	assert.Contains(t, output, "(Note: 5 players could not be displayed due to system errors)")
+	assert.Contains(t, output, "3 players could not be displayed due to system errors")
+	assert.Contains(t, output, "2 skipped due to circuit breaker")
 
 	// Verify the circuit breaker warning was logged.
 	logOutput := logBuf.String()
@@ -777,8 +778,9 @@ func TestWhoHandler_CircuitBreakerTripsAtExactlyThreeErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	output := buf.String()
-	// All 6 sessions should be reported as failures (3 engine errors + 3 skipped by circuit breaker).
-	assert.Contains(t, output, "6 players could not be displayed due to system errors")
+	// 3 engine errors and 3 skipped by circuit breaker are reported separately.
+	assert.Contains(t, output, "3 players could not be displayed due to system errors")
+	assert.Contains(t, output, "3 skipped due to circuit breaker")
 
 	logOutput := logBuf.String()
 	assert.Contains(t, logOutput, "circuit breaker tripped")
