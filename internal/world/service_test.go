@@ -4556,6 +4556,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			CharacterRepo: mockCharRepo,
 			LocationRepo:  mockLocRepo,
 			Engine:        engine,
+			EventEmitter:  &mockEventEmitter{},
 		})
 
 		examiner := &world.Character{
@@ -4564,6 +4565,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			LocationID: &charLocID,
 		}
 
+		engine.Grant(subjectID, "read", "location:"+targetLocID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(nil, world.ErrNotFound)
 
@@ -4589,13 +4591,9 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetLoc := &world.Location{
-			ID:   targetLocID,
-			Name: "Grand Hall",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
@@ -4619,13 +4617,9 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetLoc := &world.Location{
-			ID:   targetLocID,
-			Name: "Grand Hall",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
@@ -4649,13 +4643,9 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetLoc := &world.Location{
-			ID:   targetLocID,
-			Name: "Grand Hall",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockLocRepo.EXPECT().Get(ctx, targetLocID).Return(targetLoc, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, targetLocID)
 		require.Error(t, err)
@@ -4760,11 +4750,9 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		assert.Contains(t, err.Error(), "not in world")
 	})
 
-	t.Run("unauthorized on nonexistent location returns NOT_FOUND not ACCESS_DENIED", func(t *testing.T) {
-		// Documents intentional auth ordering: ExamineLocation fetches before
-		// checking authorization. An unauthorized caller on a nonexistent resource
-		// sees NOT_FOUND, not ACCESS_DENIED. This is acceptable in a MUSH context
-		// where entity existence is not sensitive.
+	t.Run("unauthorized caller gets ACCESS_DENIED even if target does not exist", func(t *testing.T) {
+		// Authorization happens before entity fetch, so unauthorized callers
+		// cannot distinguish "not found" from "exists but denied"
 		engine := policytest.NewGrantEngine() // no grants → default deny
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
@@ -4783,11 +4771,12 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockLocRepo.EXPECT().Get(ctx, nonExistentLocID).Return(nil, world.ErrNotFound)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineLocation(ctx, subjectID, charID, nonExistentLocID)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "LOCATION_NOT_FOUND")
+		assert.ErrorIs(t, err, world.ErrPermissionDenied)
+		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
 	})
 }
 
@@ -4872,6 +4861,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			CharacterRepo: mockCharRepo,
 			ObjectRepo:    mockObjRepo,
 			Engine:        engine,
+			EventEmitter:  &mockEventEmitter{},
 		})
 
 		examiner := &world.Character{
@@ -4880,6 +4870,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			LocationID: &charLocID,
 		}
 
+		engine.Grant(subjectID, "read", "object:"+targetObjID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(nil, world.ErrNotFound)
 
@@ -4905,13 +4896,9 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetObj := &world.Object{
-			ID:   targetObjID,
-			Name: "Ancient Chest",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
@@ -4935,13 +4922,9 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetObj := &world.Object{
-			ID:   targetObjID,
-			Name: "Ancient Chest",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
@@ -4965,13 +4948,9 @@ func TestWorldService_ExamineObject(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetObj := &world.Object{
-			ID:   targetObjID,
-			Name: "Ancient Chest",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockObjRepo.EXPECT().Get(ctx, targetObjID).Return(targetObj, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineObject(ctx, subjectID, charID, targetObjID)
 		require.Error(t, err)
@@ -5175,6 +5154,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		svc := world.NewService(world.ServiceConfig{
 			CharacterRepo: mockCharRepo,
 			Engine:        engine,
+			EventEmitter:  &mockEventEmitter{},
 		})
 
 		examiner := &world.Character{
@@ -5183,6 +5163,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			LocationID: &charLocID,
 		}
 
+		engine.Grant(subjectID, "read", "character:"+targetCharID.String())
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
 		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(nil, world.ErrNotFound)
 
@@ -5207,13 +5188,9 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetChar := &world.Character{
-			ID:   targetCharID,
-			Name: "Mysterious Stranger",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)
@@ -5235,13 +5212,9 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetChar := &world.Character{
-			ID:   targetCharID,
-			Name: "Mysterious Stranger",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)
@@ -5263,13 +5236,9 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 			Name:       "Explorer",
 			LocationID: &charLocID,
 		}
-		targetChar := &world.Character{
-			ID:   targetCharID,
-			Name: "Mysterious Stranger",
-		}
 
 		mockCharRepo.EXPECT().Get(ctx, charID).Return(examiner, nil)
-		mockCharRepo.EXPECT().Get(ctx, targetCharID).Return(targetChar, nil)
+		// No target fetch — authorization happens before entity fetch
 
 		err := svc.ExamineCharacter(ctx, subjectID, charID, targetCharID)
 		require.Error(t, err)

@@ -6,6 +6,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -107,6 +108,8 @@ type Metrics struct {
 }
 
 // NewMetrics creates and registers custom HoloMUSH metrics.
+// Package-level counters are registered safely — if already registered with this
+// registry (e.g., in tests creating multiple servers), registration is skipped.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		ConnectionsTotal: prometheus.NewCounterVec(
@@ -127,11 +130,19 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 
 	reg.MustRegister(m.ConnectionsTotal)
 	reg.MustRegister(m.RequestsTotal)
-	reg.MustRegister(commandOutputFailures)
-	reg.MustRegister(commandRateLimited)
-	reg.MustRegister(engineFailures)
-	reg.MustRegister(circuitBreakerTrips)
-	reg.MustRegister(circuitBreakerSkipped)
+	// Package-level counters: safe register (skip if already registered)
+	for _, c := range []prometheus.Collector{
+		commandOutputFailures, commandRateLimited,
+		engineFailures, circuitBreakerTrips, circuitBreakerSkipped,
+	} {
+		if err := reg.Register(c); err != nil {
+			// Already registered — this is expected in tests with multiple servers.
+			var alreadyReg prometheus.AlreadyRegisteredError
+			if !errors.As(err, &alreadyReg) {
+				panic(err) // unexpected registration error
+			}
+		}
+	}
 
 	return m
 }

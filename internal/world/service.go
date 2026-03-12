@@ -797,13 +797,6 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.
 // ExamineLocation checks whether the character can examine a target location and
 // sends detailed location information to them.
-//
-// Note: this method fetches the entity before checking authorization. This is
-// intentional — in a MUSH context, location and object existence is not sensitive
-// information (players can see rooms they're in), and fetching first lets us
-// provide better error messages and validate spatial constraints (e.g., character
-// must be in the world). An unauthorized caller can distinguish "not found" from
-// "access denied", which is acceptable for this domain.
 func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
@@ -826,19 +819,19 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
 	}
 
-	// Get the target location
+	// Authorize before fetching target to prevent information disclosure
+	resource := access.LocationResource(targetLocationID.String())
+	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); checkErr != nil {
+		return checkErr
+	}
+
+	// Get the target location (only after authorization)
 	targetLoc, err := s.locationRepo.Get(ctx, targetLocationID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "target location %s not found", targetLocationID)
 		}
 		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target location %s", targetLocationID)
-	}
-
-	// Check authorization to read the target
-	resource := access.LocationResource(targetLocationID.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); err != nil {
-		return err
 	}
 
 	// Build and emit examine event
@@ -859,7 +852,6 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 }
 
 // ExamineObject allows a character to examine an object.
-// Fetches the entity before checking authorization; see ExamineLocation for rationale.
 // Emits an examine event for plugins after validation and authorization.
 // Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.
@@ -885,19 +877,19 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
 	}
 
-	// Get the target object
+	// Authorize before fetching target to prevent information disclosure
+	resource := access.ObjectResource(targetObjectID.String())
+	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); checkErr != nil {
+		return checkErr
+	}
+
+	// Get the target object (only after authorization)
 	targetObj, err := s.objectRepo.Get(ctx, targetObjectID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "target object %s not found", targetObjectID)
 		}
 		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target object %s", targetObjectID)
-	}
-
-	// Check authorization to read the target
-	resource := access.ObjectResource(targetObjectID.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); err != nil {
-		return err
 	}
 
 	// Build and emit examine event
@@ -918,7 +910,6 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 }
 
 // ExamineCharacter allows a character to examine another character.
-// Fetches the entity before checking authorization; see ExamineLocation for rationale.
 // Emits an examine event for plugins after validation and authorization.
 // Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.
@@ -941,19 +932,19 @@ func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, charac
 		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
 	}
 
-	// Get the target character
+	// Authorize before fetching target to prevent information disclosure
+	resource := access.CharacterResource(targetCharacterID.String())
+	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); checkErr != nil {
+		return checkErr
+	}
+
+	// Get the target character (only after authorization)
 	targetChar, err := s.characterRepo.Get(ctx, targetCharacterID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "target character %s not found", targetCharacterID)
 		}
 		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target character %s", targetCharacterID)
-	}
-
-	// Check authorization to read the target
-	resource := access.CharacterResource(targetCharacterID.String())
-	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); err != nil {
-		return err
 	}
 
 	// Build and emit examine event

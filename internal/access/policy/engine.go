@@ -101,14 +101,15 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		characterID, err := e.sessions.ResolveSession(ctx, sessionID)
 		if err != nil {
 			// Check if this is a SESSION_INVALID error
-			oopsErr, ok := oops.AsOops(err)
+			oopsErr, isOops := oops.AsOops(err)
 			var decision types.Decision
-			if ok && oopsErr.Code() == "SESSION_INVALID" {
+			code, isStr := oopsErr.Code().(string)
+			if isOops && isStr && code == "SESSION_INVALID" {
 				slog.DebugContext(ctx, "session invalid during resolution",
 					"session_id", sessionID,
 					"error", err,
 				)
-				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "deny:session-invalid")
+				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
 			} else {
 				errutil.LogErrorContext(ctx, "session resolution failed",
 					err, "session_id", sessionID,
@@ -155,6 +156,21 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			"action", req.Action,
 			"resource", req.Resource,
 		)
+		// Audit attribute-resolution failure (consistent with other deny paths)
+		entry := audit.Entry{
+			Subject:    req.Subject,
+			Action:     req.Action,
+			Resource:   req.Resource,
+			Effect:     types.EffectDefaultDeny,
+			PolicyID:   "infra:attribute-resolution-failed",
+			PolicyName: "",
+			DurationUS: time.Since(start).Microseconds(),
+			Timestamp:  time.Now(),
+		}
+		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+			audit.RecordEngineAuditFailure()
+		}
 		return types.Decision{}, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 

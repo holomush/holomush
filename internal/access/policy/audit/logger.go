@@ -175,7 +175,8 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 	case l.asyncChan <- entry:
 		return nil
 	default:
-		// Channel full - drop entry and increment metric
+		// Channel full - drop entry, increment metric, and return error so
+		// engine callers can track audit loss via RecordEngineAuditFailure.
 		channelFullCounter.Inc()
 		slog.Warn("audit channel full: dropping async entry",
 			"subject", entry.Subject,
@@ -183,7 +184,11 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 			"resource", entry.Resource,
 			"channel_len", len(l.asyncChan),
 		)
-		return nil
+		return oops.Code("AUDIT_CHANNEL_FULL").
+			With("subject", entry.Subject).
+			With("action", entry.Action).
+			With("resource", entry.Resource).
+			Errorf("audit channel full: entry dropped")
 	}
 }
 

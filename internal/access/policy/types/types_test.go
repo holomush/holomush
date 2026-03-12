@@ -329,9 +329,9 @@ func TestDecision_IsInfraFailure(t *testing.T) {
 		expected bool
 	}{
 		{
-			name:     "session invalid is not infra failure (uses deny: prefix)",
-			decision: NewDecision(EffectDefaultDeny, "session invalid", "deny:session-invalid"),
-			expected: false,
+			name:     "session invalid is infra failure (uses infra: prefix)",
+			decision: NewDecision(EffectDefaultDeny, "session invalid", "infra:session-invalid"),
+			expected: true,
 		},
 		{
 			name:     "session store error is infra failure",

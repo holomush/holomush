@@ -201,7 +201,7 @@ func TestContract_ErrorCodePreservation(t *testing.T) {
 			name:         "SESSION_INVALID code preserved",
 			sessionErr:   oops.Code("SESSION_INVALID").Errorf("session expired"),
 			wantReason:   "session invalid",
-			wantPolicyID: "deny:session-invalid",
+			wantPolicyID: "infra:session-invalid",
 		},
 		{
 			name:         "SESSION_NOT_FOUND code preserved",
@@ -219,7 +219,7 @@ func TestContract_ErrorCodePreservation(t *testing.T) {
 			name:         "wrapped oops error preserves code",
 			sessionErr:   oops.Code("SESSION_INVALID").Wrapf(oops.Errorf("inner"), "outer"),
 			wantReason:   "session invalid",
-			wantPolicyID: "deny:session-invalid",
+			wantPolicyID: "infra:session-invalid",
 		},
 	}
 

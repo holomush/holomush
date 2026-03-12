@@ -30,10 +30,11 @@ const (
 )
 
 // Session error code constants.
-// ErrCodeSessionInvalid uses "deny:" (not "infra:") because session expiry is
-// expected behavior, not an infrastructure failure.
+// ErrCodeSessionInvalid uses "infra:" because invalid sessions are transient
+// infrastructure failures (session expired/revoked) that callers should treat
+// as ErrAccessEvaluationFailed, not hard policy denials.
 const (
-	ErrCodeSessionInvalid    = "deny:session-invalid"
+	ErrCodeSessionInvalid    = "infra:session-invalid"
 	ErrCodeSessionStoreError = "infra:session-store-error"
 )
 

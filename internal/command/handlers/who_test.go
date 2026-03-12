@@ -1190,10 +1190,10 @@ func TestWhoHandler_InfraFailureDecisionCountsAsEngineError(t *testing.T) {
 	assert.Contains(t, output, "(Note: 1 player could not be displayed due to a system error)")
 }
 
-func TestWhoHandler_SessionInvalidDenyIsNotEngineError(t *testing.T) {
-	// When the engine returns a deny:session-invalid decision (IsInfraFailure()==false),
-	// checkAccess wraps it as ErrPermissionDenied, and the who handler silently skips
-	// the session — no system error notice, no errorCount increment.
+func TestWhoHandler_SessionInvalidIsInfraFailure(t *testing.T) {
+	// When the engine returns an infra:session-invalid decision (IsInfraFailure()==true),
+	// checkAccess wraps it as ErrAccessEvaluationFailed, and the who handler increments
+	// engineErrorCount — showing the system error notice to the player.
 	char1ID := ulid.Make()
 	sessionInvalidCharID := ulid.Make()
 	playerID := ulid.Make()
@@ -1214,10 +1214,10 @@ func TestWhoHandler_SessionInvalidDenyIsNotEngineError(t *testing.T) {
 		Get(mock.Anything, char1ID).
 		Return(char1, nil).Maybe()
 
-	// sessionInvalidChar: engine returns deny:session-invalid (NOT infra failure)
+	// sessionInvalidChar: engine returns infra:session-invalid (IS infra failure)
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(sessionInvalidCharID.String())}).
-		Return(types.NewDecision(types.EffectDeny, "session expired", "deny:session-invalid"), nil).Maybe()
+		Return(types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid"), nil).Maybe()
 
 	services := testutil.NewServicesBuilder().
 		WithSession(sessionMgr).
@@ -1234,7 +1234,6 @@ func TestWhoHandler_SessionInvalidDenyIsNotEngineError(t *testing.T) {
 	output := buf.String()
 	// Visible character should appear
 	assert.Contains(t, output, "Visible")
-	// No system error notice — session-invalid is treated as a permission deny, not an engine error
-	assert.NotContains(t, output, "system error", "session-invalid should be silently skipped, not counted as error")
-	assert.NotContains(t, output, "circuit breaker", "session-invalid should not trigger circuit breaker")
+	// Session-invalid is now infra failure — shows system error notice
+	assert.Contains(t, output, "system error", "session-invalid should be treated as engine error")
 }
