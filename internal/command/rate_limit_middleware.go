@@ -39,8 +39,12 @@ func NewRateLimitMiddleware(limiter *RateLimiter, engine types.AccessPolicyEngin
 }
 
 // Enforce checks and enforces rate limits for the provided execution context.
-// Callers must not invoke Enforce on a nil receiver.
+// Callers should not invoke Enforce on a nil receiver, but a nil guard is
+// retained as defense-in-depth.
 func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecution, commandName string, span trace.Span) error {
+	if r == nil || r.limiter == nil {
+		return nil
+	}
 	subject := access.CharacterSubject(exec.CharacterID().String())
 	bypass, err := r.hasBypass(ctx, subject)
 	if err != nil {

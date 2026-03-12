@@ -7,6 +7,7 @@ package policytest
 import (
 	"context"
 	"strings"
+	"testing"
 
 	"github.com/stretchr/testify/mock"
 
@@ -79,9 +80,11 @@ type InfraFailureEngine struct {
 }
 
 // NewInfraFailureEngine creates an engine that returns infrastructure failure decisions.
-func NewInfraFailureEngine(reason, policyID string) *InfraFailureEngine {
+// The policyID must start with "infra:" to be recognized by IsInfraFailure().
+func NewInfraFailureEngine(t testing.TB, reason, policyID string) *InfraFailureEngine {
+	t.Helper()
 	if !strings.HasPrefix(policyID, "infra:") {
-		panic("NewInfraFailureEngine: policyID must start with 'infra:' prefix, got: " + policyID)
+		t.Fatalf("NewInfraFailureEngine: policyID must start with 'infra:' prefix, got: %s", policyID)
 	}
 	return &InfraFailureEngine{reason: reason, policyID: policyID}
 }

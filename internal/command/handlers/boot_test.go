@@ -365,7 +365,7 @@ func TestBootHandler_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 	})
 
 	// Use infra failure engine for the command's access check
-	infraEngine := policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver")
+	infraEngine := policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver")
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -1489,7 +1489,7 @@ func TestCheckCapability(t *testing.T) {
 		},
 		{
 			name:           "infrastructure failure decision",
-			engine:         policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver"),
+			engine:         policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver"),
 			subject:        subjectID,
 			capability:     "admin.boot",
 			cmdName:        "boot",
@@ -1550,7 +1550,6 @@ func TestCheckCapability(t *testing.T) {
 		})
 	}
 }
-
 
 func TestCheckCapability_EvalErr_IncludesErrCapabilityCheckFailed(t *testing.T) {
 	ctx := context.Background()

@@ -243,7 +243,7 @@ func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 
 func TestDispatcher_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 	reg := NewRegistry()
-	infraEngine := policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver")
+	infraEngine := policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver")
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",

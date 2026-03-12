@@ -1602,6 +1602,7 @@ func (f *failingProvider) Namespace() string { return f.namespace }
 func (f *failingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
 	return nil, f.err
 }
+
 func (f *failingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
 	return nil, nil
 }
@@ -1645,15 +1646,71 @@ func TestEngine_ResolverError_FailsClosed(t *testing.T) {
 	assert.Equal(t, types.Decision{}, decision, "resolver error must return zero Decision")
 }
 
+// partialFailingProvider returns partial data from ResolveSubject alongside an error.
+// Used to verify that the engine discards partial bags on resolver error.
+type partialFailingProvider struct {
+	namespace string
+	err       error
+}
+
+func (p *partialFailingProvider) Namespace() string { return p.namespace }
+func (p *partialFailingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	// Return partial data AND an error — engine must discard the partial data.
+	return map[string]any{"role": "admin"}, p.err
+}
+
+func (p *partialFailingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (p *partialFailingProvider) Schema() *types.NamespaceSchema { return nil }
+
+func TestEngine_ResolverPartialBags_DiscardedOnError(t *testing.T) {
+	// Verify the contract documented in resolver.Resolve's godoc: partial bags
+	// returned alongside errors are for diagnostics only. The engine must NOT
+	// evaluate policies against partial data — it must fail closed with a zero
+	// Decision and propagate the error.
+	providerErr := fmt.Errorf("partial provider failure")
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterProvider(&partialFailingProvider{
+		namespace: "character",
+		err:       providerErr,
+	})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "resolver error must propagate even with partial data")
+	assert.ErrorContains(t, evalErr, "partial provider failure")
+	assert.False(t, decision.IsAllowed(), "must deny — partial bags must not reach policy evaluation")
+	assert.Equal(t, types.Decision{}, decision, "must return zero Decision, not a policy-evaluated one")
+}
+
 // failingEnvProvider is an EnvironmentProvider whose Resolve returns an error.
 type failingEnvProvider struct {
 	namespace string
 	err       error
 }
 
-func (f *failingEnvProvider) Namespace() string                            { return f.namespace }
+func (f *failingEnvProvider) Namespace() string                                 { return f.namespace }
 func (f *failingEnvProvider) Resolve(_ context.Context) (map[string]any, error) { return nil, f.err }
-func (f *failingEnvProvider) Schema() *types.NamespaceSchema               { return nil }
+func (f *failingEnvProvider) Schema() *types.NamespaceSchema                    { return nil }
 
 func TestEngine_EnvironmentResolverError_FailsClosed(t *testing.T) {
 	// When an environment provider returns an error, the engine must fail closed:
@@ -1700,6 +1757,7 @@ func (p *panickingProvider) Namespace() string { return p.namespace }
 func (p *panickingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
 	panic("intentional test panic")
 }
+
 func (p *panickingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
 	return nil, nil
 }

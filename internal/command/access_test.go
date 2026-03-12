@@ -78,7 +78,7 @@ func TestCheckCapability(t *testing.T) {
 				engine := policytest.NewErrorEngine(errors.New("db unavailable"))
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
 			case tt.infraEngine:
-				engine := policytest.NewInfraFailureEngine("cache stale", "infra:cache-stale")
+				engine := policytest.NewInfraFailureEngine(t, "cache stale", "infra:cache-stale")
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
 			default:
 				engine := tt.setupEngine()
@@ -110,8 +110,24 @@ func TestCheckCapability_InvalidRequest(t *testing.T) {
 	ctx := context.Background()
 	engine := policytest.NewGrantEngine()
 
-	// Empty subject should fail request construction
-	err := command.CheckCapability(ctx, engine, "", "cmd:say", "say")
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, command.CodeAccessEvaluationFailed)
+	t.Run("empty subject", func(t *testing.T) {
+		err := command.CheckCapability(ctx, engine, "", "cmd:say", "say")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, command.CodeAccessEvaluationFailed)
+	})
+
+	t.Run("empty capability", func(t *testing.T) {
+		err := command.CheckCapability(ctx, engine, "character:01ABC", "", "say")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, command.CodeAccessEvaluationFailed)
+	})
+
+	t.Run("context cancelled", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		errEngine := policytest.NewErrorEngine(cancelCtx.Err())
+		err := command.CheckCapability(cancelCtx, errEngine, "character:01ABC", "cmd:say", "say")
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, command.CodeAccessEvaluationFailed)
+	})
 }

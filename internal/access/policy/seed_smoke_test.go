@@ -578,6 +578,28 @@ func TestSeedSmoke_PlayerLocationListCharacters(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should list characters at current location (G3); got: %s — %s", decision.Effect(), decision.Reason())
 }
 
+func TestSeedSmoke_PlayerDeniedListCharacters_NonCurrentLocation(t *testing.T) {
+	currentLocID := "01LOC000AAAAAAAAAAAAAA"
+	otherLocID := "01LOC000BBBBBBBBBBBBBB"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "role": "player", "location": currentLocID},
+			nil,
+		),
+		locationProvider(map[string]any{"id": otherLocID, "name": "Other Room"}),
+	})
+
+	// Player at currentLocID should NOT be able to list_characters at otherLocID.
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "list_characters",
+		Resource: "location:" + otherLocID,
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(), "player should NOT list characters at non-current location; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
 func TestSeedSmoke_AdminLocationListCharacters(t *testing.T) {
 	locID := "01LOC000FFFFFFFFFFFFFFFF"
 

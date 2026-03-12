@@ -98,8 +98,8 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		// Circuit breaker: stop querying the engine after repeated failures to avoid
 		// O(n_commands * n_capabilities) calls against a degraded engine.
 		// Each command contributes at most 1 to the count regardless of how many capabilities it has.
-		// Note: intentionally independent from the identical constant in handlers/who.go —
-		// the two circuit breakers protect different code paths and may diverge.
+		// Independent from handlers/who.go: command-list iterates registry entries while
+		// who iterates sessions — different cardinalities and failure impacts.
 		//
 		// Invariant: commands with no capabilities are ALWAYS included, even when the
 		// circuit breaker has tripped. The circuit breaker only suppresses engine calls;

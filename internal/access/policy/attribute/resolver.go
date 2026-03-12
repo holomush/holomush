@@ -102,7 +102,13 @@ func (r *Resolver) RegisterEnvironmentProvider(provider EnvironmentProvider) err
 	return nil
 }
 
-// Resolve resolves all attributes for an access request
+// Resolve resolves all attributes for an access request.
+//
+// On success, returns fully populated bags and nil error.
+// On provider failure, returns partial bags alongside an error. The partial bags
+// contain results from providers that succeeded; they are intended for diagnostics
+// only. Callers MUST NOT use partial bags for policy evaluation — the engine
+// discards them and fails closed when Resolve returns a non-nil error.
 func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types.AttributeBags, error) {
 	// Check re-entrance guard
 	if isInResolution(ctx) {

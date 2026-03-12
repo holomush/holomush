@@ -236,7 +236,7 @@ func TestRateLimitMiddleware_Enforce_InfraFailure(t *testing.T) {
 	// Engine returns an infra failure decision (PolicyID starting with "infra:")
 	// rather than a Go error. The middleware should treat this as fail-closed:
 	// the bypass is denied and rate limiting is still applied.
-	infraEngine := policytest.NewInfraFailureEngine("session store unavailable", "infra:session-store-error")
+	infraEngine := policytest.NewInfraFailureEngine(t, "session store unavailable", "infra:session-store-error")
 
 	ratelimiter := NewRateLimiter(RateLimiterConfig{
 		BurstCapacity: 1,

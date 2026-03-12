@@ -142,7 +142,7 @@ func TestWorldService_GetLocation(t *testing.T) {
 		// Infrastructure failures (DB errors, session store errors, etc.) return deny decisions
 		// with PolicyID starting with "infra:" and should be treated as evaluation failures,
 		// not permission denials.
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockRepo := worldtest.NewMockLocationRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -1118,7 +1118,7 @@ func TestWorldService_AddSceneParticipant(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -1209,7 +1209,7 @@ func TestWorldService_RemoveSceneParticipant(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -1308,7 +1308,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockSceneRepo := worldtest.NewMockSceneRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -3969,7 +3969,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -4634,7 +4634,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockLocRepo := worldtest.NewMockLocationRepository(t)
 
@@ -4950,7 +4950,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockObjRepo := worldtest.NewMockObjectRepository(t)
 
@@ -5250,7 +5250,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 
 		svc := world.NewService(world.ServiceConfig{
@@ -5518,7 +5518,7 @@ func TestWorldService_DeleteCharacter(t *testing.T) {
 	})
 
 	t.Run("returns ErrAccessEvaluationFailed on infrastructure failure", func(t *testing.T) {
-		engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+		engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 		mockCharRepo := worldtest.NewMockCharacterRepository(t)
 		mockPropRepo := worldtest.NewMockPropertyRepository(t)
 		tx := &mockTransactor{}

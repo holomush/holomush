@@ -4,6 +4,7 @@
 package command
 
 import (
+	"fmt"
 	"log/slog"
 	"maps"
 	"strings"
@@ -601,11 +602,13 @@ func validateAliasEntries(aliases map[string]string) error {
 	for key, value := range aliases {
 		if strings.TrimSpace(key) == "" {
 			return oops.Code(CodeInvalidName).
+				With("message", "empty alias key in bulk load").
 				Errorf("empty alias key in bulk load")
 		}
 		if strings.TrimSpace(value) == "" {
 			return oops.Code(CodeInvalidName).
 				With("alias", key).
+				With("message", fmt.Sprintf("empty alias value for key %q in bulk load", key)).
 				Errorf("empty alias value for key %q in bulk load", key)
 		}
 	}

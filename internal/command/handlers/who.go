@@ -20,8 +20,8 @@ import (
 // maxEngineErrors is the circuit breaker threshold for the who handler.
 // After this many total engine errors (access evaluation failures), the handler stops
 // querying the engine to prevent amplifying load on a degraded system.
-// Note: intentionally independent from the identical constant in hostfunc/commands.go —
-// the two circuit breakers protect different code paths and may diverge.
+// Independent from hostfunc/commands.go: who iterates sessions while command-list
+// iterates registry entries — different cardinalities and failure impacts.
 const maxEngineErrors = 3
 
 // playerInfo holds display information for a connected player.

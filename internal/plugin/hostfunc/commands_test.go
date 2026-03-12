@@ -894,7 +894,7 @@ func TestListCommands_InfraFailure_SetsIncompleteTrue(t *testing.T) {
 	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
-	infraEngine := policytest.NewInfraFailureEngine("session resolution failed", "infra:session-resolver")
+	infraEngine := policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver")
 
 	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(infraEngine))
 

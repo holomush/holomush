@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/store"
 )
@@ -217,7 +218,9 @@ func (pc *Cache) IsStale() bool {
 // The connStr should be a PostgreSQL connection string for a dedicated (non-pooled)
 // connection. The goroutine exits when the context is cancelled.
 func (pc *Cache) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("Cache.Start is not implemented — use StartWithListener with a concrete Listener")
+	return oops.
+		Code("CACHE_START_NOT_IMPLEMENTED").
+		Errorf("Cache.Start is not implemented — use StartWithListener with a concrete Listener")
 }
 
 // StartWithListener spawns the background LISTEN/NOTIFY goroutine using the

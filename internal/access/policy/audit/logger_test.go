@@ -369,6 +369,16 @@ func TestAuditLogger_BothDBAndWALFail_EntryDropped(t *testing.T) {
 	// Should return error when both DB and WAL fail (critical failure)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_WRITE_FAILED")
+
+	// Verify entry is truly dropped: WAL path is a directory (not a file),
+	// so nothing should be durably stored there.
+	entries, readErr := os.ReadDir(walPath)
+	require.NoError(t, readErr)
+	assert.Empty(t, entries, "WAL directory should be empty — entry must be dropped when both DB and WAL fail")
+
+	// Verify DB writer received no successful writes
+	assert.Empty(t, writer.getSyncWrites(), "DB writer should have no successful sync writes")
+	assert.Empty(t, writer.getAsyncWrites(), "DB writer should have no successful async writes")
 }
 
 func TestAuditLogger_GracefulShutdown_FlushesBuffered(t *testing.T) {

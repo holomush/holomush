@@ -75,7 +75,7 @@ func TestErrorEngine(t *testing.T) {
 }
 
 func TestInfraFailureEngine(t *testing.T) {
-	engine := policytest.NewInfraFailureEngine("session store error", "infra:session-store-error")
+	engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
 	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
 	require.NoError(t, err)
 
