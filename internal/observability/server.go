@@ -94,6 +94,12 @@ func RecordEngineFailure(operation string) {
 	engineFailures.WithLabelValues(operation).Inc()
 }
 
+// EngineFailureCounter returns the engine failures counter for a given operation.
+// Exported for test assertions via prometheus/testutil.
+func EngineFailureCounter(operation string) prometheus.Counter {
+	return engineFailures.WithLabelValues(operation)
+}
+
 // Metrics contains custom Prometheus metrics for HoloMUSH.
 type Metrics struct {
 	ConnectionsTotal *prometheus.CounterVec

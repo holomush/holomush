@@ -60,14 +60,11 @@ func (r *Resolver) RegisterProvider(provider AttributeProvider) error {
 	r.providers[namespace] = provider
 	r.providerOrder = append(r.providerOrder, namespace)
 
-	// Register schema
+	// Register schema (skip if namespace already registered to avoid fragile string matching)
 	schema := provider.Schema()
-	if schema != nil {
+	if schema != nil && !r.registry.HasNamespace(namespace) {
 		if err := r.registry.Register(namespace, schema); err != nil {
-			// If already registered, that's OK
-			if !strings.Contains(err.Error(), "already registered") {
-				return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
-			}
+			return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
 		}
 	}
 
@@ -88,14 +85,11 @@ func (r *Resolver) RegisterEnvironmentProvider(provider EnvironmentProvider) err
 	r.envProviders[namespace] = provider
 	r.envProviderOrder = append(r.envProviderOrder, namespace)
 
-	// Register schema
+	// Register schema (skip if namespace already registered to avoid fragile string matching)
 	schema := provider.Schema()
-	if schema != nil {
+	if schema != nil && !r.registry.HasNamespace(namespace) {
 		if err := r.registry.Register(namespace, schema); err != nil {
-			// If already registered, that's OK
-			if !strings.Contains(err.Error(), "already registered") {
-				return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
-			}
+			return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
 		}
 	}
 

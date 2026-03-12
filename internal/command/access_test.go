@@ -8,12 +8,14 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -76,10 +78,18 @@ func TestCheckCapability(t *testing.T) {
 			switch {
 			case tt.useErrEngine:
 				engine := policytest.NewErrorEngine(errors.New("db unavailable"))
+				metricKey := tt.cmdName + "_access_check"
+				before := testutil.ToFloat64(observability.EngineFailureCounter(metricKey))
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
+				after := testutil.ToFloat64(observability.EngineFailureCounter(metricKey))
+				assert.Equal(t, before+1, after, "RecordEngineFailure should increment for engine error")
 			case tt.infraEngine:
 				engine := policytest.NewInfraFailureEngine(t, "cache stale", "infra:cache-stale")
+				metricKey := tt.cmdName + "_access_check"
+				before := testutil.ToFloat64(observability.EngineFailureCounter(metricKey))
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
+				after := testutil.ToFloat64(observability.EngineFailureCounter(metricKey))
+				assert.Equal(t, before+1, after, "RecordEngineFailure should increment for infra failure")
 			default:
 				engine := tt.setupEngine()
 				err = command.CheckCapability(ctx, engine, tt.subject, tt.capability, tt.cmdName)
@@ -102,6 +112,11 @@ func TestCheckCapability(t *testing.T) {
 			require.True(t, ok, "error should be an oops error")
 			assert.NotEmpty(t, oopsErr.Context()["command"], "should have command context")
 			assert.NotEmpty(t, oopsErr.Context()["capability"], "should have capability context")
+
+			if tt.infraEngine {
+				errutil.AssertErrorContext(t, err, "reason", "cache stale")
+				errutil.AssertErrorContext(t, err, "policy_id", "infra:cache-stale")
+			}
 		})
 	}
 }

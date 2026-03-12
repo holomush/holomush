@@ -242,7 +242,7 @@ func (pc *Cache) listenLoop(ctx context.Context, ch <-chan string) {
 				return // channel closed
 			}
 			if err := pc.Reload(ctx); err != nil {
-				slog.Error("policy cache reload on notification failed",
+				slog.ErrorContext(ctx, "policy cache reload on notification failed",
 					slog.String("error", err.Error()))
 			}
 		}

@@ -8,6 +8,8 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 func TestErrUnknownCommand(t *testing.T) {
@@ -253,7 +255,7 @@ func TestEntityPrefixCoverage(t *testing.T) {
 	// cover all known entity prefixes from the world service.
 	// If a new entityPrefix is added to service.go without updating errors.go,
 	// this test will catch the gap.
-	knownPrefixes := []string{"LOCATION", "EXIT", "OBJECT", "CHARACTER", "SCENE"}
+	knownPrefixes := world.KnownEntityPrefixes()
 
 	for _, prefix := range knownPrefixes {
 		evalCode := prefix + "_ACCESS_EVALUATION_FAILED"

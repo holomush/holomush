@@ -157,6 +157,15 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 					With("resource", entry.Resource).
 					Errorf("audit write failed: both DB and WAL failed")
 			}
+			// WAL succeeded but primary DB failed — log degraded state
+			slog.Warn("audit DB write failed, fell back to WAL",
+				"db_error", err,
+				"subject", entry.Subject,
+				"action", entry.Action,
+				"resource", entry.Resource,
+				"effect", entry.Effect,
+			)
+			failuresCounter.WithLabelValues("db_failed_wal_ok").Inc()
 		}
 		return nil
 	}
@@ -168,6 +177,12 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 	default:
 		// Channel full - drop entry and increment metric
 		channelFullCounter.Inc()
+		slog.Warn("audit channel full: dropping async entry",
+			"subject", entry.Subject,
+			"action", entry.Action,
+			"resource", entry.Resource,
+			"channel_len", len(l.asyncChan),
+		)
 		return nil
 	}
 }

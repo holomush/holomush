@@ -90,6 +90,18 @@ const (
 	prefixScene     entityPrefix = "SCENE"
 )
 
+// KnownEntityPrefixes returns all entity prefix strings.
+// Exported so cross-package tests can stay in sync without hardcoding.
+func KnownEntityPrefixes() []string {
+	return []string{
+		string(prefixLocation),
+		string(prefixExit),
+		string(prefixObject),
+		string(prefixCharacter),
+		string(prefixScene),
+	}
+}
+
 // checkAccess evaluates an access request using the ABAC policy engine.
 // Returns nil if allowed, or an error with appropriate oops error codes:
 //
@@ -632,7 +644,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixCharacter); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixLocation); err != nil {
 		return nil, err
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)

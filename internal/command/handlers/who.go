@@ -138,9 +138,12 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to a system error)")
 		case errorCount > 1:
 			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to system errors)\n", errorCount)
-		// Note: skippedCount > 0 without errorCount > 0 is unreachable because the circuit breaker
-		// only trips after maxEngineErrors engine errors, each of which also increments errorCount.
-		// The combined case (errorCount > 0 && skippedCount > 0) above handles this scenario.
+		default:
+			// Defensive: skippedCount > 0 without errorCount > 0 should be unreachable
+			// (circuit breaker only trips after engine errors), but guard against logic drift.
+			if skippedCount > 0 {
+				writeOutputf(ctx, exec, "who", "(Note: %d players skipped due to system issues)\n", skippedCount)
+			}
 		}
 	}
 	return nil
