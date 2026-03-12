@@ -6462,7 +6462,7 @@ func TestWorldService_CreateObject_VerifiesAccessRequest(t *testing.T) {
 
 	assert.Equal(t, subjectID, capturedRequest.Subject, "subject should be character:<id>")
 	assert.Equal(t, "write", capturedRequest.Action, "action should be 'write'")
-	assert.Equal(t, "object:*", capturedRequest.Resource, "resource should be object:*")
+	assert.Equal(t, access.ObjectResource("*"), capturedRequest.Resource, "resource should match typed helper")
 }
 
 func TestWorldService_UpdateObject_VerifiesAccessRequest(t *testing.T) {

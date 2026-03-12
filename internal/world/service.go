@@ -110,7 +110,7 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 
 	req, reqErr := types.NewAccessRequest(subject, action, resource)
 	if reqErr != nil {
-		// Defensive: currently unreachable because all call sites use typed helpers
+		// Defensive: all call sites should use typed helpers
 		// (access.CharacterSubject, access.LocationResource, etc.) that panic on
 		// empty input, and action strings are hardcoded literals. Kept as defense
 		// in depth against future call sites that might bypass the typed helpers.
@@ -416,7 +416,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Errorf("object repository not configured")
 	}
-	if err := s.checkAccess(ctx, subjectID, "write", "object:*", prefixObject); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "write", access.ObjectResource("*"), prefixObject); err != nil {
 		return err
 	}
 	if obj == nil {
