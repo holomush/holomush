@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -60,6 +61,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 				"threshold", maxEngineErrors,
 				"skipped_sessions", skippedCount,
 			)
+			observability.RecordCircuitBreakerTrip("who", skippedCount)
 			break
 		}
 
@@ -108,11 +110,15 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Symmetric anomaly detection for engine errors: if ALL sessions failed
-	// with engine errors, this indicates a possible engine outage.
-	if engineErrorCount > 0 && engineErrorCount == len(sessions) {
+	// with engine errors (or were skipped by the circuit breaker after engine errors),
+	// this indicates a possible engine outage. Account for skipped sessions here
+	// because the circuit breaker caps engineErrorCount at maxEngineErrors even when
+	// all remaining sessions would have failed too.
+	if engineErrorCount > 0 && (engineErrorCount+skippedCount) >= len(sessions) {
 		slog.WarnContext(ctx, "who handler: all sessions failed with engine errors — possible engine outage",
 			"total_sessions", len(sessions),
 			"engine_error_count", engineErrorCount,
+			"skipped_count", skippedCount,
 		)
 	}
 
@@ -132,9 +138,9 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			writeOutput(ctx, exec, "who", "(Note: 1 player could not be displayed due to a system error)")
 		case errorCount > 1:
 			writeOutputf(ctx, exec, "who", "(Note: %d players could not be displayed due to system errors)\n", errorCount)
-		case skippedCount > 0:
-			writeOutputf(ctx, exec, "who",
-				"(Note: %d players skipped due to engine circuit breaker)\n", skippedCount)
+		// Note: skippedCount > 0 without errorCount > 0 is unreachable because the circuit breaker
+		// only trips after maxEngineErrors engine errors, each of which also increments errorCount.
+		// The combined case (errorCount > 0 && skippedCount > 0) above handles this scenario.
 		}
 	}
 	return nil

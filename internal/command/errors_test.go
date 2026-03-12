@@ -157,6 +157,11 @@ func TestPlayerMessage(t *testing.T) {
 			expected: "alias name must start with a letter and contain only letters, digits, or _!?@#$%^+-",
 		},
 		{
+			name:     "invalid name - no message context fallback",
+			err:      oops.Code(CodeInvalidName).Errorf("raw error without message context"),
+			expected: "Invalid name.",
+		},
+		{
 			name:     "no alias cache",
 			err:      oops.Code(CodeNoAliasCache).Errorf("alias operations require a configured alias cache"),
 			expected: "Alias system is not available. Contact the server administrator.",

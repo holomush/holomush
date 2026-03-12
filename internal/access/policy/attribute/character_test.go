@@ -253,6 +253,15 @@ func TestCharacterProvider_RoleResolution(t *testing.T) {
 			expectedRole: "player",
 		},
 		{
+			name: "explicit empty-string role from resolver defaults to player",
+			roleResolver: &mockRoleResolver{
+				roles: map[string]string{
+					"character:" + charID.String(): "",
+				},
+			},
+			expectedRole: "player",
+		},
+		{
 			name: "admin role from resolver",
 			roleResolver: &mockRoleResolver{
 				roles: map[string]string{

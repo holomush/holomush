@@ -5,6 +5,7 @@ package policy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -817,6 +818,62 @@ func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
 			assert.NotNil(t, decision.Attributes(), "attributes should be populated")
 		})
 	}
+}
+
+
+// failingAttributeProvider is a test double that always returns an error from ResolveSubject.
+type failingAttributeProvider struct {
+	namespace string
+	err       error
+}
+
+func (f *failingAttributeProvider) Namespace() string { return f.namespace }
+func (f *failingAttributeProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	return nil, f.err
+}
+func (f *failingAttributeProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (f *failingAttributeProvider) Schema() *types.NamespaceSchema {
+	return &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
+	}
+}
+
+func TestEngine_EvaluateAttributeResolutionError(t *testing.T) {
+	// A failing attribute provider should cause the engine to fail closed:
+	// return a non-nil error with a zero-value decision.
+	providerErr := errors.New("database connection failed")
+	failingProvider := &failingAttributeProvider{
+		namespace: "character",
+		err:       providerErr,
+	}
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	require.NoError(t, resolver.RegisterProvider(failingProvider))
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.Error(t, err, "attribute resolution failure must return error")
+	assert.Equal(t, types.Decision{}, decision, "decision must be zero-value on error")
+	assert.False(t, decision.IsAllowed(), "decision must not be allowed on error")
+	assert.ErrorContains(t, err, "database connection failed")
 }
 
 // mockAttributeProvider is a test double for AttributeProvider.

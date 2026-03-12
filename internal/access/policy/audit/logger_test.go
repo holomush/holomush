@@ -562,6 +562,19 @@ func TestAuditLogger_ReplayWAL_AllFail(t *testing.T) {
 	assert.Len(t, lines, 2, "WAL should contain all failed entries")
 }
 
+func TestPartialReplayError_ErrorFormat(t *testing.T) {
+	err := &PartialReplayError{
+		FailedCount:   3,
+		ReplayedCount: 7,
+		TotalCount:    10,
+	}
+
+	msg := err.Error()
+	assert.Contains(t, msg, "partially failed", "Error() should contain 'partially failed'")
+	assert.Contains(t, msg, "3", "Error() should contain failed count")
+	assert.Contains(t, msg, "10", "Error() should contain total count")
+}
+
 func TestRecordEngineAuditFailure_IncrementsCounter(t *testing.T) {
 	before := promtestutil.ToFloat64(engineAuditFailuresCounter)
 

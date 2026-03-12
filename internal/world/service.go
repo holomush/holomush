@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -104,7 +105,7 @@ const (
 // holomush_engine_failures_total counter uses a package-level Prometheus var
 // that is not exported; metric increments are verified by integration tests.
 func (s *Service) checkAccess(ctx context.Context, subject, action, resource string, prefix entityPrefix) error {
-	metricKey := string(prefix) + "_access_check"
+	metricKey := strings.ToLower(string(prefix)) + "_access_check"
 	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
 	denyCode := string(prefix) + "_ACCESS_DENIED"
 
@@ -631,7 +632,7 @@ func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string,
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
 	resource := access.LocationResource(locationID.String())
-	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixLocation); err != nil {
+	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixCharacter); err != nil {
 		return nil, err
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)

@@ -3949,10 +3949,10 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		assert.ErrorIs(t, err, world.ErrPermissionDenied)
-		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_DENIED")
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_DENIED")
 	})
 
-	t.Run("returns LOCATION_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
+	t.Run("returns CHARACTER_ACCESS_EVALUATION_FAILED for engine errors", func(t *testing.T) {
 		engine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 		mockRepo := worldtest.NewMockCharacterRepository(t)
 
@@ -3964,7 +3964,7 @@ func TestWorldService_GetCharactersByLocation(t *testing.T) {
 		chars, err := svc.GetCharactersByLocation(ctx, subjectID, locationID, world.ListOptions{})
 		assert.Nil(t, chars)
 		require.Error(t, err)
-		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
+		errutil.AssertErrorCode(t, err, "CHARACTER_ACCESS_EVALUATION_FAILED")
 		assert.ErrorIs(t, err, world.ErrAccessEvaluationFailed)
 	})
 
@@ -7614,7 +7614,7 @@ func TestWorldService_MalformedAccessParams(t *testing.T) {
 				_, err := svc.GetCharactersByLocation(ctx, "", locID, world.ListOptions{})
 				return err
 			},
-			expectedErrorCode: "LOCATION_ACCESS_EVALUATION_FAILED",
+			expectedErrorCode: "CHARACTER_ACCESS_EVALUATION_FAILED",
 		},
 	}
 

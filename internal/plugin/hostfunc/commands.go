@@ -188,7 +188,7 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 		if err != nil {
 			errutil.LogErrorContext(ctx, "access request construction failed",
 				err, "subject", subject, "action", "execute", "resource", cap)
-			observability.RecordEngineFailure("command_capability_check")
+			observability.RecordEngineFailure("command_capability_request_error")
 			hadError = true
 			return false, hadError
 		}
@@ -197,7 +197,7 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 		if err != nil {
 			errutil.LogErrorContext(ctx, "access evaluation failed",
 				err, "subject", subject, "action", "execute", "resource", cap)
-			observability.RecordEngineFailure("command_capability_check")
+			observability.RecordEngineFailure("command_capability_engine_error")
 			hadError = true
 			return false, hadError
 		}
@@ -206,7 +206,7 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 				slog.ErrorContext(ctx, "access check infrastructure failure",
 					"subject", subject, "action", "execute", "resource", cap,
 					"reason", decision.Reason(), "policy_id", decision.PolicyID())
-				observability.RecordEngineFailure("command_capability_check")
+				observability.RecordEngineFailure("command_capability_engine_error")
 				hadError = true
 			}
 			return false, hadError

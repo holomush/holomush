@@ -51,6 +51,31 @@ var engineFailures = prometheus.NewCounterVec(
 	[]string{"operation"},
 )
 
+// circuitBreakerTrips tracks circuit breaker activations by handler.
+var circuitBreakerTrips = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_circuit_breaker_trips_total",
+		Help: "Total number of circuit breaker activations by handler",
+	},
+	[]string{"handler"},
+)
+
+// circuitBreakerSkipped tracks sessions skipped by circuit breaker activations.
+var circuitBreakerSkipped = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_circuit_breaker_skipped_total",
+		Help: "Total number of sessions skipped due to circuit breaker by handler",
+	},
+	[]string{"handler"},
+)
+
+// RecordCircuitBreakerTrip increments the circuit breaker trip counter
+// and records the number of sessions skipped.
+func RecordCircuitBreakerTrip(handler string, skipped int) {
+	circuitBreakerTrips.WithLabelValues(handler).Inc()
+	circuitBreakerSkipped.WithLabelValues(handler).Add(float64(skipped))
+}
+
 // RecordCommandOutputFailure increments the command output failure counter.
 // Called by command handlers when output write fails.
 func RecordCommandOutputFailure(command string) {
@@ -99,6 +124,8 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	reg.MustRegister(commandOutputFailures)
 	reg.MustRegister(commandRateLimited)
 	reg.MustRegister(engineFailures)
+	reg.MustRegister(circuitBreakerTrips)
+	reg.MustRegister(circuitBreakerSkipped)
 
 	return m
 }

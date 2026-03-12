@@ -59,6 +59,7 @@ func (r *RateLimitMiddleware) Enforce(ctx context.Context, exec *CommandExecutio
 			err, "subject", subject, "action", "execute", "resource", CapabilityRateLimitBypass, "command", commandName,
 		)
 		observability.RecordEngineFailure("rate_limit_bypass")
+		span.SetAttributes(attribute.Bool("rate_limit.bypass_check_failed", true))
 	} else if bypass {
 		return nil
 	}

@@ -231,6 +231,7 @@ func (r *Resolver) resolveEnvironment(ctx context.Context, bag map[string]any) e
 func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityID string) (attrs map[string]any, retErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			attrs = nil // defense-in-depth: discard partially-mutated map
 			r.logger.Error("provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"resolve_type", resolveType,
@@ -267,6 +268,7 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider EnvironmentProvider) (attrs map[string]any, retErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			attrs = nil // defense-in-depth: discard partially-mutated map
 			r.logger.Error("environment provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"provider_type", "environment",

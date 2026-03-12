@@ -1141,3 +1141,100 @@ func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
 		"circuit breaker should trip after 3 engine errors even with interleaved non-engine errors")
 	assert.Contains(t, logOutput, "engine_failures=3")
 }
+
+func TestWhoHandler_InfraFailureDecisionCountsAsEngineError(t *testing.T) {
+	// When the engine returns nil error but an infra-failure decision (IsInfraFailure()==true),
+	// checkAccess wraps it as ErrAccessEvaluationFailed. The who handler should count this
+	// as an engine error and show the system error notice — not silently skip like a deny.
+	char1ID := ulid.Make()
+	infraFailCharID := ulid.Make()
+	playerID := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, ulid.Make())
+	sessionMgr.Connect(infraFailCharID, ulid.Make())
+
+	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	// char1 is accessible
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, char1ID).
+		Return(char1, nil).Maybe()
+
+	// infraFailChar: engine returns nil error but infra-failure decision
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(infraFailCharID.String())}).
+		Return(types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error"), nil).Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Visible character should appear
+	assert.Contains(t, output, "Visible")
+	// Infra failure should be counted as an error and shown as system error
+	assert.Contains(t, output, "(Note: 1 player could not be displayed due to a system error)")
+}
+
+func TestWhoHandler_SessionInvalidDenyIsNotEngineError(t *testing.T) {
+	// When the engine returns a deny:session-invalid decision (IsInfraFailure()==false),
+	// checkAccess wraps it as ErrPermissionDenied, and the who handler silently skips
+	// the session — no system error notice, no errorCount increment.
+	char1ID := ulid.Make()
+	sessionInvalidCharID := ulid.Make()
+	playerID := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, ulid.Make())
+	sessionMgr.Connect(sessionInvalidCharID, ulid.Make())
+
+	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	// char1 is accessible
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(char1ID.String())}).
+		Return(types.NewDecision(types.EffectAllow, "", ""), nil).Maybe()
+	fixture.Mocks.CharacterRepo.EXPECT().
+		Get(mock.Anything, char1ID).
+		Return(char1, nil).Maybe()
+
+	// sessionInvalidChar: engine returns deny:session-invalid (NOT infra failure)
+	fixture.Mocks.Engine.EXPECT().
+		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executor.CharacterID.String()), Action: "read", Resource: access.CharacterResource(sessionInvalidCharID.String())}).
+		Return(types.NewDecision(types.EffectDeny, "session expired", "deny:session-invalid"), nil).Maybe()
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+	require.NoError(t, err)
+
+	output := buf.String()
+	// Visible character should appear
+	assert.Contains(t, output, "Visible")
+	// No system error notice — session-invalid is treated as a permission deny, not an engine error
+	assert.NotContains(t, output, "system error", "session-invalid should be silently skipped, not counted as error")
+	assert.NotContains(t, output, "circuit breaker", "session-invalid should not trigger circuit breaker")
+}

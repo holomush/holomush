@@ -119,6 +119,22 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			if valErr := decision.Validate(); valErr != nil {
 				return decision, oops.Wrapf(valErr, "decision validation failed")
 			}
+			// Audit session-resolution deny decision
+			entry := audit.Entry{
+				Subject:    req.Subject,
+				Action:     req.Action,
+				Resource:   req.Resource,
+				Effect:     types.EffectDefaultDeny,
+				PolicyID:   decision.PolicyID(),
+				PolicyName: "",
+				DurationUS: time.Since(start).Microseconds(),
+				Timestamp:  time.Now(),
+			}
+			if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+				slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+				audit.RecordEngineAuditFailure()
+			}
+
 			RecordEvaluationMetrics(time.Since(start), decision.Effect())
 			return decision, nil
 		}
