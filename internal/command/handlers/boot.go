@@ -159,10 +159,10 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 		// for monitoring/alerting purposes.
 		if accessEvalFailedCount > 0 {
 			return ulid.ULID{}, "", oops.Code(command.CodeAccessEvaluationFailed).
-				Errorf("Unable to search for player due to a temporary system error. Please try again shortly.")
+				Errorf("access evaluation failed during player search")
 		}
 		//nolint:wrapcheck // WorldError creates a structured oops error
-		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a temporary system error. Please try again shortly.", nil)
+		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a system error. Please try again shortly.", nil)
 	}
 
 	//nolint:wrapcheck // ErrTargetNotFound creates a structured oops error

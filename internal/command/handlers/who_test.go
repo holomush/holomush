@@ -213,6 +213,50 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	assert.Contains(t, buf.String(), "1 player online")
 }
 
+// TestWhoHandler_AllSessionsDenied_AnomalyDetection verifies that when ALL
+// active sessions are denied read access (explicit deny, not errors), the
+// WhoHandler returns success with zero players shown.
+func TestWhoHandler_AllSessionsDenied_AnomalyDetection(t *testing.T) {
+	char1ID := ulid.Make()
+	char2ID := ulid.Make()
+	char3ID := ulid.Make()
+	conn1 := ulid.Make()
+	conn2 := ulid.Make()
+	conn3 := ulid.Make()
+	executor := testutil.RegularPlayer()
+
+	sessionMgr := core.NewSessionManager()
+	sessionMgr.Connect(char1ID, conn1)
+	sessionMgr.Connect(char2ID, conn2)
+	sessionMgr.Connect(char3ID, conn3)
+
+	fixture := testutil.NewWorldServiceBuilder(t).Build()
+	for _, charID := range []ulid.ULID{char1ID, char2ID, char3ID} {
+		fixture.Mocks.Engine.EXPECT().
+			Evaluate(mock.Anything, types.AccessRequest{
+				Subject:  access.CharacterSubject(executor.CharacterID.String()),
+				Action:   "read",
+				Resource: access.CharacterResource(charID.String()),
+			}).
+			Return(types.NewDecision(types.EffectDeny, "", ""), nil)
+	}
+
+	services := testutil.NewServicesBuilder().
+		WithSession(sessionMgr).
+		WithWorldFixture(fixture).
+		Build()
+	exec, buf := testutil.NewExecutionBuilder().
+		WithCharacter(executor).
+		WithServices(services).
+		Build()
+
+	err := WhoHandler(context.Background(), exec)
+
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "No players online")
+	assert.NotContains(t, buf.String(), "could not be displayed")
+}
+
 func TestFormatIdleTime(t *testing.T) {
 	tests := []struct {
 		name     string
