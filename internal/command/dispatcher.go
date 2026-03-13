@@ -180,6 +180,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 			metrics.SetStatus(StatusPermissionDenied)
 		} else {
 			metrics.SetStatus(StatusEngineFailure)
+			span.RecordError(capErr)
+			span.SetStatus(codes.Error, capErr.Error())
 		}
 		return capErr
 	}

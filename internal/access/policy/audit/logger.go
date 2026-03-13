@@ -26,7 +26,7 @@ type Mode string
 
 // Audit logging modes.
 const (
-	ModeMinimal     Mode = "minimal"      // Logs denials and default denials only (sync)
+	ModeMinimal     Mode = "minimal"      // Logs denials, default denials, and system bypasses (sync)
 	ModeDenialsOnly Mode = "denials_only" // Logs all denials, default denials, and system bypasses (sync)
 	ModeAll         Mode = "all"          // everything
 )

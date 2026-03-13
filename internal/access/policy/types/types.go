@@ -346,7 +346,7 @@ const (
 // and MUST NOT grant access. When the returned Decision indicates infrastructure
 // failure (IsInfraFailure), the engine has already denied the request. The engine
 // never returns a permissive Decision alongside an error; on error paths the
-// returned Decision is always the zero value (EffectDefaultDeny, allowed=false).
+// returned Decision is an infra-failure (EffectDefaultDeny with "infra:" policy ID).
 //
 // This interface is defined here (in types package) to avoid import cycles:
 // - world package needs to call the engine

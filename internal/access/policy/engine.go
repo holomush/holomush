@@ -47,7 +47,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 0a: Context cancellation check
 	if err := ctx.Err(); err != nil {
-		return types.Decision{}, oops.Wrapf(err, "context cancelled before evaluation")
+		return types.NewDecision(types.EffectDefaultDeny, "context cancelled", "infra:context-cancelled"),
+			oops.Wrapf(err, "context cancelled before evaluation")
 	}
 
 	// Step 1: System bypass — defense-in-depth (S1)
@@ -171,7 +172,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 			audit.RecordEngineAuditFailure()
 		}
-		return types.Decision{}, oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
+		return types.NewDecision(types.EffectDefaultDeny, "attribute resolution failed", "infra:attribute-resolution"),
+			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale

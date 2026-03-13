@@ -130,7 +130,7 @@ func TestAuditLogger_MinimalMode_Deny_LoggedSync(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_MinimalMode_SystemBypass_NotLogged(t *testing.T) {
+func TestAuditLogger_MinimalMode_SystemBypass_LoggedSync(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
@@ -150,7 +150,11 @@ func TestAuditLogger_MinimalMode_SystemBypass_NotLogged(t *testing.T) {
 	err := logger.Log(context.Background(), entry)
 	require.NoError(t, err)
 
-	assert.Empty(t, writer.getSyncWrites())
+	// System bypasses are elevated-privilege events — always logged, even in minimal mode
+	syncWrites := writer.getSyncWrites()
+	require.Len(t, syncWrites, 1)
+	assert.Equal(t, entry.Subject, syncWrites[0].Subject)
+	assert.Equal(t, entry.Effect, syncWrites[0].Effect)
 	assert.Empty(t, writer.getAsyncWrites())
 }
 

@@ -181,10 +181,10 @@ func TestEngine_ContextCancelled(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 
-	// Contract: returned Decision is zero-value — not allowed, not an infra-failure decision
-	assert.Equal(t, types.Decision{}, decision)
+	// Contract: returned Decision is a DefaultDeny infra-failure — not allowed
 	assert.False(t, decision.IsAllowed())
-	assert.False(t, decision.IsInfraFailure())
+	assert.True(t, decision.IsInfraFailure())
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 }
 
 func TestEngine_SessionResolved(t *testing.T) {
@@ -871,8 +871,9 @@ func TestEngine_EvaluateAttributeResolutionError(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.Error(t, err, "attribute resolution failure must return error")
-	assert.Equal(t, types.Decision{}, decision, "decision must be zero-value on error")
 	assert.False(t, decision.IsAllowed(), "decision must not be allowed on error")
+	assert.True(t, decision.IsInfraFailure(), "decision must be infra-failure on attribute resolution error")
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.ErrorContains(t, err, "database connection failed")
 }
 
@@ -1697,10 +1698,9 @@ func TestEngine_ResolverError_FailsClosed(t *testing.T) {
 	decision, evalErr := engine.Evaluate(context.Background(), req)
 	require.Error(t, evalErr, "resolver error must propagate as engine error")
 	assert.ErrorContains(t, evalErr, "database connection lost")
-	// With the zero-Decision return contract, callers treat non-nil error as
-	// evaluation failure. The Decision is a zero value, not a populated DefaultDeny.
+	// Attribute resolution errors return infra-failure decisions (DefaultDeny with infra: prefix)
 	assert.False(t, decision.IsAllowed(), "resolver error decision must deny access")
-	assert.Equal(t, types.Decision{}, decision, "resolver error must return zero Decision")
+	assert.True(t, decision.IsInfraFailure(), "resolver error must return infra-failure decision")
 }
 
 // partialFailingProvider returns partial data from ResolveSubject alongside an error.
@@ -1756,7 +1756,7 @@ func TestEngine_ResolverPartialBags_DiscardedOnError(t *testing.T) {
 	require.Error(t, evalErr, "resolver error must propagate even with partial data")
 	assert.ErrorContains(t, evalErr, "partial provider failure")
 	assert.False(t, decision.IsAllowed(), "must deny — partial bags must not reach policy evaluation")
-	assert.Equal(t, types.Decision{}, decision, "must return zero Decision, not a policy-evaluated one")
+	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision on partial resolution")
 }
 
 // failingEnvProvider is an EnvironmentProvider whose Resolve returns an error.
@@ -1802,7 +1802,7 @@ func TestEngine_EnvironmentResolverError_FailsClosed(t *testing.T) {
 	require.Error(t, evalErr, "environment resolver error must propagate")
 	assert.ErrorContains(t, evalErr, "environment provider unavailable")
 	assert.False(t, decision.IsAllowed(), "must deny on environment resolver error")
-	assert.Equal(t, types.Decision{}, decision, "must return zero Decision")
+	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision")
 }
 
 // panickingProvider is an AttributeProvider whose ResolveSubject panics.
@@ -1848,5 +1848,5 @@ func TestEngine_ResolverPanic_FailsClosed(t *testing.T) {
 	require.Error(t, evalErr, "panic-recovered error must propagate")
 	assert.ErrorContains(t, evalErr, "panicked")
 	assert.False(t, decision.IsAllowed(), "must deny on provider panic")
-	assert.Equal(t, types.Decision{}, decision, "must return zero Decision")
+	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision")
 }
