@@ -659,8 +659,8 @@ func TestEvaluateConditions_InExpr(t *testing.T) {
 			}}),
 			bags: func() *types.AttributeBags {
 				b := newBags()
-				b.Subject["id"] = "char:01ABC"
-				b.Resource["visible_to"] = []string{"char:01ABC", "char:02DEF"}
+				b.Subject["id"] = "character:01ABC"
+				b.Resource["visible_to"] = []string{"character:01ABC", "character:02DEF"}
 				return b
 			}(),
 			expected: true,
@@ -672,8 +672,8 @@ func TestEvaluateConditions_InExpr(t *testing.T) {
 			}}),
 			bags: func() *types.AttributeBags {
 				b := newBags()
-				b.Subject["id"] = "char:99ZZZ"
-				b.Resource["visible_to"] = []string{"char:01ABC", "char:02DEF"}
+				b.Subject["id"] = "character:99ZZZ"
+				b.Resource["visible_to"] = []string{"character:01ABC", "character:02DEF"}
 				return b
 			}(),
 			expected: false,
@@ -685,8 +685,8 @@ func TestEvaluateConditions_InExpr(t *testing.T) {
 			}}),
 			bags: func() *types.AttributeBags {
 				b := newBags()
-				b.Subject["id"] = "char:01ABC"
-				b.Resource["visible_to"] = []any{"char:01ABC", "char:02DEF"}
+				b.Subject["id"] = "character:01ABC"
+				b.Resource["visible_to"] = []any{"character:01ABC", "character:02DEF"}
 				return b
 			}(),
 			expected: true,
@@ -698,7 +698,7 @@ func TestEvaluateConditions_InExpr(t *testing.T) {
 			}}),
 			bags: func() *types.AttributeBags {
 				b := newBags()
-				b.Subject["id"] = "char:01ABC"
+				b.Subject["id"] = "character:01ABC"
 				b.Resource["visible_to"] = "not a slice"
 				return b
 			}(),
@@ -1213,8 +1213,8 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			dsl:  `permit(principal, action, resource) when { principal.id in resource.visible_to };`,
 			bags: func() *types.AttributeBags {
 				b := newBags()
-				b.Subject["id"] = "char:01"
-				b.Resource["visible_to"] = []string{"char:01", "char:02"}
+				b.Subject["id"] = "character:01"
+				b.Resource["visible_to"] = []string{"character:01", "character:02"}
 				return b
 			}(),
 			expected: true,
@@ -1303,8 +1303,8 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			bags: func() *types.AttributeBags {
 				b := newBags()
 				b.Resource["visibility"] = "restricted"
-				b.Resource["visible_to"] = []string{"char:01", "char:02"}
-				b.Subject["id"] = "char:01"
+				b.Resource["visible_to"] = []string{"character:01", "character:02"}
+				b.Subject["id"] = "character:01"
 				return b
 			}(),
 			expected: true,
@@ -1315,8 +1315,8 @@ func TestEvaluateConditions_ParsedPolicies(t *testing.T) {
 			bags: func() *types.AttributeBags {
 				b := newBags()
 				b.Resource["visibility"] = "restricted"
-				b.Resource["visible_to"] = []string{"char:01", "char:02"}
-				b.Subject["id"] = "char:99"
+				b.Resource["visible_to"] = []string{"character:01", "character:02"}
+				b.Subject["id"] = "character:99"
 				return b
 			}(),
 			expected: false,

@@ -6,21 +6,24 @@ package world
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // ErrPermissionDenied is returned when an operation is not authorized.
 var ErrPermissionDenied = errors.New("permission denied")
 
-// AccessControl defines the interface for authorization checks.
-// This mirrors internal/access.AccessControl to avoid coupling world to access package.
-type AccessControl interface {
-	Check(ctx context.Context, subject, action, resource string) bool
-}
+// ErrAccessEvaluationFailed is returned when the policy engine fails to evaluate a request.
+// Callers can use errors.Is to distinguish engine failures from policy denials.
+var ErrAccessEvaluationFailed = errors.New("access evaluation failed")
 
 // ServiceConfig holds dependencies for WorldService.
 type ServiceConfig struct {
@@ -30,7 +33,7 @@ type ServiceConfig struct {
 	SceneRepo     SceneRepository
 	CharacterRepo CharacterRepository
 	PropertyRepo  PropertyRepository
-	AccessControl AccessControl
+	Engine        types.AccessPolicyEngine
 	EventEmitter  EventEmitter
 	Transactor    Transactor
 }
@@ -44,16 +47,16 @@ type Service struct {
 	sceneRepo     SceneRepository
 	characterRepo CharacterRepository
 	propertyRepo  PropertyRepository
-	accessControl AccessControl
+	engine        types.AccessPolicyEngine
 	eventEmitter  EventEmitter
 	transactor    Transactor
 }
 
 // NewService creates a new Service with the given configuration.
-// Panics if AccessControl is nil, as it is required for all operations.
+// Panics if Engine is nil, as it is required for all operations.
 func NewService(cfg ServiceConfig) *Service {
-	if cfg.AccessControl == nil {
-		panic("world.NewService: AccessControl is required")
+	if cfg.Engine == nil {
+		panic("world.NewService: Engine is required")
 	}
 	if cfg.EventEmitter == nil {
 		slog.Warn("world.NewService: EventEmitter not configured, operations requiring event emission will fail")
@@ -68,10 +71,96 @@ func NewService(cfg ServiceConfig) *Service {
 		sceneRepo:     cfg.SceneRepo,
 		characterRepo: cfg.CharacterRepo,
 		propertyRepo:  cfg.PropertyRepo,
-		accessControl: cfg.AccessControl,
+		engine:        cfg.Engine,
 		eventEmitter:  cfg.EventEmitter,
 		transactor:    cfg.Transactor,
 	}
+}
+
+// entityPrefix is a typed string for checkAccess error code prefixes.
+// Using a distinct type prevents typos in free-form prefix strings from
+// producing unhandled error codes.
+type entityPrefix string
+
+const (
+	prefixLocation  entityPrefix = "LOCATION"
+	prefixExit      entityPrefix = "EXIT"
+	prefixObject    entityPrefix = "OBJECT"
+	prefixCharacter entityPrefix = "CHARACTER"
+	prefixScene     entityPrefix = "SCENE"
+)
+
+// KnownEntityPrefixes returns all entity prefix strings.
+// Exported so cross-package tests can stay in sync without hardcoding.
+func KnownEntityPrefixes() []string {
+	return []string{
+		string(prefixLocation),
+		string(prefixExit),
+		string(prefixObject),
+		string(prefixCharacter),
+		string(prefixScene),
+	}
+}
+
+// checkAccess evaluates an access request using the ABAC policy engine.
+// Returns nil if allowed, or an error with appropriate oops error codes:
+//
+//   - ErrPermissionDenied       → oops.Code("{entityPrefix}_ACCESS_DENIED")
+//   - ErrAccessEvaluationFailed → oops.Code("{entityPrefix}_ACCESS_EVALUATION_FAILED")
+//   - all other errors          → oops.Code("{entityPrefix}_ACCESS_EVALUATION_FAILED")
+//
+// The entityPrefix parameter determines the error code prefix (e.g., "LOCATION", "EXIT").
+// Unknown errors (context errors, DB failures, etc.) are classified as evaluation
+// failures rather than denials to avoid poisoning metrics and user feedback.
+//
+// Metrics: calls observability.RecordEngineFailure in all error paths. The
+// holomush_engine_failures_total counter uses a package-level Prometheus var
+// that is not exported; metric increments are verified by integration tests.
+func (s *Service) checkAccess(ctx context.Context, subject, action, resource string, prefix entityPrefix) error {
+	metricKey := strings.ToLower(string(prefix)) + "_access_check"
+	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
+	denyCode := string(prefix) + "_ACCESS_DENIED"
+
+	req, reqErr := types.NewAccessRequest(subject, action, resource)
+	if reqErr != nil {
+		// Defensive: all call sites should use typed helpers
+		// (access.CharacterSubject, access.LocationResource, etc.) that panic on
+		// empty input, and action strings are hardcoded literals. Kept as defense
+		// in depth against future call sites that might bypass the typed helpers.
+		errutil.LogErrorContext(ctx, "invalid access request",
+			reqErr, "subject", subject, "action", action, "resource", resource)
+		observability.RecordEngineFailure(metricKey)
+		return oops.Code(failCode).
+			Wrap(errors.Join(ErrAccessEvaluationFailed, reqErr))
+	}
+	decision, err := s.engine.Evaluate(ctx, req)
+	if err != nil {
+		errutil.LogErrorContext(ctx, "access evaluation failed",
+			err, "subject", subject, "action", action, "resource", resource)
+		observability.RecordEngineFailure(metricKey)
+		return oops.Code(failCode).
+			Wrap(errors.Join(ErrAccessEvaluationFailed, err))
+	}
+	if !decision.IsAllowed() {
+		// Infrastructure failures (session resolution, DB errors) should return
+		// ErrAccessEvaluationFailed, not ErrPermissionDenied, so callers and users
+		// can distinguish transient failures from policy denials.
+		if decision.IsInfraFailure() {
+			slog.ErrorContext(ctx, "access check infrastructure failure",
+				"policy_id", decision.PolicyID(), "reason", decision.Reason(),
+				"subject", subject, "action", action, "resource", resource)
+			observability.RecordEngineFailure(metricKey)
+			return oops.Code(failCode).
+				With("reason", decision.Reason()).
+				With("policy_id", decision.PolicyID()).
+				Wrap(ErrAccessEvaluationFailed)
+		}
+		return oops.Code(denyCode).
+			With("reason", decision.Reason()).
+			With("policy_id", decision.PolicyID()).
+			Wrap(ErrPermissionDenied)
+	}
+	return nil
 }
 
 // GetLocation retrieves a location by ID after checking read authorization.
@@ -79,9 +168,9 @@ func (s *Service) GetLocation(ctx context.Context, subjectID string, id ulid.ULI
 	if s.locationRepo == nil {
 		return nil, oops.Code("LOCATION_GET_FAILED").Errorf("location repository not configured")
 	}
-	resource := fmt.Sprintf("location:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.LocationResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); err != nil {
+		return nil, err
 	}
 	loc, err := s.locationRepo.Get(ctx, id)
 	if err != nil {
@@ -100,8 +189,8 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	if s.locationRepo == nil {
 		return oops.Code("LOCATION_CREATE_FAILED").Errorf("location repository not configured")
 	}
-	if !s.accessControl.Check(ctx, subjectID, "write", "location:*") {
-		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	if err := s.checkAccess(ctx, subjectID, "write", access.LocationResource("*"), prefixLocation); err != nil {
+		return err
 	}
 	if loc == nil {
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
@@ -128,9 +217,9 @@ func (s *Service) UpdateLocation(ctx context.Context, subjectID string, loc *Loc
 	if loc == nil {
 		return oops.Code("LOCATION_INVALID").Errorf("location is nil")
 	}
-	resource := fmt.Sprintf("location:%s", loc.ID.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.LocationResource(loc.ID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixLocation); err != nil {
+		return err
 	}
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
@@ -157,9 +246,9 @@ func (s *Service) DeleteLocation(ctx context.Context, subjectID string, id ulid.
 	if s.transactor == nil {
 		return oops.Code("LOCATION_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
-	resource := fmt.Sprintf("location:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
-		return oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.LocationResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixLocation); err != nil {
+		return err
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.propertyRepo.DeleteByParent(ctx, "location", id); err != nil {
@@ -186,9 +275,9 @@ func (s *Service) GetExit(ctx context.Context, subjectID string, id ulid.ULID) (
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_GET_FAILED").Errorf("exit repository not configured")
 	}
-	resource := fmt.Sprintf("exit:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ExitResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixExit); err != nil {
+		return nil, err
 	}
 	exit, err := s.exitRepo.Get(ctx, id)
 	if err != nil {
@@ -210,8 +299,8 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_CREATE_FAILED").Errorf("exit repository not configured")
 	}
-	if !s.accessControl.Check(ctx, subjectID, "write", "exit:*") {
-		return oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	if err := s.checkAccess(ctx, subjectID, "write", access.ExitResource("*"), prefixExit); err != nil {
+		return err
 	}
 	if exit == nil {
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
@@ -241,9 +330,9 @@ func (s *Service) UpdateExit(ctx context.Context, subjectID string, exit *Exit) 
 	if exit == nil {
 		return oops.Code("EXIT_INVALID").Errorf("exit is nil")
 	}
-	resource := fmt.Sprintf("exit:%s", exit.ID.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ExitResource(exit.ID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixExit); err != nil {
+		return err
 	}
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
@@ -265,9 +354,9 @@ func (s *Service) DeleteExit(ctx context.Context, subjectID string, id ulid.ULID
 	if s.exitRepo == nil {
 		return oops.Code("EXIT_DELETE_FAILED").Errorf("exit repository not configured")
 	}
-	resource := fmt.Sprintf("exit:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
-		return oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ExitResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixExit); err != nil {
+		return err
 	}
 	err := s.exitRepo.Delete(ctx, id)
 	if err != nil {
@@ -303,9 +392,9 @@ func (s *Service) GetExitsByLocation(ctx context.Context, subjectID string, loca
 	if s.exitRepo == nil {
 		return nil, oops.Code("EXIT_LIST_FAILED").Errorf("exit repository not configured")
 	}
-	resource := fmt.Sprintf("location:%s", locationID.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("EXIT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.LocationResource(locationID.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); err != nil {
+		return nil, err
 	}
 	exits, err := s.exitRepo.ListFromLocation(ctx, locationID)
 	if err != nil {
@@ -319,9 +408,9 @@ func (s *Service) GetObject(ctx context.Context, subjectID string, id ulid.ULID)
 	if s.objectRepo == nil {
 		return nil, oops.Code("OBJECT_GET_FAILED").Errorf("object repository not configured")
 	}
-	resource := fmt.Sprintf("object:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ObjectResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); err != nil {
+		return nil, err
 	}
 	obj, err := s.objectRepo.Get(ctx, id)
 	if err != nil {
@@ -340,8 +429,8 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_CREATE_FAILED").Errorf("object repository not configured")
 	}
-	if !s.accessControl.Check(ctx, subjectID, "write", "object:*") {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	if err := s.checkAccess(ctx, subjectID, "write", access.ObjectResource("*"), prefixObject); err != nil {
+		return err
 	}
 	if obj == nil {
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
@@ -371,9 +460,9 @@ func (s *Service) UpdateObject(ctx context.Context, subjectID string, obj *Objec
 	if obj == nil {
 		return oops.Code("OBJECT_INVALID").Errorf("object is nil")
 	}
-	resource := fmt.Sprintf("object:%s", obj.ID.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ObjectResource(obj.ID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixObject); err != nil {
+		return err
 	}
 	if err := obj.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
@@ -403,9 +492,9 @@ func (s *Service) DeleteObject(ctx context.Context, subjectID string, id ulid.UL
 	if s.transactor == nil {
 		return oops.Code("OBJECT_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
-	resource := fmt.Sprintf("object:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ObjectResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixObject); err != nil {
+		return err
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.propertyRepo.DeleteByParent(ctx, "object", id); err != nil {
@@ -444,9 +533,9 @@ func (s *Service) MoveObject(ctx context.Context, subjectID string, id ulid.ULID
 	if s.objectRepo == nil {
 		return oops.Code("OBJECT_MOVE_FAILED").Errorf("object repository not configured")
 	}
-	resource := fmt.Sprintf("object:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("OBJECT_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.ObjectResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixObject); err != nil {
+		return err
 	}
 	if err := to.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)
@@ -503,9 +592,9 @@ func (s *Service) DeleteCharacter(ctx context.Context, subjectID string, id ulid
 	if s.transactor == nil {
 		return oops.Code("CHARACTER_DELETE_FAILED").Errorf("transactor required for transactional cascade delete (spec: 05-storage-audit.md §117)")
 	}
-	resource := fmt.Sprintf("character:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "delete", resource) {
-		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.CharacterResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "delete", resource, prefixCharacter); err != nil {
+		return err
 	}
 	deleteFn := func(ctx context.Context) error {
 		if err := s.propertyRepo.DeleteByParent(ctx, "character", id); err != nil {
@@ -532,9 +621,9 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_GET_FAILED").Errorf("character repository not configured")
 	}
-	resource := fmt.Sprintf("character:%s", id.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.CharacterResource(id.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); err != nil {
+		return nil, err
 	}
 	char, err := s.characterRepo.Get(ctx, id)
 	if err != nil {
@@ -546,14 +635,18 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	return char, nil
 }
 
-// GetCharactersByLocation retrieves characters at a location with pagination after checking read authorization.
+// GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.
+// Note: This decomposes the legacy compound resource "location:<id>:characters" into
+// resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition,
+// see docs/specs/2026-02-05-full-abac-design.md §7.3).
+// Error codes use LOCATION_* prefix (not CHARACTER_*) because the gated resource is the location.
 func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
 	}
-	resource := fmt.Sprintf("location:%s:characters", locationID.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.LocationResource(locationID.String())
+	if err := s.checkAccess(ctx, subjectID, "list_characters", resource, prefixLocation); err != nil {
+		return nil, err
 	}
 	chars, err := s.characterRepo.GetByLocation(ctx, locationID, opts)
 	if err != nil {
@@ -568,9 +661,9 @@ func (s *Service) AddSceneParticipant(ctx context.Context, subjectID string, sce
 	if s.sceneRepo == nil {
 		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").Errorf("scene repository not configured")
 	}
-	resource := fmt.Sprintf("scene:%s", sceneID.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("SCENE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.SceneResource(sceneID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixScene); err != nil {
+		return err
 	}
 	if err := role.Validate(); err != nil {
 		return oops.Code("SCENE_INVALID").Wrap(err)
@@ -589,9 +682,9 @@ func (s *Service) RemoveSceneParticipant(ctx context.Context, subjectID string, 
 	if s.sceneRepo == nil {
 		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").Errorf("scene repository not configured")
 	}
-	resource := fmt.Sprintf("scene:%s", sceneID.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("SCENE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.SceneResource(sceneID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixScene); err != nil {
+		return err
 	}
 	if err := s.sceneRepo.RemoveParticipant(ctx, sceneID, characterID); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -607,9 +700,9 @@ func (s *Service) ListSceneParticipants(ctx context.Context, subjectID string, s
 	if s.sceneRepo == nil {
 		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Errorf("scene repository not configured")
 	}
-	resource := fmt.Sprintf("scene:%s", sceneID.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return nil, oops.Code("SCENE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.SceneResource(sceneID.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixScene); err != nil {
+		return nil, err
 	}
 	participants, err := s.sceneRepo.ListParticipants(ctx, sceneID)
 	if err != nil {
@@ -638,9 +731,9 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 	if s.characterRepo == nil {
 		return oops.Code("CHARACTER_MOVE_FAILED").Errorf("character repository not configured")
 	}
-	resource := fmt.Sprintf("character:%s", characterID.String())
-	if !s.accessControl.Check(ctx, subjectID, "write", resource) {
-		return oops.Code("CHARACTER_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixCharacter); err != nil {
+		return err
 	}
 
 	// Get current location for the move event
@@ -703,6 +796,8 @@ func (s *Service) MoveCharacter(ctx context.Context, subjectID string, character
 // Emits an examine event for plugins after validation and authorization.
 // Returns EVENT_EMITTER_MISSING error if no emitter was configured (system misconfiguration).
 // Returns EVENT_EMIT_FAILED error if event emission fails after retries.
+// ExamineLocation checks whether the character can examine a target location and
+// sends detailed location information to them.
 func (s *Service) ExamineLocation(ctx context.Context, subjectID string, characterID, targetLocationID ulid.ULID) error {
 	if s.characterRepo == nil {
 		return oops.Code("EXAMINE_FAILED").Errorf("character repository not configured")
@@ -725,19 +820,19 @@ func (s *Service) ExamineLocation(ctx context.Context, subjectID string, charact
 		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
 	}
 
-	// Get the target location
+	// Authorize before fetching target to prevent information disclosure
+	resource := access.LocationResource(targetLocationID.String())
+	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixLocation); checkErr != nil {
+		return checkErr
+	}
+
+	// Get the target location (only after authorization)
 	targetLoc, err := s.locationRepo.Get(ctx, targetLocationID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("LOCATION_NOT_FOUND").Wrapf(err, "target location %s not found", targetLocationID)
 		}
 		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target location %s", targetLocationID)
-	}
-
-	// Check authorization to read the target
-	resource := fmt.Sprintf("location:%s", targetLocationID.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
 
 	// Build and emit examine event
@@ -783,19 +878,19 @@ func (s *Service) ExamineObject(ctx context.Context, subjectID string, character
 		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
 	}
 
-	// Get the target object
+	// Authorize before fetching target to prevent information disclosure
+	resource := access.ObjectResource(targetObjectID.String())
+	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixObject); checkErr != nil {
+		return checkErr
+	}
+
+	// Get the target object (only after authorization)
 	targetObj, err := s.objectRepo.Get(ctx, targetObjectID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("OBJECT_NOT_FOUND").Wrapf(err, "target object %s not found", targetObjectID)
 		}
 		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target object %s", targetObjectID)
-	}
-
-	// Check authorization to read the target
-	resource := fmt.Sprintf("object:%s", targetObjectID.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
 
 	// Build and emit examine event
@@ -838,19 +933,19 @@ func (s *Service) ExamineCharacter(ctx context.Context, subjectID string, charac
 		return oops.Code("EXAMINE_FAILED").Errorf("character %s not in world", characterID)
 	}
 
-	// Get the target character
+	// Authorize before fetching target to prevent information disclosure
+	resource := access.CharacterResource(targetCharacterID.String())
+	if checkErr := s.checkAccess(ctx, subjectID, "read", resource, prefixCharacter); checkErr != nil {
+		return checkErr
+	}
+
+	// Get the target character (only after authorization)
 	targetChar, err := s.characterRepo.Get(ctx, targetCharacterID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "target character %s not found", targetCharacterID)
 		}
 		return oops.Code("EXAMINE_FAILED").Wrapf(err, "get target character %s", targetCharacterID)
-	}
-
-	// Check authorization to read the target
-	resource := fmt.Sprintf("character:%s", targetCharacterID.String())
-	if !s.accessControl.Check(ctx, subjectID, "read", resource) {
-		return oops.Code("EXAMINE_ACCESS_DENIED").Wrap(ErrPermissionDenied)
 	}
 
 	// Build and emit examine event
@@ -877,8 +972,8 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 		return nil, oops.Code("LOCATION_FIND_FAILED").Errorf("location repository not configured")
 	}
 	// Check read authorization for location wildcard (searching locations)
-	if !s.accessControl.Check(ctx, subjectID, "read", "location:*") {
-		return nil, oops.Code("LOCATION_ACCESS_DENIED").Wrap(ErrPermissionDenied)
+	if err := s.checkAccess(ctx, subjectID, "read", access.LocationResource("*"), prefixLocation); err != nil {
+		return nil, err
 	}
 	loc, err := s.locationRepo.FindByName(ctx, name)
 	if err != nil {

@@ -4,25 +4,14 @@
 // Package access provides authorization for HoloMUSH.
 //
 // All parameters use prefixed string format:
-//   - subject: "char:01ABC", "session:01XYZ", "plugin:echo-bot", "system"
+//   - subject: "character:01ABC", "session:01XYZ", "plugin:echo-bot", "system"
 //   - action: "read", "write", "emit", "execute", "grant"
 //   - resource: "location:01ABC", "character:*", "stream:location:*"
 package access
 
 import (
-	"context"
 	"strings"
 )
-
-// AccessControl checks permissions for all subjects in HoloMUSH.
-// This is the single entry point for all authorization.
-//
-//nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
-type AccessControl interface {
-	// Check returns true if subject is allowed to perform action on resource.
-	// Returns false for unknown subjects or denied permissions (deny by default).
-	Check(ctx context.Context, subject, action, resource string) bool
-}
 
 // ParseSubject splits a subject string into prefix and ID.
 // Returns ("system", "") for "system".

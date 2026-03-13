@@ -118,6 +118,7 @@ func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 	return nil
 }
+
 func (h *captureHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &captureHandler{lc: h.lc, attrs: append(h.attrs, attrs...)}
 }

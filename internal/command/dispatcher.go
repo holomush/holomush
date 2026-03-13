@@ -8,12 +8,14 @@ import (
 	"log/slog"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
 var tracer = otel.Tracer("holomush/command")
@@ -21,9 +23,10 @@ var tracer = otel.Tracer("holomush/command")
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
 	registry    *Registry
-	access      access.AccessControl
+	engine      types.AccessPolicyEngine
 	aliasCache  *AliasCache          // optional, can be nil
 	rateLimiter *RateLimitMiddleware // optional, can be nil
+	optErr      error                // error from applying options
 }
 
 // DispatcherOption configures a Dispatcher during construction.
@@ -38,28 +41,41 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 }
 
 // WithRateLimiter configures the dispatcher to use rate limiting.
-// If not provided, rate limiting is disabled.
+// If not provided, rate limiting is disabled. Passing nil is an error —
+// omit the option entirely to disable rate limiting.
 func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 	return func(d *Dispatcher) {
-		d.rateLimiter = NewRateLimitMiddleware(rl, d.access)
+		if rl == nil {
+			d.optErr = ErrNilRateLimiter
+			return
+		}
+		middleware, err := NewRateLimitMiddleware(rl, d.engine)
+		if err != nil {
+			d.optErr = err
+			return
+		}
+		d.rateLimiter = middleware
 	}
 }
 
 // NewDispatcher creates a new command dispatcher with the given registry
-// and access control. Returns an error if registry or ac is nil.
-func NewDispatcher(registry *Registry, ac access.AccessControl, opts ...DispatcherOption) (*Dispatcher, error) {
+// and policy engine. Returns an error if registry or engine is nil.
+func NewDispatcher(registry *Registry, engine types.AccessPolicyEngine, opts ...DispatcherOption) (*Dispatcher, error) {
 	if registry == nil {
 		return nil, ErrNilRegistry
 	}
-	if ac == nil {
-		return nil, ErrNilAccessControl
+	if engine == nil {
+		return nil, ErrNilDispatcherEngine
 	}
 	d := &Dispatcher{
 		registry: registry,
-		access:   ac,
+		engine:   engine,
 	}
 	for _, opt := range opts {
 		opt(d)
+		if d.optErr != nil {
+			return nil, d.optErr
+		}
 	}
 	return d, nil
 }
@@ -132,7 +148,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	}
 
 	// Apply rate limiting if configured (after alias resolution, before capability check)
-	subject := "char:" + exec.CharacterID().String()
+	subject := access.CharacterSubject(exec.CharacterID().String())
 	if d.rateLimiter != nil {
 		if rateErr := d.rateLimiter.Enforce(ctx, exec, parsed.Name, span); rateErr != nil {
 			metrics.SetStatus(StatusRateLimited)
@@ -154,11 +170,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 
 	// Check capabilities using getter to ensure defensive copy
 	for _, cap := range entry.GetCapabilities() {
-		if !d.access.Check(ctx, subject, "execute", cap) {
-			metrics.SetStatus(StatusPermissionDenied)
-			err = ErrPermissionDenied(parsed.Name, cap)
-			return err
+		capErr := CheckCapability(ctx, d.engine, subject, cap, parsed.Name)
+		if capErr == nil {
+			continue
 		}
+		oopsErr, ok := oops.AsOops(capErr)
+		code, isStr := oopsErr.Code().(string)
+		if ok && isStr && code == CodePermissionDenied {
+			metrics.SetStatus(StatusPermissionDenied)
+		} else {
+			metrics.SetStatus(StatusEngineFailure)
+			span.RecordError(capErr)
+			span.SetStatus(codes.Error, capErr.Error())
+		}
+		return capErr
 	}
 
 	// Execute

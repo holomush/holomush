@@ -7,20 +7,41 @@ import (
 	"context"
 	"strings"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
 
+// RoleResolver resolves roles for subjects.
+// This interface allows CharacterProvider to resolve roles without
+// coupling to a specific access control implementation.
+//
+// When GetRole returns an empty string, CharacterProvider treats it the same
+// as a nil resolver: the character falls back to the default "player" role.
+// Implementors should return a non-empty role string only when the subject
+// has an explicit role assignment.
+type RoleResolver interface {
+	// GetRole returns the role assigned to a subject, or empty string if none.
+	// Returning "" is equivalent to no role assignment; CharacterProvider will
+	// fall back to the default role ("player").
+	GetRole(subject string) string
+}
+
 // CharacterProvider resolves attributes for character entities.
 type CharacterProvider struct {
-	repo world.CharacterRepository
+	repo         world.CharacterRepository
+	roleResolver RoleResolver
 }
 
 // NewCharacterProvider creates a new character attribute provider.
-func NewCharacterProvider(repo world.CharacterRepository) *CharacterProvider {
-	return &CharacterProvider{repo: repo}
+// roleResolver may be nil, in which case all characters default to "player" role.
+func NewCharacterProvider(repo world.CharacterRepository, roleResolver RoleResolver) *CharacterProvider {
+	return &CharacterProvider{
+		repo:         repo,
+		roleResolver: roleResolver,
+	}
 }
 
 // Namespace returns "character".
@@ -80,13 +101,23 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 			Wrapf(err, "failed to fetch character")
 	}
 
+	// Resolve role from role resolver
+	role := "player" // default fallback
+	if p.roleResolver != nil {
+		// Build subject ID for role lookup: "character:ULID"
+		subjectID := access.CharacterSubject(char.ID.String())
+		if resolvedRole := p.roleResolver.GetRole(subjectID); resolvedRole != "" {
+			role = resolvedRole
+		}
+	}
+
 	// Map character fields to attributes
 	attrs := map[string]any{
 		"id":          char.ID.String(),
 		"player_id":   char.PlayerID.String(),
 		"name":        char.Name,
 		"description": char.Description,
-		"role":        "player", // TODO: resolve from DB when role column is added
+		"role":        role,
 	}
 
 	// Handle optional location — expose as both "location_id" (raw) and "location" (for seed policies)

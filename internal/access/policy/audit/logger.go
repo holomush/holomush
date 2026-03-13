@@ -26,8 +26,8 @@ type Mode string
 
 // Audit logging modes.
 const (
-	ModeMinimal     Mode = "minimal"      // system bypasses + denials
-	ModeDenialsOnly Mode = "denials_only" // denials + default_deny + system_bypass
+	ModeMinimal     Mode = "minimal"      // Logs denials, default denials, and system bypasses (sync)
+	ModeDenialsOnly Mode = "denials_only" // Logs all denials, default denials, and system bypasses (sync)
 	ModeAll         Mode = "all"          // everything
 )
 
@@ -62,11 +62,26 @@ var (
 		Help: "Total number of audit logging failures",
 	}, []string{"reason"})
 
+	// engineAuditFailuresCounter tracks audit logging failures at the engine
+	// level (as opposed to writer-level failures tracked by failuresCounter).
+	// Exported via RecordEngineAuditFailure for use by the policy engine.
+	engineAuditFailuresCounter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "abac_audit_engine_failures_total",
+		Help: "Total number of audit logging failures at the engine evaluation level",
+	})
+
 	walEntriesGauge = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "abac_audit_wal_entries",
 		Help: "Current number of entries in the WAL",
 	})
 )
+
+// RecordEngineAuditFailure increments the engine-level audit failure counter.
+// Call this when audit.Log returns an error in the policy engine to give ops
+// teams an alertable metric for audit gaps.
+func RecordEngineAuditFailure() {
+	engineAuditFailuresCounter.Inc()
+}
 
 // Logger routes audit entries based on mode and effect.
 type Logger struct {
@@ -124,7 +139,7 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 		if err := l.writer.WriteSync(ctx, entry); err != nil {
 			// Fallback to WAL
 			if walErr := l.writeToWAL(entry); walErr != nil {
-				// Both failed - log error and drop entry
+				// Both failed - log error and return it to the caller
 				slog.Error("audit write failed: both DB and WAL failed",
 					"db_error", err,
 					"wal_error", walErr,
@@ -134,7 +149,23 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 					"effect", entry.Effect,
 				)
 				failuresCounter.WithLabelValues("wal_failed").Inc()
+				return oops.Code("AUDIT_WRITE_FAILED").
+					With("db_error", err).
+					With("wal_error", walErr).
+					With("subject", entry.Subject).
+					With("action", entry.Action).
+					With("resource", entry.Resource).
+					Errorf("audit write failed: both DB and WAL failed")
 			}
+			// WAL succeeded but primary DB failed — log degraded state
+			slog.Warn("audit DB write failed, fell back to WAL",
+				"db_error", err,
+				"subject", entry.Subject,
+				"action", entry.Action,
+				"resource", entry.Resource,
+				"effect", entry.Effect,
+			)
+			failuresCounter.WithLabelValues("db_failed_wal_ok").Inc()
 		}
 		return nil
 	}
@@ -144,9 +175,20 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 	case l.asyncChan <- entry:
 		return nil
 	default:
-		// Channel full - drop entry and increment metric
+		// Channel full - drop entry, increment metric, and return error so
+		// engine callers can track audit loss via RecordEngineAuditFailure.
 		channelFullCounter.Inc()
-		return nil
+		slog.Warn("audit channel full: dropping async entry",
+			"subject", entry.Subject,
+			"action", entry.Action,
+			"resource", entry.Resource,
+			"channel_len", len(l.asyncChan),
+		)
+		return oops.Code("AUDIT_CHANNEL_FULL").
+			With("subject", entry.Subject).
+			With("action", entry.Action).
+			With("resource", entry.Resource).
+			Errorf("audit channel full: entry dropped")
 	}
 }
 
@@ -155,7 +197,7 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 func (l *Logger) shouldLog(effect types.Effect) (shouldLog, useSync bool) {
 	switch l.mode {
 	case ModeMinimal:
-		// Log: deny, default_deny, system_bypass (all sync)
+		// Log: deny, default_deny, system_bypass (elevated privilege always traceable)
 		switch effect {
 		case types.EffectDeny, types.EffectDefaultDeny, types.EffectSystemBypass:
 			shouldLog, useSync = true, true
@@ -259,8 +301,23 @@ func (l *Logger) writeToWAL(entry Entry) error {
 	return nil
 }
 
+// PartialReplayError indicates that some WAL entries were successfully replayed
+// but others failed. The WAL has been atomically rewritten to contain only the
+// failed entries, so retrying ReplayWAL is safe.
+type PartialReplayError struct {
+	FailedCount   int
+	TotalCount    int
+	ReplayedCount int
+}
+
+func (e *PartialReplayError) Error() string {
+	return fmt.Sprintf("WAL replay partially failed: %d of %d entries could not be written", e.FailedCount, e.TotalCount)
+}
+
 // ReplayWAL reads all entries from the WAL and writes them to the writer.
-// On success, truncates the WAL file.
+// On full success, truncates the WAL file. On partial failure, rewrites the
+// WAL with only the entries that failed so they can be retried next time.
+// A *PartialReplayError return means the WAL was safely rewritten and retry is safe.
 func (l *Logger) ReplayWAL(ctx context.Context) error {
 	l.walMu.Lock()
 	defer l.walMu.Unlock()
@@ -280,8 +337,9 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		return nil // Empty WAL
 	}
 
-	// Parse and replay entries
-	lines := 0
+	// Parse and replay entries; collect failed entries for WAL rewrite.
+	replayed := 0
+	var failedLines []string
 	for _, line := range splitLines(string(data)) {
 		if line == "" {
 			continue
@@ -291,24 +349,52 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			slog.Error("failed to unmarshal WAL entry", "error", err, "line", line)
 			failuresCounter.WithLabelValues("wal_unmarshal_failed").Inc()
+			// Keep the raw line so it is preserved for manual inspection.
+			failedLines = append(failedLines, line)
 			continue
 		}
 
 		if err := l.writer.WriteSync(ctx, entry); err != nil {
 			slog.Error("failed to replay WAL entry", "error", err, "entry", entry)
 			failuresCounter.WithLabelValues("wal_replay_failed").Inc()
-			// Continue with other entries
+			// Re-marshal so the entry is preserved in the WAL for retry.
+			if raw, merr := json.Marshal(entry); merr == nil {
+				failedLines = append(failedLines, string(raw))
+			} else {
+				// Fall back to the original line if re-marshal fails.
+				failedLines = append(failedLines, line)
+			}
+			continue
 		}
-		lines++
+		replayed++
 	}
 
-	// Truncate WAL on success
+	if len(failedLines) > 0 {
+		// Rewrite WAL atomically with only the failed entries.
+		tmpPath := l.walPath + ".tmp"
+		var buf []byte
+		for _, fl := range failedLines {
+			buf = append(buf, []byte(fl+"\n")...)
+		}
+		if werr := os.WriteFile(tmpPath, buf, 0o600); werr != nil {
+			return oops.With("path", tmpPath).Wrap(werr)
+		}
+		if rerr := os.Rename(tmpPath, l.walPath); rerr != nil {
+			return oops.With("path", l.walPath).Wrap(rerr)
+		}
+		walEntriesGauge.Set(float64(len(failedLines)))
+		slog.Warn("partially replayed WAL entries; WAL rewritten with failed entries",
+			"replayed", replayed, "failed", len(failedLines))
+		return &PartialReplayError{FailedCount: len(failedLines), TotalCount: replayed + len(failedLines), ReplayedCount: replayed}
+	}
+
+	// All entries replayed — truncate the WAL.
 	if err := os.Truncate(l.walPath, 0); err != nil {
 		return oops.With("path", l.walPath).Wrap(err)
 	}
 
 	walEntriesGauge.Set(0)
-	slog.Info("replayed WAL entries", "count", lines)
+	slog.Info("replayed WAL entries", "count", replayed)
 	return nil
 }
 

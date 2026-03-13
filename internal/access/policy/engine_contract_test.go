@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -151,10 +152,10 @@ func TestContract_EmptyPolicyCache(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "no applicable policies", decision.Reason)
-	assert.Empty(t, decision.PolicyID)
+	assert.Equal(t, "no applicable policies", decision.Reason())
+	assert.Empty(t, decision.PolicyID())
 }
 
 // TestContract_EmptyPolicyCache_AllSubjectTypes verifies default deny for
@@ -181,7 +182,7 @@ func TestContract_EmptyPolicyCache_AllSubjectTypes(t *testing.T) {
 			decision, err := engine.Evaluate(context.Background(), req)
 			require.NoError(t, err)
 
-			assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+			assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 			assert.False(t, decision.IsAllowed())
 		})
 	}
@@ -240,10 +241,10 @@ func TestContract_ErrorCodePreservation(t *testing.T) {
 			decision, err := engine.Evaluate(context.Background(), req)
 			require.NoError(t, err, "session errors should not propagate as engine errors")
 
-			assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+			assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 			assert.False(t, decision.IsAllowed())
-			assert.Equal(t, tt.wantReason, decision.Reason)
-			assert.Equal(t, tt.wantPolicyID, decision.PolicyID)
+			assert.Equal(t, tt.wantReason, decision.Reason())
+			assert.Equal(t, tt.wantPolicyID, decision.PolicyID())
 		})
 	}
 }
@@ -259,10 +260,10 @@ func TestContract_SystemBypass_SkipsValidation(t *testing.T) {
 		Resource: "", // would normally fail validation
 	}
 
-	decision, err := engine.Evaluate(context.Background(), req)
+	decision, err := engine.Evaluate(access.WithSystemSubject(context.Background()), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectSystemBypass, decision.Effect)
+	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
 	assert.True(t, decision.IsAllowed())
 }
 
@@ -295,7 +296,11 @@ func TestContract_ValidSubjectFormats(t *testing.T) {
 				Resource: "location:01XYZ",
 			}
 
-			_, err := engine.Evaluate(context.Background(), req)
+			ctx := context.Background()
+			if tt.subject == "system" {
+				ctx = access.WithSystemSubject(ctx)
+			}
+			_, err := engine.Evaluate(ctx, req)
 			require.NoError(t, err, "valid subject %q should not error", tt.subject)
 		})
 	}

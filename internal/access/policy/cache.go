@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/store"
 )
@@ -116,6 +117,7 @@ func NewCache(s store.PolicyStore, compiler *Compiler, opts ...CacheOption) *Cac
 		cfg:      cfg,
 		snapshot: &Snapshot{}, // empty, non-nil snapshot
 	}
+
 	return pc
 }
 
@@ -196,12 +198,10 @@ func (pc *Cache) IsStale() bool {
 //
 // The connStr should be a PostgreSQL connection string for a dedicated (non-pooled)
 // connection. The goroutine exits when the context is cancelled.
-func (pc *Cache) Start(_ context.Context, connStr string) error {
-	// This method would create a real PgListener. For now, it's a placeholder
-	// that production code will wire up. Tests use StartWithListener instead.
-	_ = connStr
-	slog.Warn("Cache.Start called without real PG listener implementation")
-	return nil
+func (pc *Cache) Start(_ context.Context, _ string) error {
+	return oops.
+		Code("CACHE_START_NOT_IMPLEMENTED").
+		Errorf("Cache.Start is not implemented — use StartWithListener with a concrete Listener")
 }
 
 // StartWithListener spawns the background LISTEN/NOTIFY goroutine using the
@@ -242,7 +242,7 @@ func (pc *Cache) listenLoop(ctx context.Context, ch <-chan string) {
 				return // channel closed
 			}
 			if err := pc.Reload(ctx); err != nil {
-				slog.Error("policy cache reload on notification failed",
+				slog.ErrorContext(ctx, "policy cache reload on notification failed",
 					slog.String("error", err.Error()))
 			}
 		}

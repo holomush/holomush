@@ -11,19 +11,20 @@ import (
 
 // Error codes for command dispatch failures.
 const (
-	CodeUnknownCommand    = "UNKNOWN_COMMAND"
-	CodePermissionDenied  = "PERMISSION_DENIED"
-	CodeInvalidArgs       = "INVALID_ARGS"
-	CodeWorldError        = "WORLD_ERROR"
-	CodeRateLimited       = "RATE_LIMITED"
-	CodeCircularAlias     = "CIRCULAR_ALIAS"
-	CodeAliasConflict     = "ALIAS_CONFLICT"
-	CodeNoCharacter       = "NO_CHARACTER"
-	CodeTargetNotFound    = "TARGET_NOT_FOUND"
-	CodeShutdownRequested = "SHUTDOWN_REQUESTED"
-	CodeNilServices       = "NIL_SERVICES"
-	CodeInvalidName       = "INVALID_NAME"
-	CodeNoAliasCache      = "NO_ALIAS_CACHE"
+	CodeUnknownCommand         = "UNKNOWN_COMMAND"
+	CodePermissionDenied       = "PERMISSION_DENIED"
+	CodeAccessEvaluationFailed = "ACCESS_EVALUATION_FAILED"
+	CodeInvalidArgs            = "INVALID_ARGS"
+	CodeWorldError             = "WORLD_ERROR"
+	CodeRateLimited            = "RATE_LIMITED"
+	CodeCircularAlias          = "CIRCULAR_ALIAS"
+	CodeAliasConflict          = "ALIAS_CONFLICT"
+	CodeNoCharacter            = "NO_CHARACTER"
+	CodeTargetNotFound         = "TARGET_NOT_FOUND"
+	CodeShutdownRequested      = "SHUTDOWN_REQUESTED"
+	CodeNilServices            = "NIL_SERVICES"
+	CodeInvalidName            = "INVALID_NAME"
+	CodeNoAliasCache           = "NO_ALIAS_CACHE"
 )
 
 // Sentinel errors for special conditions.
@@ -41,8 +42,14 @@ var (
 	// ErrNilRegistry is returned when creating a dispatcher with a nil registry.
 	ErrNilRegistry = oops.Errorf("registry cannot be nil")
 
-	// ErrNilAccessControl is returned when creating a dispatcher with nil access control.
-	ErrNilAccessControl = oops.Errorf("access control cannot be nil")
+	// ErrNilDispatcherEngine is returned when creating a dispatcher with a nil policy engine.
+	ErrNilDispatcherEngine = oops.Errorf("dispatcher: policy engine cannot be nil")
+
+	// ErrNilRateLimiterEngine is returned when creating rate limit middleware with a nil policy engine.
+	ErrNilRateLimiterEngine = oops.Errorf("rate limit middleware: policy engine cannot be nil")
+
+	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
+	ErrNilRateLimiter = oops.Errorf("rate limiter cannot be nil")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.
@@ -132,6 +139,26 @@ func ErrNilServices() error {
 		Errorf("command execution context missing services")
 }
 
+// entityAccessEvalFailedCodes is the explicit set of entity-scoped access
+// evaluation failure codes. Using an allowlist instead of suffix matching
+// ensures unknown codes fall through to the default warning log.
+var entityAccessEvalFailedCodes = map[string]struct{}{
+	"LOCATION_ACCESS_EVALUATION_FAILED":  {},
+	"EXIT_ACCESS_EVALUATION_FAILED":      {},
+	"OBJECT_ACCESS_EVALUATION_FAILED":    {},
+	"CHARACTER_ACCESS_EVALUATION_FAILED": {},
+	"SCENE_ACCESS_EVALUATION_FAILED":     {},
+}
+
+// entityAccessDeniedCodes is the explicit set of entity-scoped access denied codes.
+var entityAccessDeniedCodes = map[string]struct{}{
+	"LOCATION_ACCESS_DENIED":  {},
+	"EXIT_ACCESS_DENIED":      {},
+	"OBJECT_ACCESS_DENIED":    {},
+	"CHARACTER_ACCESS_DENIED": {},
+	"SCENE_ACCESS_DENIED":     {},
+}
+
 // PlayerMessage extracts a player-facing message from an error.
 func PlayerMessage(err error) string {
 	if err == nil {
@@ -142,11 +169,32 @@ func PlayerMessage(err error) string {
 		return "Something went wrong. Try again."
 	}
 
-	switch oopsErr.Code() {
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		code = ""
+	}
+
+	// Handle entity-scoped access evaluation failures from the world service.
+	// These codes (e.g., LOCATION_ACCESS_EVALUATION_FAILED, CHARACTER_ACCESS_EVALUATION_FAILED)
+	// share the same player-facing message as the command-layer ACCESS_EVALUATION_FAILED.
+	if _, ok := entityAccessEvalFailedCodes[code]; ok {
+		return "Permission check failed. Please try again or contact an administrator."
+	}
+
+	// Handle entity-scoped access denied errors from the world service.
+	// These codes (e.g., LOCATION_ACCESS_DENIED, CHARACTER_ACCESS_DENIED)
+	// share the same player-facing message as the command-layer PERMISSION_DENIED.
+	if _, ok := entityAccessDeniedCodes[code]; ok {
+		return "You don't have permission to do that."
+	}
+
+	switch code {
 	case CodeUnknownCommand:
 		return "Unknown command. Try 'help'."
 	case CodePermissionDenied:
 		return "You don't have permission to do that."
+	case CodeAccessEvaluationFailed:
+		return "Permission check failed. Please try again or contact an administrator."
 	case CodeInvalidArgs:
 		if usage, ok := oopsErr.Context()["usage"].(string); ok && usage != "" {
 			return "Usage: " + usage
@@ -178,14 +226,15 @@ func PlayerMessage(err error) string {
 	case CodeNilServices:
 		return "Internal error: services unavailable."
 	case CodeInvalidName:
-		// INVALID_NAME errors contain helpful context in the message itself
-		// (e.g., "alias name cannot be empty", "alias name exceeds maximum length of 20")
-		return err.Error()
+		if msg, ok := oopsErr.Context()["message"].(string); ok && msg != "" {
+			return msg
+		}
+		return "Invalid name."
 	case CodeNoAliasCache:
 		return "Alias system is not available. Contact the server administrator."
 	default:
 		slog.Warn("unhandled error code in PlayerMessage",
-			"code", oopsErr.Code(),
+			"code", code,
 			"error", err)
 		return "Something went wrong. Try again."
 	}

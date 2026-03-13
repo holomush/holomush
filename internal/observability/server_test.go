@@ -465,3 +465,64 @@ func TestServer_MetricsIncrement(t *testing.T) {
 	// Check request was counted
 	assert.Contains(t, bodyStr, `holomush_requests_total{status="success",type="command"} 1`, "expected command request counter to be 1")
 }
+
+func TestRecordEngineFailure(t *testing.T) {
+	server := NewServer("127.0.0.1:0", func() bool { return true })
+
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Stop(ctx)
+	}()
+
+	// Record engine failures
+	RecordEngineFailure("checkAccess")
+	RecordEngineFailure("checkAccess")
+	RecordEngineFailure("checkCapability")
+
+	// Verify via metrics endpoint
+	resp, err := http.Get("http://" + server.Addr() + "/metrics")
+	require.NoError(t, err, "failed to GET /metrics")
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "failed to read response body")
+
+	bodyStr := string(body)
+	assert.Contains(t, bodyStr, `holomush_engine_failures_total{operation="checkAccess"}`,
+		"expected engine failures counter for checkAccess")
+	assert.Contains(t, bodyStr, `holomush_engine_failures_total{operation="checkCapability"}`,
+		"expected engine failures counter for checkCapability")
+}
+
+func TestRecordCircuitBreakerTrip(t *testing.T) {
+	server := NewServer("127.0.0.1:0", func() bool { return true })
+
+	_, err := server.Start()
+	require.NoError(t, err, "failed to start server")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Stop(ctx)
+	}()
+
+	// Record circuit breaker trips
+	RecordCircuitBreakerTrip("who", 5)
+	RecordCircuitBreakerTrip("who", 3)
+
+	// Verify via metrics endpoint
+	resp, err := http.Get("http://" + server.Addr() + "/metrics")
+	require.NoError(t, err, "failed to GET /metrics")
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "failed to read response body")
+
+	bodyStr := string(body)
+	assert.Contains(t, bodyStr, `holomush_circuit_breaker_trips_total{handler="who"}`,
+		"expected circuit breaker trips counter")
+	assert.Contains(t, bodyStr, `holomush_circuit_breaker_skipped_total{handler="who"}`,
+		"expected circuit breaker skipped counter")
+}

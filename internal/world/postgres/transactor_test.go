@@ -19,13 +19,15 @@ import (
 
 func TestTransactor_InTransaction_CommitsOnSuccess(t *testing.T) {
 	ctx := context.Background()
-	tx := postgres.NewTransactor(testPool)
+	tr := postgres.NewTransactor(testPool)
 
 	locID := "01TESTTXCOMMIT00000000000"
 
-	err := tx.InTransaction(ctx, func(txCtx context.Context) error {
-		_, err := testPool.Exec(txCtx,
-			`INSERT INTO locations (id, name) VALUES ($1, $2)`, locID, "commit-test")
+	err := tr.InTransaction(ctx, func(txCtx context.Context) error {
+		tx := postgres.TxFromContext(txCtx)
+		require.NotNil(t, tx, "expected transaction in context")
+		_, err := tx.Exec(txCtx,
+			`INSERT INTO locations (id, name, description) VALUES ($1, $2, $3)`, locID, "commit-test", "A test location")
 		return err
 	})
 	require.NoError(t, err)
@@ -42,13 +44,15 @@ func TestTransactor_InTransaction_CommitsOnSuccess(t *testing.T) {
 
 func TestTransactor_InTransaction_RollsBackOnError(t *testing.T) {
 	ctx := context.Background()
-	tx := postgres.NewTransactor(testPool)
+	tr := postgres.NewTransactor(testPool)
 
 	locID := "01TESTTXROLLBK00000000000"
 
-	err := tx.InTransaction(ctx, func(txCtx context.Context) error {
-		_, err := testPool.Exec(txCtx,
-			`INSERT INTO locations (id, name) VALUES ($1, $2)`, locID, "rollback-test")
+	err := tr.InTransaction(ctx, func(txCtx context.Context) error {
+		tx := postgres.TxFromContext(txCtx)
+		require.NotNil(t, tx, "expected transaction in context")
+		_, err := tx.Exec(txCtx,
+			`INSERT INTO locations (id, name, description) VALUES ($1, $2, $3)`, locID, "rollback-test", "A test location")
 		if err != nil {
 			return err
 		}

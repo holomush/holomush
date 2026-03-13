@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // --- Mock PolicyStore ---
@@ -350,4 +351,14 @@ func TestCacheOption_WithStalenessThreshold(t *testing.T) {
 	cache := NewCache(ms, compiler, WithStalenessThreshold(1*time.Hour))
 	require.NoError(t, cache.Reload(context.Background()))
 	assert.False(t, cache.IsStale())
+}
+
+func TestCache_Start_ReturnsNotImplemented(t *testing.T) {
+	ms := &mockPolicyStore{policies: testPolicies()}
+	compiler := testCompiler()
+	cache := NewCache(ms, compiler)
+
+	err := cache.Start(context.Background(), "postgres://localhost:5432/test")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CACHE_START_NOT_IMPLEMENTED")
 }

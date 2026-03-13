@@ -5,6 +5,7 @@ package policy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -95,12 +97,34 @@ func TestEngine_SystemBypass(t *testing.T) {
 		Resource: "location:01ABC",
 	}
 
-	decision, err := engine.Evaluate(context.Background(), req)
+	ctx := access.WithSystemSubject(context.Background())
+	decision, err := engine.Evaluate(ctx, req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectSystemBypass, decision.Effect)
+	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
 	assert.True(t, decision.IsAllowed())
-	assert.Equal(t, "system bypass", decision.Reason)
+	assert.Equal(t, "system bypass", decision.Reason())
+}
+
+func TestEngine_SystemBypass_RejectedWithoutSystemContext(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	req := types.AccessRequest{
+		Subject:  "system",
+		Action:   "write",
+		Resource: "location:01ABC",
+	}
+
+	// Use plain context (no system marker) — should be rejected
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.Error(t, err)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SYSTEM_SUBJECT_REJECTED", oopsErr.Code())
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
+	assert.False(t, decision.IsAllowed())
+	assert.Empty(t, decision.PolicyID())
 }
 
 func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {
@@ -112,7 +136,8 @@ func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {
 		Resource: "location:01ABC",
 	}
 
-	decision, err := engine.Evaluate(context.Background(), req)
+	ctx := access.WithSystemSubject(context.Background())
+	decision, err := engine.Evaluate(ctx, req)
 	require.NoError(t, err)
 
 	assert.NoError(t, decision.Validate())
@@ -127,7 +152,7 @@ func TestEngine_SystemBypass_Audited(t *testing.T) {
 		Resource: "location:01ABC",
 	}
 
-	_, err := engine.Evaluate(context.Background(), req)
+	_, err := engine.Evaluate(access.WithSystemSubject(context.Background()), req)
 	require.NoError(t, err)
 
 	entries := mockWriter.getEntries()
@@ -136,6 +161,30 @@ func TestEngine_SystemBypass_Audited(t *testing.T) {
 	assert.Equal(t, "write", entries[0].Action)
 	assert.Equal(t, "location:01ABC", entries[0].Resource)
 	assert.Equal(t, types.EffectSystemBypass, entries[0].Effect)
+}
+
+func TestEngine_ContextCancelled(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately before calling Evaluate
+
+	req := types.AccessRequest{
+		Subject:  "player:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(ctx, req)
+
+	// Contract: context cancellation returns an error wrapping context.Canceled
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// Contract: returned Decision is a DefaultDeny infra-failure — not allowed
+	assert.False(t, decision.IsAllowed())
+	assert.True(t, decision.IsInfraFailure())
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 }
 
 func TestEngine_SessionResolved(t *testing.T) {
@@ -157,10 +206,10 @@ func TestEngine_SessionResolved(t *testing.T) {
 	require.NoError(t, err)
 
 	// Steps 3-4 implemented, no policies loaded, so default deny
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "no applicable policies", decision.Reason)
-	assert.NotNil(t, decision.Attributes, "attributes should be populated")
+	assert.Equal(t, "no applicable policies", decision.Reason())
+	assert.NotNil(t, decision.Attributes(), "attributes should be populated")
 }
 
 func TestEngine_SessionResolved_RewritesSubject(t *testing.T) {
@@ -206,10 +255,10 @@ func TestEngine_SessionInvalid(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "session invalid", decision.Reason)
-	assert.Equal(t, "infra:session-invalid", decision.PolicyID)
+	assert.Equal(t, "session invalid", decision.Reason())
+	assert.Equal(t, "infra:session-invalid", decision.PolicyID())
 }
 
 func TestEngine_SessionStoreError(t *testing.T) {
@@ -229,10 +278,10 @@ func TestEngine_SessionStoreError(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "session store error", decision.Reason)
-	assert.Equal(t, "infra:session-store-error", decision.PolicyID)
+	assert.Equal(t, "session store error", decision.Reason())
+	assert.Equal(t, "infra:session-store-error", decision.PolicyID())
 }
 
 func TestEngine_NonSystemNonSession(t *testing.T) {
@@ -247,11 +296,11 @@ func TestEngine_NonSystemNonSession(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "no applicable policies", decision.Reason)
-	assert.Equal(t, "", decision.PolicyID)
-	assert.NotNil(t, decision.Attributes, "attributes should be populated")
+	assert.Equal(t, "no applicable policies", decision.Reason())
+	assert.Equal(t, "", decision.PolicyID())
+	assert.NotNil(t, decision.Attributes(), "attributes should be populated")
 }
 
 func TestEngine_StaleCacheDefaultDeny(t *testing.T) {
@@ -278,8 +327,8 @@ func TestEngine_StaleCacheDefaultDeny(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
-	assert.Equal(t, "policy cache stale", decision.Reason)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
+	assert.Equal(t, "policy cache stale", decision.Reason())
 	assert.False(t, decision.IsAllowed())
 }
 
@@ -338,11 +387,15 @@ func TestEngine_AllDecisionsValidate(t *testing.T) {
 				Resource: "location:01XYZ",
 			}
 
-			decision, err := engine.Evaluate(context.Background(), req)
+			ctx := context.Background()
+			if tt.subject == "system" {
+				ctx = access.WithSystemSubject(ctx)
+			}
+			decision, err := engine.Evaluate(ctx, req)
 			require.NoError(t, err)
 
 			assert.NoError(t, decision.Validate(),
-				"decision with effect=%s should validate", decision.Effect)
+				"decision with effect=%s should validate", decision.Effect())
 		})
 	}
 }
@@ -389,7 +442,7 @@ func TestEngine_AuditLoggerCleanup(t *testing.T) {
 	_ = NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
 	// Trigger a write to create the WAL file
-	ctx := context.Background()
+	ctx := access.WithSystemSubject(context.Background())
 	req := types.AccessRequest{
 		Subject:  "system",
 		Action:   "write",
@@ -760,11 +813,69 @@ func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
 			decision, err := engine.Evaluate(context.Background(), tt.req)
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.wantEffect, decision.Effect)
-			assert.Equal(t, tt.wantReason, decision.Reason)
-			assert.NotNil(t, decision.Attributes, "attributes should be populated")
+			assert.Equal(t, tt.wantEffect, decision.Effect())
+			assert.Equal(t, tt.wantReason, decision.Reason())
+			assert.NotNil(t, decision.Attributes(), "attributes should be populated")
 		})
 	}
+}
+
+// failingAttributeProvider is a test double that always returns an error from ResolveSubject.
+type failingAttributeProvider struct {
+	namespace string
+	err       error
+}
+
+func (f *failingAttributeProvider) Namespace() string { return f.namespace }
+func (f *failingAttributeProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	return nil, f.err
+}
+
+func (f *failingAttributeProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (f *failingAttributeProvider) Schema() *types.NamespaceSchema {
+	return &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
+	}
+}
+
+func TestEngine_EvaluateAttributeResolutionError(t *testing.T) {
+	// A failing attribute provider should cause the engine to fail closed:
+	// return a non-nil error with a zero-value decision.
+	providerErr := errors.New("database connection failed")
+	failingProvider := &failingAttributeProvider{
+		namespace: "character",
+		err:       providerErr,
+	}
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	require.NoError(t, resolver.RegisterProvider(failingProvider))
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, err := engine.Evaluate(context.Background(), req)
+	require.Error(t, err, "attribute resolution failure must return error")
+	assert.False(t, decision.IsAllowed(), "decision must not be allowed on error")
+	assert.True(t, decision.IsInfraFailure(), "decision must be infra-failure on attribute resolution error")
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
+	assert.ErrorContains(t, err, "database connection failed")
 }
 
 // mockAttributeProvider is a test double for AttributeProvider.
@@ -870,10 +981,10 @@ func TestEngine_EvaluateConditions_SimpleConditionSatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 1)
-	assert.Equal(t, "policy-1", decision.Policies[0].PolicyID)
-	assert.True(t, decision.Policies[0].ConditionsMet, "condition should be satisfied")
-	assert.Equal(t, types.EffectAllow, decision.Policies[0].Effect)
+	require.Len(t, decision.Policies(), 1)
+	assert.Equal(t, "policy-1", decision.Policies()[0].PolicyID)
+	assert.True(t, decision.Policies()[0].ConditionsMet, "condition should be satisfied")
+	assert.Equal(t, types.EffectAllow, decision.Policies()[0].Effect)
 }
 
 func TestEngine_EvaluateConditions_SimpleConditionUnsatisfied(t *testing.T) {
@@ -895,9 +1006,9 @@ func TestEngine_EvaluateConditions_SimpleConditionUnsatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 1)
-	assert.Equal(t, "policy-1", decision.Policies[0].PolicyID)
-	assert.False(t, decision.Policies[0].ConditionsMet, "condition should not be satisfied")
+	require.Len(t, decision.Policies(), 1)
+	assert.Equal(t, "policy-1", decision.Policies()[0].PolicyID)
+	assert.False(t, decision.Policies()[0].ConditionsMet, "condition should not be satisfied")
 }
 
 func TestEngine_EvaluateConditions_MissingAttribute(t *testing.T) {
@@ -919,8 +1030,8 @@ func TestEngine_EvaluateConditions_MissingAttribute(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 1)
-	assert.False(t, decision.Policies[0].ConditionsMet, "missing attribute should cause condition to fail")
+	require.Len(t, decision.Policies(), 1)
+	assert.False(t, decision.Policies()[0].ConditionsMet, "missing attribute should cause condition to fail")
 }
 
 func TestEngine_EvaluateConditions_NumericComparison(t *testing.T) {
@@ -942,8 +1053,8 @@ func TestEngine_EvaluateConditions_NumericComparison(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 1)
-	assert.True(t, decision.Policies[0].ConditionsMet, "numeric comparison should be satisfied")
+	require.Len(t, decision.Policies(), 1)
+	assert.True(t, decision.Policies()[0].ConditionsMet, "numeric comparison should be satisfied")
 }
 
 func TestEngine_EvaluateConditions_Unconditional(t *testing.T) {
@@ -960,8 +1071,8 @@ func TestEngine_EvaluateConditions_Unconditional(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 1)
-	assert.True(t, decision.Policies[0].ConditionsMet, "unconditional policy should always be satisfied")
+	require.Len(t, decision.Policies(), 1)
+	assert.True(t, decision.Policies()[0].ConditionsMet, "unconditional policy should always be satisfied")
 }
 
 func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
@@ -991,22 +1102,22 @@ func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 3)
+	require.Len(t, decision.Policies(), 3)
 
 	// Policy 1: role == "admin" → true
-	assert.Equal(t, "policy-1", decision.Policies[0].PolicyID)
-	assert.True(t, decision.Policies[0].ConditionsMet)
-	assert.Equal(t, types.EffectAllow, decision.Policies[0].Effect)
+	assert.Equal(t, "policy-1", decision.Policies()[0].PolicyID)
+	assert.True(t, decision.Policies()[0].ConditionsMet)
+	assert.Equal(t, types.EffectAllow, decision.Policies()[0].Effect)
 
 	// Policy 2: level > 10 → false
-	assert.Equal(t, "policy-2", decision.Policies[1].PolicyID)
-	assert.False(t, decision.Policies[1].ConditionsMet)
-	assert.Equal(t, types.EffectAllow, decision.Policies[1].Effect)
+	assert.Equal(t, "policy-2", decision.Policies()[1].PolicyID)
+	assert.False(t, decision.Policies()[1].ConditionsMet)
+	assert.Equal(t, types.EffectAllow, decision.Policies()[1].Effect)
 
 	// Policy 3: banned == true → false
-	assert.Equal(t, "policy-3", decision.Policies[2].PolicyID)
-	assert.False(t, decision.Policies[2].ConditionsMet)
-	assert.Equal(t, types.EffectDeny, decision.Policies[2].Effect)
+	assert.Equal(t, "policy-3", decision.Policies()[2].PolicyID)
+	assert.False(t, decision.Policies()[2].ConditionsMet)
+	assert.Equal(t, types.EffectDeny, decision.Policies()[2].Effect)
 }
 
 func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
@@ -1034,9 +1145,9 @@ func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 2)
-	assert.True(t, decision.Policies[0].ConditionsMet)
-	assert.True(t, decision.Policies[1].ConditionsMet)
+	require.Len(t, decision.Policies(), 2)
+	assert.True(t, decision.Policies()[0].ConditionsMet)
+	assert.True(t, decision.Policies()[1].ConditionsMet)
 }
 
 func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
@@ -1058,8 +1169,8 @@ func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	require.Len(t, decision.Policies, 1)
-	match := decision.Policies[0]
+	require.Len(t, decision.Policies(), 1)
+	match := decision.Policies()[0]
 	assert.Equal(t, "policy-1", match.PolicyID)
 	assert.Equal(t, "test-policy-1", match.PolicyName)
 	assert.Equal(t, types.EffectAllow, match.Effect)
@@ -1093,10 +1204,10 @@ func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "forbid policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-2", decision.PolicyID)
+	assert.Equal(t, "forbid policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-2", decision.PolicyID())
 }
 
 func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
@@ -1118,10 +1229,10 @@ func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
-	assert.Equal(t, "permit policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-1", decision.PolicyID)
+	assert.Equal(t, "permit policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-1", decision.PolicyID())
 }
 
 func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
@@ -1143,10 +1254,10 @@ func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect)
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "no policies satisfied", decision.Reason)
-	assert.Equal(t, "", decision.PolicyID)
+	assert.Equal(t, "no policies satisfied", decision.Reason())
+	assert.Equal(t, "", decision.PolicyID())
 }
 
 func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
@@ -1174,10 +1285,10 @@ func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "forbid policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-1", decision.PolicyID) // First forbid wins
+	assert.Equal(t, "forbid policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-1", decision.PolicyID()) // First forbid wins
 }
 
 func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
@@ -1205,10 +1316,10 @@ func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
-	assert.Equal(t, "permit policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-1", decision.PolicyID) // First permit wins
+	assert.Equal(t, "permit policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-1", decision.PolicyID()) // First permit wins
 }
 
 func TestEngine_DenyOverrides_ForbidUnsatisfied_PermitSatisfied(t *testing.T) {
@@ -1236,10 +1347,10 @@ func TestEngine_DenyOverrides_ForbidUnsatisfied_PermitSatisfied(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
-	assert.Equal(t, "permit policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-2", decision.PolicyID)
+	assert.Equal(t, "permit policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-2", decision.PolicyID())
 }
 
 // Audit mode tests
@@ -1309,7 +1420,7 @@ func TestEngine_Audit_ModeAll_AllowAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 
 	// Wait a bit for async audit
 	time.Sleep(50 * time.Millisecond)
@@ -1341,7 +1452,7 @@ func TestEngine_Audit_ModeAll_DenyAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 
 	entries := mockWriter.getEntries()
 	require.Len(t, entries, 1)
@@ -1370,7 +1481,7 @@ func TestEngine_Audit_ModeMinimal_AllowNotAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 
 	// Wait a bit to ensure async operations complete
 	time.Sleep(50 * time.Millisecond)
@@ -1397,7 +1508,7 @@ func TestEngine_Audit_ModeMinimal_DenyAudited(t *testing.T) {
 
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 
 	entries := mockWriter.getEntries()
 	require.Len(t, entries, 1)
@@ -1425,13 +1536,13 @@ func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
-	assert.Equal(t, "permit policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-1", decision.PolicyID)
-	assert.NotNil(t, decision.Attributes)
-	require.Len(t, decision.Policies, 1)
-	assert.True(t, decision.Policies[0].ConditionsMet)
+	assert.Equal(t, "permit policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-1", decision.PolicyID())
+	assert.NotNil(t, decision.Attributes())
+	require.Len(t, decision.Policies(), 1)
+	assert.True(t, decision.Policies()[0].ConditionsMet)
 }
 
 func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
@@ -1459,14 +1570,14 @@ func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectDeny, decision.Effect)
+	assert.Equal(t, types.EffectDeny, decision.Effect())
 	assert.False(t, decision.IsAllowed())
-	assert.Equal(t, "forbid policy satisfied", decision.Reason)
-	assert.Equal(t, "policy-2", decision.PolicyID)
-	assert.NotNil(t, decision.Attributes)
-	require.Len(t, decision.Policies, 2)
-	assert.True(t, decision.Policies[0].ConditionsMet) // permit satisfied
-	assert.True(t, decision.Policies[1].ConditionsMet) // forbid satisfied (wins)
+	assert.Equal(t, "forbid policy satisfied", decision.Reason())
+	assert.Equal(t, "policy-2", decision.PolicyID())
+	assert.NotNil(t, decision.Attributes())
+	require.Len(t, decision.Policies(), 2)
+	assert.True(t, decision.Policies()[0].ConditionsMet) // permit satisfied
+	assert.True(t, decision.Policies()[1].ConditionsMet) // forbid satisfied (wins)
 }
 
 func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
@@ -1527,9 +1638,9 @@ func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), req)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.EffectAllow, decision.Effect)
+	assert.Equal(t, types.EffectAllow, decision.Effect())
 	assert.True(t, decision.IsAllowed())
-	assert.Equal(t, "permit policy satisfied", decision.Reason)
+	assert.Equal(t, "permit policy satisfied", decision.Reason())
 
 	// Wait for async audit
 	time.Sleep(50 * time.Millisecond)
@@ -1538,4 +1649,205 @@ func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
 	entries := mockWriter.getEntries()
 	require.Len(t, entries, 1)
 	assert.Equal(t, "character:01ABC", entries[0].Subject) // Resolved subject
+}
+
+// failingProvider is a mock attribute provider that always returns an error.
+type failingProvider struct {
+	namespace string
+	err       error
+}
+
+func (f *failingProvider) Namespace() string { return f.namespace }
+func (f *failingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	return nil, f.err
+}
+
+func (f *failingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (f *failingProvider) Schema() *types.NamespaceSchema { return nil }
+
+func TestEngine_ResolverError_FailsClosed(t *testing.T) {
+	// When an attribute provider returns an error, the engine must fail closed:
+	// return a zero-value Decision (denied) and propagate the error.
+	providerErr := fmt.Errorf("database connection lost")
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterProvider(&failingProvider{
+		namespace: "character",
+		err:       providerErr,
+	})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "resolver error must propagate as engine error")
+	assert.ErrorContains(t, evalErr, "database connection lost")
+	// Attribute resolution errors return infra-failure decisions (DefaultDeny with infra: prefix)
+	assert.False(t, decision.IsAllowed(), "resolver error decision must deny access")
+	assert.True(t, decision.IsInfraFailure(), "resolver error must return infra-failure decision")
+}
+
+// partialFailingProvider returns partial data from ResolveSubject alongside an error.
+// Used to verify that the engine discards partial bags on resolver error.
+type partialFailingProvider struct {
+	namespace string
+	err       error
+}
+
+func (p *partialFailingProvider) Namespace() string { return p.namespace }
+func (p *partialFailingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	// Return partial data AND an error — engine must discard the partial data.
+	return map[string]any{"role": "admin"}, p.err
+}
+
+func (p *partialFailingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (p *partialFailingProvider) Schema() *types.NamespaceSchema { return nil }
+
+func TestEngine_ResolverPartialBags_DiscardedOnError(t *testing.T) {
+	// Verify the contract documented in resolver.Resolve's godoc: partial bags
+	// returned alongside errors are for diagnostics only. The engine must NOT
+	// evaluate policies against partial data — it must fail closed with a zero
+	// Decision and propagate the error.
+	providerErr := fmt.Errorf("partial provider failure")
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterProvider(&partialFailingProvider{
+		namespace: "character",
+		err:       providerErr,
+	})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "resolver error must propagate even with partial data")
+	assert.ErrorContains(t, evalErr, "partial provider failure")
+	assert.False(t, decision.IsAllowed(), "must deny — partial bags must not reach policy evaluation")
+	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision on partial resolution")
+}
+
+// failingEnvProvider is an EnvironmentProvider whose Resolve returns an error.
+type failingEnvProvider struct {
+	namespace string
+	err       error
+}
+
+func (f *failingEnvProvider) Namespace() string                                 { return f.namespace }
+func (f *failingEnvProvider) Resolve(_ context.Context) (map[string]any, error) { return nil, f.err }
+func (f *failingEnvProvider) Schema() *types.NamespaceSchema                    { return nil }
+
+func TestEngine_EnvironmentResolverError_FailsClosed(t *testing.T) {
+	// When an environment provider returns an error, the engine must fail closed:
+	// return a zero-value Decision and propagate the error.
+	envErr := fmt.Errorf("environment provider unavailable")
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterEnvironmentProvider(&failingEnvProvider{
+		namespace: "env",
+		err:       envErr,
+	})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "environment resolver error must propagate")
+	assert.ErrorContains(t, evalErr, "environment provider unavailable")
+	assert.False(t, decision.IsAllowed(), "must deny on environment resolver error")
+	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision")
+}
+
+// panickingProvider is an AttributeProvider whose ResolveSubject panics.
+type panickingProvider struct {
+	namespace string
+}
+
+func (p *panickingProvider) Namespace() string { return p.namespace }
+func (p *panickingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	panic("intentional test panic")
+}
+
+func (p *panickingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+func (p *panickingProvider) Schema() *types.NamespaceSchema { return nil }
+
+func TestEngine_ResolverPanic_FailsClosed(t *testing.T) {
+	// When a provider panics, safeResolve recovers the panic and returns an error.
+	// The engine must fail closed: zero Decision + propagated error.
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	err := resolver.RegisterProvider(&panickingProvider{namespace: "character"})
+	require.NoError(t, err)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "location:01XYZ",
+	}
+
+	decision, evalErr := engine.Evaluate(context.Background(), req)
+	require.Error(t, evalErr, "panic-recovered error must propagate")
+	assert.ErrorContains(t, evalErr, "panicked")
+	assert.False(t, decision.IsAllowed(), "must deny on provider panic")
+	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision")
 }

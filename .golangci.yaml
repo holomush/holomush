@@ -54,6 +54,13 @@ linters:
           - wrapcheck
           - errcheck
 
+      # Test password hashes (argon2id fixtures) are not real credentials.
+      # G101 fires on struct literals containing PasswordHash fields.
+      - path: '_test\.go'
+        linters:
+          - gosec
+        text: 'G101'
+
       # Main package doesn't need to wrap errors
       - path: cmd/
         linters:
@@ -64,6 +71,14 @@ linters:
         linters:
           - revive
         text: var-naming
+
+      # G706 (log injection) is a false positive when using structured slog: key-value pairs
+      # prevent injection regardless of whether values are user-controlled.
+      # Scoped to known slog-only packages; new packages using fmt/log must be added here.
+      - path: '(internal/(access|command|core|grpc|logging|observability|plugin|store|telnet|tls|web|world|xdg)|cmd|pkg)/.+\.go$'
+        linters:
+          - gosec
+        text: G706
 
   settings:
     errcheck:

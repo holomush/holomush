@@ -13,6 +13,7 @@ formatter:
 
 exclude:
   - .beads/
+  - .serena/
   - dist/
   - .worktrees/
   - node_modules/

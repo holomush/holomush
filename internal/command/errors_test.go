@@ -8,6 +8,8 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/holomush/holomush/internal/world"
 )
 
 func TestErrUnknownCommand(t *testing.T) {
@@ -157,9 +159,19 @@ func TestPlayerMessage(t *testing.T) {
 			expected: "alias name must start with a letter and contain only letters, digits, or _!?@#$%^+-",
 		},
 		{
+			name:     "invalid name - no message context fallback",
+			err:      oops.Code(CodeInvalidName).Errorf("raw error without message context"),
+			expected: "Invalid name.",
+		},
+		{
 			name:     "no alias cache",
 			err:      oops.Code(CodeNoAliasCache).Errorf("alias operations require a configured alias cache"),
 			expected: "Alias system is not available. Contact the server administrator.",
+		},
+		{
+			name:     "access evaluation failed",
+			err:      oops.Code(CodeAccessEvaluationFailed).Errorf("engine error"),
+			expected: "Permission check failed. Please try again or contact an administrator.",
 		},
 	}
 
@@ -168,5 +180,96 @@ func TestPlayerMessage(t *testing.T) {
 			msg := PlayerMessage(tt.err)
 			assert.Equal(t, tt.expected, msg)
 		})
+	}
+}
+
+func TestPlayerMessage_SuffixMatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "LOCATION_ACCESS_EVALUATION_FAILED suffix",
+			code:     "LOCATION_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
+		{
+			name:     "CHARACTER_ACCESS_EVALUATION_FAILED suffix",
+			code:     "CHARACTER_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
+		{
+			name:     "LOCATION_ACCESS_DENIED suffix",
+			code:     "LOCATION_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "OBJECT_ACCESS_DENIED suffix",
+			code:     "OBJECT_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "CHARACTER_ACCESS_DENIED suffix",
+			code:     "CHARACTER_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "EXIT_ACCESS_DENIED suffix",
+			code:     "EXIT_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "SCENE_ACCESS_DENIED suffix",
+			code:     "SCENE_ACCESS_DENIED",
+			expected: "You don't have permission to do that.",
+		},
+		{
+			name:     "SCENE_ACCESS_EVALUATION_FAILED suffix",
+			code:     "SCENE_ACCESS_EVALUATION_FAILED",
+			expected: "Permission check failed. Please try again or contact an administrator.",
+		},
+		{
+			name:     "unknown code with ACCESS_DENIED suffix falls through to default",
+			code:     "CUSTOM_ACCESS_DENIED",
+			expected: "Something went wrong. Try again.",
+		},
+		{
+			name:     "unknown code with ACCESS_EVALUATION_FAILED suffix falls through to default",
+			code:     "CUSTOM_ACCESS_EVALUATION_FAILED",
+			expected: "Something went wrong. Try again.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := oops.Code(tt.code).Errorf("test error")
+			msg := PlayerMessage(err)
+			assert.Equal(t, tt.expected, msg)
+		})
+	}
+}
+
+func TestEntityPrefixCoverage(t *testing.T) {
+	// Verify that entityAccessEvalFailedCodes and entityAccessDeniedCodes
+	// cover all known entity prefixes from the world service.
+	// If a new entityPrefix is added to service.go without updating errors.go,
+	// this test will catch the gap.
+	knownPrefixes := world.KnownEntityPrefixes()
+
+	for _, prefix := range knownPrefixes {
+		evalCode := prefix + "_ACCESS_EVALUATION_FAILED"
+		deniedCode := prefix + "_ACCESS_DENIED"
+
+		// Verify the maps contain these codes (compile-time check via package access)
+		evalErr := oops.Code(evalCode).Errorf("test")
+		msg := PlayerMessage(evalErr)
+		assert.NotEqual(t, "Something went wrong. Try again.", msg,
+			"entityAccessEvalFailedCodes missing %q — add it to errors.go", evalCode)
+
+		deniedErr := oops.Code(deniedCode).Errorf("test")
+		msg = PlayerMessage(deniedErr)
+		assert.NotEqual(t, "Something went wrong. Try again.", msg,
+			"entityAccessDeniedCodes missing %q — add it to errors.go", deniedCode)
 	}
 }

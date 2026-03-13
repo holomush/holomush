@@ -5,29 +5,30 @@ package policy
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// AccessPolicyEngine is the main entry point for policy-based authorization.
-type AccessPolicyEngine interface {
-	Evaluate(ctx context.Context, request types.AccessRequest) (types.Decision, error)
-}
-
-// Engine implements AccessPolicyEngine.
+// Engine implements types.AccessPolicyEngine.
 type Engine struct {
 	resolver *attribute.Resolver
 	cache    *Cache
 	sessions SessionResolver
 	audit    *audit.Logger
 }
+
+// Compile-time check that Engine implements AccessPolicyEngine.
+var _ types.AccessPolicyEngine = (*Engine)(nil)
 
 // NewEngine creates a new policy engine with the given dependencies.
 func NewEngine(resolver *attribute.Resolver, cache *Cache, sessions SessionResolver, auditLogger *audit.Logger) *Engine {
@@ -46,11 +47,25 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 0a: Context cancellation check
 	if err := ctx.Err(); err != nil {
-		return types.Decision{}, oops.Wrapf(err, "context cancelled before evaluation")
+		return types.NewDecision(types.EffectDefaultDeny, "context cancelled", "infra:context-cancelled"),
+			oops.Wrapf(err, "context cancelled before evaluation")
 	}
 
-	// Step 1: System bypass (before input validation — system always passes)
+	// Step 1: System bypass — defense-in-depth (S1)
+	// The "system" subject bypasses all policy evaluation. To prevent accidental
+	// or malicious use, we require the context to be marked as a system operation
+	// via access.WithSystemSubject(ctx). External request contexts are never marked
+	// as system, so this blocks any attempt to inject the system subject from
+	// gRPC, WebSocket, or other external ingress points.
 	if req.Subject == "system" {
+		if !access.IsSystemContext(ctx) {
+			slog.ErrorContext(ctx, "system subject used without system context (S1 violation)",
+				"action", req.Action,
+				"resource", req.Resource,
+			)
+			return types.Decision{},
+				oops.Code("SYSTEM_SUBJECT_REJECTED").Errorf("system subject is only allowed from system context")
+		}
 		decision := types.NewDecision(types.EffectSystemBypass, "system bypass", "")
 		if err := decision.Validate(); err != nil {
 			return decision, oops.Wrapf(err, "decision validation failed")
@@ -69,7 +84,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if err := e.audit.Log(ctx, entry); err != nil {
 			// Log error but don't fail the decision
-			_ = err
+			slog.WarnContext(ctx, "audit log failed", "error", err)
+			audit.RecordEngineAuditFailure()
 		}
 
 		return decision, nil
@@ -86,36 +102,89 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		characterID, err := e.sessions.ResolveSession(ctx, sessionID)
 		if err != nil {
 			// Check if this is a SESSION_INVALID error
-			oopsErr, ok := oops.AsOops(err)
+			oopsErr, isOops := oops.AsOops(err)
 			var decision types.Decision
-			if ok && oopsErr.Code() == "SESSION_INVALID" {
+			code, isStr := oopsErr.Code().(string)
+			if isOops && isStr && code == "SESSION_INVALID" {
+				slog.DebugContext(ctx, "session invalid during resolution",
+					"session_id", sessionID,
+					"error", err,
+				)
 				decision = types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid")
 			} else {
+				errutil.LogErrorContext(ctx, "session resolution failed",
+					err, "session_id", sessionID,
+				)
 				decision = types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error")
 			}
 
 			if valErr := decision.Validate(); valErr != nil {
 				return decision, oops.Wrapf(valErr, "decision validation failed")
 			}
+			// Audit session-resolution deny decision
+			entry := audit.Entry{
+				Subject:    req.Subject,
+				Action:     req.Action,
+				Resource:   req.Resource,
+				Effect:     types.EffectDefaultDeny,
+				PolicyID:   decision.PolicyID(),
+				PolicyName: "",
+				DurationUS: time.Since(start).Microseconds(),
+				Timestamp:  time.Now(),
+			}
+			if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+				slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+				audit.RecordEngineAuditFailure()
+			}
+
+			RecordEvaluationMetrics(time.Since(start), decision.Effect())
 			return decision, nil
 		}
 
 		// Rewrite subject to character: format
-		req.Subject = "character:" + characterID
+		req.Subject = access.CharacterSubject(characterID)
 	}
 
-	// Step 3: Eager attribute resolution
-	bags, err := e.resolver.Resolve(ctx, req)
-	if err != nil {
-		// Provider errors don't fail evaluation — continue with what we have
-		// (resolver already logs errors internally)
-		bags = types.NewAttributeBags()
+	// Step 3: Eager attribute resolution — fail-closed on provider errors.
+	// If any attribute provider fails, the engine returns an error rather than
+	// evaluating policies against incomplete data. Callers treat non-nil error
+	// as denial, consistent with the AccessPolicyEngine interface contract.
+	bags, resolveErr := e.resolver.Resolve(ctx, req)
+	if resolveErr != nil {
+		errutil.LogErrorContext(ctx, "attribute resolution failed — fail-closed",
+			resolveErr,
+			"subject", req.Subject,
+			"action", req.Action,
+			"resource", req.Resource,
+		)
+		// Audit attribute-resolution failure (consistent with other deny paths)
+		entry := audit.Entry{
+			Subject:    req.Subject,
+			Action:     req.Action,
+			Resource:   req.Resource,
+			Effect:     types.EffectDefaultDeny,
+			PolicyID:   "infra:attribute-resolution-failed",
+			PolicyName: "",
+			DurationUS: time.Since(start).Microseconds(),
+			Timestamp:  time.Now(),
+		}
+		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+			audit.RecordEngineAuditFailure()
+		}
+		return types.NewDecision(types.EffectDefaultDeny, "attribute resolution failed", "infra:attribute-resolution"),
+			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
 	// Step 3b: Staleness check — fail-closed when cache is stale
 	if e.cache.IsStale() {
-		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "")
-		decision.Attributes = bags
+		slog.WarnContext(ctx, "policy cache stale — denying request fail-closed",
+			"subject", req.Subject,
+			"action", req.Action,
+			"resource", req.Resource,
+		)
+		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "infra:policy-cache-stale")
+		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
@@ -124,15 +193,16 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			PolicyID:   "",
+			PolicyID:   "infra:policy-cache-stale",
 			PolicyName: "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-			_ = auditErr
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+			audit.RecordEngineAuditFailure()
 		}
-		RecordEvaluationMetrics(time.Since(start), decision.Effect)
+		RecordEvaluationMetrics(time.Since(start), decision.Effect())
 		return decision, nil
 	}
 
@@ -143,7 +213,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	// If no candidates, default deny
 	if len(candidates) == 0 {
 		decision := types.NewDecision(types.EffectDefaultDeny, "no applicable policies", "")
-		decision.Attributes = bags
+		decision.SetAttributes(bags)
 		if valErr := decision.Validate(); valErr != nil {
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
@@ -161,7 +231,8 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 			// Log error but don't fail the decision
-			_ = auditErr
+			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+			audit.RecordEngineAuditFailure()
 		}
 
 		return decision, nil
@@ -181,7 +252,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 6: Deny-overrides combination
 	decision := e.combineDecisions(satisfied)
-	decision.Attributes = bags
+	decision.SetAttributes(bags)
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
 	}
@@ -191,18 +262,19 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		Subject:    req.Subject,
 		Action:     req.Action,
 		Resource:   req.Resource,
-		Effect:     decision.Effect,
-		PolicyID:   decision.PolicyID,
-		PolicyName: policyNameFromMatches(decision.PolicyID, decision.Policies),
+		Effect:     decision.Effect(),
+		PolicyID:   decision.PolicyID(),
+		PolicyName: policyNameFromMatches(decision.PolicyID(), decision.Policies()),
 		DurationUS: time.Since(start).Microseconds(),
 		Timestamp:  time.Now(),
 	}
 	if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-		_ = auditErr
+		slog.WarnContext(ctx, "audit log failed", "error", auditErr)
+		audit.RecordEngineAuditFailure()
 	}
 
 	// Record metrics
-	RecordEvaluationMetrics(time.Since(start), decision.Effect)
+	RecordEvaluationMetrics(time.Since(start), decision.Effect())
 
 	return decision, nil
 }
@@ -331,7 +403,7 @@ func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision 
 	for _, match := range satisfied {
 		if match.ConditionsMet && match.Effect == types.EffectDeny {
 			decision := types.NewDecision(types.EffectDeny, "forbid policy satisfied", match.PolicyID)
-			decision.Policies = satisfied
+			decision.SetPolicies(satisfied)
 			return decision
 		}
 	}
@@ -340,13 +412,13 @@ func (e *Engine) combineDecisions(satisfied []types.PolicyMatch) types.Decision 
 	for _, match := range satisfied {
 		if match.ConditionsMet && match.Effect == types.EffectAllow {
 			decision := types.NewDecision(types.EffectAllow, "permit policy satisfied", match.PolicyID)
-			decision.Policies = satisfied
+			decision.SetPolicies(satisfied)
 			return decision
 		}
 	}
 
 	// No policies had conditions satisfied - default deny
 	decision := types.NewDecision(types.EffectDefaultDeny, "no policies satisfied", "")
-	decision.Policies = satisfied
+	decision.SetPolicies(satisfied)
 	return decision
 }

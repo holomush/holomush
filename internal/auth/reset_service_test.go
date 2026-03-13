@@ -263,7 +263,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 			ExpiresAt: time.Now().Add(time.Hour),
 		}
 		newPassword := "newSecurePassword123"
-		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash" //nolint:gosec // Test data, not real credentials
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
@@ -382,7 +382,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 			ExpiresAt: time.Now().Add(time.Hour),
 		}
 		newPassword := "newSecurePassword123"
-		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash" //nolint:gosec // Test data, not real credentials
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
@@ -413,7 +413,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 			ExpiresAt: time.Now().Add(time.Hour),
 		}
 		newPassword := "newSecurePassword123"
-		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash" //nolint:gosec // Test data, not real credentials
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
@@ -446,7 +446,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		}
 		newPassword1 := "newSecurePassword123"
 		newPassword2 := "anotherPassword456"
-		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash" //nolint:gosec // Test data, not real credentials
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
 		// First reset succeeds - token is found
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil).Once()

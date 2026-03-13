@@ -6,6 +6,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -41,6 +42,41 @@ var commandRateLimited = prometheus.NewCounterVec(
 	[]string{"command"},
 )
 
+// engineFailures is a package-level counter for access engine failures.
+// This tracks when the access policy engine returns errors during evaluation.
+var engineFailures = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_engine_failures_total",
+		Help: "Total number of access engine evaluation failures",
+	},
+	[]string{"operation"},
+)
+
+// circuitBreakerTrips tracks circuit breaker activations by handler.
+var circuitBreakerTrips = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_circuit_breaker_trips_total",
+		Help: "Total number of circuit breaker activations by handler",
+	},
+	[]string{"handler"},
+)
+
+// circuitBreakerSkipped tracks sessions skipped by circuit breaker activations.
+var circuitBreakerSkipped = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "holomush_circuit_breaker_skipped_total",
+		Help: "Total number of sessions skipped due to circuit breaker by handler",
+	},
+	[]string{"handler"},
+)
+
+// RecordCircuitBreakerTrip increments the circuit breaker trip counter
+// and records the number of sessions skipped.
+func RecordCircuitBreakerTrip(handler string, skipped int) {
+	circuitBreakerTrips.WithLabelValues(handler).Inc()
+	circuitBreakerSkipped.WithLabelValues(handler).Add(float64(skipped))
+}
+
 // RecordCommandOutputFailure increments the command output failure counter.
 // Called by command handlers when output write fails.
 func RecordCommandOutputFailure(command string) {
@@ -53,6 +89,18 @@ func RecordCommandRateLimited(command string) {
 	commandRateLimited.WithLabelValues(command).Inc()
 }
 
+// RecordEngineFailure increments the engine failure counter.
+// Called when the access policy engine returns an error during evaluation.
+func RecordEngineFailure(operation string) {
+	engineFailures.WithLabelValues(operation).Inc()
+}
+
+// EngineFailureCounter returns the engine failures counter for a given operation.
+// Exported for test assertions via prometheus/testutil.
+func EngineFailureCounter(operation string) prometheus.Counter {
+	return engineFailures.WithLabelValues(operation)
+}
+
 // Metrics contains custom Prometheus metrics for HoloMUSH.
 type Metrics struct {
 	ConnectionsTotal *prometheus.CounterVec
@@ -60,6 +108,8 @@ type Metrics struct {
 }
 
 // NewMetrics creates and registers custom HoloMUSH metrics.
+// Package-level counters are registered safely — if already registered with this
+// registry (e.g., in tests creating multiple servers), registration is skipped.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		ConnectionsTotal: prometheus.NewCounterVec(
@@ -80,8 +130,19 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 
 	reg.MustRegister(m.ConnectionsTotal)
 	reg.MustRegister(m.RequestsTotal)
-	reg.MustRegister(commandOutputFailures)
-	reg.MustRegister(commandRateLimited)
+	// Package-level counters: safe register (skip if already registered)
+	for _, c := range []prometheus.Collector{
+		commandOutputFailures, commandRateLimited,
+		engineFailures, circuitBreakerTrips, circuitBreakerSkipped,
+	} {
+		if err := reg.Register(c); err != nil {
+			// Already registered — this is expected in tests with multiple servers.
+			var alreadyReg prometheus.AlreadyRegisteredError
+			if !errors.As(err, &alreadyReg) {
+				panic(err) // unexpected registration error
+			}
+		}
+	}
 
 	return m
 }

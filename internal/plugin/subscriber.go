@@ -101,15 +101,14 @@ func (s *Subscriber) dispatch(ctx context.Context, event pluginsdk.Event) {
 }
 
 func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event pluginsdk.Event) {
-	// Use timeout for plugin execution
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		// Use timeout for plugin execution
+		tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		emits, err := s.host.DeliverEvent(ctx, pluginName, event)
+		emits, err := s.host.DeliverEvent(tctx, pluginName, event)
 		if err != nil {
 			switch {
 			case errors.Is(err, context.DeadlineExceeded):
@@ -136,8 +135,8 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 
 		// Emit response events
 		for _, emit := range emits {
-			if err := s.emitter.EmitPluginEvent(ctx, pluginName, emit); err != nil {
-				slog.Error("failed to emit plugin event",
+			if err := s.emitter.EmitPluginEvent(tctx, pluginName, emit); err != nil {
+				slog.ErrorContext(tctx, "failed to emit plugin event",
 					"plugin", pluginName,
 					"stream", emit.Stream,
 					"error", err)

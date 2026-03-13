@@ -24,7 +24,7 @@ func TestNullResolver_CurrentLocation(t *testing.T) {
 		charID string
 	}{
 		{"empty character ID", ""},
-		{"valid character ID", "char:01ABC"},
+		{"valid character ID", "character:01ABC"},
 		{"any string", "anything"},
 	}
 

@@ -11,7 +11,7 @@
 //
 // # Audit Modes
 //
-//   - ModeMinimal: Logs denials, default denials, and system bypasses (sync)
+//   - ModeMinimal: Logs denials and default denials only (sync)
 //   - ModeDenialsOnly: Logs all denials and system bypasses (sync)
 //   - ModeAll: Logs everything - denials sync, allows async
 //
@@ -58,5 +58,7 @@
 //	logger.Log(ctx, entry)
 //
 //	// Replay WAL after recovery
-//	logger.ReplayWAL(ctx)
+//	if err := logger.ReplayWAL(ctx); err != nil {
+//		slog.Error("WAL replay failed", "error", err)
+//	}
 package audit

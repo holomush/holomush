@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -38,7 +39,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Find the target session by character name
-	subjectID := "char:" + exec.CharacterID().String()
+	subjectID := access.CharacterSubject(exec.CharacterID().String())
 	targetCharID, targetCharName, err := findCharacterByName(ctx, exec, subjectID, targetName)
 	if err != nil {
 		return err
@@ -49,10 +50,9 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 
 	// Boot others requires admin.boot capability
 	if !isSelfBoot {
-		allowed := exec.Services().Access().Check(ctx, subjectID, "execute", "admin.boot")
-		if !allowed {
-			//nolint:wrapcheck // ErrPermissionDenied creates a structured oops error
-			return command.ErrPermissionDenied("boot", "admin.boot")
+		if err := command.CheckCapability(ctx, exec.Services().Engine(), subjectID, "admin.boot", "boot"); err != nil {
+			//nolint:wrapcheck // CheckCapability returns structured oops errors with code and context
+			return err
 		}
 	}
 
@@ -114,18 +114,29 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 	sessions := exec.Services().Session().ListActiveSessions()
 
 	var errorCount int
+	var accessEvalFailedCount int
 
 	for _, session := range sessions {
 		// Get character info for this session
 		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
+			// - permission denied and not found are expected, don't log or count
 			if errors.Is(err, world.ErrNotFound) || errors.Is(err, world.ErrPermissionDenied) {
 				continue
 			}
+			// Access evaluation failures are already logged by checkAccess helper.
+			// Count them separately so callers can distinguish engine outages.
+			if errors.Is(err, world.ErrAccessEvaluationFailed) {
+				accessEvalFailedCount++
+				errorCount++
+				continue
+			}
 			// Track unexpected errors (database failures, timeouts, etc.) but continue searching
+			// Unexpected errors fall through here intentionally —
+			// database failures or timeouts should be visible to admins via error reporting.
 			errorCount++
-			slog.Error("unexpected error looking up character",
+			slog.ErrorContext(ctx, "unexpected error looking up character",
 				"target_name", targetName,
 				"session_char_id", session.CharacterID.String(),
 				"error", err,
@@ -141,11 +152,17 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 
 	// If unexpected errors occurred and no match was found, report system error
 	// rather than "not found" to avoid misleading the user.
-	// Note: We don't wrap lastErr because oops preserves the inner error's code,
-	// and we need WORLD_ERROR code for PlayerMessage to return our custom message.
 	if errorCount > 0 {
+		// When any errors were engine failures, propagate ACCESS_EVALUATION_FAILED
+		// so callers and PlayerMessage can distinguish engine outages from world errors.
+		// This applies to mixed failures too — the engine outage signal takes priority
+		// for monitoring/alerting purposes.
+		if accessEvalFailedCount > 0 {
+			return ulid.ULID{}, "", oops.Code(command.CodeAccessEvaluationFailed).
+				Errorf("access evaluation failed during player search")
+		}
 		//nolint:wrapcheck // WorldError creates a structured oops error
-		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to system error. Try again.", nil)
+		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a system error. Please try again shortly.", nil)
 	}
 
 	//nolint:wrapcheck // ErrTargetNotFound creates a structured oops error

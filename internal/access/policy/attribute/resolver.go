@@ -5,6 +5,7 @@ package attribute
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -59,14 +60,11 @@ func (r *Resolver) RegisterProvider(provider AttributeProvider) error {
 	r.providers[namespace] = provider
 	r.providerOrder = append(r.providerOrder, namespace)
 
-	// Register schema
+	// Register schema (skip if namespace already registered to avoid fragile string matching)
 	schema := provider.Schema()
-	if schema != nil {
+	if schema != nil && !r.registry.HasNamespace(namespace) {
 		if err := r.registry.Register(namespace, schema); err != nil {
-			// If already registered, that's OK
-			if !strings.Contains(err.Error(), "already registered") {
-				return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
-			}
+			return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
 		}
 	}
 
@@ -87,21 +85,24 @@ func (r *Resolver) RegisterEnvironmentProvider(provider EnvironmentProvider) err
 	r.envProviders[namespace] = provider
 	r.envProviderOrder = append(r.envProviderOrder, namespace)
 
-	// Register schema
+	// Register schema (skip if namespace already registered to avoid fragile string matching)
 	schema := provider.Schema()
-	if schema != nil {
+	if schema != nil && !r.registry.HasNamespace(namespace) {
 		if err := r.registry.Register(namespace, schema); err != nil {
-			// If already registered, that's OK
-			if !strings.Contains(err.Error(), "already registered") {
-				return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
-			}
+			return oops.Wrapf(err, "failed to register schema for namespace %q", namespace)
 		}
 	}
 
 	return nil
 }
 
-// Resolve resolves all attributes for an access request
+// Resolve resolves all attributes for an access request.
+//
+// On success, returns fully populated bags and nil error.
+// On provider failure, returns partial bags alongside an error. The partial bags
+// contain results from providers that succeeded; they are intended for diagnostics
+// only. Callers MUST NOT use partial bags for policy evaluation — the engine
+// discards them and fails closed when Resolve returns a non-nil error.
 func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types.AttributeBags, error) {
 	// Check re-entrance guard
 	if isInResolution(ctx) {
@@ -126,20 +127,28 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	// Set action name
 	bags.Action["name"] = req.Action
 
+	var errs []error
+
 	// Resolve subject attributes
 	if subjectID != "" {
-		r.resolveEntity(ctx, "subject", subjectType, subjectID, bags.Subject)
+		if err := r.resolveEntity(ctx, "subject", subjectType, subjectID, bags.Subject); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	// Resolve resource attributes
 	if resourceID != "" {
-		r.resolveEntity(ctx, "resource", resourceType, resourceID, bags.Resource)
+		if err := r.resolveEntity(ctx, "resource", resourceType, resourceID, bags.Resource); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	// Resolve environment attributes
-	r.resolveEnvironment(ctx, bags.Environment)
+	if err := r.resolveEnvironment(ctx, bags.Environment); err != nil {
+		errs = append(errs, err)
+	}
 
-	return bags, nil
+	return bags, errors.Join(errs...)
 }
 
 // splitEntityID splits an entity ID in the format "type:id" into its components.
@@ -151,9 +160,14 @@ func splitEntityID(entityID string) (entityType, id string) {
 	return parts[0], parts[1]
 }
 
-// resolveEntity resolves attributes for a single entity (subject or resource)
-func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID string, bag map[string]any) {
+// resolveEntity resolves attributes for a single entity (subject or resource).
+// It iterates all registered providers and merges their attributes into bag.
+// Returns an error wrapping all individual provider errors; partial results
+// from successful providers are still written to bag before the error is returned.
+func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID string, bag map[string]any) error {
 	cache := getCacheFromContext(ctx)
+
+	var errs []error
 
 	// Try each provider in registration order
 	for _, namespace := range r.providerOrder {
@@ -169,7 +183,11 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID s
 		}
 
 		// Resolve from provider with panic recovery
-		attrs := r.safeResolve(ctx, provider, resolveType, entityID)
+		attrs, err := r.safeResolve(ctx, provider, resolveType, entityID)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		if attrs != nil {
 			// Cache the result
 			cache.Put(cacheKey, attrs)
@@ -178,35 +196,50 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID s
 			r.mergeAttributes(namespace, attrs, bag)
 		}
 	}
+
+	return errors.Join(errs...)
 }
 
 // resolveEnvironment resolves environment attributes
-func (r *Resolver) resolveEnvironment(ctx context.Context, bag map[string]any) {
+func (r *Resolver) resolveEnvironment(ctx context.Context, bag map[string]any) error {
+	var errs []error
+
 	for _, namespace := range r.envProviderOrder {
 		provider := r.envProviders[namespace]
 
 		// Resolve with panic recovery
-		attrs := r.safeResolveEnvironment(ctx, provider)
+		attrs, err := r.safeResolveEnvironment(ctx, provider)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		if attrs != nil {
 			r.mergeAttributes(namespace, attrs, bag)
 		}
 	}
+
+	return errors.Join(errs...)
 }
 
 // safeResolve calls a provider with error and panic recovery
-func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityID string) map[string]any {
+func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityID string) (attrs map[string]any, retErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			attrs = nil // defense-in-depth: discard partially-mutated map
 			r.logger.Error("provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"resolve_type", resolveType,
 				"entity_id", entityID,
 				"panic", recovered,
 			)
+			retErr = oops.
+				With("namespace", provider.Namespace()).
+				With("resolve_type", resolveType).
+				With("entity_id", entityID).
+				Errorf("provider %s panicked during %s resolution", provider.Namespace(), resolveType)
 		}
 	}()
 
-	var attrs map[string]any
 	var err error
 
 	switch resolveType {
@@ -215,43 +248,40 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 	case "resource":
 		attrs, err = provider.ResolveResource(ctx, entityID)
 	default:
-		return nil
+		return nil, nil
 	}
 
 	if err != nil {
-		r.logger.Error("provider error during resolution",
-			"namespace", provider.Namespace(),
-			"resolve_type", resolveType,
-			"entity_id", entityID,
-			"error", err,
-		)
-		return nil
+		return nil, oops.With("namespace", provider.Namespace()).With("resolve_type", resolveType).With("entity_id", entityID).Wrap(err)
 	}
 
-	return attrs
+	return attrs, nil
 }
 
 // safeResolveEnvironment calls an environment provider with error and panic recovery
-func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider EnvironmentProvider) map[string]any {
+func (r *Resolver) safeResolveEnvironment(ctx context.Context, provider EnvironmentProvider) (attrs map[string]any, retErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			attrs = nil // defense-in-depth: discard partially-mutated map
 			r.logger.Error("environment provider panicked during resolution",
 				"namespace", provider.Namespace(),
+				"provider_type", "environment",
 				"panic", recovered,
 			)
+			retErr = oops.
+				With("namespace", provider.Namespace()).
+				With("provider_type", "environment").
+				Errorf("environment provider %s panicked during resolution", provider.Namespace())
 		}
 	}()
 
-	attrs, err := provider.Resolve(ctx)
+	var err error
+	attrs, err = provider.Resolve(ctx)
 	if err != nil {
-		r.logger.Error("environment provider error during resolution",
-			"namespace", provider.Namespace(),
-			"error", err,
-		)
-		return nil
+		return nil, oops.With("namespace", provider.Namespace()).Wrap(err)
 	}
 
-	return attrs
+	return attrs, nil
 }
 
 // mergeAttributes merges attributes from a provider into a bag with namespace prefix.

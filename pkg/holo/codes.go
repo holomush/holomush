@@ -87,7 +87,7 @@ func (f formatter) Parse(text string) StyledText {
 					colorNum := text[i+2 : i+5]
 					num, err := strconv.Atoi(colorNum)
 					if err == nil && num >= 0 && num <= 255 {
-						result.WriteString(fmt.Sprintf("\x1b[38;5;%dm", num))
+						fmt.Fprintf(&result, "\x1b[38;5;%dm", num)
 						i += 5
 						continue
 					}
