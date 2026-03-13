@@ -223,22 +223,38 @@ func TestCheckAccess(t *testing.T) {
 		// Infrastructure failures return a deny Decision without a Go error.
 		// checkAccess must detect IsInfraFailure() and return ErrAccessEvaluationFailed
 		// (not ErrPermissionDenied) so callers can distinguish transient failures from policy denials.
+		// All five entity prefixes must produce the correct _ACCESS_EVALUATION_FAILED code.
+		prefixes := []struct {
+			prefix       entityPrefix
+			expectedCode string
+		}{
+			{prefixLocation, "LOCATION_ACCESS_EVALUATION_FAILED"},
+			{prefixCharacter, "CHARACTER_ACCESS_EVALUATION_FAILED"},
+			{prefixObject, "OBJECT_ACCESS_EVALUATION_FAILED"},
+			{prefixExit, "EXIT_ACCESS_EVALUATION_FAILED"},
+			{prefixScene, "SCENE_ACCESS_EVALUATION_FAILED"},
+		}
 		infraDecision := types.NewDecision(types.EffectDefaultDeny, "session store unavailable", "infra:session-store-error")
-		engine := policytest.NewMockAccessPolicyEngine(t)
-		engine.On("Evaluate", ctx, types.AccessRequest{
-			Subject: subject, Action: action, Resource: resource,
-		}).Return(infraDecision, nil)
 
-		svc := &Service{engine: engine}
-		err := svc.checkAccess(ctx, subject, action, resource, prefixLocation)
+		for _, tt := range prefixes {
+			t.Run(string(tt.prefix), func(t *testing.T) {
+				engine := policytest.NewMockAccessPolicyEngine(t)
+				engine.On("Evaluate", ctx, types.AccessRequest{
+					Subject: subject, Action: action, Resource: resource,
+				}).Return(infraDecision, nil)
 
-		assert.Error(t, err)
-		errutil.AssertErrorCode(t, err, "LOCATION_ACCESS_EVALUATION_FAILED")
-		assert.ErrorIs(t, err, ErrAccessEvaluationFailed,
-			"infrastructure failure should return ErrAccessEvaluationFailed, not ErrPermissionDenied")
-		assert.NotErrorIs(t, err, ErrPermissionDenied,
-			"infrastructure failure must not be classified as permission denied")
-		engine.AssertExpectations(t)
+				svc := &Service{engine: engine}
+				err := svc.checkAccess(ctx, subject, action, resource, tt.prefix)
+
+				assert.Error(t, err)
+				errutil.AssertErrorCode(t, err, tt.expectedCode)
+				assert.ErrorIs(t, err, ErrAccessEvaluationFailed,
+					"infrastructure failure should return ErrAccessEvaluationFailed, not ErrPermissionDenied")
+				assert.NotErrorIs(t, err, ErrPermissionDenied,
+					"infrastructure failure must not be classified as permission denied")
+				engine.AssertExpectations(t)
+			})
+		}
 	})
 
 	t.Run("logs structured fields on engine error", func(t *testing.T) {

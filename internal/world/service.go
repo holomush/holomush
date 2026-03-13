@@ -639,6 +639,7 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 // Note: This decomposes the legacy compound resource "location:<id>:characters" into
 // resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition,
 // see docs/specs/2026-02-05-full-abac-design.md §7.3).
+// Error codes use LOCATION_* prefix (not CHARACTER_*) because the gated resource is the location.
 func (s *Service) GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts ListOptions) ([]*Character, error) {
 	if s.characterRepo == nil {
 		return nil, oops.Code("CHARACTER_QUERY_FAILED").Errorf("character repository not configured")
