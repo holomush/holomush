@@ -53,8 +53,8 @@ type cacheConfig struct {
 	stalenessThreshold time.Duration
 	reconnectInitial   time.Duration
 	reconnectMax       time.Duration
-	reconnectFactor float64
-	lastUpdateGauge prometheus.Gauge
+	reconnectFactor    float64
+	lastUpdateGauge    prometheus.Gauge
 }
 
 // WithStalenessThreshold sets the duration after which the cache is considered stale.

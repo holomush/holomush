@@ -820,7 +820,6 @@ func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
 	}
 }
 
-
 // failingAttributeProvider is a test double that always returns an error from ResolveSubject.
 type failingAttributeProvider struct {
 	namespace string
@@ -831,9 +830,11 @@ func (f *failingAttributeProvider) Namespace() string { return f.namespace }
 func (f *failingAttributeProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
 	return nil, f.err
 }
+
 func (f *failingAttributeProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
 	return nil, nil
 }
+
 func (f *failingAttributeProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
