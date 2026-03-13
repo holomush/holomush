@@ -16,7 +16,6 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -24,10 +23,9 @@ import (
 
 // communicationFixture contains all components needed for communication plugin integration tests.
 type communicationFixture struct {
-	LuaHost  *pluginlua.Host
-	Enforcer *capability.Enforcer
-	Plugin   *plugins.DiscoveredPlugin
-	Cleanup  func()
+	LuaHost *pluginlua.Host
+	Plugin  *plugins.DiscoveredPlugin
+	Cleanup func()
 }
 
 // setupCommunicationTest creates all components needed to test the communication plugins.
@@ -42,8 +40,7 @@ func setupCommunicationTest() (*communicationFixture, error) {
 		return nil, statErr
 	}
 
-	enforcer := capability.NewEnforcer()
-	hostFuncs := hostfunc.New(nil, enforcer)
+	hostFuncs := hostfunc.New(nil)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
 	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
@@ -73,15 +70,9 @@ func setupCommunicationTest() (*communicationFixture, error) {
 		return nil, err
 	}
 
-	if err := enforcer.SetGrants("communication", commPlugin.Manifest.Capabilities); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
 	return &communicationFixture{
-		LuaHost:  luaHost,
-		Enforcer: enforcer,
-		Plugin:   commPlugin,
+		LuaHost: luaHost,
+		Plugin:  commPlugin,
 		Cleanup: func() {
 			_ = luaHost.Close(context.Background())
 		},

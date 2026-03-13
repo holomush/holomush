@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -115,10 +114,8 @@ var _ hostfunc.WorldMutator = (*mockWorldMutatorService)(nil)
 
 func TestCreateLocationFn_Success(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -139,27 +136,10 @@ func TestCreateLocationFn_Success(t *testing.T) {
 	assert.Equal(t, "Test Room", tbl.RawGetString("name").String())
 }
 
-func TestCreateLocationFn_CapabilityDenied(t *testing.T) {
-	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`result, err = holomush.create_location("Test", "", "persistent")`)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestCreateLocationFn_InvalidLocationType(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -175,10 +155,7 @@ func TestCreateLocationFn_InvalidLocationType(t *testing.T) {
 }
 
 func TestCreateLocationFn_NoWorldService(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.location"}))
-
-	funcs := hostfunc.New(nil, enforcer)
+	funcs := hostfunc.New(nil)
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -196,10 +173,8 @@ func TestCreateLocationFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createLocationErr: errors.New("database connection timeout with stack trace"),
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -224,13 +199,11 @@ func TestCreateLocationFn_ServiceError(t *testing.T) {
 
 func TestCreateExitFn_Success(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
 
 	fromID := ulid.Make()
 	toID := ulid.Make()
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -252,13 +225,11 @@ func TestCreateExitFn_Success(t *testing.T) {
 
 func TestCreateExitFn_WithBidirectionalOptions(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
 
 	fromID := ulid.Make()
 	toID := ulid.Make()
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -274,30 +245,10 @@ func TestCreateExitFn_WithBidirectionalOptions(t *testing.T) {
 	require.Equal(t, lua.LTTable, result.Type())
 }
 
-func TestCreateExitFn_CapabilityDenied(t *testing.T) {
-	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	fromID := ulid.Make()
-	toID := ulid.Make()
-	code := fmt.Sprintf(`result, err = holomush.create_exit("%s", "%s", "north", {})`, fromID, toID)
-	err := L.DoString(code)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestCreateExitFn_InvalidFromID(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -315,10 +266,8 @@ func TestCreateExitFn_InvalidFromID(t *testing.T) {
 
 func TestCreateExitFn_InvalidToID(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -335,10 +284,7 @@ func TestCreateExitFn_InvalidToID(t *testing.T) {
 }
 
 func TestCreateExitFn_NoWorldService(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
-
-	funcs := hostfunc.New(nil, enforcer)
+	funcs := hostfunc.New(nil)
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -359,13 +305,11 @@ func TestCreateExitFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createExitErr: errors.New("database connection timeout with stack trace"),
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.exit"}))
 
 	fromID := ulid.Make()
 	toID := ulid.Make()
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -391,12 +335,10 @@ func TestCreateExitFn_ServiceError(t *testing.T) {
 
 func TestCreateObjectFn_Success(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
 
 	locID := ulid.Make()
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -416,29 +358,10 @@ func TestCreateObjectFn_Success(t *testing.T) {
 	assert.Equal(t, "Magic Sword", tbl.RawGetString("name").String())
 }
 
-func TestCreateObjectFn_CapabilityDenied(t *testing.T) {
-	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	locID := ulid.Make()
-	code := fmt.Sprintf(`result, err = holomush.create_object("Sword", {location_id = "%s"})`, locID)
-	err := L.DoString(code)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestCreateObjectFn_NoContainment(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -454,10 +377,8 @@ func TestCreateObjectFn_NoContainment(t *testing.T) {
 
 func TestCreateObjectFn_MissingOptsTable(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -475,10 +396,8 @@ func TestCreateObjectFn_MissingOptsTable(t *testing.T) {
 
 func TestCreateObjectFn_OptsNotATable(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -498,12 +417,10 @@ func TestCreateObjectFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createObjectErr: errors.New("database connection timeout with stack trace"),
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.write.object"}))
 
 	locID := ulid.Make()
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -543,10 +460,8 @@ func TestFindLocationFn_Success(t *testing.T) {
 			return nil, world.ErrNotFound
 		},
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.read.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -571,10 +486,8 @@ func TestFindLocationFn_NotFound(t *testing.T) {
 			return nil, world.ErrNotFound
 		},
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.read.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -588,31 +501,14 @@ func TestFindLocationFn_NotFound(t *testing.T) {
 	assert.Equal(t, "location not found", errVal.String())
 }
 
-func TestFindLocationFn_CapabilityDenied(t *testing.T) {
-	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`result, err = holomush.find_location("Test")`)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestFindLocationFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		findLocationByNameFn: func(_ context.Context, _, _ string) (*world.Location, error) {
 			return nil, errors.New("database connection timeout with stack trace")
 		},
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"world.read.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -648,10 +544,7 @@ func TestSetPropertyFn_LocationDescription(t *testing.T) {
 		location: loc,
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -677,10 +570,7 @@ func TestSetPropertyFn_ObjectDescription(t *testing.T) {
 		object: obj,
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -695,10 +585,8 @@ func TestSetPropertyFn_ObjectDescription(t *testing.T) {
 
 func TestSetPropertyFn_InvalidEntityType(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -716,10 +604,8 @@ func TestSetPropertyFn_InvalidEntityType(t *testing.T) {
 
 func TestSetPropertyFn_InvalidEntityID(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -743,10 +629,8 @@ func TestSetPropertyFn_InvalidProperty(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		location: loc,
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -759,23 +643,6 @@ func TestSetPropertyFn_InvalidProperty(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, result.Type())
 	assert.Contains(t, errVal.String(), "invalid property")
-}
-
-func TestSetPropertyFn_CapabilityDenied(t *testing.T) {
-	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	locID := ulid.Make()
-	code := fmt.Sprintf(`result, err = holomush.set_property("location", "%s", "description", "test")`, locID)
-	err := L.DoString(code)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
 }
 
 func TestSetPropertyFn_ServiceError(t *testing.T) {
@@ -792,10 +659,7 @@ func TestSetPropertyFn_ServiceError(t *testing.T) {
 		updateLocationErr: errors.New("database connection timeout with stack trace"),
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.set"}))
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -830,10 +694,8 @@ func TestGetPropertyFn_LocationDescription(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		location: loc,
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -860,10 +722,8 @@ func TestGetPropertyFn_ObjectName(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		object: obj,
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -881,10 +741,8 @@ func TestGetPropertyFn_ObjectName(t *testing.T) {
 
 func TestGetPropertyFn_InvalidEntityType(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -904,10 +762,8 @@ func TestGetPropertyFn_EntityNotFound(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		err: world.ErrNotFound,
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -923,31 +779,12 @@ func TestGetPropertyFn_EntityNotFound(t *testing.T) {
 	assert.Contains(t, errVal.String(), "not found")
 }
 
-func TestGetPropertyFn_CapabilityDenied(t *testing.T) {
-	mutator := &mockWorldMutatorService{}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	locID := ulid.Make()
-	code := fmt.Sprintf(`result, err = holomush.get_property("location", "%s", "description")`, locID)
-	err := L.DoString(code)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestGetPropertyFn_ServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		err: errors.New("database connection timeout with stack trace"),
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"property.get"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
@@ -981,10 +818,8 @@ func TestWorldWriteFunctions_SubjectIDFormat(t *testing.T) {
 			return nil, world.ErrNotFound
 		},
 	}
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("my-building-plugin", []string{"world.read.location"}))
 
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(mutator))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
 	L := lua.NewState()
 	defer L.Close()
 	funcs.Register(L, "my-building-plugin")

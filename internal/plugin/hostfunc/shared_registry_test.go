@@ -8,11 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/plugin/capability"
 )
 
 func TestSharedRegistry_DefaultsSharedWithCommand(t *testing.T) {
-	funcs := New(nil, capability.NewEnforcer())
+	funcs := New(nil)
 	services := command.NewTestServices(command.ServicesConfig{})
 
 	require.NotNil(t, services.PropertyRegistry())

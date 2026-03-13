@@ -21,7 +21,6 @@ import (
 	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -70,10 +69,9 @@ func (m *mockHelpCommandRegistry) Get(name string) (command.CommandEntry, bool) 
 
 // helpFixture contains all components needed for help plugin integration tests.
 type helpFixture struct {
-	LuaHost  *pluginlua.Host
-	Enforcer *capability.Enforcer
-	Plugin   *plugins.DiscoveredPlugin
-	Cleanup  func()
+	LuaHost *pluginlua.Host
+	Plugin  *plugins.DiscoveredPlugin
+	Cleanup func()
 }
 
 // setupHelpTest creates all components needed to test the help plugins.
@@ -88,9 +86,8 @@ func setupHelpTest() (*helpFixture, error) {
 		return nil, statErr
 	}
 
-	enforcer := capability.NewEnforcer()
 	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil, enforcer,
+	hostFuncs := hostfunc.New(nil,
 		hostfunc.WithCommandRegistry(registry),
 		hostfunc.WithEngine(policytest.AllowAllEngine()),
 	)
@@ -123,15 +120,9 @@ func setupHelpTest() (*helpFixture, error) {
 		return nil, err
 	}
 
-	if err := enforcer.SetGrants("help", helpPlugin.Manifest.Capabilities); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
 	return &helpFixture{
-		LuaHost:  luaHost,
-		Enforcer: enforcer,
-		Plugin:   helpPlugin,
+		LuaHost: luaHost,
+		Plugin:  helpPlugin,
 		Cleanup: func() {
 			_ = luaHost.Close(context.Background())
 		},
@@ -338,9 +329,8 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 		return nil, statErr
 	}
 
-	enforcer := capability.NewEnforcer()
 	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil, enforcer,
+	hostFuncs := hostfunc.New(nil,
 		hostfunc.WithCommandRegistry(registry),
 		hostfunc.WithEngine(engine),
 	)
@@ -373,15 +363,9 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 		return nil, err
 	}
 
-	if err := enforcer.SetGrants("help", helpPlugin.Manifest.Capabilities); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
 	return &helpFixture{
-		LuaHost:  luaHost,
-		Enforcer: enforcer,
-		Plugin:   helpPlugin,
+		LuaHost: luaHost,
+		Plugin:  helpPlugin,
 		Cleanup: func() {
 			_ = luaHost.Close(context.Background())
 		},

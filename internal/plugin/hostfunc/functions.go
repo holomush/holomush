@@ -4,7 +4,7 @@
 // Package hostfunc provides host functions to Lua plugins.
 //
 // Host functions expose server capabilities to plugins in a controlled way.
-// Functions that access sensitive resources require capability checks.
+// Access control is enforced via ABAC policies at the service layer.
 package hostfunc
 
 import (
@@ -34,15 +34,9 @@ type KVStore interface {
 	Delete(ctx context.Context, namespace, key string) error
 }
 
-// CapabilityChecker validates plugin capabilities.
-type CapabilityChecker interface {
-	Check(plugin, capability string) bool
-}
-
 // Functions provides host functions to Lua plugins.
 type Functions struct {
 	kvStore          KVStore
-	enforcer         CapabilityChecker
 	worldMutator     WorldMutator
 	commandRegistry  CommandRegistry
 	engine           types.AccessPolicyEngine
@@ -89,15 +83,10 @@ func WithWorldQuerier(_ WorldQuerier) Option {
 }
 
 // New creates host functions with dependencies.
-// Panics if enforcer is nil (required dependency).
 // KVStore may be nil; KV functions will return errors if called.
-func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
-	if enforcer == nil {
-		panic("hostfunc.New: enforcer cannot be nil")
-	}
+func New(kv KVStore, opts ...Option) *Functions {
 	f := &Functions{
-		kvStore:  kv,
-		enforcer: enforcer,
+		kvStore: kv,
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -121,43 +110,30 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	// Request ID (no capability required)
 	ls.SetField(mod, "new_request_id", ls.NewFunction(f.newRequestIDFn()))
 
-	// KV operations (capability required)
-	ls.SetField(mod, "kv_get", ls.NewFunction(f.wrap(pluginName, "kv.read", f.kvGetFn(pluginName))))
-	ls.SetField(mod, "kv_set", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvSetFn(pluginName))))
-	ls.SetField(mod, "kv_delete", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvDeleteFn(pluginName))))
+	// KV operations
+	ls.SetField(mod, "kv_get", ls.NewFunction(f.kvGetFn(pluginName)))
+	ls.SetField(mod, "kv_set", ls.NewFunction(f.kvSetFn(pluginName)))
+	ls.SetField(mod, "kv_delete", ls.NewFunction(f.kvDeleteFn(pluginName)))
 
-	// World queries (capability required)
-	ls.SetField(mod, "query_room", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.queryRoomFn(pluginName))))
-	ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
-	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
-	ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
+	// World queries
+	ls.SetField(mod, "query_room", ls.NewFunction(f.queryRoomFn(pluginName)))
+	ls.SetField(mod, "query_character", ls.NewFunction(f.queryCharacterFn(pluginName)))
+	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.queryRoomCharactersFn(pluginName)))
+	ls.SetField(mod, "query_object", ls.NewFunction(f.queryObjectFn(pluginName)))
 
-	// World mutations (capability required)
-	ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
-	ls.SetField(mod, "create_exit", ls.NewFunction(f.wrap(pluginName, "world.write.exit", f.createExitFn(pluginName))))
-	ls.SetField(mod, "create_object", ls.NewFunction(f.wrap(pluginName, "world.write.object", f.createObjectFn(pluginName))))
-	ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
-	ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
-	ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
+	// World mutations
+	ls.SetField(mod, "create_location", ls.NewFunction(f.createLocationFn(pluginName)))
+	ls.SetField(mod, "create_exit", ls.NewFunction(f.createExitFn(pluginName)))
+	ls.SetField(mod, "create_object", ls.NewFunction(f.createObjectFn(pluginName)))
+	ls.SetField(mod, "find_location", ls.NewFunction(f.findLocationFn(pluginName)))
+	ls.SetField(mod, "set_property", ls.NewFunction(f.setPropertyFn(pluginName)))
+	ls.SetField(mod, "get_property", ls.NewFunction(f.getPropertyFn(pluginName)))
 
-	// Command registry functions (capability required)
-	ls.SetField(mod, "list_commands", ls.NewFunction(f.wrap(pluginName, "command.list", f.listCommandsFn(pluginName))))
-	ls.SetField(mod, "get_command_help", ls.NewFunction(f.wrap(pluginName, "command.help", f.getCommandHelpFn(pluginName))))
+	// Command registry functions
+	ls.SetField(mod, "list_commands", ls.NewFunction(f.listCommandsFn(pluginName)))
+	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
 
 	ls.SetGlobal("holomush", mod)
-}
-
-func (f *Functions) wrap(plugin, capName string, fn lua.LGFunction) lua.LGFunction {
-	return func(L *lua.LState) int {
-		if !f.enforcer.Check(plugin, capName) {
-			slog.Warn("capability denied",
-				"plugin", plugin,
-				"capability", capName)
-			L.RaiseError("capability denied: %s requires %s", plugin, capName)
-			return 0
-		}
-		return fn(L)
-	}
 }
 
 func (f *Functions) logFn(pluginName string) lua.LGFunction {

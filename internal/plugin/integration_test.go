@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
@@ -29,10 +28,9 @@ import (
 
 // echoBotFixture contains all components needed for echo-bot integration tests.
 type echoBotFixture struct {
-	LuaHost  *pluginlua.Host
-	Enforcer *capability.Enforcer
-	Plugin   *plugins.DiscoveredPlugin
-	Cleanup  func()
+	LuaHost *pluginlua.Host
+	Plugin  *plugins.DiscoveredPlugin
+	Cleanup func()
 }
 
 // setupEchoBotTest creates all components needed to test the echo-bot plugins.
@@ -47,8 +45,7 @@ func setupEchoBotTest() (*echoBotFixture, error) {
 		return nil, statErr
 	}
 
-	enforcer := capability.NewEnforcer()
-	hostFuncs := hostfunc.New(nil, enforcer)
+	hostFuncs := hostfunc.New(nil)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
 	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
@@ -78,15 +75,9 @@ func setupEchoBotTest() (*echoBotFixture, error) {
 		return nil, err
 	}
 
-	if err := enforcer.SetGrants("echo-bot", echoBotPlugin.Manifest.Capabilities); err != nil {
-		luaHost.Close(ctx) //nolint:errcheck
-		return nil, err
-	}
-
 	return &echoBotFixture{
-		LuaHost:  luaHost,
-		Enforcer: enforcer,
-		Plugin:   echoBotPlugin,
+		LuaHost: luaHost,
+		Plugin:  echoBotPlugin,
 		Cleanup: func() {
 			_ = luaHost.Close(context.Background())
 		},
