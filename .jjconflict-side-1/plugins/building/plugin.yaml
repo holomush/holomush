@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: building
+version: 1.0.0
+type: lua
+events:
+  - command
+capabilities:
+  - build.location
+  - build.exit
+  - world.write.location
+  - world.write.exit
+  - world.read.location
+commands:
+  - name: dig
+    capabilities:
+      - build.location
+      - build.exit
+    help: "Create a new location with connecting exit"
+    usage: "dig <exit> to \"<location>\" [return <exit>]"
+    helpText: |
+      ## Dig
+
+      Creates a new location and connects it to your current location with an exit.
+
+      ### Syntax
+
+      `dig <exit-name> to "<location-name>" [return <return-exit>]`
+
+      - `<exit-name>` - Name of the exit from here to the new location
+      - `<location-name>` - Name of the new location (must be quoted)
+      - `return <return-exit>` - Optional: creates a return exit back to here
+
+      ### Examples
+
+      - `dig north to "Town Square"` - Creates "Town Square" with a north exit
+      - `dig north to "Market" return south` - Creates bidirectional connection
+
+      ### Requirements
+
+      Requires `build.location` and `build.exit` capabilities.
+
+  - name: link
+    capabilities:
+      - build.exit
+    help: "Link current location to another with an exit"
+    usage: "link <exit> to <target>"
+    helpText: |
+      ## Link
+
+      Creates an exit from your current location to an existing location.
+
+      ### Syntax
+
+      `link <exit-name> to <target>`
+
+      - `<exit-name>` - Name of the exit to create
+      - `<target>` - Either a location ID (`#01ABC...`) or location name
+
+      ### Target Resolution
+
+      - **By ID**: `link east to #01HXYZ123ABC` - Direct ID reference
+      - **By Name**: `link east to "Garden"` - Searches for location by name
+
+      When using name lookup, the location name must be unique or an error
+      is returned.
+
+      ### Examples
+
+      - `link east to #01HXYZ123ABC` - Link to location by ID
+      - `link east to "Garden"` - Link to location by name
+
+      ### Requirements
+
+      Requires `build.exit` capability.
+
+lua-plugin:
+  entry: main.lua

@@ -1,0 +1,157 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Bugs
+    - errcheck
+    - govet
+    - staticcheck
+    - nilerr
+
+    # Style
+    - revive
+    - misspell
+
+    # Performance
+    - prealloc
+    - unconvert
+
+    # Security
+    - gosec
+
+    # Error handling
+    - errorlint
+    - wrapcheck
+
+    # Maintenance
+    - unparam
+    - gocritic
+    - nolintlint
+
+  exclusions:
+    # Default exclusion presets
+    presets:
+      - common-false-positives
+
+    # Path exclusions
+    paths:
+      # TinyGo WASM plugins use patterns incompatible with standard linting:
+      # - //export directives make functions appear unused
+      # - unsafe memory access is required for WASM host communication
+      # - integer conversions are necessary for 32-bit WASM ABI
+      - plugins/
+
+    rules:
+      # Test files can have longer functions and more complexity
+      # Also exclude errcheck blank identifier checks for test cleanup code
+      - path: '_test\.go'
+        linters:
+          - gocritic
+          - wrapcheck
+          - errcheck
+
+      # Test password hashes (argon2id fixtures) are not real credentials.
+      # G101 fires on struct literals containing PasswordHash fields.
+      - path: '_test\.go'
+        linters:
+          - gosec
+        text: 'G101'
+
+      # Main package doesn't need to wrap errors
+      - path: cmd/
+        linters:
+          - wrapcheck
+
+      # Package name "types" triggers var-naming but matches spec directory structure
+      - path: internal/access/policy/types/
+        linters:
+          - revive
+        text: var-naming
+
+      # G706 (log injection) is a false positive when using structured slog: key-value pairs
+      # prevent injection regardless of whether values are user-controlled.
+      # Scoped to known slog-only packages; new packages using fmt/log must be added here.
+      - path: '(internal/(access|command|core|grpc|logging|observability|plugin|store|telnet|tls|web|world|xdg)|cmd|pkg)/.+\.go$'
+        linters:
+          - gosec
+        text: G706
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # Optimization hint, not a bug - can be addressed later
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam # Event struct (120 bytes) is passed by value by design
+
+    gosec:
+      excludes:
+        - G104 # Audit errors not checked (handled by errcheck)
+
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+      ignore-sig-regexps:
+        # oops error library - builder pattern methods create structured errors
+        - 'github\.com/samber/oops\.OopsErrorBuilder\)\.New\('
+        - 'github\.com/samber/oops\.OopsErrorBuilder\)\.Wrap\('
+      ignore-package-globs:
+        # oops error library creates structured errors, not wrapping issues
+        - github.com/samber/oops
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

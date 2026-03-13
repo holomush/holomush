@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Benchmark baseline values for regression detection.
+# Format: BenchmarkName ns/op
+#
+# These values represent the maximum acceptable performance targets.
+# The check script enforces a 110% threshold on top of these values.
+# Update these when intentional performance changes are made.
+#
+# To regenerate from actual measurements:
+#   go test -bench=. -benchmem -count=3 ./internal/access/policy/ -run=^$ -benchtime=1s
+#
+BenchmarkSinglePolicyEvaluation 10000
+BenchmarkConditionEvaluation 1000000
+BenchmarkFiftyPolicyEvaluation 100000
+BenchmarkAttributeResolution 50000
+BenchmarkWorstCase_NestedIf 25000000
+BenchmarkWorstCase_AllPoliciesMatch 10000000
+BenchmarkEvaluateEndToEnd 1000000

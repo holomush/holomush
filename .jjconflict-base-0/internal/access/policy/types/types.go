@@ -1,0 +1,357 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// Package types defines the core types for the ABAC policy engine.
+package types
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/samber/oops"
+)
+
+// Effect represents the evaluated outcome of an access control decision.
+type Effect int
+
+// Effect constants define the possible outcomes of policy evaluation.
+const (
+	EffectDefaultDeny  Effect = iota // default_deny
+	EffectAllow                      // allow
+	EffectDeny                       // deny
+	EffectSystemBypass               // system_bypass
+)
+
+var effectStrings = [...]string{
+	"default_deny",
+	"allow",
+	"deny",
+	"system_bypass",
+}
+
+func (e Effect) String() string {
+	if e >= 0 && int(e) < len(effectStrings) {
+		return effectStrings[e]
+	}
+	return fmt.Sprintf("unknown(%d)", int(e))
+}
+
+// PolicyEffect is a string type used in policy declarations to specify
+// the intended effect when a policy matches.
+type PolicyEffect string
+
+// PolicyEffect constants define the valid policy effect declarations.
+const (
+	PolicyEffectPermit PolicyEffect = "permit"
+	PolicyEffectForbid PolicyEffect = "forbid"
+)
+
+// String returns the underlying string value for DB serialization.
+func (pe PolicyEffect) String() string {
+	return string(pe)
+}
+
+// ParsePolicyEffect validates the input string and returns a PolicyEffect constant
+// or an error if the input is not a valid policy effect value.
+// Valid values are "permit" and "forbid". This function MUST be used when deserializing
+// PolicyEffect values from external sources (DB, API, files) to prevent invalid
+// values from circulating in the system.
+func ParsePolicyEffect(s string) (PolicyEffect, error) {
+	switch s {
+	case "permit":
+		return PolicyEffectPermit, nil
+	case "forbid":
+		return PolicyEffectForbid, nil
+	default:
+		return "", oops.In("access").With("valid", "permit,forbid").Errorf("invalid policy effect: %q", s)
+	}
+}
+
+// ToEffect converts a PolicyEffect to the runtime Effect type.
+// Permit maps to EffectAllow, Forbid maps to EffectDeny,
+// and any unknown value maps to EffectDefaultDeny.
+func (pe PolicyEffect) ToEffect() Effect {
+	switch pe {
+	case PolicyEffectPermit:
+		return EffectAllow
+	case PolicyEffectForbid:
+		return EffectDeny
+	default:
+		return EffectDefaultDeny
+	}
+}
+
+// AccessRequest represents a subject attempting an action on a resource.
+//
+// Fields are exported for test assertion readability (mock.MatchedBy comparisons
+// and struct literal matching). Production code MUST use NewAccessRequest() which
+// validates all fields are non-empty.
+type AccessRequest struct {
+	Subject  string // "character:01ABC", "plugin:echo-bot", "system"
+	Action   string // "read", "write", "delete", "enter", "execute", "emit"
+	Resource string // "location:01XYZ", "command:dig", "property:01DEF"
+}
+
+// NewAccessRequest creates a validated AccessRequest. Returns an error if any
+// field is empty, preventing silent misuse at access control boundaries.
+func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
+	if subject == "" {
+		return AccessRequest{}, oops.In("access").With("field", "subject").Errorf("access request: subject must not be empty")
+	}
+	if action == "" {
+		return AccessRequest{}, oops.In("access").With("field", "action").Errorf("access request: action must not be empty")
+	}
+	if resource == "" {
+		return AccessRequest{}, oops.In("access").With("field", "resource").Errorf("access request: resource must not be empty")
+	}
+	return AccessRequest{
+		Subject:  subject,
+		Action:   action,
+		Resource: resource,
+	}, nil
+}
+
+// Decision is the result of evaluating an access request against the policy engine.
+// All fields are deliberately unexported; use NewDecision() and accessor methods.
+type Decision struct {
+	allowed    bool
+	effect     Effect
+	reason     string
+	policyID   string
+	policies   []PolicyMatch
+	attributes *AttributeBags
+}
+
+// NewDecision creates a Decision with the allowed field set consistently
+// based on the effect: Allow and SystemBypass grant access, all others deny.
+func NewDecision(effect Effect, reason, policyID string) Decision {
+	allowed := effect == EffectAllow || effect == EffectSystemBypass
+	return Decision{
+		allowed:  allowed,
+		effect:   effect,
+		reason:   reason,
+		policyID: policyID,
+	}
+}
+
+// IsAllowed returns whether the decision grants access.
+func (d Decision) IsAllowed() bool {
+	return d.allowed
+}
+
+// Effect returns the evaluated effect of this decision.
+func (d Decision) Effect() Effect {
+	return d.effect
+}
+
+// Reason returns the human-readable explanation for this decision.
+func (d Decision) Reason() string {
+	return d.reason
+}
+
+// PolicyID returns the ID of the policy that made this decision.
+func (d Decision) PolicyID() string {
+	return d.policyID
+}
+
+// Policies returns a defensive copy of the policy matches that contributed to this decision.
+func (d Decision) Policies() []PolicyMatch {
+	if d.policies == nil {
+		return nil
+	}
+	cp := make([]PolicyMatch, len(d.policies))
+	copy(cp, d.policies)
+	return cp
+}
+
+// Attributes returns the attribute bags used during evaluation.
+// The returned pointer may be set via SetAttributes during engine evaluation.
+func (d Decision) Attributes() *AttributeBags {
+	return d.attributes
+}
+
+// SetPolicies sets the policy matches for this decision.
+// This is intended for use by the policy engine during evaluation.
+// Note: this setter exists because Decision lives in the types package while
+// the engine that populates it lives in the policy package. A NewDecisionWithDetails
+// constructor is not practical because the engine builds decisions incrementally
+// (attributes first, then policies after evaluation). Consider consolidating
+// packages if this design becomes a maintenance burden.
+func (d *Decision) SetPolicies(p []PolicyMatch) {
+	d.policies = make([]PolicyMatch, len(p))
+	copy(d.policies, p)
+}
+
+// SetAttributes sets the attribute bags for this decision.
+// This is intended for use by the policy engine during evaluation.
+func (d *Decision) SetAttributes(a *AttributeBags) {
+	d.attributes = a
+}
+
+// IsInfraFailure returns true if this decision represents an infrastructure
+// failure (session resolution error, DB error, etc.) rather than a policy denial.
+// Infrastructure failures use PolicyID with the "infra:" prefix.
+func (d Decision) IsInfraFailure() bool {
+	return strings.HasPrefix(d.policyID, "infra:")
+}
+
+// Validate checks that the Decision invariant holds: the allowed field
+// must be consistent with the effect. Returns an error if the invariant
+// is violated. This should be called at engine return boundaries.
+func (d Decision) Validate() error {
+	expectAllowed := d.effect == EffectAllow || d.effect == EffectSystemBypass
+	if d.allowed != expectAllowed {
+		return fmt.Errorf(
+			"decision invariant violated: allowed=%v but effect=%s",
+			d.allowed, d.effect,
+		)
+	}
+	return nil
+}
+
+// PolicyMatch records that a specific policy matched an access request
+// and what effect it contributed.
+type PolicyMatch struct {
+	PolicyID      string
+	PolicyName    string
+	Effect        Effect
+	ConditionsMet bool
+}
+
+// AttributeBags holds the attribute collections used during policy evaluation.
+type AttributeBags struct {
+	Subject     map[string]any
+	Resource    map[string]any
+	Action      map[string]any
+	Environment map[string]any
+}
+
+// NewAttributeBags creates an AttributeBags with all maps initialized.
+func NewAttributeBags() *AttributeBags {
+	return &AttributeBags{
+		Subject:     make(map[string]any),
+		Resource:    make(map[string]any),
+		Action:      make(map[string]any),
+		Environment: make(map[string]any),
+	}
+}
+
+// AttrType represents the data type of an attribute value.
+type AttrType int
+
+// AttrType constants define the supported attribute data types.
+const (
+	AttrTypeString     AttrType = iota // string
+	AttrTypeInt                        // int
+	AttrTypeFloat                      // float
+	AttrTypeBool                       // bool
+	AttrTypeStringList                 // string_list
+)
+
+var attrTypeStrings = [...]string{
+	"string",
+	"int",
+	"float",
+	"bool",
+	"string_list",
+}
+
+func (at AttrType) String() string {
+	if at >= 0 && int(at) < len(attrTypeStrings) {
+		return attrTypeStrings[at]
+	}
+	return fmt.Sprintf("unknown(%d)", int(at))
+}
+
+// AttributeSchema defines the valid attributes and their types.
+// Task 6 will extend this with full namespace/attribute registration.
+type AttributeSchema struct {
+	namespaces map[string]*NamespaceSchema
+}
+
+// NamespaceSchema defines the attributes within a namespace.
+type NamespaceSchema struct {
+	Attributes map[string]AttrType
+}
+
+// NewAttributeSchema creates an empty AttributeSchema.
+func NewAttributeSchema() *AttributeSchema {
+	return &AttributeSchema{
+		namespaces: make(map[string]*NamespaceSchema),
+	}
+}
+
+// Register adds a namespace schema. Full implementation in Task 12.
+func (s *AttributeSchema) Register(namespace string, schema *NamespaceSchema) error {
+	s.namespaces[namespace] = schema
+	return nil
+}
+
+// HasNamespace returns true if the given namespace has been registered.
+func (s *AttributeSchema) HasNamespace(namespace string) bool {
+	_, ok := s.namespaces[namespace]
+	return ok
+}
+
+// IsRegistered checks if a namespace+key pair exists. Full implementation in Task 12.
+func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
+	ns, ok := s.namespaces[namespace]
+	if !ok {
+		return false
+	}
+	_, exists := ns.Attributes[key]
+	return exists
+}
+
+// PolicySource identifies where a policy originated.
+type PolicySource string
+
+// PolicySource constants define valid policy origins.
+const (
+	PolicySourceSeed   PolicySource = "seed"
+	PolicySourceLock   PolicySource = "lock"
+	PolicySourceAdmin  PolicySource = "admin"
+	PolicySourcePlugin PolicySource = "plugin"
+)
+
+// PropertyVisibility controls who can see a property.
+type PropertyVisibility string
+
+// PropertyVisibility constants define valid visibility levels.
+const (
+	PropertyVisibilityPublic     PropertyVisibility = "public"
+	PropertyVisibilityPrivate    PropertyVisibility = "private"
+	PropertyVisibilityRestricted PropertyVisibility = "restricted"
+	PropertyVisibilitySystem     PropertyVisibility = "system"
+	PropertyVisibilityAdmin      PropertyVisibility = "admin"
+)
+
+// EntityType identifies the kind of game entity.
+type EntityType string
+
+// EntityType constants define valid game entity kinds.
+const (
+	EntityTypeCharacter EntityType = "character"
+	EntityTypeLocation  EntityType = "location"
+	EntityTypeObject    EntityType = "object"
+)
+
+// AccessPolicyEngine defines the interface for ABAC policy evaluation.
+// Implementations MUST return an error or a deny decision for unknown/unmatched requests (fail-closed).
+// This ensures that missing policies result in access denial rather than unexpected grants.
+//
+// Fail-closed guarantee: the engine MUST deny access whenever it cannot produce a
+// reliable decision. Callers MUST treat any non-nil error from Evaluate as a denial
+// and MUST NOT grant access. When the returned Decision indicates infrastructure
+// failure (IsInfraFailure), the engine has already denied the request. The engine
+// never returns a permissive Decision alongside an error; on error paths the
+// returned Decision is always the zero value (EffectDefaultDeny, allowed=false).
+//
+// This interface is defined here (in types package) to avoid import cycles:
+// - world package needs to call the engine
+// - policy/attribute package needs to query world repositories
+// By defining the interface with the types it uses, both can import types without a cycle.
+type AccessPolicyEngine interface {
+	Evaluate(ctx context.Context, request AccessRequest) (Decision, error)
+}

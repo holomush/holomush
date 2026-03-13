@@ -1,0 +1,205 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package world_test
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/holomush/holomush/internal/world"
+)
+
+func TestBidirectionalCleanupResult_Error(t *testing.T) {
+	exitID := ulid.Make()
+	toLocationID := ulid.Make()
+	returnExitID := ulid.Make()
+	underlyingErr := errors.New("connection timeout")
+
+	tests := []struct {
+		name        string
+		result      *world.BidirectionalCleanupResult
+		wantContain string
+	}{
+		{
+			name: "nil issue returns empty string",
+			result: &world.BidirectionalCleanupResult{
+				ExitID:       exitID,
+				ToLocationID: toLocationID,
+				ReturnName:   "south",
+				Issue:        nil,
+			},
+			wantContain: "",
+		},
+		{
+			name: "return not found",
+			result: &world.BidirectionalCleanupResult{
+				ExitID:       exitID,
+				ToLocationID: toLocationID,
+				ReturnName:   "south",
+				Issue: &world.CleanupIssue{
+					Type: world.CleanupReturnNotFound,
+				},
+			},
+			wantContain: "not found",
+		},
+		{
+			name: "find error",
+			result: &world.BidirectionalCleanupResult{
+				ExitID:       exitID,
+				ToLocationID: toLocationID,
+				ReturnName:   "south",
+				Issue: &world.CleanupIssue{
+					Type: world.CleanupFindError,
+					Err:  underlyingErr,
+				},
+			},
+			wantContain: "connection timeout",
+		},
+		{
+			name: "delete error",
+			result: &world.BidirectionalCleanupResult{
+				ExitID:       exitID,
+				ToLocationID: toLocationID,
+				ReturnName:   "south",
+				Issue: &world.CleanupIssue{
+					Type:         world.CleanupDeleteError,
+					ReturnExitID: returnExitID,
+					Err:          underlyingErr,
+				},
+			},
+			wantContain: "failed to delete",
+		},
+		{
+			name: "unknown issue type",
+			result: &world.BidirectionalCleanupResult{
+				ExitID:       exitID,
+				ToLocationID: toLocationID,
+				ReturnName:   "south",
+				Issue: &world.CleanupIssue{
+					Type: world.CleanupIssueType("unknown"),
+				},
+			},
+			wantContain: "unknown cleanup issue",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errStr := tt.result.Error()
+			if tt.wantContain == "" {
+				assert.Empty(t, errStr)
+			} else {
+				assert.Contains(t, errStr, tt.wantContain)
+			}
+		})
+	}
+}
+
+func TestBidirectionalCleanupResult_Unwrap(t *testing.T) {
+	underlyingErr := errors.New("database error")
+
+	t.Run("unwrap with nil issue returns nil", func(t *testing.T) {
+		result := &world.BidirectionalCleanupResult{
+			ExitID: ulid.Make(),
+			Issue:  nil,
+		}
+		assert.Nil(t, result.Unwrap())
+	})
+
+	t.Run("unwrap with nil Err returns nil", func(t *testing.T) {
+		result := &world.BidirectionalCleanupResult{
+			ExitID: ulid.Make(),
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupReturnNotFound,
+				Err:  nil,
+			},
+		}
+		assert.Nil(t, result.Unwrap())
+	})
+
+	t.Run("unwrap returns underlying error", func(t *testing.T) {
+		result := &world.BidirectionalCleanupResult{
+			ExitID: ulid.Make(),
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupFindError,
+				Err:  underlyingErr,
+			},
+		}
+		assert.Equal(t, underlyingErr, result.Unwrap())
+	})
+
+	t.Run("errors.Is works through unwrap", func(t *testing.T) {
+		sentinelErr := errors.New("sentinel")
+		result := &world.BidirectionalCleanupResult{
+			ExitID: ulid.Make(),
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupFindError,
+				Err:  sentinelErr,
+			},
+		}
+		assert.True(t, errors.Is(result, sentinelErr))
+	})
+
+	t.Run("errors.As detects BidirectionalCleanupResult", func(t *testing.T) {
+		// This test verifies the documented pattern for callers:
+		//   var cleanupErr *world.BidirectionalCleanupResult
+		//   if errors.As(err, &cleanupErr) { ... }
+		result := &world.BidirectionalCleanupResult{
+			ExitID:       ulid.Make(),
+			ToLocationID: ulid.Make(),
+			ReturnName:   "south",
+			Issue: &world.CleanupIssue{
+				Type: world.CleanupReturnNotFound,
+			},
+		}
+
+		// errors.As should detect the type
+		var cleanupErr *world.BidirectionalCleanupResult
+		assert.True(t, errors.As(result, &cleanupErr),
+			"errors.As should detect *BidirectionalCleanupResult")
+		assert.Equal(t, result.ReturnName, cleanupErr.ReturnName)
+		assert.False(t, cleanupErr.IsSevere())
+	})
+}
+
+func TestBidirectionalCleanupResult_IsSevere(t *testing.T) {
+	tests := []struct {
+		name       string
+		issueType  world.CleanupIssueType
+		wantSevere bool
+	}{
+		{"nil issue is not severe", "", false},
+		{"return not found is not severe", world.CleanupReturnNotFound, false},
+		{"find error is severe", world.CleanupFindError, true},
+		{"delete error is severe", world.CleanupDeleteError, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var issue *world.CleanupIssue
+			if tt.issueType != "" {
+				issue = &world.CleanupIssue{Type: tt.issueType}
+			}
+			result := &world.BidirectionalCleanupResult{
+				ExitID: ulid.Make(),
+				Issue:  issue,
+			}
+			assert.Equal(t, tt.wantSevere, result.IsSevere())
+		})
+	}
+}
+
+func TestErrNotFound_ExportedFromWorldPackage(t *testing.T) {
+	// Verify ErrNotFound is exported and usable from world package
+	assert.NotNil(t, world.ErrNotFound)
+	assert.Equal(t, "not found", world.ErrNotFound.Error())
+
+	// Verify errors.Is works for wrapped errors
+	wrappedErr := errors.New("get location: not found")
+	assert.False(t, errors.Is(wrappedErr, world.ErrNotFound),
+		"unrelated error should not match ErrNotFound")
+}

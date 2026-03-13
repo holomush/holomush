@@ -1,0 +1,490 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  BINARY_NAME: holomush
+  MAIN_PKG: ./cmd/holomush
+  MIGRATE_CLI: migrate
+  MIGRATIONS_DIR: internal/store/migrations
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Development
+  dev:
+    desc: Run server in development mode
+    cmds:
+      - go run {{.MAIN_PKG}}
+
+  # Building
+  build:
+    desc: Build the server binary
+    cmds:
+      - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
+
+  build:all:
+    desc: Build for all platforms
+    cmds:
+      - task: build:linux
+      - task: build:darwin
+
+  build:linux:
+    desc: Build for Linux
+    cmds:
+      - GOOS=linux GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-linux-amd64 {{.MAIN_PKG}}
+      - GOOS=linux GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-linux-arm64 {{.MAIN_PKG}}
+
+  build:darwin:
+    desc: Build for macOS
+    cmds:
+      - GOOS=darwin GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-darwin-amd64 {{.MAIN_PKG}}
+      - GOOS=darwin GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-darwin-arm64 {{.MAIN_PKG}}
+
+  # Proto generation
+  proto:
+    desc: Generate Go code from protobuf definitions
+    cmds:
+      - buf generate
+    sources:
+      - api/proto/**/*.proto
+      - buf.yaml
+      - buf.gen.yaml
+    generates:
+      - internal/proto/**/*.go
+
+  # Schema generation
+  generate:schema:
+    desc: Generate plugin JSON Schema from Go types
+    cmds:
+      - go run cmd/gen-schema/main.go
+    sources:
+      - cmd/gen-schema/main.go
+      - internal/plugin/manifest.go
+      - internal/plugin/schema.go
+    generates:
+      - schemas/plugin.schema.json
+
+  # Testing
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -race -v ./...
+
+  test:coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  test:short:
+    desc: Run short tests only
+    cmds:
+      - go test -short -v ./...
+
+  test:integration:
+    desc: Run integration tests (requires Docker)
+    cmds:
+      - go test -race -v -tags=integration ./...
+
+  test:ginkgo:
+    desc: Run ginkgo integration tests with parallelism
+    cmds:
+      - ginkgo -r -p --randomize-all ./test/integration/...
+
+  test:fuzz:
+    desc: Run fuzz tests
+    cmds:
+      - go test -fuzz=FuzzParse -fuzztime={{.FUZZ_TIME}} {{.FUZZ_PACKAGE}}
+    vars:
+      FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
+      FUZZ_PACKAGE: '{{default "./internal/access/policy/dsl/" .FUZZ_PACKAGE}}'
+
+  test:bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem -count={{.BENCH_COUNT}} -benchtime={{.BENCH_TIME}} -run='^$' {{.BENCH_PACKAGE}}
+    vars:
+      BENCH_COUNT: '{{default "3" .BENCH_COUNT}}'
+      BENCH_TIME: '{{default "1s" .BENCH_TIME}}'
+      BENCH_PACKAGE: '{{default "./internal/access/policy/" .BENCH_PACKAGE}}'
+
+  mocks:generate:
+    desc: Generate mocks with mockery
+    cmds:
+      - mockery
+
+  # Linting
+  # License headers
+  license:check:
+    desc: Check SPDX license headers
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Directories to check
+        DIRS="api cmd internal pkg plugins scripts"
+
+        # Verify directories exist
+        EXISTING_DIRS=""
+        for dir in $DIRS; do
+          if [[ -d "$dir" ]]; then
+            EXISTING_DIRS="$EXISTING_DIRS $dir"
+          else
+            echo "WARNING: Directory '$dir' does not exist, skipping"
+          fi
+        done
+
+        if [[ -z "$EXISTING_DIRS" ]]; then
+          echo "ERROR: No directories found to check"
+          exit 1
+        fi
+
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense -check -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' \
+          -ignore 'vendor/**' \
+          $EXISTING_DIRS
+
+  license:add:
+    desc: Add missing SPDX license headers
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Directories to add headers to
+        DIRS="api cmd internal pkg plugins scripts"
+
+        # Verify directories exist
+        EXISTING_DIRS=""
+        for dir in $DIRS; do
+          if [[ -d "$dir" ]]; then
+            EXISTING_DIRS="$EXISTING_DIRS $dir"
+          else
+            echo "WARNING: Directory '$dir' does not exist, skipping"
+          fi
+        done
+
+        if [[ -z "$EXISTING_DIRS" ]]; then
+          echo "ERROR: No directories found to process"
+          exit 1
+        fi
+
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' \
+          -ignore 'vendor/**' \
+          $EXISTING_DIRS
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: lint:go
+      - task: lint:markdown
+      - task: lint:yaml
+      - task: lint:actions
+      - task: lint:access-migration
+      - task: lint:test-helpers
+
+  lint:go:
+    desc: Lint Go code
+    cmds:
+      - golangci-lint run
+
+  lint:markdown:
+    desc: Lint Markdown files
+    cmds:
+      - rumdl check --exclude 'site,.git,.beads,.serena' .
+      - rumdl check --config site/.rumdl.toml site/
+
+  lint:yaml:
+    desc: Check YAML formatting
+    cmds:
+      - yamlfmt -lint .
+
+  lint:actions:
+    desc: Lint GitHub Actions workflows
+    cmds:
+      - actionlint
+
+  lint:access-migration:
+    desc: Verify no legacy AccessControl.Check() calls remain
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Search for legacy AccessControl.Check(ctx, ...) calls in production code.
+        # Pattern: AccessControl\.Check\(ctx, — specifically targets AccessControl.Check(ctx, subject, action, resource)
+        # This avoids false positives from other Check() methods (e.g., capability.Enforcer.Check).
+        # Exclude test files (_test.go), generated files (*.pb.go), and comments.
+        LEGACY_CALLS=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E 'AccessControl\.Check\(ctx,' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' || true)
+
+        if [ -n "$LEGACY_CALLS" ]; then
+          echo "ERROR: Found legacy AccessControl.Check() calls in production code:"
+          echo "$LEGACY_CALLS"
+          echo ""
+          echo "All access checks must use AccessPolicyEngine.Evaluate() instead."
+          echo "See docs/plans/2026-02-06-full-abac-phase-7.6.md or internal/world/service.go checkAccess() helper"
+          exit 1
+        fi
+
+        echo "✓ No legacy AccessControl.Check() calls found"
+
+        # Check for legacy "char:" prefix usage (must be "character:").
+        CHAR_PREFIX=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E '"char:' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '"character:' || true)
+
+        if [ -n "$CHAR_PREFIX" ]; then
+          echo "ERROR: Found legacy \"char:\" prefix in production code:"
+          echo "$CHAR_PREFIX"
+          echo ""
+          echo "Migrate all occurrences to the \"character:\" prefix."
+          exit 1
+        fi
+
+        echo "✓ No legacy char: prefix found"
+
+  lint:test-helpers:
+    desc: Verify no test helper imports in production code
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Search for imports of test helper packages in production code.
+        # Blocked packages: policytest (access policy test helpers)
+        # These should only be imported in *_test.go files or testutil packages for testing purposes.
+        # Pattern: "holomush/internal/access/policy/policytest" or just "policytest"
+        # Excludes: *_test.go files, testutil/* packages, *.pb.go files
+        TEST_HELPER_IMPORTS=$(grep -rn \
+          --include="*.go" \
+          --exclude="*_test.go" \
+          --exclude="*.pb.go" \
+          -E '(import|").*policytest' \
+          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '/testutil/' || true)
+
+        if [ -n "$TEST_HELPER_IMPORTS" ]; then
+          echo "ERROR: Found test helper package imports in production code:"
+          echo "$TEST_HELPER_IMPORTS"
+          echo ""
+          echo "Test helper packages (policytest) must only be imported in *_test.go files or testutil packages."
+          echo "These packages contain test engines and mock implementations that should not be used in production."
+          exit 1
+        fi
+
+        echo "✓ No test helper package imports found in production code"
+
+  # Formatting
+  fmt:
+    desc: Format all files
+    cmds:
+      - task: fmt:go
+      - task: fmt:yaml
+      - task: fmt:markdown
+      - task: fmt:dprint
+
+  fmt:markdown:
+    desc: Format Markdown files
+    cmds:
+      - rumdl fmt --exclude 'site,.git,.beads,.serena' .
+      - rumdl fmt --config site/.rumdl.toml site/
+
+  fmt:go:
+    desc: Format Go code
+    cmds:
+      - gofumpt -w .
+
+  fmt:dprint:
+    desc: Format with dprint
+    cmds:
+      - dprint fmt
+
+  fmt:yaml:
+    desc: Format YAML files
+    cmds:
+      - yamlfmt .
+
+  fmt:check:
+    desc: Check formatting without modifying
+    cmds:
+      - dprint check
+      - rumdl fmt --check --exclude 'site,.git,.beads,.serena' .
+      - rumdl fmt --check --config site/.rumdl.toml site/
+
+  # Dependencies
+  deps:
+    desc: Download and tidy dependencies
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  deps:upgrade:
+    desc: Upgrade all dependencies
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  # Plugins (WASM plugin build tasks removed - see holomush-1hq.21)
+
+  # Documentation
+  spec:
+    desc: Create a new spec document
+    cmds:
+      - |
+        DATE=$(date +%Y-%m-%d)
+        read -p "Spec name (e.g., event-system): " NAME
+        FILE="docs/specs/${DATE}-${NAME}.md"
+        cat > "$FILE" << 'EOF'
+        # {{.NAME}} Specification
+
+        **Status:** Draft
+        **Date:** {{.DATE}}
+        **Version:** 0.1.0
+
+        ## Overview
+
+        ## Requirements
+
+        ## Non-Goals
+
+        ## Design
+
+        ## Open Questions
+        EOF
+        echo "Created: $FILE"
+
+  plan:
+    desc: Create a new plan document
+    cmds:
+      - |
+        DATE=$(date +%Y-%m-%d)
+        read -p "Plan name (e.g., phase-1-implementation): " NAME
+        FILE="docs/plans/${DATE}-${NAME}.md"
+        cat > "$FILE" << 'EOF'
+        # {{.NAME}} Plan
+
+        **Status:** Draft
+        **Date:** {{.DATE}}
+
+        ## Overview
+
+        ## Tasks
+
+        ## Dependencies
+
+        ## Risks
+        EOF
+        echo "Created: $FILE"
+
+  # Cleanup
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf dist/
+      - rm -f {{.BINARY_NAME}}
+      - rm -f coverage.out coverage.html
+
+  # Install tools (prefer brew, use uvx for Python)
+  tools:
+    desc: Install development tools
+    cmds:
+      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen
+      - brew install steveyegge/beads/bd
+      - curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
+      - 'echo "Tools installed. Run lefthook install to set up git hooks."'
+      - 'echo "Note: yamlfmt handles both formatting and linting of YAML files"'
+
+  # Git hooks
+  hooks:install:
+    desc: Install git hooks
+    cmds:
+      - lefthook install
+      - bd hooks install --chain
+
+  hooks:uninstall:
+    desc: Uninstall git hooks
+    cmds:
+      - bd hooks uninstall
+      - lefthook uninstall
+
+  # Release
+  release:check:
+    desc: Validate goreleaser config
+    cmds:
+      - goreleaser check
+
+  release:snapshot:
+    desc: Build snapshot locally (no publish, local arch only)
+    cmds:
+      - goreleaser build --snapshot --clean --single-target
+
+  # Documentation
+  docs:setup:
+    desc: Set up documentation development environment
+    dir: site
+    cmds:
+      - uv sync
+
+  docs:build:
+    desc: Build documentation site
+    dir: site
+    cmds:
+      - uv run zensical build
+
+  docs:serve:
+    desc: Start documentation dev server
+    dir: site
+    cmds:
+      - uv run zensical serve
+
+  # Migration tasks
+  migrate:
+    desc: Apply all pending migrations
+    cmds:
+      - go run {{.MAIN_PKG}} migrate up
+
+  migrate:up:
+    desc: Apply all pending migrations
+    cmds:
+      - go run {{.MAIN_PKG}} migrate up
+
+  migrate:down:
+    desc: Rollback one migration
+    cmds:
+      - go run {{.MAIN_PKG}} migrate down
+
+  migrate:status:
+    desc: Show migration status
+    cmds:
+      - go run {{.MAIN_PKG}} migrate status
+
+  migrate:version:
+    desc: Print current schema version
+    cmds:
+      - go run {{.MAIN_PKG}} migrate version
+
+  migrate:create:
+    desc: 'Create a new migration (usage: task migrate:create -- migration_name)'
+    cmds:
+      - "{{.MIGRATE_CLI}} create -ext sql -dir {{.MIGRATIONS_DIR}} -seq {{.CLI_ARGS}}"
+    preconditions:
+      - sh: command -v {{.MIGRATE_CLI}}
+        msg: |
+          migrate CLI not found. Install with:
+          go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+  migrate:force:
+    desc: 'Force set migration version (usage: task migrate:force -- VERSION)'
+    cmds:
+      - go run {{.MAIN_PKG}} migrate force {{.CLI_ARGS}}

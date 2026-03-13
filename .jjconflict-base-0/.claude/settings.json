@@ -1,0 +1,80 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:proxy.golang.org)",
+      "WebFetch(domain:sum.golang.org)",
+      "WebFetch(domain:sum.golang.org)",
+      "WebFetch(domain:dprint.dev)",
+      "WebFetch(domain:plugins.dprint.dev)",
+      "WebFetch(domain:release-assets.githubusercontent.com)",
+      "WebFetch(domain:index.crates.io)",
+      "WebFetch(domain:static.crates.io)",
+      "Edit(~/Library/Caches/**)",
+      "Edit(~/go/pkg/**)",
+      "Edit(.git/**)",
+      "Edit(/.worktrees/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-main.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-task-runner.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-format.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/go-vet.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-reminder.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "allowUnsandboxedCommands": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": [
+      "docker",
+      "git",
+      "gh",
+      "bd"
+    ],
+    "network": {
+      "allowAllUnixSockets": true,
+      "allowLocalBinding": true
+    }
+  }
+}

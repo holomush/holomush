@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: echo-bot
+version: 1.0.0
+type: lua
+events:
+  - say
+capabilities:
+  - events.emit.location
+lua-plugin:
+  entry: main.lua
