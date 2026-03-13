@@ -197,9 +197,9 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 func (l *Logger) shouldLog(effect types.Effect) (shouldLog, useSync bool) {
 	switch l.mode {
 	case ModeMinimal:
-		// Log: deny, default_deny only (no system_bypass — minimal mode)
+		// Log: deny, default_deny, system_bypass (elevated privilege always traceable)
 		switch effect {
-		case types.EffectDeny, types.EffectDefaultDeny:
+		case types.EffectDeny, types.EffectDefaultDeny, types.EffectSystemBypass:
 			shouldLog, useSync = true, true
 		default:
 			shouldLog, useSync = false, false
