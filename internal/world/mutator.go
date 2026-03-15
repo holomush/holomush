@@ -14,7 +14,7 @@ import (
 // available to plugins that need to modify world state.
 //
 // All methods accept a subjectID parameter for ABAC authorization.
-// Plugins typically use "system:plugin:<name>" as their subject ID.
+// Plugins use "plugin:<name>" as their subject ID (via access.PluginSubject).
 type Mutator interface {
 	// Read operations (from Service)
 

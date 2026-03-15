@@ -75,7 +75,7 @@ type Host struct {
 	closed        bool
 }
 
-// loadedPlugin holds state for a single loaded binary plugins.
+// loadedPlugin holds state for a single loaded binary plugin.
 type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
@@ -189,7 +189,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	return nil
 }
 
-// Unload tears down a plugins.
+// Unload tears down a plugin.
 func (h *Host) Unload(_ context.Context, name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()

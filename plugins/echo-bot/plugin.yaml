@@ -6,7 +6,11 @@ version: 1.0.0
 type: lua
 events:
   - say
-capabilities:
-  - events.emit.location
+policies:
+  - name: "emit-events"
+    dsl: |
+      permit(principal is plugin, action in ["emit"], resource is stream) when {
+        principal.plugin.name == "echo-bot"
+      };
 lua-plugin:
   entry: main.lua

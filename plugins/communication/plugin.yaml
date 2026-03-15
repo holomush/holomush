@@ -6,9 +6,12 @@ version: 1.0.0
 type: lua
 events:
   - command
-capabilities:
-  - events.emit.location
-  - events.emit.character
+policies:
+  - name: "emit-location"
+    dsl: |
+      permit(principal is plugin, action in ["emit"], resource is stream) when {
+        principal.plugin.name == "communication"
+      };
 commands:
   - name: say
     capabilities:

@@ -6,12 +6,22 @@ version: 1.0.0
 type: lua
 events:
   - command
-capabilities:
-  - build.location
-  - build.exit
-  - world.write.location
-  - world.write.exit
-  - world.read.location
+policies:
+  - name: "world-write-location"
+    dsl: |
+      permit(principal is plugin, action in ["write", "create"], resource is location) when {
+        principal.plugin.name == "building"
+      };
+  - name: "world-write-exit"
+    dsl: |
+      permit(principal is plugin, action in ["write", "create"], resource is exit) when {
+        principal.plugin.name == "building"
+      };
+  - name: "world-read-location"
+    dsl: |
+      permit(principal is plugin, action in ["read"], resource is location) when {
+        principal.plugin.name == "building"
+      };
 commands:
   - name: dig
     capabilities:

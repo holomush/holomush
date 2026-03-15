@@ -4,7 +4,9 @@
 // Package hostfunc provides host functions to Lua plugins.
 //
 // Host functions expose server capabilities to plugins in a controlled way.
-// Access control is enforced via ABAC policies at the service layer.
+// Access control is enforced via ABAC policies: world operations at the
+// service layer (world.Service.checkAccess), KV operations at the hostfunc
+// layer (checkKVAccess), and command access via the AccessPolicyEngine.
 package hostfunc
 
 import (
@@ -17,6 +19,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -47,7 +50,7 @@ type Functions struct {
 type Option func(*Functions)
 
 // WithWorldService sets the world service for world query and mutation functions.
-// Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
+// Each plugin will get its own adapter with authorization subject "plugin:<name>".
 // The service must implement WorldMutator; this is enforced at compile-time.
 func WithWorldService(svc WorldMutator) Option {
 	return func(f *Functions) {
@@ -104,10 +107,10 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 
 	mod := ls.NewTable()
 
-	// Logging (no capability required)
+	// Logging
 	ls.SetField(mod, "log", ls.NewFunction(f.logFn(pluginName)))
 
-	// Request ID (no capability required)
+	// Request ID
 	ls.SetField(mod, "new_request_id", ls.NewFunction(f.newRequestIDFn()))
 
 	// KV operations
@@ -204,12 +207,57 @@ func sanitizeKVErrorForPlugin(pluginName, operation, key string, err error) stri
 	return fmt.Sprintf("internal error (ref: %s)", errorID)
 }
 
+// checkKVAccess evaluates ABAC for a KV operation. Returns an error string
+// for Lua if denied, or empty string if allowed.
+func (f *Functions) checkKVAccess(L *lua.LState, pluginName, action, key string) string { //nolint:gocritic // L is standard gopher-lua convention
+	if f.engine == nil {
+		slog.Warn("KV access denied: no ABAC engine configured",
+			"plugin", pluginName, "action", action, "key", key)
+		return "access engine not available"
+	}
+
+	subject := access.PluginSubject(pluginName)
+	resource := access.KVResource(pluginName, key)
+
+	parentCtx := L.Context()
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
+	defer cancel()
+
+	req, err := types.NewAccessRequest(subject, action, resource)
+	if err != nil {
+		slog.Error("failed to create KV access request",
+			"plugin", pluginName, "action", action, "key", key, "error", err)
+		return "access check failed"
+	}
+
+	decision, err := f.engine.Evaluate(ctx, req)
+	if err != nil {
+		slog.Error("KV access check engine error",
+			"plugin", pluginName, "action", action, "key", key, "error", err)
+		return "access check failed"
+	}
+
+	if !decision.IsAllowed() {
+		return "access denied"
+	}
+	return ""
+}
+
 func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
 		if key == "" {
 			L.RaiseError("kv_get: key cannot be empty")
 			return 0
+		}
+
+		if errMsg := f.checkKVAccess(L, pluginName, "read", key); errMsg != "" {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(errMsg))
+			return 2
 		}
 
 		if f.kvStore == nil {
@@ -252,6 +300,12 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			return 0
 		}
 
+		if errMsg := f.checkKVAccess(L, pluginName, "write", key); errMsg != "" {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(errMsg))
+			return 2
+		}
+
 		if f.kvStore == nil {
 			slog.Error("kv_set called but store unavailable",
 				"plugin", pluginName,
@@ -282,6 +336,12 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		if key == "" {
 			L.RaiseError("kv_delete: key cannot be empty")
 			return 0
+		}
+
+		if errMsg := f.checkKVAccess(L, pluginName, "delete", key); errMsg != "" {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(errMsg))
+			return 2
 		}
 
 		if f.kvStore == nil {

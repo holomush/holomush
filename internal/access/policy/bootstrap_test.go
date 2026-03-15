@@ -76,6 +76,18 @@ func (m *bootstrapMockStore) ListEnabled(_ context.Context) ([]*store.StoredPoli
 	return result, nil
 }
 
+func (m *bootstrapMockStore) DeleteBySource(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+
+func (m *bootstrapMockStore) CreateBatch(_ context.Context, _ []*store.StoredPolicy) error {
+	return nil
+}
+
+func (m *bootstrapMockStore) ReplaceBySource(_ context.Context, _, _ string, _ []*store.StoredPolicy) error {
+	return nil
+}
+
 func (m *bootstrapMockStore) List(_ context.Context, _ store.ListOptions) ([]*store.StoredPolicy, error) {
 	return nil, nil
 }

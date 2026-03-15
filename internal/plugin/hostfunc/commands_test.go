@@ -147,15 +147,19 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 		},
 	}
 
-	hf := New(nil, WithCommandRegistry(registry))
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine()
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "communication.say")
+
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: get_command_help is called
+	// When: get_command_help is called with character_id
 	err := L.DoString(`
-		info, err = holomush.get_command_help("say")
+		info, err = holomush.get_command_help("say", "` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -182,6 +186,7 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 
 func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 	// Given: an empty registry
+	charID := ulid.Make()
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
 
 	hf := New(nil, WithCommandRegistry(registry))
@@ -192,7 +197,7 @@ func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 
 	// When: get_command_help is called for non-existent command
 	err := L.DoString(`
-		info, err = holomush.get_command_help("nonexistent")
+		info, err = holomush.get_command_help("nonexistent", "` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -207,6 +212,7 @@ func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 
 func TestGetCommandHelp_NoRegistry(t *testing.T) {
 	// Given: no command registry configured
+	charID := ulid.Make()
 
 	hf := New(nil) // No WithCommandRegistry
 
@@ -216,7 +222,7 @@ func TestGetCommandHelp_NoRegistry(t *testing.T) {
 
 	// When: get_command_help is called
 	err := L.DoString(`
-		info, err = holomush.get_command_help("say")
+		info, err = holomush.get_command_help("say", "` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -228,6 +234,7 @@ func TestGetCommandHelp_NoRegistry(t *testing.T) {
 
 func TestGetCommandHelp_EmptyCommandName(t *testing.T) {
 	// Given: a valid setup
+	charID := ulid.Make()
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
 
 	hf := New(nil, WithCommandRegistry(registry))
@@ -237,7 +244,7 @@ func TestGetCommandHelp_EmptyCommandName(t *testing.T) {
 	hf.Register(L, "test-plugin")
 
 	// When: get_command_help is called with empty name
-	err := L.DoString(`holomush.get_command_help("")`)
+	err := L.DoString(`holomush.get_command_help("", "` + charID.String() + `")`)
 
 	// Then: error is raised
 	require.Error(t, err)
@@ -1150,6 +1157,123 @@ func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
 	assert.Contains(t, names, "look", "commands without capabilities should still appear")
 	assert.NotContains(t, names, "boot", "commands with capabilities should be hidden when engine errors")
 	assert.Len(t, names, 1)
+}
+
+func TestGetCommandHelp_AccessDenied(t *testing.T) {
+	// Given: a command with capabilities and an engine that denies access
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name:         "secret-cmd",
+				Help:         "Secret command",
+				Usage:        "secret-cmd",
+				Capabilities: []string{"admin.secret"},
+				Source:       "admin",
+			}),
+		},
+	}
+
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine() // No grants — denies everything by default
+
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: get_command_help is called for a capability-gated command the character cannot access
+	err := L.DoString(`
+		info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: nil result with "access denied" error
+	info := L.GetGlobal("info")
+	assert.Equal(t, lua.LNil, info)
+
+	errVal := L.GetGlobal("err")
+	assert.NotEqual(t, lua.LNil, errVal)
+	assert.Contains(t, errVal.String(), "access denied")
+}
+
+func TestGetCommandHelp_NoCapabilities_NoCheck(t *testing.T) {
+	// Given: a command WITHOUT capabilities — engine denies all, but help should still be returned
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"}, // No capabilities
+		},
+	}
+
+	charID := ulid.Make()
+	denyEngine := policytest.DenyAllEngine()
+
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(denyEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: get_command_help is called for a command with no capabilities
+	err := L.DoString(`
+		info, err = holomush.get_command_help("look", "` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: help is returned (no access check needed for commands without capabilities)
+	info := L.GetGlobal("info")
+	require.NotEqual(t, lua.LNil, info)
+
+	tbl, ok := info.(*lua.LTable)
+	require.True(t, ok)
+
+	assert.Equal(t, "look", L.GetField(tbl, "name").String())
+	assert.Equal(t, "Look around", L.GetField(tbl, "help").String())
+
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LNil, errVal)
+}
+
+
+func TestGetCommandHelp_NilEngine_FailsClosed(t *testing.T) {
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name: "secret-cmd", Help: "Secret",
+				Capabilities: []string{"admin.secret"}, Source: "admin",
+			}),
+		},
+	}
+	hf := New(nil, WithCommandRegistry(registry))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+	charID := ulid.Make()
+	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
+	require.NoError(t, err)
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "access engine not available")
+}
+
+func TestGetCommandHelp_EngineError_ReturnsCheckFailed(t *testing.T) {
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name: "secret-cmd", Help: "Secret",
+				Capabilities: []string{"admin.secret"}, Source: "admin",
+			}),
+		},
+	}
+	engine := policytest.NewErrorEngine(assert.AnError)
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(engine))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+	charID := ulid.Make()
+	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
+	require.NoError(t, err)
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "access check failed")
 }
 
 func TestListCommands_NoErrorWhenEngineSucceeds(t *testing.T) {

@@ -4,6 +4,8 @@
 // Package dsl defines the AST types for the ABAC policy DSL and provides
 // a parser built with participle. The AST nodes are designed to survive
 // JSON serialization round-trips for policy storage.
+//
+//go:generate go run github.com/holomush/holomush/internal/access/policy/dsl/gen-ebnf
 package dsl
 
 import (
@@ -462,4 +464,10 @@ func NewParser() (*participle.Parser[Policy], error) {
 		participle.Unquote("String"),
 		participle.UseLookahead(participle.MaxLookahead),
 	)
+}
+
+// EBNF returns the auto-generated EBNF grammar from the participle struct tags.
+// This is the machine-authoritative grammar definition.
+func EBNF() string {
+	return parser.String()
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -230,7 +231,7 @@ func TestHostFunctions_KV_WithKVStore(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	// Set returns (nil, nil) on success
@@ -255,7 +256,7 @@ func TestHostFunctions_KVGet_ReturnsNilForMissingKey(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`
@@ -274,8 +275,8 @@ func TestHostFunctions_KVGet_NoStoreAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	// nil kv store
-	hf := hostfunc.New(nil)
+	// nil kv store, engine allows so we reach the nil-store guard
+	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`
@@ -291,8 +292,8 @@ func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	// nil kv store
-	hf := hostfunc.New(nil)
+	// nil kv store, engine allows so we reach the nil-store guard
+	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
@@ -309,7 +310,7 @@ func TestHostFunctions_KVDelete(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	// Set a key
@@ -332,8 +333,8 @@ func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	// nil kv store
-	hf := hostfunc.New(nil)
+	// nil kv store, engine allows so we reach the nil-store guard
+	hf := hostfunc.New(nil, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_delete("key")`)
@@ -353,7 +354,7 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 		data:   make(map[string][]byte),
 		getErr: errors.New("database connection failed"),
 	}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`val, err = holomush.kv_get("key")`)
@@ -377,7 +378,7 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 		data:   make(map[string][]byte),
 		setErr: errors.New("write failed: disk full"),
 	}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
@@ -403,7 +404,7 @@ func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
 		data:      make(map[string][]byte),
 		deleteErr: errors.New("delete failed: permission denied"),
 	}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_delete("key")`)
@@ -438,7 +439,7 @@ func TestHostFunctions_KV_MissingArguments(t *testing.T) {
 			defer L.Close()
 
 			kvStore := &mockKVStore{data: make(map[string][]byte)}
-			hf := hostfunc.New(kvStore)
+			hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 			hf.Register(L, "test-plugin")
 
 			err := L.DoString(tt.code)
@@ -452,7 +453,7 @@ func TestHostFunctions_KVGet_EmptyKeyRejected(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_get("")`)
@@ -464,7 +465,7 @@ func TestHostFunctions_KVSet_EmptyKeyRejected(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_set("", "value")`)
@@ -476,7 +477,7 @@ func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`holomush.kv_delete("")`)
@@ -488,7 +489,7 @@ func TestHostFunctions_KVSet_EmptyValueAllowed(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	// Empty values should be allowed (useful for clearing/resetting)
@@ -513,7 +514,7 @@ func TestHostFunctions_KVGet_Timeout(t *testing.T) {
 
 	// Create a slow store that exceeds the 5-second timeout
 	kvStore := &slowKVStore{delay: 10 * time.Second}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`val, err = holomush.kv_get("key")`)
@@ -531,7 +532,7 @@ func TestHostFunctions_KVSet_Timeout(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &slowKVStore{delay: 10 * time.Second}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_set("key", "value")`)
@@ -549,7 +550,7 @@ func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
 	defer L.Close()
 
 	kvStore := &slowKVStore{delay: 10 * time.Second}
-	hf := hostfunc.New(kvStore)
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hf.Register(L, "test-plugin")
 
 	err := L.DoString(`result, err = holomush.kv_delete("key")`)
@@ -569,7 +570,7 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	L1 := lua.NewState()
 	defer L1.Close()
 
-	hfA := hostfunc.New(kvStore)
+	hfA := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hfA.Register(L1, "plugin-a")
 
 	err := L1.DoString(`holomush.kv_set("secret", "plugin-a-data")`)
@@ -578,7 +579,7 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	// Plugin B tries to read - should get nil (different namespace)
 	L2 := lua.NewState()
 	defer L2.Close()
-	hfB := hostfunc.New(kvStore)
+	hfB := hostfunc.New(kvStore, hostfunc.WithEngine(policytest.AllowAllEngine()))
 	hfB.Register(L2, "plugin-b")
 
 	err = L2.DoString(`val, err = holomush.kv_get("secret")`)
@@ -586,6 +587,117 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 
 	val := L2.GetGlobal("val")
 	assert.Equal(t, lua.LTNil, val.Type(), "plugin-b should not see plugin-a's data")
+}
+
+func TestKVGet_DeniedByEngine(t *testing.T) {
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	engine := policytest.DenyAllEngine()
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(engine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`
+		local val, err = holomush.kv_get("mykey")
+		result_val = val
+		result_err = err
+	`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("result_val"))
+	errStr := L.GetGlobal("result_err")
+	assert.Contains(t, errStr.String(), "access denied")
+}
+
+func TestKVGet_AllowedByEngine(t *testing.T) {
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	kvStore.data["test-plugin:mykey"] = []byte("hello")
+	engine := policytest.AllowAllEngine()
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(engine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`
+		local val, err = holomush.kv_get("mykey")
+		result_val = val
+		result_err = err
+	`)
+	require.NoError(t, err)
+
+	assert.Equal(t, "hello", L.GetGlobal("result_val").String())
+	assert.Equal(t, lua.LNil, L.GetGlobal("result_err"))
+}
+
+func TestKVGet_NilEngine_Denied(t *testing.T) {
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	hf := hostfunc.New(kvStore) // No WithEngine
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`
+		local val, err = holomush.kv_get("mykey")
+		result_val = val
+		result_err = err
+	`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("result_val"))
+	errStr := L.GetGlobal("result_err")
+	assert.Contains(t, errStr.String(), "access engine not available")
+}
+
+func TestKVSet_DeniedByEngine(t *testing.T) {
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	engine := policytest.DenyAllEngine()
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(engine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`
+		local result, err = holomush.kv_set("mykey", "myvalue")
+		result_val = result
+		result_err = err
+	`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("result_val"))
+	errStr := L.GetGlobal("result_err")
+	assert.Contains(t, errStr.String(), "access denied")
+
+	// Verify store was NOT called (data map should be empty)
+	assert.Empty(t, kvStore.data, "kvStore should not have been called when access denied")
+}
+
+func TestKVDelete_DeniedByEngine(t *testing.T) {
+	kvStore := &mockKVStore{data: make(map[string][]byte)}
+	kvStore.data["test-plugin:mykey"] = []byte("value")
+	engine := policytest.DenyAllEngine()
+	hf := hostfunc.New(kvStore, hostfunc.WithEngine(engine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	err := L.DoString(`
+		local result, err = holomush.kv_delete("mykey")
+		result_val = result
+		result_err = err
+	`)
+	require.NoError(t, err)
+
+	assert.Equal(t, lua.LNil, L.GetGlobal("result_val"))
+	errStr := L.GetGlobal("result_err")
+	assert.Contains(t, errStr.String(), "access denied")
+
+	// Verify store was NOT called (data should still contain the key)
+	assert.Contains(t, kvStore.data, "test-plugin:mykey", "kvStore should not have been called when access denied")
 }
 
 type mockKVStore struct {

@@ -36,9 +36,22 @@
       },
       "type": "array"
     },
-    "capabilities": {
+    "policies": {
       "items": {
-        "type": "string"
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "dsl": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "dsl"
+        ]
       },
       "type": "array"
     },

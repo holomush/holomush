@@ -89,6 +89,17 @@ pre-commit:
         fi
       stage_fixed: true
 
+    ebnf-sync:
+      glob: "internal/access/policy/dsl/ast.go"
+      run: |
+        set -euo pipefail
+        task generate:ebnf
+        if ! git diff --exit-code site/docs/developers/policy-dsl.ebnf site/docs/developers/policy-dsl-railroad.html; then
+          echo "EBNF/railroad out of sync. Run 'task generate:ebnf' and commit."
+          exit 1
+        fi
+      stage_fixed: true
+
 commit-msg:
   commands:
     conventional-commit:

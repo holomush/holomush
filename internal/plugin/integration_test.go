@@ -139,8 +139,8 @@ var _ = Describe("Echo Bot Integration", func() {
 			Expect(slices.Contains(fixture.Plugin.Manifest.Events, "say")).To(BeTrue())
 		})
 
-		It("has events.emit.location capability", func() {
-			Expect(slices.Contains(fixture.Plugin.Manifest.Capabilities, "events.emit.location")).To(BeTrue())
+		It("declares no top-level policies by default", func() {
+			Expect(fixture.Plugin.Manifest.Policies).To(BeEmpty())
 		})
 	})
 

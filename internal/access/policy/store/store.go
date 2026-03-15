@@ -11,6 +11,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/samber/oops"
@@ -45,6 +46,14 @@ type PolicyStore interface {
 	GetByID(ctx context.Context, id string) (*StoredPolicy, error)
 	Update(ctx context.Context, p *StoredPolicy) error
 	Delete(ctx context.Context, name string) error
+	// CreateBatch atomically inserts multiple policies in a single transaction.
+	CreateBatch(ctx context.Context, policies []*StoredPolicy) error
+	// DeleteBySource deletes all policies with the given source whose name starts
+	// with namePrefix. Used for bulk cleanup of plugin policies on unload.
+	DeleteBySource(ctx context.Context, source, namePrefix string) (int64, error)
+	// ReplaceBySource atomically deletes all policies with the given source and
+	// name prefix, then inserts replacement policies in a single transaction.
+	ReplaceBySource(ctx context.Context, source, namePrefix string, policies []*StoredPolicy) error
 	ListEnabled(ctx context.Context) ([]*StoredPolicy, error)
 	List(ctx context.Context, opts ListOptions) ([]*StoredPolicy, error)
 }
@@ -81,6 +90,19 @@ func ValidateSourceNaming(name, source string) error {
 		return oops.Code("POLICY_SOURCE_MISMATCH").
 			With("name", name).With("source", source).
 			Errorf("policy with source 'lock' must be named 'lock:*'")
+	}
+
+	hasPluginPrefix := strings.HasPrefix(name, "plugin:")
+
+	if hasPluginPrefix && source != "plugin" {
+		return oops.Code("POLICY_SOURCE_MISMATCH").
+			With("name", name).With("source", source).
+			Errorf("policy named 'plugin:*' must have source 'plugin'")
+	}
+	if !hasPluginPrefix && source == "plugin" {
+		return oops.Code("POLICY_SOURCE_MISMATCH").
+			With("name", name).With("source", source).
+			Errorf("policy with source 'plugin' must be named 'plugin:*'")
 	}
 
 	return nil

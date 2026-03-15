@@ -450,6 +450,34 @@ func TestStreamResource_EmptyID_Panics(t *testing.T) {
 	})
 }
 
+func TestPluginSubject(t *testing.T) {
+	assert.Equal(t, "plugin:echo-bot", access.PluginSubject("echo-bot"))
+	assert.Equal(t, "plugin:building", access.PluginSubject("building"))
+}
+
+func TestPluginSubject_EmptyName_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.PluginSubject: empty name would bypass access control", func() {
+		access.PluginSubject("")
+	})
+}
+
+func TestKVResource(t *testing.T) {
+	assert.Equal(t, "kv:echo-bot:counter", access.KVResource("echo-bot", "counter"))
+	assert.Equal(t, "kv:building:room-count", access.KVResource("building", "room-count"))
+}
+
+func TestKVResource_EmptyNamespace_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.KVResource: empty namespace would bypass access control", func() {
+		access.KVResource("", "key")
+	})
+}
+
+func TestKVResource_EmptyKey_Panics(t *testing.T) {
+	assert.PanicsWithValue(t, "access.KVResource: empty key would bypass access control", func() {
+		access.KVResource("ns", "")
+	})
+}
+
 func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 	// This test verifies that knownPrefixes (the internal validation list) covers
 	// all prefix constants that should be known. SubjectSystem is intentionally
@@ -516,6 +544,11 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 			name:     "resource scene prefix",
 			constant: access.ResourceScene,
 			desc:     "ResourceScene",
+		},
+		{
+			name:     "resource kv prefix",
+			constant: access.ResourceKV,
+			desc:     "ResourceKV",
 		},
 	}
 

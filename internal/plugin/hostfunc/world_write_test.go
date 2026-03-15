@@ -810,7 +810,7 @@ func TestGetPropertyFn_ServiceError(t *testing.T) {
 // --- Additional coverage tests ---
 
 func TestWorldWriteFunctions_SubjectIDFormat(t *testing.T) {
-	// Verify that subject ID is formatted correctly as "system:plugin:<name>"
+	// Verify that subject ID is formatted correctly as "plugin:<name>"
 	var capturedSubjectID string
 	mutator := &mockWorldMutatorService{
 		findLocationByNameFn: func(_ context.Context, subjectID, _ string) (*world.Location, error) {
@@ -826,7 +826,7 @@ func TestWorldWriteFunctions_SubjectIDFormat(t *testing.T) {
 
 	_ = L.DoString(`result, err = holomush.find_location("Test")`)
 
-	assert.Equal(t, "system:plugin:my-building-plugin", capturedSubjectID)
+	assert.Equal(t, "plugin:my-building-plugin", capturedSubjectID)
 }
 
 // mockWorldServiceWithExpectations provides finer-grained control for testing.

@@ -11,7 +11,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -74,59 +73,10 @@ type helpFixture struct {
 	Cleanup func()
 }
 
-// setupHelpTest creates all components needed to test the help plugins.
+// setupHelpTest creates all components needed to test the help plugins
+// using an AllowAll engine. For custom engine tests, use setupHelpTestWithEngine.
 func setupHelpTest() (*helpFixture, error) {
-	pluginsDir, err := findPluginsDir()
-	if err != nil {
-		return nil, err
-	}
-	helpDir := filepath.Join(pluginsDir, "help")
-
-	if _, statErr := os.Stat(helpDir); os.IsNotExist(statErr) {
-		return nil, statErr
-	}
-
-	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil,
-		hostfunc.WithCommandRegistry(registry),
-		hostfunc.WithEngine(policytest.AllowAllEngine()),
-	)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
-
-	ctx := context.Background()
-	discovered, err := manager.Discover(ctx)
-	if err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
-	var helpPlugin *plugins.DiscoveredPlugin
-	for _, dp := range discovered {
-		if dp.Manifest.Name == "help" {
-			helpPlugin = dp
-			break
-		}
-	}
-
-	if helpPlugin == nil {
-		_ = luaHost.Close(ctx)
-		return nil, os.ErrNotExist
-	}
-
-	if err := luaHost.Load(ctx, helpPlugin.Manifest, helpPlugin.Dir); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
-	return &helpFixture{
-		LuaHost: luaHost,
-		Plugin:  helpPlugin,
-		Cleanup: func() {
-			_ = luaHost.Close(context.Background())
-		},
-	}, nil
+	return setupHelpTestWithEngine(policytest.AllowAllEngine())
 }
 
 // makeCommandPayload creates a JSON payload for a command event.
@@ -577,6 +527,3 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 		})
 	})
 })
-
-// Ensure slices is used to avoid import error
-var _ = slices.Contains([]string{}, "")

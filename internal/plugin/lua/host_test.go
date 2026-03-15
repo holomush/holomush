@@ -633,9 +633,6 @@ end
 	}
 }
 
-// Capability enforcement is now handled by ABAC seed policies at the service
-// layer, not by the hostfunc.wrap() pattern. See T29 (holomush-5k1.8.3).
-
 func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
 	defer func() {
 		r := recover()

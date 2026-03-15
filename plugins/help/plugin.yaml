@@ -6,9 +6,12 @@ version: 1.0.0
 type: lua
 events:
   - command
-capabilities:
-  - command.list
-  - command.help
+policies:
+  - name: "command-access"
+    dsl: |
+      permit(principal is plugin, action in ["read"], resource is command) when {
+        principal.plugin.name == "help"
+      };
 commands:
   - name: help
     capabilities: []

@@ -293,6 +293,124 @@ func (s *PostgresStore) ListEnabled(ctx context.Context) ([]*StoredPolicy, error
 	return scanPolicies(rows)
 }
 
+// escapeLikePattern escapes SQL LIKE metacharacters (%, _, \) in a pattern.
+func escapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+// DeleteBySource deletes all policies with the given source whose name starts
+// with namePrefix. Used for bulk cleanup of plugin policies on unload.
+func (s *PostgresStore) DeleteBySource(ctx context.Context, source, namePrefix string) (int64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, oops.In("policy_store").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	result, err := tx.Exec(ctx,
+		`DELETE FROM access_policies WHERE source = $1 AND name LIKE $2 || '%' ESCAPE '\'`,
+		source, escapeLikePattern(namePrefix))
+	if err != nil {
+		return 0, oops.In("policy_store").With("source", source).With("prefix", namePrefix).Wrap(err)
+	}
+
+	if result.RowsAffected() > 0 {
+		_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, namePrefix)
+		if err != nil {
+			return 0, oops.In("policy_store").Wrap(err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, oops.In("policy_store").Wrap(err)
+	}
+
+	return result.RowsAffected(), nil
+}
+
+// ReplaceBySource atomically deletes all policies with the given source and
+// name prefix, then inserts the replacement policies in a single transaction.
+func (s *PostgresStore) ReplaceBySource(ctx context.Context, source, namePrefix string, policies []*StoredPolicy) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.In("policy_store").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// Delete existing policies
+	_, err = tx.Exec(ctx,
+		`DELETE FROM access_policies WHERE source = $1 AND name LIKE $2 || '%' ESCAPE '\'`,
+		source, escapeLikePattern(namePrefix))
+	if err != nil {
+		return oops.In("policy_store").With("source", source).With("prefix", namePrefix).Wrap(err)
+	}
+
+	// Insert replacements
+	for _, p := range policies {
+		if validateErr := ValidateSourceNaming(p.Name, p.Source); validateErr != nil {
+			return validateErr
+		}
+		_, err = tx.Exec(ctx,
+			`INSERT INTO access_policies (name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
+		if err != nil {
+			return oops.In("policy_store").With("policy", p.Name).Wrap(err)
+		}
+	}
+
+	// Always notify — a replace inherently changes policy state (delete + insert)
+	_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, namePrefix)
+	if err != nil {
+		return oops.In("policy_store").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.In("policy_store").Wrap(err)
+	}
+	return nil
+}
+
+// CreateBatch atomically inserts multiple policies in a single transaction.
+func (s *PostgresStore) CreateBatch(ctx context.Context, policies []*StoredPolicy) error {
+	if len(policies) == 0 {
+		return nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.In("policy_store").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	for _, p := range policies {
+		if validateErr := ValidateSourceNaming(p.Name, p.Source); validateErr != nil {
+			return validateErr
+		}
+		_, err = tx.Exec(ctx,
+			`INSERT INTO access_policies (name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
+		if err != nil {
+			return oops.In("policy_store").With("policy", p.Name).Wrap(err)
+		}
+	}
+
+	if len(policies) > 0 {
+		_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, policies[0].Source)
+		if err != nil {
+			return oops.In("policy_store").Wrap(err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.In("policy_store").Wrap(err)
+	}
+	return nil
+}
+
 // List returns policies matching the given options, ordered by name.
 func (s *PostgresStore) List(ctx context.Context, opts ListOptions) ([]*StoredPolicy, error) {
 	var where []string

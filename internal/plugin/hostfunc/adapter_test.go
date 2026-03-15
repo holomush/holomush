@@ -92,7 +92,7 @@ func TestWorldQuerierAdapter_SubjectID(t *testing.T) {
 	svc := &mockWorldService{}
 	adapter := hostfunc.NewWorldQuerierAdapter(svc, "my-plugin")
 
-	assert.Equal(t, "system:plugin:my-plugin", adapter.SubjectID())
+	assert.Equal(t, "plugin:my-plugin", adapter.SubjectID())
 }
 
 func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
@@ -111,7 +111,7 @@ func TestWorldQuerierAdapter_GetLocation(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedLoc, loc)
-		assert.Equal(t, "system:plugin:test-plugin", svc.capturedSubjectID)
+		assert.Equal(t, "plugin:test-plugin", svc.capturedSubjectID)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -172,7 +172,7 @@ func TestWorldQuerierAdapter_GetCharacter(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedChar, char)
-		assert.Equal(t, "system:plugin:chat-plugin", svc.capturedSubjectID)
+		assert.Equal(t, "plugin:chat-plugin", svc.capturedSubjectID)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -231,7 +231,7 @@ func TestWorldQuerierAdapter_GetCharactersByLocation(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedChars, chars)
-		assert.Equal(t, "system:plugin:presence-plugin", svc.capturedSubjectID)
+		assert.Equal(t, "plugin:presence-plugin", svc.capturedSubjectID)
 	})
 
 	t.Run("returns empty slice", func(t *testing.T) {
@@ -299,7 +299,7 @@ func TestWorldQuerierAdapter_GetObject(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, expectedObj, obj)
-		assert.Equal(t, "system:plugin:inventory-plugin", svc.capturedSubjectID)
+		assert.Equal(t, "plugin:inventory-plugin", svc.capturedSubjectID)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
