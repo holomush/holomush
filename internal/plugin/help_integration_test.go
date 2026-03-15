@@ -11,7 +11,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -21,7 +20,6 @@ import (
 	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -70,72 +68,15 @@ func (m *mockHelpCommandRegistry) Get(name string) (command.CommandEntry, bool) 
 
 // helpFixture contains all components needed for help plugin integration tests.
 type helpFixture struct {
-	LuaHost  *pluginlua.Host
-	Enforcer *capability.Enforcer
-	Plugin   *plugins.DiscoveredPlugin
-	Cleanup  func()
+	LuaHost *pluginlua.Host
+	Plugin  *plugins.DiscoveredPlugin
+	Cleanup func()
 }
 
-// setupHelpTest creates all components needed to test the help plugins.
+// setupHelpTest creates all components needed to test the help plugins
+// using an AllowAll engine. For custom engine tests, use setupHelpTestWithEngine.
 func setupHelpTest() (*helpFixture, error) {
-	pluginsDir, err := findPluginsDir()
-	if err != nil {
-		return nil, err
-	}
-	helpDir := filepath.Join(pluginsDir, "help")
-
-	if _, statErr := os.Stat(helpDir); os.IsNotExist(statErr) {
-		return nil, statErr
-	}
-
-	enforcer := capability.NewEnforcer()
-	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil, enforcer,
-		hostfunc.WithCommandRegistry(registry),
-		hostfunc.WithEngine(policytest.AllowAllEngine()),
-	)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
-
-	ctx := context.Background()
-	discovered, err := manager.Discover(ctx)
-	if err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
-	var helpPlugin *plugins.DiscoveredPlugin
-	for _, dp := range discovered {
-		if dp.Manifest.Name == "help" {
-			helpPlugin = dp
-			break
-		}
-	}
-
-	if helpPlugin == nil {
-		_ = luaHost.Close(ctx)
-		return nil, os.ErrNotExist
-	}
-
-	if err := luaHost.Load(ctx, helpPlugin.Manifest, helpPlugin.Dir); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
-	if err := enforcer.SetGrants("help", helpPlugin.Manifest.Capabilities); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
-	return &helpFixture{
-		LuaHost:  luaHost,
-		Enforcer: enforcer,
-		Plugin:   helpPlugin,
-		Cleanup: func() {
-			_ = luaHost.Close(context.Background())
-		},
-	}, nil
+	return setupHelpTestWithEngine(policytest.AllowAllEngine())
 }
 
 // makeCommandPayload creates a JSON payload for a command event.
@@ -338,9 +279,8 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 		return nil, statErr
 	}
 
-	enforcer := capability.NewEnforcer()
 	registry := &mockHelpCommandRegistry{}
-	hostFuncs := hostfunc.New(nil, enforcer,
+	hostFuncs := hostfunc.New(nil,
 		hostfunc.WithCommandRegistry(registry),
 		hostfunc.WithEngine(engine),
 	)
@@ -373,15 +313,9 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 		return nil, err
 	}
 
-	if err := enforcer.SetGrants("help", helpPlugin.Manifest.Capabilities); err != nil {
-		_ = luaHost.Close(ctx)
-		return nil, err
-	}
-
 	return &helpFixture{
-		LuaHost:  luaHost,
-		Enforcer: enforcer,
-		Plugin:   helpPlugin,
+		LuaHost: luaHost,
+		Plugin:  helpPlugin,
 		Cleanup: func() {
 			_ = luaHost.Close(context.Background())
 		},
@@ -593,6 +527,3 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 		})
 	})
 })
-
-// Ensure slices is used to avoid import error
-var _ = slices.Contains([]string{}, "")

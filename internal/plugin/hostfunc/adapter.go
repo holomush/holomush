@@ -10,6 +10,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -32,7 +33,7 @@ type WorldMutator = world.Mutator
 
 // WorldQuerierAdapter wraps a WorldService to provide plugin access with
 // system-level authorization. Each plugin gets its own adapter instance
-// with a subject ID like "system:plugin:<name>".
+// with a subject ID like "plugin:<name>".
 //
 // # Defensive nil handling
 //
@@ -47,7 +48,7 @@ type WorldQuerierAdapter struct {
 }
 
 // NewWorldQuerierAdapter creates a new adapter for the given plugin.
-// The adapter uses "system:plugin:<pluginName>" as the authorization subject.
+// The adapter uses "plugin:<pluginName>" as the authorization subject.
 // Panics if svc is nil or pluginName is empty.
 func NewWorldQuerierAdapter(svc WorldService, pluginName string) *WorldQuerierAdapter {
 	if svc == nil {
@@ -64,7 +65,7 @@ func NewWorldQuerierAdapter(svc WorldService, pluginName string) *WorldQuerierAd
 
 // SubjectID returns the authorization subject for this plugin.
 func (a *WorldQuerierAdapter) SubjectID() string {
-	return "system:plugin:" + a.pluginName
+	return access.PluginSubject(a.pluginName)
 }
 
 // GetLocation retrieves a location by ID with plugin authorization.

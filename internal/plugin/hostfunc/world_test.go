@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -86,13 +85,6 @@ func (m *mockWorldQuerier) FindLocationByName(_ context.Context, _, _ string) (*
 // Compile-time interface check.
 var _ hostfunc.WorldMutator = (*mockWorldQuerier)(nil)
 
-// mockEnforcerAllow allows all capabilities.
-type mockEnforcerAllow struct{}
-
-func (m *mockEnforcerAllow) Check(_, _ string) bool {
-	return true
-}
-
 func TestQueryRoom(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
@@ -103,7 +95,7 @@ func TestQueryRoom(t *testing.T) {
 	}
 
 	querier := &mockWorldQuerier{location: loc}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -129,7 +121,7 @@ func TestQueryRoom(t *testing.T) {
 
 func TestQueryRoom_InvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -147,7 +139,7 @@ func TestQueryRoom_InvalidID(t *testing.T) {
 
 func TestQueryRoom_NotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -165,7 +157,7 @@ func TestQueryRoom_NotFound(t *testing.T) {
 
 func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
 	// No world querier provided
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+	funcs := hostfunc.New(nil)
 
 	L := lua.NewState()
 	defer L.Close()
@@ -185,7 +177,7 @@ func TestQueryRoom_InternalError(t *testing.T) {
 	roomID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -217,7 +209,7 @@ func TestQueryRoom_InternalError(t *testing.T) {
 func TestQueryRoom_PermissionDenied(t *testing.T) {
 	roomID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -237,7 +229,7 @@ func TestQueryRoom_Timeout(t *testing.T) {
 	roomID := ulid.Make()
 	// Context timeout should be surfaced to plugins as "query timed out"
 	querier := &mockWorldQuerier{err: context.DeadlineExceeded}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -253,29 +245,6 @@ func TestQueryRoom_Timeout(t *testing.T) {
 	assert.Equal(t, "query timed out", errVal.String(), "expected timeout error message")
 }
 
-func TestQueryRoom_RequiresCapability(t *testing.T) {
-	locID := ulid.Make()
-	loc := &world.Location{
-		ID:   locID,
-		Name: "Test Room",
-		Type: world.LocationTypePersistent,
-	}
-
-	querier := &mockWorldQuerier{location: loc}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(querier))
-
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`room, err = holomush.query_room("` + locID.String() + `")`)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestQueryCharacter(t *testing.T) {
 	charID := ulid.Make()
 	playerID := ulid.Make()
@@ -289,7 +258,7 @@ func TestQueryCharacter(t *testing.T) {
 	}
 
 	querier := &mockWorldQuerier{character: char}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -323,7 +292,7 @@ func TestQueryCharacter_NilLocation(t *testing.T) {
 	}
 
 	querier := &mockWorldQuerier{character: char}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -342,7 +311,7 @@ func TestQueryCharacter_NilLocation(t *testing.T) {
 
 func TestQueryCharacter_InvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -360,7 +329,7 @@ func TestQueryCharacter_InvalidID(t *testing.T) {
 
 func TestQueryCharacter_NotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -380,7 +349,7 @@ func TestQueryCharacter_InternalError(t *testing.T) {
 	charID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -411,7 +380,7 @@ func TestQueryCharacter_InternalError(t *testing.T) {
 func TestQueryCharacter_PermissionDenied(t *testing.T) {
 	charID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -429,7 +398,7 @@ func TestQueryCharacter_PermissionDenied(t *testing.T) {
 
 func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
 	// No world querier provided
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+	funcs := hostfunc.New(nil)
 
 	L := lua.NewState()
 	defer L.Close()
@@ -445,28 +414,6 @@ func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
-func TestQueryCharacter_RequiresCapability(t *testing.T) {
-	charID := ulid.Make()
-	char := &world.Character{
-		ID:   charID,
-		Name: "Test Character",
-	}
-
-	querier := &mockWorldQuerier{character: char}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(querier))
-
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`character, err = holomush.query_character("` + charID.String() + `")`)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestQueryRoomCharacters(t *testing.T) {
 	roomID := ulid.Make()
 	char1 := &world.Character{
@@ -479,7 +426,7 @@ func TestQueryRoomCharacters(t *testing.T) {
 	}
 
 	querier := &mockWorldQuerier{characters: []*world.Character{char1, char2}}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -516,7 +463,7 @@ func TestQueryRoomCharacters_EmptyRoom(t *testing.T) {
 	roomID := ulid.Make()
 
 	querier := &mockWorldQuerier{characters: []*world.Character{}}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -537,7 +484,7 @@ func TestQueryRoomCharacters_EmptyRoom(t *testing.T) {
 
 func TestQueryRoomCharacters_InvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -556,7 +503,7 @@ func TestQueryRoomCharacters_InvalidID(t *testing.T) {
 func TestQueryRoomCharacters_NotFound(t *testing.T) {
 	roomID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -576,7 +523,7 @@ func TestQueryRoomCharacters_InternalError(t *testing.T) {
 	roomID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -607,7 +554,7 @@ func TestQueryRoomCharacters_InternalError(t *testing.T) {
 func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
 	roomID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -625,7 +572,7 @@ func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
 
 func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
 	// No world querier provided
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+	funcs := hostfunc.New(nil)
 
 	L := lua.NewState()
 	defer L.Close()
@@ -641,23 +588,6 @@ func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
-func TestQueryRoomCharacters_RequiresCapability(t *testing.T) {
-	roomID := ulid.Make()
-	querier := &mockWorldQuerier{characters: []*world.Character{}}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(querier))
-
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestQueryObject(t *testing.T) {
 	objID := ulid.Make()
 	locID := ulid.Make()
@@ -668,7 +598,7 @@ func TestQueryObject(t *testing.T) {
 	obj.OwnerID = &ownerID
 
 	querier := &mockWorldQuerier{object: obj}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -704,7 +634,7 @@ func TestQueryObject_WithContainer(t *testing.T) {
 	obj.IsContainer = true
 
 	querier := &mockWorldQuerier{object: obj}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -730,7 +660,7 @@ func TestQueryObject_HeldByCharacter(t *testing.T) {
 	obj.Description = "A glowing blade."
 
 	querier := &mockWorldQuerier{object: obj}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -767,7 +697,7 @@ func TestQueryObject_NilOptionalFields(t *testing.T) {
 	}
 
 	querier := &mockWorldQuerier{object: obj}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -788,7 +718,7 @@ func TestQueryObject_NilOptionalFields(t *testing.T) {
 
 func TestQueryObject_InvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -806,7 +736,7 @@ func TestQueryObject_InvalidID(t *testing.T) {
 
 func TestQueryObject_NotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -826,7 +756,7 @@ func TestQueryObject_InternalError(t *testing.T) {
 	objID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -857,7 +787,7 @@ func TestQueryObject_InternalError(t *testing.T) {
 func TestQueryObject_PermissionDenied(t *testing.T) {
 	objID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -875,7 +805,7 @@ func TestQueryObject_PermissionDenied(t *testing.T) {
 
 func TestQueryObject_NoQuerierConfigured(t *testing.T) {
 	// No world querier provided
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{})
+	funcs := hostfunc.New(nil)
 
 	L := lua.NewState()
 	defer L.Close()
@@ -889,28 +819,6 @@ func TestQueryObject_NoQuerierConfigured(t *testing.T) {
 	assert.Equal(t, lua.LTNil, objVal.Type(), "expected nil object")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
-}
-
-func TestQueryObject_RequiresCapability(t *testing.T) {
-	objID := ulid.Make()
-	obj := &world.Object{
-		ID:   objID,
-		Name: "Test Object",
-	}
-
-	querier := &mockWorldQuerier{object: obj}
-	enforcer := capability.NewEnforcer()
-	// No capabilities granted
-
-	funcs := hostfunc.New(nil, enforcer, hostfunc.WithWorldService(querier))
-
-	L := lua.NewState()
-	defer L.Close()
-	funcs.Register(L, "test-plugin")
-
-	err := L.DoString(`obj, err = holomush.query_object("` + objID.String() + `")`)
-	require.Error(t, err, "expected capability error")
-	assert.Contains(t, err.Error(), "capability denied")
 }
 
 // contextAwareWorldQuerier passes through the context to allow testing context propagation.
@@ -1008,7 +916,7 @@ func TestQueryRoom_InheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1036,7 +944,7 @@ func TestQueryCharacter_InheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1062,7 +970,7 @@ func TestQueryRoomCharacters_InheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1088,7 +996,7 @@ func TestQueryObject_InheritsParentContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1114,7 +1022,7 @@ func TestQueryRoom_InheritsContextDeadline(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1144,7 +1052,7 @@ func TestQueryRoom_FallbackToBackgroundContext(t *testing.T) {
 
 	ctxChan := make(chan context.Context, 1)
 	querier := &contextAwareWorldQuerier{ctxChan: ctxChan}
-	funcs := hostfunc.New(nil, &mockEnforcerAllow{}, hostfunc.WithWorldService(querier))
+	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
 	L := lua.NewState()
 	defer L.Close()

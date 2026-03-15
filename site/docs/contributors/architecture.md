@@ -169,15 +169,24 @@ flowchart TB
     GoPlugin --> Binaries["plugin binaries<br/>(per platform)"]
 ```
 
-Plugins declare capabilities and the host enforces them:
+Plugins declare ABAC policies and the engine enforces them:
 
 ```yaml
 # Plugin manifest
 name: combat-system
-capabilities:
-  - events.subscribe.location
-  - events.emit.location
-  - world.read
+policies:
+  - name: "combat-access"
+    dsl: |
+      permit(principal is plugin, action in ["subscribe", "emit"], resource is stream) when {
+        principal.plugin.name == "combat-system" &&
+        resource like "stream:location:*"
+      };
+  - name: "world-read"
+    dsl: |
+      permit(principal is plugin, action in ["read"], resource is world_object) when {
+        principal.plugin.name == "combat-system" &&
+        resource like "world:*"
+      };
 ```
 
 ### Access Control
@@ -250,11 +259,11 @@ that the full ABAC implementation extends.
 - Enables testing with mocks
 - Supports future extensibility
 
-### Capability-Based Security
+### Policy-Based Security (ABAC)
 
-- Plugins declare required capabilities
-- Host enforces capability boundaries
-- Default deny for undeclared access
+- Plugins declare ABAC policies in their manifest
+- Access Policy Engine enforces policy boundaries
+- Default deny — no seed policies for plugins
 
 ## Further Reading
 

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<style>
+body {
+	background-color: hsl(30,20%, 95%);
+}
+h1 {
+	font-family: sans-serif;
+	font-size: 1em;
+}
+</style>
+<!-- From https://github.com/tabatkins/railroad-diagrams -->
+<link rel='stylesheet' href='railroad-diagrams.css'>
+<script src='railroad-diagrams.js'></script>
+<body>
+<h1 id="Policy">Policy</h1>
+<script>
+Diagram(Choice(0, Sequence(Choice(0, Sequence(Terminal("permit")), Sequence(Terminal("forbid"))), Terminal("("), NonTerminal("Target", {href:"#Target"}), Terminal(")"), Optional(Choice(0, Sequence(Terminal("when"), Terminal("{"), NonTerminal("ConditionBlock", {href:"#ConditionBlock"}), Terminal("}")))), Terminal(";")))).addTo();
+</script>
+
+<h1 id="Target">Target</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("PrincipalClause", {href:"#PrincipalClause"}), Terminal(","), NonTerminal("ActionClause", {href:"#ActionClause"}), Terminal(","), NonTerminal("ResourceClause", {href:"#ResourceClause"})))).addTo();
+</script>
+
+<h1 id="PrincipalClause">PrincipalClause</h1>
+<script>
+Diagram(Choice(0, Sequence(Terminal("principal"), Optional(Choice(0, Sequence(Terminal("is"), NonTerminal("ident"))))))).addTo();
+</script>
+
+<h1 id="ActionClause">ActionClause</h1>
+<script>
+Diagram(Choice(0, Sequence(Terminal("action"), Optional(Choice(0, Sequence(Terminal("in"), Terminal("["), NonTerminal("string"), ZeroOrMore(Choice(0, Sequence(Terminal(","), NonTerminal("string")))), Terminal("]"))))))).addTo();
+</script>
+
+<h1 id="ResourceClause">ResourceClause</h1>
+<script>
+Diagram(Choice(0, Sequence(Terminal("resource"), Optional(Choice(0, Sequence(Choice(0, Sequence(Terminal("is"), NonTerminal("ident")))), Sequence(Choice(0, Sequence(NonTerminal("opeq"), NonTerminal("string"))))))))).addTo();
+</script>
+
+<h1 id="ConditionBlock">ConditionBlock</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("Conjunction", {href:"#Conjunction"}), ZeroOrMore(Choice(0, Sequence(NonTerminal("opor"), NonTerminal("Conjunction", {href:"#Conjunction"}))))))).addTo();
+</script>
+
+<h1 id="Conjunction">Conjunction</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("Condition", {href:"#Condition"}), ZeroOrMore(Choice(0, Sequence(NonTerminal("opand"), NonTerminal("Condition", {href:"#Condition"}))))))).addTo();
+</script>
+
+<h1 id="Condition">Condition</h1>
+<script>
+Diagram(Choice(0, Sequence(Choice(0, Sequence(NonTerminal("bang"), NonTerminal("Condition", {href:"#Condition"})))), Sequence(Choice(0, Sequence(Terminal("("), NonTerminal("ConditionBlock", {href:"#ConditionBlock"}), Terminal(")")))), Sequence(NonTerminal("IfThenElse", {href:"#IfThenElse"})), Sequence(NonTerminal("HasCondition", {href:"#HasCondition"})), Sequence(NonTerminal("ContainsCondition", {href:"#ContainsCondition"})), Sequence(NonTerminal("LikeCondition", {href:"#LikeCondition"})), Sequence(NonTerminal("InListCondition", {href:"#InListCondition"})), Sequence(NonTerminal("InExprCondition", {href:"#InExprCondition"})), Sequence(NonTerminal("Comparison", {href:"#Comparison"})), Sequence(Choice(0, Sequence(Terminal("true")), Sequence(Terminal("false")))))).addTo();
+</script>
+
+<h1 id="IfThenElse">IfThenElse</h1>
+<script>
+Diagram(Choice(0, Sequence(Terminal("if"), NonTerminal("Condition", {href:"#Condition"}), Terminal("then"), NonTerminal("Condition", {href:"#Condition"}), Terminal("else"), NonTerminal("Condition", {href:"#Condition"})))).addTo();
+</script>
+
+<h1 id="HasCondition">HasCondition</h1>
+<script>
+Diagram(Choice(0, Sequence(Choice(0, Sequence(Terminal("principal")), Sequence(Terminal("resource")), Sequence(Terminal("action")), Sequence(Terminal("env"))), Terminal("has"), NonTerminal("ident"), ZeroOrMore(Choice(0, Sequence(NonTerminal("dot"), NonTerminal("ident"))))))).addTo();
+</script>
+
+<h1 id="ContainsCondition">ContainsCondition</h1>
+<script>
+Diagram(Choice(0, Sequence(Choice(0, Sequence(Terminal("principal")), Sequence(Terminal("resource")), Sequence(Terminal("action")), Sequence(Terminal("env"))), ZeroOrMore(Choice(0, Sequence(NonTerminal("dot"), NonTerminal("ident")))), NonTerminal("dot"), NonTerminal("containskw"), Terminal("("), NonTerminal("ListExpr", {href:"#ListExpr"}), Terminal(")")))).addTo();
+</script>
+
+<h1 id="ListExpr">ListExpr</h1>
+<script>
+Diagram(Choice(0, Sequence(Terminal("["), NonTerminal("Literal", {href:"#Literal"}), ZeroOrMore(Choice(0, Sequence(Terminal(","), NonTerminal("Literal", {href:"#Literal"})))), Terminal("]")))).addTo();
+</script>
+
+<h1 id="Literal">Literal</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("string")), Sequence(NonTerminal("number")), Sequence(Choice(0, Sequence(Terminal("true")), Sequence(Terminal("false")))))).addTo();
+</script>
+
+<h1 id="LikeCondition">LikeCondition</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("Expr", {href:"#Expr"}), Terminal("like"), NonTerminal("string")))).addTo();
+</script>
+
+<h1 id="Expr">Expr</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("AttrRef", {href:"#AttrRef"})), Sequence(NonTerminal("Literal", {href:"#Literal"})))).addTo();
+</script>
+
+<h1 id="AttrRef">AttrRef</h1>
+<script>
+Diagram(Choice(0, Sequence(Choice(0, Sequence(Terminal("principal")), Sequence(Terminal("resource")), Sequence(Terminal("action")), Sequence(Terminal("env"))), NonTerminal("dot"), NonTerminal("ident"), ZeroOrMore(Choice(0, Sequence(NonTerminal("dot"), NonTerminal("ident"))))))).addTo();
+</script>
+
+<h1 id="InListCondition">InListCondition</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("Expr", {href:"#Expr"}), Terminal("in"), NonTerminal("ListExpr", {href:"#ListExpr"})))).addTo();
+</script>
+
+<h1 id="InExprCondition">InExprCondition</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("Expr", {href:"#Expr"}), Terminal("in"), NonTerminal("Expr", {href:"#Expr"})))).addTo();
+</script>
+
+<h1 id="Comparison">Comparison</h1>
+<script>
+Diagram(Choice(0, Sequence(NonTerminal("Expr", {href:"#Expr"}), Choice(0, Sequence(NonTerminal("opeq")), Sequence(NonTerminal("opne")), Sequence(NonTerminal("opge")), Sequence(NonTerminal("ople")), Sequence(NonTerminal("opgt")), Sequence(NonTerminal("oplt"))), NonTerminal("Expr", {href:"#Expr"})))).addTo();
+</script>
+
+</body>
+

@@ -2,6 +2,8 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package plugins provides plugin management and lifecycle control.
+//
+//go:generate go run github.com/holomush/holomush/internal/plugin/gen-schema
 package plugins
 
 import (
@@ -23,6 +25,12 @@ const (
 	TypeBinary Type = "binary"
 )
 
+// ManifestPolicy defines an ABAC policy contributed by a plugin.
+type ManifestPolicy struct {
+	Name string `yaml:"name" json:"name"`
+	DSL  string `yaml:"dsl" json:"dsl"`
+}
+
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
 	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
@@ -31,10 +39,14 @@ type Manifest struct {
 	Engine       string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
 	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
 	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
-	Capabilities []string          `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Policies     []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
 	Commands     []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
 	LuaPlugin    *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
 	BinaryPlugin *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
+
+	// Deprecated: capabilities field is no longer supported. Use policies instead.
+	// This field exists only to detect old-format manifests and produce a clear error.
+	Capabilities []string `yaml:"capabilities,omitempty" json:"-" jsonschema:"-"`
 }
 
 // LuaConfig holds Lua-specific configuration.
@@ -120,6 +132,11 @@ func (m *Manifest) Validate() error {
 		return oops.In("manifest").With("name", m.Name).With("max_length", maxNameLength).With("actual_length", len(m.Name)).New("name exceeds maximum length")
 	}
 
+	if len(m.Capabilities) > 0 {
+		return oops.In("manifest").With("name", m.Name).
+			New("'capabilities' field is no longer supported; use 'policies' with ABAC policy definitions instead")
+	}
+
 	if m.Version == "" {
 		return oops.In("manifest").With("name", m.Name).New("version is required")
 	}
@@ -158,6 +175,19 @@ func (m *Manifest) Validate() error {
 		}
 	default:
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua' or 'binary'")
+	}
+
+	// Validate policies
+	for i, p := range m.Policies {
+		if p.Name == "" {
+			return oops.Errorf("policy[%d]: name cannot be empty", i)
+		}
+		if !namePattern.MatchString(p.Name) {
+			return oops.Errorf("policy[%d] %q: name must match plugin naming pattern (lowercase, hyphens, no special chars)", i, p.Name)
+		}
+		if p.DSL == "" {
+			return oops.Errorf("policy[%d] %q: dsl cannot be empty", i, p.Name)
+		}
 	}
 
 	// Validate commands and check for duplicates

@@ -21,8 +21,6 @@ type: lua
 events:
   - say
   - pose
-capabilities:
-  - events.emit.location
 lua-plugin:
   entry: main.lua
 `
@@ -33,7 +31,6 @@ lua-plugin:
 	assert.Equal(t, "1.0.0", m.Version)
 	assert.Equal(t, plugins.TypeLua, m.Type)
 	assert.Len(t, m.Events, 2)
-	assert.Len(t, m.Capabilities, 1)
 	require.NotNil(t, m.LuaPlugin)
 	assert.Equal(t, "main.lua", m.LuaPlugin.Entry)
 }
@@ -45,9 +42,6 @@ version: 2.1.0
 type: binary
 events:
   - combat_start
-capabilities:
-  - events.*
-  - world.*
 binary-plugin:
   executable: combat-${os}-${arch}
 `
@@ -586,62 +580,78 @@ lua-plugin:
 	}
 }
 
-func TestParseManifest_CapabilityValidation(t *testing.T) {
-	tests := []struct {
-		name    string
-		yaml    string
-		wantErr bool
-	}{
-		{
-			name: "valid capabilities",
-			yaml: `
-name: test
-version: 1.0.0
+func TestParseManifest_WithPolicies(t *testing.T) {
+	data := []byte(`
+name: test-plugin
+version: "1.0.0"
 type: lua
-capabilities:
-  - events.emit.location
-  - world.read.*
+policies:
+  - name: "allow-emit"
+    dsl: |
+      permit(principal, action, resource) when {
+        principal is plugin
+        and action is "emit"
+      };
+  - name: "allow-kv"
+    dsl: |
+      permit(principal, action, resource) when {
+        principal is plugin
+        and resource like "kv:test-plugin:*"
+      };
 lua-plugin:
   entry: main.lua
-`,
-			wantErr: false,
-		},
-		{
-			name: "wildcard capability",
-			yaml: `
-name: test
-version: 1.0.0
-type: lua
-capabilities:
-  - "**"
-lua-plugin:
-  entry: main.lua
-`,
-			wantErr: false,
-		},
-		{
-			name: "empty capabilities is valid",
-			yaml: `
-name: test
-version: 1.0.0
-type: lua
-lua-plugin:
-  entry: main.lua
-`,
-			wantErr: false,
-		},
-	}
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	assert.Len(t, m.Policies, 2)
+	assert.Equal(t, "allow-emit", m.Policies[0].Name)
+	assert.Contains(t, m.Policies[0].DSL, "principal is plugin")
+	assert.Equal(t, "allow-kv", m.Policies[1].Name)
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := plugins.ParseManifest([]byte(tt.yaml))
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+func TestParseManifest_NoPolicies(t *testing.T) {
+	data := []byte(`
+name: test-plugin
+version: "1.0.0"
+type: lua
+lua-plugin:
+  entry: main.lua
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	assert.Empty(t, m.Policies)
+}
+
+func TestParseManifest_PolicyEmptyName(t *testing.T) {
+	data := []byte(`
+name: test-plugin
+version: "1.0.0"
+type: lua
+policies:
+  - name: ""
+    dsl: "permit(principal, action, resource);"
+lua-plugin:
+  entry: main.lua
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name cannot be empty")
+}
+
+func TestParseManifest_PolicyEmptyDSL(t *testing.T) {
+	data := []byte(`
+name: test-plugin
+version: "1.0.0"
+type: lua
+policies:
+  - name: "allow-emit"
+    dsl: ""
+lua-plugin:
+  entry: main.lua
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dsl cannot be empty")
 }
 
 func TestParseManifest_EventValidation(t *testing.T) {
@@ -696,29 +706,6 @@ lua-plugin:
 			}
 		})
 	}
-}
-
-func TestParseManifest_CapabilityPattern(t *testing.T) {
-	// Test that capability patterns are preserved correctly
-	yaml := `
-name: test
-version: 1.0.0
-type: lua
-capabilities:
-  - events.emit.*
-  - world.read.**
-  - kv.read
-  - kv.write
-lua-plugin:
-  entry: main.lua
-`
-	m, err := plugins.ParseManifest([]byte(yaml))
-	require.NoError(t, err)
-	assert.Len(t, m.Capabilities, 4)
-	assert.Contains(t, m.Capabilities, "events.emit.*")
-	assert.Contains(t, m.Capabilities, "world.read.**")
-	assert.Contains(t, m.Capabilities, "kv.read")
-	assert.Contains(t, m.Capabilities, "kv.write")
 }
 
 func TestManifest_HasEvent(t *testing.T) {

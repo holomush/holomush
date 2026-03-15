@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -604,9 +603,7 @@ end
 `
 	writeMainLua(t, dir, mainLua)
 
-	enforcer := capability.NewEnforcer()
-
-	hostFuncs := hostfunc.New(nil, enforcer)
+	hostFuncs := hostfunc.New(nil)
 	host := pluginlua.NewHostWithFunctions(hostFuncs)
 	defer closeHost(t, host)
 
@@ -634,54 +631,6 @@ end
 	if len(emits) > 0 {
 		assert.Contains(t, emits[0].Payload, "request_id", "payload should contain request_id")
 	}
-}
-
-func TestLuaHost_WithHostFunctions_CapabilityEnforcement(t *testing.T) {
-	dir := t.TempDir()
-
-	// Plugin that tries to use kv_get without capability
-	mainLua := `
-function on_event(event)
-    local val, err = holomush.kv_get("mykey")
-    if err then
-        return {{
-            stream = event.stream,
-            type = "error",
-            payload = err
-        }}
-    end
-    return nil
-end
-`
-	writeMainLua(t, dir, mainLua)
-
-	enforcer := capability.NewEnforcer()
-	// Note: NOT granting kv.read capability to trigger denial
-
-	hostFuncs := hostfunc.New(nil, enforcer)
-	host := pluginlua.NewHostWithFunctions(hostFuncs)
-	defer closeHost(t, host)
-
-	manifest := &plugins.Manifest{
-		Name:      "no-kv-cap",
-		Version:   "1.0.0",
-		Type:      plugins.TypeLua,
-		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
-	}
-
-	err := host.Load(context.Background(), manifest, dir)
-	require.NoError(t, err)
-
-	event := pluginsdk.Event{
-		ID:     "01ABC",
-		Stream: "location:123",
-		Type:   "say",
-	}
-
-	// Should fail because plugin lacks kv.read capability
-	_, err = host.DeliverEvent(context.Background(), "no-kv-cap", event)
-	require.Error(t, err, "expected error due to capability denial")
-	assert.Contains(t, err.Error(), "capability denied", "error should mention capability denial")
 }
 
 func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {

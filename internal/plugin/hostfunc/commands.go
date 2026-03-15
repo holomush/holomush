@@ -216,11 +216,15 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 }
 
 // getCommandHelpFn returns the get_command_help host function.
-// Args: command_name (string)
+// Args: command_name (string), character_id (string)
 // Returns: (command info table, error string)
+//
+// For commands with capabilities, evaluates ABAC before returning help.
+// Commands without capabilities are always accessible.
 func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		name := L.CheckString(1)
+		characterID := L.CheckString(2)
 		if name == "" {
 			L.RaiseError("command name cannot be empty")
 			return 0
@@ -237,6 +241,43 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 			L.Push(lua.LNil)
 			L.Push(lua.LString("command not found: " + name))
 			return 2
+		}
+
+		// Access check for capability-gated commands (fail-closed)
+		if len(cmd.GetCapabilities()) > 0 {
+			if f.engine == nil {
+				L.Push(lua.LNil)
+				L.Push(lua.LString("access engine not available"))
+				return 2
+			}
+
+			charID, err := ulid.Parse(characterID)
+			if err != nil {
+				L.Push(lua.LNil)
+				L.Push(lua.LString("invalid character_id"))
+				return 2
+			}
+
+			ctx := L.Context()
+			if ctx == nil {
+				slog.Warn("lua VM context is nil in get_command_help, using background context")
+				ctx = context.Background()
+			}
+
+			subject := access.CharacterSubject(charID.String())
+			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
+			if hadError {
+				slog.Error("engine error in get_command_help",
+					"command", name, "character", characterID)
+				L.Push(lua.LNil)
+				L.Push(lua.LString("access check failed"))
+				return 2
+			}
+			if !allowed {
+				L.Push(lua.LNil)
+				L.Push(lua.LString("access denied"))
+				return 2
+			}
 		}
 
 		// Build result table with full command details

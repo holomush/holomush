@@ -15,7 +15,6 @@ import (
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
@@ -101,31 +100,13 @@ func newMockHost(t *testing.T) (*Host, *mockPluginClient) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 	return host, mockClient
 }
 
 func TestNewHost(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	require.NotNil(t, host, "NewHost returned nil")
-}
-
-func TestNewHost_NilEnforcer(t *testing.T) {
-	defer func() {
-		r := recover()
-		require.NotNil(t, r, "expected panic when enforcer is nil")
-	}()
-	NewHost(nil)
-}
-
-func TestNewHostWithFactory_NilEnforcer(t *testing.T) {
-	defer func() {
-		r := recover()
-		require.NotNil(t, r, "expected panic when enforcer is nil")
-	}()
-	NewHostWithFactory(nil, &DefaultClientFactory{})
 }
 
 func TestNewHostWithFactory_NilFactory(t *testing.T) {
@@ -133,21 +114,18 @@ func TestNewHostWithFactory_NilFactory(t *testing.T) {
 		r := recover()
 		require.NotNil(t, r, "expected panic when factory is nil")
 	}()
-	enforcer := capability.NewEnforcer()
-	NewHostWithFactory(enforcer, nil)
+	NewHostWithFactory(nil)
 }
 
 func TestPlugins_Empty(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	plugins := host.Plugins()
 	assert.Empty(t, plugins, "expected empty plugins list")
 }
 
 func TestPlugins_AfterClose(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	err := host.Close(context.Background())
 	require.NoError(t, err, "Close returned error")
@@ -157,16 +135,14 @@ func TestPlugins_AfterClose(t *testing.T) {
 }
 
 func TestClose_NoPlugins(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	err := host.Close(context.Background())
 	assert.NoError(t, err, "Close returned error")
 }
 
 func TestClose_PreventsFurtherLoads(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	err := host.Close(context.Background())
 	require.NoError(t, err, "Close returned error")
@@ -186,8 +162,7 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 }
 
 func TestClose_Idempotent(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	// First close should succeed
 	err1 := host.Close(context.Background())
@@ -199,8 +174,7 @@ func TestClose_Idempotent(t *testing.T) {
 }
 
 func TestLoad_ContextCancelled(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	// Create a cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -224,8 +198,7 @@ func TestLoad_ContextCancelled(t *testing.T) {
 }
 
 func TestUnload_NotLoaded(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	err := host.Unload(context.Background(), "nonexistent")
 	require.Error(t, err, "expected error when unloading nonexistent plugin")
@@ -233,8 +206,7 @@ func TestUnload_NotLoaded(t *testing.T) {
 }
 
 func TestUnload_AfterClose(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	err := host.Close(context.Background())
 	require.NoError(t, err, "Close returned error")
@@ -245,8 +217,7 @@ func TestUnload_AfterClose(t *testing.T) {
 }
 
 func TestDeliverEvent_NotLoaded(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	_, err := host.DeliverEvent(context.Background(), "nonexistent", pluginsdk.Event{})
 	require.Error(t, err, "expected error when delivering to nonexistent plugin")
@@ -254,8 +225,7 @@ func TestDeliverEvent_NotLoaded(t *testing.T) {
 }
 
 func TestDeliverEvent_HostClosed(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 
 	err := host.Close(context.Background())
 	require.NoError(t, err, "Close returned error")
@@ -273,8 +243,7 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -307,8 +276,7 @@ func TestDeliverEvent_NilResponse(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -341,8 +309,7 @@ func TestDeliverEvent_Timeout(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -371,8 +338,7 @@ func TestLoad_ClientError(t *testing.T) {
 		clientErr: errors.New("connection failed"),
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -402,8 +368,7 @@ func TestLoad_DispenseError(t *testing.T) {
 		},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -487,8 +452,7 @@ func TestLoad_DuplicateName(t *testing.T) {
 }
 
 func TestLoad_ExecutableNotFound(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -509,51 +473,12 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist, "expected error to wrap os.ErrNotExist")
 }
 
-func TestLoad_SetGrantsFailure(t *testing.T) {
-	// Create mock plugin client that succeeds
-	grpcClient := &mockGRPCPluginClient{}
-	mockClient := &mockPluginClient{
-		protocol: &mockClientProtocol{pluginClient: grpcClient},
-	}
-	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
-
-	ctx := context.Background()
-	tmpDir := t.TempDir()
-	err := createTempExecutable(tmpDir + "/test-plugin")
-	require.NoError(t, err, "failed to create temp file")
-
-	// Create manifest with invalid capability pattern (empty string)
-	manifest := &plugins.Manifest{
-		Name:    "test-plugin",
-		Version: "1.0.0",
-		Type:    plugins.TypeBinary,
-		BinaryPlugin: &plugins.BinaryConfig{
-			Executable: "test-plugin",
-		},
-		Capabilities: []string{"valid.capability", ""}, // Empty pattern will cause SetGrants to fail
-	}
-
-	err = host.Load(ctx, manifest, tmpDir)
-	require.Error(t, err, "expected error when SetGrants fails")
-	// oops.Error() returns underlying error message from enforcer
-	assert.Contains(t, err.Error(), "empty capability pattern", "expected error to contain enforcer error message")
-
-	// Verify plugin was not added to the host
-	assert.Empty(t, host.Plugins(), "plugin should not be loaded after SetGrants failure")
-
-	// Verify client was killed (cleanup on error)
-	assert.True(t, mockClient.killed, "client should be killed on SetGrants failure")
-}
-
 func TestLoad_ExecutableStatError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("skipping test when running as root (permissions ignored)")
 	}
 
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 
 	// Create a directory structure where the parent directory has no read permission
@@ -597,8 +522,7 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 }
 
 func TestLoad_ExecutableNotExecutable(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -622,8 +546,7 @@ func TestLoad_ExecutableNotExecutable(t *testing.T) {
 }
 
 func TestLoad_ExecutablePathTraversal(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -654,8 +577,7 @@ func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
 		t.Skip("skipping test when running as root")
 	}
 
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 
 	// Create a temp directory structure
@@ -701,8 +623,7 @@ func TestDeliverEvent_Success(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -782,8 +703,7 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 				protocol: &mockClientProtocol{pluginClient: grpcClient},
 			}
 			factory := &mockClientFactory{client: mockClient}
-			enforcer := capability.NewEnforcer()
-			host := NewHostWithFactory(enforcer, factory)
+			host := NewHostWithFactory(factory)
 
 			ctx := context.Background()
 			tmpDir := t.TempDir()
@@ -814,8 +734,7 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 }
 
 func TestLoad_NilBinaryPlugin(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -832,8 +751,7 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 }
 
 func TestLoad_NilManifest(t *testing.T) {
-	enforcer := capability.NewEnforcer()
-	host := NewHost(enforcer)
+	host := NewHost()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
@@ -871,8 +789,7 @@ func TestLoad_InvalidPluginClient(t *testing.T) {
 		},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	enforcer := capability.NewEnforcer()
-	host := NewHostWithFactory(enforcer, factory)
+	host := NewHostWithFactory(factory)
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()

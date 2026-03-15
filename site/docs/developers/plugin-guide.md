@@ -31,20 +31,24 @@ version: 1.0.0
 type: lua
 events:
   - say
-capabilities:
-  - events.emit.location
+policies:
+  - name: "emit-events"
+    dsl: |
+      permit(principal is plugin, action in ["emit"], resource is stream) when {
+        principal.plugin.name == "my-plugin"
+      };
 lua-plugin:
   entry: main.lua
 ```
 
-| Field          | Required | Description                                    |
-| -------------- | -------- | ---------------------------------------------- |
-| `name`         | Yes      | Unique identifier (lowercase, a-z0-9, hyphens) |
-| `version`      | Yes      | Semantic version (e.g., 1.0.0)                 |
-| `type`         | Yes      | Must be `lua` for Lua plugins                  |
-| `events`       | No       | Event types to receive                         |
-| `capabilities` | No       | Required capabilities                          |
-| `lua-plugin`   | Yes      | Lua-specific configuration                     |
+| Field        | Required | Description                                    |
+| ------------ | -------- | ---------------------------------------------- |
+| `name`       | Yes      | Unique identifier (lowercase, a-z0-9, hyphens) |
+| `version`    | Yes      | Semantic version (e.g., 1.0.0)                 |
+| `type`       | Yes      | Must be `lua` for Lua plugins                  |
+| `events`     | No       | Event types to receive                         |
+| `policies`   | No       | ABAC policies (name + DSL pairs)               |
+| `lua-plugin` | Yes      | Lua-specific configuration                     |
 
 ### Event Handler
 
@@ -110,7 +114,7 @@ holomush.log("error", "Failed to process")
 -- Request ID generation (no capability required)
 local id = holomush.new_request_id()
 
--- Key-value storage (requires kv.read or kv.write capability)
+-- Key-value storage (enforced via ABAC)
 local value, err = holomush.kv_get("my-key")
 local _, err = holomush.kv_set("my-key", "my-value")
 local _, err = holomush.kv_delete("my-key")
@@ -118,32 +122,32 @@ local _, err = holomush.kv_delete("my-key")
 
 ### World Query Functions
 
-Lua plugins can query the game world using these host functions. Each requires
-the appropriate capability declared in `plugin.yaml`.
+Lua plugins can query the game world using these host functions. Access is
+enforced via ABAC policies declared in `plugin.yaml`.
 
 ```lua
--- Query room/location information (requires world.read.location capability)
+-- Query room/location information (enforced via ABAC)
 local room, err = holomush.query_room(room_id)
 -- Returns: table with id, name, description, type on success
 -- Returns: nil, error_message on failure
 
--- Query character information (requires world.read.character capability)
+-- Query character information (enforced via ABAC)
 local char, err = holomush.query_character(character_id)
 -- Returns: table with id, name, player_id, location_id on success
 -- Returns: nil, error_message on failure
 
--- Query characters in a room (requires world.read.character capability)
+-- Query characters in a room (enforced via ABAC)
 local chars, err = holomush.query_room_characters(room_id)
 -- Returns: array of character tables on success
 -- Returns: nil, error_message on failure
 
--- Query object information (requires world.read.object capability)
+-- Query object information (enforced via ABAC)
 local obj, err = holomush.query_object(object_id)
 -- Returns: table with id, name, description, is_container, owner_id, containment_type on success
 -- Returns: nil, error_message on failure
 ```
 
-Example manifest with world query capabilities:
+Example manifest with world query policies:
 
 ```yaml
 name: world-aware-plugin
@@ -151,9 +155,13 @@ version: 1.0.0
 type: lua
 events:
   - say
-capabilities:
-  - world.read.location
-  - world.read.character
+policies:
+  - name: "read-world"
+    dsl: |
+      permit(principal is plugin, action in ["read"], resource is world_object) when {
+        principal.plugin.name == "world-aware-plugin" &&
+        (resource like "location:*" || resource like "character:*")
+      };
 lua-plugin:
   entry: main.lua
 ```
@@ -181,8 +189,12 @@ version: 1.0.0
 type: binary
 events:
   - say
-capabilities:
-  - events.emit.location
+policies:
+  - name: "emit-events"
+    dsl: |
+      permit(principal is plugin, action in ["emit"], resource is stream) when {
+        principal.plugin.name == "my-binary-plugin"
+      };
 binary-plugin:
   executable: my-plugin
 ```
@@ -319,29 +331,46 @@ Both plugin types handle the same event types:
 
 See the [World Model Design](https://github.com/holomush/holomush/blob/main/docs/specs/2026-01-22-world-model-design.md) for complete payload specifications.
 
-## Capabilities
+## ABAC Policies
 
-Plugins declare required capabilities in their manifest. The capability system
-uses glob patterns:
+Plugins declare access policies in their manifest using Cedar-style DSL. The ABAC
+engine is default-deny — plugins can only perform actions explicitly permitted by
+their policies.
 
-| Pattern                | Matches                  |
-| ---------------------- | ------------------------ |
-| `events.emit.*`        | Direct children only     |
-| `events.emit.**`       | All descendants          |
-| `world.read.location`  | Query room/location data |
-| `world.read.character` | Query character data     |
-| `world.read.object`    | Query object data        |
-| `kv.read`              | Key-value read access    |
-| `kv.write`             | Key-value write access   |
+Policies are installed to the PolicyStore when a plugin is loaded and removed when
+the plugin is unloaded.
 
-Example capabilities:
+### Policy Structure
+
+Each policy has a `name` (for identification) and a `dsl` block containing one or
+more Cedar-style permit statements:
 
 ```yaml
-capabilities:
-  - events.emit.location # Emit events to locations
-  - kv.read # Read from key-value store
-  - kv.write # Write to key-value store
+policies:
+  - name: "emit-events"
+    dsl: |
+      permit(principal is plugin, action in ["emit"], resource is stream) when {
+        principal.plugin.name == "my-plugin"
+      };
+  - name: "kv-access"
+    dsl: |
+      permit(principal is plugin, action in ["read", "write"], resource is kv) when {
+        principal.plugin.name == "my-plugin"
+      };
 ```
+
+### Common Policy Patterns
+
+| Access Needed          | Action     | Resource Pattern |
+| ---------------------- | ---------- | ---------------- |
+| Emit events to streams | `"emit"`   | `"stream:*"`     |
+| Read locations         | `"read"`   | `"location:*"`   |
+| Read characters        | `"read"`   | `"character:*"`  |
+| Read objects           | `"read"`   | `"object:*"`     |
+| Key-value read         | `"read"`   | `"kv:*"`         |
+| Key-value write        | `"write"`  | `"kv:*"`         |
+| Key-value delete       | `"delete"` | `"kv:*"`         |
+| Execute commands       | `"execute"`| `"command:*"`    |
 
 ## Error Handling
 
@@ -355,7 +384,7 @@ helps plugins respond appropriately.
 | `"room not found"`               | Room ID doesn't exist            | Check ID validity, handle missing |
 | `"character not found"`          | Character ID doesn't exist       | Check ID validity, handle missing |
 | `"object not found"`             | Object ID doesn't exist          | Check ID validity, handle missing |
-| `"access denied"`                | Plugin lacks required capability | Add capability to manifest        |
+| `"access denied"`                | Plugin lacks required ABAC policy | Add policy to manifest           |
 | `"query timed out"`              | Query exceeded 5-second timeout  | Simplify query or retry later     |
 | `"internal error (ref: XXXX...)` | Server error with correlation ID | Log and surface to user           |
 
@@ -380,7 +409,7 @@ if err then
         holomush.log("debug", "Room not found: " .. room_id)
         return nil
     elseif err:match("access denied") then
-        -- Permission error - likely missing capability
+        -- Permission error - likely missing ABAC policy
         holomush.log("warn", "Permission denied for room query")
         return nil
     elseif err:match("internal error") then
@@ -658,7 +687,7 @@ A complete example showing both plugin types:
 
 `WithWorldService` provides per-plugin ABAC (Attribute-Based Access Control)
 authorization. Each plugin receives its own authorization subject
-(`system:plugin:<name>`), enabling:
+(`plugin:<name>`), enabling:
 
 - **Fine-grained access control**: Operators can grant different plugins different
   world access permissions
@@ -678,7 +707,6 @@ Replace `WithWorldQuerier` with `WithWorldService`:
     // Legacy approach - no authorization
     funcs := hostfunc.New(
         kvStore,
-        enforcer,
         hostfunc.WithWorldQuerier(querier),
     )
     ```
@@ -689,7 +717,6 @@ Replace `WithWorldQuerier` with `WithWorldService`:
     // New approach - per-plugin ABAC authorization
     funcs := hostfunc.New(
         kvStore,
-        enforcer,
         hostfunc.WithWorldService(worldService),
     )
     ```
@@ -705,7 +732,8 @@ for authorization:
 | `WorldService` | `GetLocation(ctx, subjectID, id)` |
 
 The host function system automatically provides the subject ID based on the plugin
-name (`system:plugin:<name>`), so plugin code itself does not need changes.
+name (`plugin:<name>` via `access.PluginSubject()`), so plugin code itself does
+not need changes.
 
 #### Timeline
 

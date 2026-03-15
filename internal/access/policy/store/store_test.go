@@ -37,9 +37,11 @@ func TestValidateSourceNaming(t *testing.T) {
 			source: "lock",
 		},
 		{
-			name:   "plugin policy with plugin source passes",
-			pName:  "echo-bot-allow",
-			source: "plugin",
+			name:      "plugin policy without plugin: prefix fails",
+			pName:     "echo-bot-allow",
+			source:    "plugin",
+			wantErr:   true,
+			errorCode: "POLICY_SOURCE_MISMATCH",
 		},
 		{
 			name:      "seed-prefixed name with admin source fails",
@@ -78,6 +80,25 @@ func TestValidateSourceNaming(t *testing.T) {
 			name:   "short name does not match lock prefix",
 			pName:  "lock",
 			source: "admin",
+		},
+		{
+			name:   "plugin:-prefixed name with plugin source passes",
+			pName:  "plugin:echo-bot:emit",
+			source: "plugin",
+		},
+		{
+			name:      "plugin:-prefixed name with admin source fails",
+			pName:     "plugin:echo-bot:emit",
+			source:    "admin",
+			wantErr:   true,
+			errorCode: "POLICY_SOURCE_MISMATCH",
+		},
+		{
+			name:      "non-plugin: name with plugin source fails",
+			pName:     "my-policy",
+			source:    "plugin",
+			wantErr:   true,
+			errorCode: "POLICY_SOURCE_MISMATCH",
 		},
 	}
 

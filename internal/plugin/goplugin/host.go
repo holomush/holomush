@@ -20,7 +20,6 @@ import (
 	"github.com/samber/oops"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/capability"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -70,14 +69,13 @@ func (f *DefaultClientFactory) NewClient(execPath string) PluginClient {
 
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
-	enforcer      *capability.Enforcer
 	clientFactory ClientFactory
 	plugins       map[string]*loadedPlugin
 	mu            sync.RWMutex
 	closed        bool
 }
 
-// loadedPlugin holds state for a single loaded binary plugins.
+// loadedPlugin holds state for a single loaded binary plugin.
 type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
@@ -85,22 +83,17 @@ type loadedPlugin struct {
 }
 
 // NewHost creates a new binary plugin host.
-// Panics if enforcer is nil.
-func NewHost(enforcer *capability.Enforcer) *Host {
-	return NewHostWithFactory(enforcer, &DefaultClientFactory{})
+func NewHost() *Host {
+	return NewHostWithFactory(&DefaultClientFactory{})
 }
 
 // NewHostWithFactory creates a host with a custom client factory (for testing).
-// Panics if enforcer or factory is nil.
-func NewHostWithFactory(enforcer *capability.Enforcer, factory ClientFactory) *Host {
-	if enforcer == nil {
-		panic("goplugin: enforcer cannot be nil")
-	}
+// Panics if factory is nil.
+func NewHostWithFactory(factory ClientFactory) *Host {
 	if factory == nil {
 		panic("goplugin: factory cannot be nil")
 	}
 	return &Host{
-		enforcer:      enforcer,
 		clientFactory: factory,
 		plugins:       make(map[string]*loadedPlugin),
 	}
@@ -187,11 +180,6 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("plugin does not implement PluginClient")
 	}
 
-	if err := h.enforcer.SetGrants(manifest.Name, manifest.Capabilities); err != nil {
-		client.Kill()
-		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "set_capabilities").Wrap(err)
-	}
-
 	h.plugins[manifest.Name] = &loadedPlugin{
 		manifest: manifest,
 		client:   client,
@@ -201,7 +189,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	return nil
 }
 
-// Unload tears down a plugins.
+// Unload tears down a plugin.
 func (h *Host) Unload(_ context.Context, name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -217,15 +205,6 @@ func (h *Host) Unload(_ context.Context, name string) error {
 
 	if p.client != nil {
 		p.client.Kill()
-	}
-
-	// RemoveGrants only fails if plugin name is empty, which cannot happen here
-	// since we retrieved 'name' from h.plugins map (validated at Load time).
-	// Warn-and-continue is safe; grants are cleaned up, unload proceeds.
-	if err := h.enforcer.RemoveGrants(name); err != nil {
-		slog.Warn("failed to remove capabilities during unload",
-			"plugin", name,
-			"error", err)
 	}
 
 	delete(h.plugins, name)
@@ -313,16 +292,9 @@ func (h *Host) Close(_ context.Context) error {
 		return nil
 	}
 
-	for name, p := range h.plugins {
+	for _, p := range h.plugins {
 		if p.client != nil {
 			p.client.Kill()
-		}
-		// RemoveGrants only fails if plugin name is empty, which cannot happen
-		// here since 'name' comes from h.plugins map keys (validated at Load).
-		if err := h.enforcer.RemoveGrants(name); err != nil {
-			slog.Warn("failed to remove capabilities during close",
-				"plugin", name,
-				"error", err)
 		}
 	}
 

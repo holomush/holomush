@@ -16,10 +16,11 @@ import (
 
 // Manager discovers and manages plugin lifecycle.
 type Manager struct {
-	pluginsDir string
-	luaHost    Host
-	loaded     map[string]*DiscoveredPlugin
-	mu         sync.RWMutex
+	pluginsDir      string
+	luaHost         Host
+	policyInstaller PluginPolicyInstaller
+	loaded          map[string]*DiscoveredPlugin
+	mu              sync.RWMutex
 }
 
 // ManagerOption configures the Manager.
@@ -29,6 +30,13 @@ type ManagerOption func(*Manager)
 func WithLuaHost(h Host) ManagerOption {
 	return func(m *Manager) {
 		m.luaHost = h
+	}
+}
+
+// WithPolicyInstaller sets the policy installer for plugin ABAC policies.
+func WithPolicyInstaller(pi PluginPolicyInstaller) ManagerOption {
+	return func(m *Manager) {
+		m.policyInstaller = pi
 	}
 }
 
@@ -137,6 +145,16 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 		if err := m.luaHost.Load(ctx, dp.Manifest, dp.Dir); err != nil {
 			return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
 		}
+		if m.policyInstaller != nil && len(dp.Manifest.Policies) > 0 {
+			if err := m.policyInstaller.InstallPluginPolicies(ctx, dp.Manifest.Name, dp.Manifest.Policies); err != nil {
+				// Roll back the plugin load on policy failure
+				if unloadErr := m.luaHost.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+					slog.Error("failed to rollback plugin load after policy install failure",
+						"plugin", dp.Manifest.Name, "error", unloadErr)
+				}
+				return oops.In("manager").With("plugin", dp.Manifest.Name).Wrapf(err, "install plugin policies")
+			}
+		}
 	case TypeBinary:
 		// Binary plugins require go-plugin host (not yet implemented)
 		slog.Warn("binary plugins not yet supported, skipping",
@@ -181,6 +199,14 @@ func (m *Manager) ListPlugins() []string {
 func (m *Manager) Close(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.policyInstaller != nil {
+		for name := range m.loaded {
+			if err := m.policyInstaller.RemovePluginPolicies(ctx, name); err != nil {
+				slog.Error("failed to remove plugin policies", "plugin", name, "error", err)
+			}
+		}
+	}
 
 	// Clear loaded map first to ensure consistent state even if close fails.
 	m.loaded = make(map[string]*DiscoveredPlugin)

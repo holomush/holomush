@@ -4,7 +4,9 @@
 // Package hostfunc provides host functions to Lua plugins.
 //
 // Host functions expose server capabilities to plugins in a controlled way.
-// Functions that access sensitive resources require capability checks.
+// Access control is enforced via ABAC policies: world operations at the
+// service layer (world.Service.checkAccess), KV operations at the hostfunc
+// layer (checkKVAccess), and command access via the AccessPolicyEngine.
 package hostfunc
 
 import (
@@ -17,6 +19,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
@@ -34,15 +37,9 @@ type KVStore interface {
 	Delete(ctx context.Context, namespace, key string) error
 }
 
-// CapabilityChecker validates plugin capabilities.
-type CapabilityChecker interface {
-	Check(plugin, capability string) bool
-}
-
 // Functions provides host functions to Lua plugins.
 type Functions struct {
 	kvStore          KVStore
-	enforcer         CapabilityChecker
 	worldMutator     WorldMutator
 	commandRegistry  CommandRegistry
 	engine           types.AccessPolicyEngine
@@ -53,7 +50,7 @@ type Functions struct {
 type Option func(*Functions)
 
 // WithWorldService sets the world service for world query and mutation functions.
-// Each plugin will get its own adapter with authorization subject "system:plugin:<name>".
+// Each plugin will get its own adapter with authorization subject "plugin:<name>".
 // The service must implement WorldMutator; this is enforced at compile-time.
 func WithWorldService(svc WorldMutator) Option {
 	return func(f *Functions) {
@@ -89,15 +86,10 @@ func WithWorldQuerier(_ WorldQuerier) Option {
 }
 
 // New creates host functions with dependencies.
-// Panics if enforcer is nil (required dependency).
 // KVStore may be nil; KV functions will return errors if called.
-func New(kv KVStore, enforcer CapabilityChecker, opts ...Option) *Functions {
-	if enforcer == nil {
-		panic("hostfunc.New: enforcer cannot be nil")
-	}
+func New(kv KVStore, opts ...Option) *Functions {
 	f := &Functions{
-		kvStore:  kv,
-		enforcer: enforcer,
+		kvStore: kv,
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -115,49 +107,36 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 
 	mod := ls.NewTable()
 
-	// Logging (no capability required)
+	// Logging
 	ls.SetField(mod, "log", ls.NewFunction(f.logFn(pluginName)))
 
-	// Request ID (no capability required)
+	// Request ID
 	ls.SetField(mod, "new_request_id", ls.NewFunction(f.newRequestIDFn()))
 
-	// KV operations (capability required)
-	ls.SetField(mod, "kv_get", ls.NewFunction(f.wrap(pluginName, "kv.read", f.kvGetFn(pluginName))))
-	ls.SetField(mod, "kv_set", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvSetFn(pluginName))))
-	ls.SetField(mod, "kv_delete", ls.NewFunction(f.wrap(pluginName, "kv.write", f.kvDeleteFn(pluginName))))
+	// KV operations
+	ls.SetField(mod, "kv_get", ls.NewFunction(f.kvGetFn(pluginName)))
+	ls.SetField(mod, "kv_set", ls.NewFunction(f.kvSetFn(pluginName)))
+	ls.SetField(mod, "kv_delete", ls.NewFunction(f.kvDeleteFn(pluginName)))
 
-	// World queries (capability required)
-	ls.SetField(mod, "query_room", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.queryRoomFn(pluginName))))
-	ls.SetField(mod, "query_character", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryCharacterFn(pluginName))))
-	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.wrap(pluginName, "world.read.character", f.queryRoomCharactersFn(pluginName))))
-	ls.SetField(mod, "query_object", ls.NewFunction(f.wrap(pluginName, "world.read.object", f.queryObjectFn(pluginName))))
+	// World queries
+	ls.SetField(mod, "query_room", ls.NewFunction(f.queryRoomFn(pluginName)))
+	ls.SetField(mod, "query_character", ls.NewFunction(f.queryCharacterFn(pluginName)))
+	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.queryRoomCharactersFn(pluginName)))
+	ls.SetField(mod, "query_object", ls.NewFunction(f.queryObjectFn(pluginName)))
 
-	// World mutations (capability required)
-	ls.SetField(mod, "create_location", ls.NewFunction(f.wrap(pluginName, "world.write.location", f.createLocationFn(pluginName))))
-	ls.SetField(mod, "create_exit", ls.NewFunction(f.wrap(pluginName, "world.write.exit", f.createExitFn(pluginName))))
-	ls.SetField(mod, "create_object", ls.NewFunction(f.wrap(pluginName, "world.write.object", f.createObjectFn(pluginName))))
-	ls.SetField(mod, "find_location", ls.NewFunction(f.wrap(pluginName, "world.read.location", f.findLocationFn(pluginName))))
-	ls.SetField(mod, "set_property", ls.NewFunction(f.wrap(pluginName, "property.set", f.setPropertyFn(pluginName))))
-	ls.SetField(mod, "get_property", ls.NewFunction(f.wrap(pluginName, "property.get", f.getPropertyFn(pluginName))))
+	// World mutations
+	ls.SetField(mod, "create_location", ls.NewFunction(f.createLocationFn(pluginName)))
+	ls.SetField(mod, "create_exit", ls.NewFunction(f.createExitFn(pluginName)))
+	ls.SetField(mod, "create_object", ls.NewFunction(f.createObjectFn(pluginName)))
+	ls.SetField(mod, "find_location", ls.NewFunction(f.findLocationFn(pluginName)))
+	ls.SetField(mod, "set_property", ls.NewFunction(f.setPropertyFn(pluginName)))
+	ls.SetField(mod, "get_property", ls.NewFunction(f.getPropertyFn(pluginName)))
 
-	// Command registry functions (capability required)
-	ls.SetField(mod, "list_commands", ls.NewFunction(f.wrap(pluginName, "command.list", f.listCommandsFn(pluginName))))
-	ls.SetField(mod, "get_command_help", ls.NewFunction(f.wrap(pluginName, "command.help", f.getCommandHelpFn(pluginName))))
+	// Command registry functions
+	ls.SetField(mod, "list_commands", ls.NewFunction(f.listCommandsFn(pluginName)))
+	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
 
 	ls.SetGlobal("holomush", mod)
-}
-
-func (f *Functions) wrap(plugin, capName string, fn lua.LGFunction) lua.LGFunction {
-	return func(L *lua.LState) int {
-		if !f.enforcer.Check(plugin, capName) {
-			slog.Warn("capability denied",
-				"plugin", plugin,
-				"capability", capName)
-			L.RaiseError("capability denied: %s requires %s", plugin, capName)
-			return 0
-		}
-		return fn(L)
-	}
 }
 
 func (f *Functions) logFn(pluginName string) lua.LGFunction {
@@ -228,12 +207,57 @@ func sanitizeKVErrorForPlugin(pluginName, operation, key string, err error) stri
 	return fmt.Sprintf("internal error (ref: %s)", errorID)
 }
 
+// checkKVAccess evaluates ABAC for a KV operation. Returns an error string
+// for Lua if denied, or empty string if allowed.
+func (f *Functions) checkKVAccess(L *lua.LState, pluginName, action, key string) string { //nolint:gocritic // L is standard gopher-lua convention
+	if f.engine == nil {
+		slog.Warn("KV access denied: no ABAC engine configured",
+			"plugin", pluginName, "action", action, "key", key)
+		return "access engine not available"
+	}
+
+	subject := access.PluginSubject(pluginName)
+	resource := access.KVResource(pluginName, key)
+
+	parentCtx := L.Context()
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
+	defer cancel()
+
+	req, err := types.NewAccessRequest(subject, action, resource)
+	if err != nil {
+		slog.Error("failed to create KV access request",
+			"plugin", pluginName, "action", action, "key", key, "error", err)
+		return "access check failed"
+	}
+
+	decision, err := f.engine.Evaluate(ctx, req)
+	if err != nil {
+		slog.Error("KV access check engine error",
+			"plugin", pluginName, "action", action, "key", key, "error", err)
+		return "access check failed"
+	}
+
+	if !decision.IsAllowed() {
+		return "access denied"
+	}
+	return ""
+}
+
 func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		key := L.CheckString(1)
 		if key == "" {
 			L.RaiseError("kv_get: key cannot be empty")
 			return 0
+		}
+
+		if errMsg := f.checkKVAccess(L, pluginName, "read", key); errMsg != "" {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(errMsg))
+			return 2
 		}
 
 		if f.kvStore == nil {
@@ -276,6 +300,12 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			return 0
 		}
 
+		if errMsg := f.checkKVAccess(L, pluginName, "write", key); errMsg != "" {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(errMsg))
+			return 2
+		}
+
 		if f.kvStore == nil {
 			slog.Error("kv_set called but store unavailable",
 				"plugin", pluginName,
@@ -306,6 +336,12 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 		if key == "" {
 			L.RaiseError("kv_delete: key cannot be empty")
 			return 0
+		}
+
+		if errMsg := f.checkKVAccess(L, pluginName, "delete", key); errMsg != "" {
+			L.Push(lua.LNil)
+			L.Push(lua.LString(errMsg))
+			return 2
 		}
 
 		if f.kvStore == nil {

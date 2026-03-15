@@ -14,6 +14,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/holomush/holomush/internal/access"
 )
 
 // pushError pushes nil followed by an error string to the Lua stack and returns 2.
@@ -95,7 +97,7 @@ func (f *Functions) withQueryContext(
 // The world service must implement WorldMutator, which is enforced at construction time
 // via WithWorldService, so this function assumes f.worldMutator is set.
 //
-// The subjectID for ABAC is constructed as "system:plugin:<pluginName>".
+// The subjectID for ABAC is constructed as "plugin:<pluginName>".
 func (f *Functions) withMutatorContext(
 	L *lua.LState,
 	funcName, pluginName string,
@@ -112,7 +114,7 @@ func (f *Functions) withMutatorContext(
 	ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 	defer cancel()
 
-	subjectID := "system:plugin:" + pluginName
+	subjectID := access.PluginSubject(pluginName)
 	adapter := NewWorldQuerierAdapter(f.worldMutator, pluginName)
 	return fn(ctx, f.worldMutator, subjectID, adapter)
 }

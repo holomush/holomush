@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -203,7 +204,7 @@ func (f *Functions) findLocationFn(pluginName string) lua.LGFunction {
 		name := L.CheckString(1)
 
 		return f.withQueryContext(L, pluginName, func(ctx context.Context, _ *WorldQuerierAdapter) int {
-			subjectID := "system:plugin:" + pluginName
+			subjectID := access.PluginSubject(pluginName)
 			loc, err := f.worldMutator.FindLocationByName(ctx, subjectID, name)
 			if err != nil {
 				if errors.Is(err, world.ErrNotFound) {

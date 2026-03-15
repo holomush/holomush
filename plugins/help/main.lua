@@ -120,7 +120,7 @@ end
 
 -- Show detailed help for a specific command
 function show_command_help(ctx, command_name)
-    local info, err = holomush.get_command_help(command_name)
+    local info, err = holomush.get_command_help(command_name, ctx.character_id)
     if err then
         if err:match("command not found") then
             holo.emit.character(ctx.character_id, "error", {

@@ -60,13 +60,25 @@ tasks:
   generate:schema:
     desc: Generate plugin JSON Schema from Go types
     cmds:
-      - go run cmd/gen-schema/main.go
+      - go generate ./internal/plugin/
     sources:
-      - cmd/gen-schema/main.go
+      - internal/plugin/gen-schema/main.go
       - internal/plugin/manifest.go
       - internal/plugin/schema.go
     generates:
       - schemas/plugin.schema.json
+
+  # DSL grammar reference generation
+  generate:ebnf:
+    desc: Generate EBNF grammar and railroad diagram from DSL parser
+    cmds:
+      - go generate ./internal/access/policy/dsl/
+    sources:
+      - internal/access/policy/dsl/gen-ebnf/main.go
+      - internal/access/policy/dsl/ast.go
+    generates:
+      - site/docs/developers/policy-dsl.ebnf
+      - site/docs/developers/policy-dsl-railroad.html
 
   # Testing
   test:

@@ -21,7 +21,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/plugin/capability"
 )
 
 // Compile-time check: policy.Engine must satisfy types.AccessPolicyEngine.
@@ -58,14 +57,11 @@ func TestListCommands_ReturnsAllCommands(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	// Character can see all commands (no capabilities required on any command)
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -112,40 +108,13 @@ func TestListCommands_ReturnsAllCommands(t *testing.T) {
 	assert.True(t, sayFound, "expected 'say' command in results")
 }
 
-func TestListCommands_RequiresCapability(t *testing.T) {
-	// Given: a registry with commands but NO capability granted
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something"},
-		},
-	}
-
-	enforcer := capability.NewEnforcer()
-	// NOT granting command.list capability
-
-	hf := New(nil, enforcer, WithCommandRegistry(registry))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: list_commands is called without capability
-	err := L.DoString(`holomush.list_commands()`)
-
-	// Then: capability error is raised
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestListCommands_NoRegistry(t *testing.T) {
 	// Given: no command registry configured (but access control is available)
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
 
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 
-	hf := New(nil, enforcer, WithEngine(ac)) // No WithCommandRegistry
+	hf := New(nil, WithEngine(ac)) // No WithCommandRegistry
 
 	L := lua.NewState()
 	defer L.Close()
@@ -178,18 +147,19 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.help"}))
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine()
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "communication.say")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
-	// When: get_command_help is called
+	// When: get_command_help is called with character_id
 	err := L.DoString(`
-		info, err = holomush.get_command_help("say")
+		info, err = holomush.get_command_help("say", "` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -216,12 +186,10 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 
 func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 	// Given: an empty registry
+	charID := ulid.Make()
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.help"}))
-
-	hf := New(nil, enforcer, WithCommandRegistry(registry))
+	hf := New(nil, WithCommandRegistry(registry))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -229,7 +197,7 @@ func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 
 	// When: get_command_help is called for non-existent command
 	err := L.DoString(`
-		info, err = holomush.get_command_help("nonexistent")
+		info, err = holomush.get_command_help("nonexistent", "` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -242,37 +210,11 @@ func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 	assert.Contains(t, errVal.String(), "command not found")
 }
 
-func TestGetCommandHelp_RequiresCapability(t *testing.T) {
-	// Given: a registry with commands but NO capability granted
-	registry := &mockCommandRegistry{
-		commands: []command.CommandEntry{
-			{Name: "say", Help: "Say something"},
-		},
-	}
-
-	enforcer := capability.NewEnforcer()
-	// NOT granting command.help capability
-
-	hf := New(nil, enforcer, WithCommandRegistry(registry))
-
-	L := lua.NewState()
-	defer L.Close()
-	hf.Register(L, "test-plugin")
-
-	// When: get_command_help is called without capability
-	err := L.DoString(`holomush.get_command_help("say")`)
-
-	// Then: capability error is raised
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "capability denied")
-}
-
 func TestGetCommandHelp_NoRegistry(t *testing.T) {
 	// Given: no command registry configured
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.help"}))
+	charID := ulid.Make()
 
-	hf := New(nil, enforcer) // No WithCommandRegistry
+	hf := New(nil) // No WithCommandRegistry
 
 	L := lua.NewState()
 	defer L.Close()
@@ -280,7 +222,7 @@ func TestGetCommandHelp_NoRegistry(t *testing.T) {
 
 	// When: get_command_help is called
 	err := L.DoString(`
-		info, err = holomush.get_command_help("say")
+		info, err = holomush.get_command_help("say", "` + charID.String() + `")
 	`)
 	require.NoError(t, err)
 
@@ -292,19 +234,17 @@ func TestGetCommandHelp_NoRegistry(t *testing.T) {
 
 func TestGetCommandHelp_EmptyCommandName(t *testing.T) {
 	// Given: a valid setup
+	charID := ulid.Make()
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.help"}))
-
-	hf := New(nil, enforcer, WithCommandRegistry(registry))
+	hf := New(nil, WithCommandRegistry(registry))
 
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
 
 	// When: get_command_help is called with empty name
-	err := L.DoString(`holomush.get_command_help("")`)
+	err := L.DoString(`holomush.get_command_help("", "` + charID.String() + `")`)
 
 	// Then: error is raised
 	require.Error(t, err)
@@ -322,15 +262,12 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	// AccessControl that grants "comms.say" to our character but NOT admin caps
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.say")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -381,13 +318,10 @@ func TestListCommands_EmptyCapabilitiesAlwaysIncluded(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine() // No grants - character has zero capabilities
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -423,16 +357,13 @@ func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	// Grant only ONE of the required capabilities
 	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.nuke")
 	// NOT granting admin.danger
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -468,16 +399,13 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	// Grant ALL required capabilities
 	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.nuke")
 	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.danger")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -514,14 +442,11 @@ func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -573,9 +498,6 @@ func TestListCommands_CircuitBreakerTripsAfterThreeErrors(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	errorEngine := policytest.NewErrorEngine(errors.New("policy store unavailable"))
 
@@ -588,7 +510,7 @@ func TestListCommands_CircuitBreakerTripsAfterThreeErrors(t *testing.T) {
 	slog.SetDefault(testLogger)
 	defer slog.SetDefault(originalLogger)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -638,11 +560,8 @@ func TestListCommands_InvalidCharacterID(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	ac := policytest.NewGrantEngine()
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -666,11 +585,8 @@ func TestListCommands_EmptyCharacterID(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	ac := policytest.NewGrantEngine()
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -694,11 +610,8 @@ func TestListCommands_NoEngineConfigured(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	// NOT providing WithEngine
-	hf := New(nil, enforcer, WithCommandRegistry(registry))
+	hf := New(nil, WithCommandRegistry(registry))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -733,9 +646,6 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	subject := access.CharacterSubject(charID.String())
 
@@ -748,7 +658,7 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 		return true
 	})).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -779,9 +689,6 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	subject := access.CharacterSubject(charID.String())
 	evalErr := errors.New("policy store unavailable")
@@ -802,7 +709,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	slog.SetDefault(testLogger)
 	defer slog.SetDefault(oldLogger)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -833,14 +740,11 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
 	charID := ulid.Make()
 	denyEngine := policytest.DenyAllEngine()
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(denyEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(denyEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -890,13 +794,10 @@ func TestListCommands_InfraFailure_SetsIncompleteTrue(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	infraEngine := policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(infraEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(infraEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -949,9 +850,6 @@ func TestListCommands_ThreadsLuaContext(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
@@ -963,7 +861,7 @@ func TestListCommands_ThreadsLuaContext(t *testing.T) {
 		return true
 	}), mock.Anything).Return(types.NewDecision(types.EffectDeny, "test", ""), nil)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -999,9 +897,6 @@ func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
@@ -1013,7 +908,7 @@ func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
 		return true
 	}), mock.Anything).Return(types.NewDecision(types.EffectDeny, "test", ""), nil)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1043,14 +938,11 @@ func TestListCommands_IncompleteField_FalseWhenNoErrors(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.say")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1094,14 +986,11 @@ func TestListCommands_IncompleteField_TrueWhenEngineErrors(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1151,9 +1040,6 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	subject := access.CharacterSubject(charID.String())
 
@@ -1173,7 +1059,7 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 		Resource: "admin.boot",
 	}).Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(mockEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1224,14 +1110,11 @@ func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(errorEngine))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(errorEngine))
 
 	L := lua.NewState()
 	defer L.Close()
@@ -1276,6 +1159,123 @@ func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
 	assert.Len(t, names, 1)
 }
 
+func TestGetCommandHelp_AccessDenied(t *testing.T) {
+	// Given: a command with capabilities and an engine that denies access
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name:         "secret-cmd",
+				Help:         "Secret command",
+				Usage:        "secret-cmd",
+				Capabilities: []string{"admin.secret"},
+				Source:       "admin",
+			}),
+		},
+	}
+
+	charID := ulid.Make()
+	ac := policytest.NewGrantEngine() // No grants — denies everything by default
+
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: get_command_help is called for a capability-gated command the character cannot access
+	err := L.DoString(`
+		info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: nil result with "access denied" error
+	info := L.GetGlobal("info")
+	assert.Equal(t, lua.LNil, info)
+
+	errVal := L.GetGlobal("err")
+	assert.NotEqual(t, lua.LNil, errVal)
+	assert.Contains(t, errVal.String(), "access denied")
+}
+
+func TestGetCommandHelp_NoCapabilities_NoCheck(t *testing.T) {
+	// Given: a command WITHOUT capabilities — engine denies all, but help should still be returned
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			{Name: "look", Help: "Look around", Usage: "look [target]", Source: "core"}, // No capabilities
+		},
+	}
+
+	charID := ulid.Make()
+	denyEngine := policytest.DenyAllEngine()
+
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(denyEngine))
+
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+
+	// When: get_command_help is called for a command with no capabilities
+	err := L.DoString(`
+		info, err = holomush.get_command_help("look", "` + charID.String() + `")
+	`)
+	require.NoError(t, err)
+
+	// Then: help is returned (no access check needed for commands without capabilities)
+	info := L.GetGlobal("info")
+	require.NotEqual(t, lua.LNil, info)
+
+	tbl, ok := info.(*lua.LTable)
+	require.True(t, ok)
+
+	assert.Equal(t, "look", L.GetField(tbl, "name").String())
+	assert.Equal(t, "Look around", L.GetField(tbl, "help").String())
+
+	errVal := L.GetGlobal("err")
+	assert.Equal(t, lua.LNil, errVal)
+}
+
+
+func TestGetCommandHelp_NilEngine_FailsClosed(t *testing.T) {
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name: "secret-cmd", Help: "Secret",
+				Capabilities: []string{"admin.secret"}, Source: "admin",
+			}),
+		},
+	}
+	hf := New(nil, WithCommandRegistry(registry))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+	charID := ulid.Make()
+	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
+	require.NoError(t, err)
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "access engine not available")
+}
+
+func TestGetCommandHelp_EngineError_ReturnsCheckFailed(t *testing.T) {
+	registry := &mockCommandRegistry{
+		commands: []command.CommandEntry{
+			command.NewTestEntry(command.CommandEntryConfig{
+				Name: "secret-cmd", Help: "Secret",
+				Capabilities: []string{"admin.secret"}, Source: "admin",
+			}),
+		},
+	}
+	engine := policytest.NewErrorEngine(assert.AnError)
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(engine))
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+	charID := ulid.Make()
+	err := L.DoString(`info, err = holomush.get_command_help("secret-cmd", "` + charID.String() + `")`)
+	require.NoError(t, err)
+	assert.Equal(t, lua.LNil, L.GetGlobal("info"))
+	assert.Contains(t, L.GetGlobal("err").String(), "access check failed")
+}
+
 func TestListCommands_NoErrorWhenEngineSucceeds(t *testing.T) {
 	// Given: a registry with commands and an engine that succeeds
 	registry := &mockCommandRegistry{
@@ -1285,14 +1285,11 @@ func TestListCommands_NoErrorWhenEngineSucceeds(t *testing.T) {
 		},
 	}
 
-	enforcer := capability.NewEnforcer()
-	require.NoError(t, enforcer.SetGrants("test-plugin", []string{"command.list"}))
-
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "comms.say")
 
-	hf := New(nil, enforcer, WithCommandRegistry(registry), WithEngine(ac))
+	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
 	L := lua.NewState()
 	defer L.Close()

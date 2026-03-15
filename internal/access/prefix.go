@@ -27,6 +27,7 @@ const (
 	ResourceStream    = "stream:"
 	ResourceExit      = "exit:"
 	ResourceScene     = "scene:"
+	ResourceKV        = "kv:"
 )
 
 // Session error code constants.
@@ -51,6 +52,16 @@ var knownPrefixes = []string{
 	ResourceStream,
 	ResourceExit,
 	ResourceScene,
+	ResourceKV,
+}
+
+// PluginSubject returns a properly formatted plugin subject identifier.
+// Panics if name is empty, since an empty subject bypasses access control.
+func PluginSubject(name string) string {
+	if name == "" {
+		panic("access.PluginSubject: empty name would bypass access control")
+	}
+	return SubjectPlugin + name
 }
 
 // CharacterSubject returns a properly formatted character subject identifier.
@@ -137,6 +148,18 @@ func StreamResource(streamID string) string {
 		panic("access.StreamResource: empty streamID would create invalid resource reference")
 	}
 	return ResourceStream + streamID
+}
+
+// KVResource returns a properly formatted key-value store resource identifier.
+// Panics if namespace or key is empty, since either would create an invalid reference.
+func KVResource(namespace, key string) string {
+	if namespace == "" {
+		panic("access.KVResource: empty namespace would bypass access control")
+	}
+	if key == "" {
+		panic("access.KVResource: empty key would bypass access control")
+	}
+	return ResourceKV + namespace + ":" + key
 }
 
 // ParseEntityRef parses an entity reference string into its type name and ID.

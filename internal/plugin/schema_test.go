@@ -22,8 +22,6 @@ type: lua
 events:
   - say
   - pose
-capabilities:
-  - events.emit.location
 lua-plugin:
   entry: main.lua
 `
@@ -38,9 +36,6 @@ version: 2.1.0
 type: binary
 events:
   - combat_start
-capabilities:
-  - events.*
-  - world.*
 binary-plugin:
   executable: combat-linux-amd64
 `
@@ -351,8 +346,9 @@ dependencies:
 events:
   - say
   - pose
-capabilities:
-  - events.emit.location
+policies:
+  - name: "allow-emit"
+    dsl: "permit(principal, action, resource) when { principal is plugin };"
 lua-plugin:
   entry: main.lua
 `
@@ -399,16 +395,24 @@ lua-plugin:
 	}
 }
 
-func TestValidateSchema_Capabilities(t *testing.T) {
+func TestValidateSchema_Policies(t *testing.T) {
 	yaml := `
 name: test
 version: 1.0.0
 type: lua
-capabilities:
-  - events.emit.*
-  - world.read.**
-  - kv.read
-  - kv.write
+policies:
+  - name: "allow-emit"
+    dsl: |
+      permit(principal, action, resource) when {
+        principal is plugin
+        and action is "emit"
+      };
+  - name: "allow-kv"
+    dsl: |
+      permit(principal, action, resource) when {
+        principal is plugin
+        and resource like "kv:test:*"
+      };
 lua-plugin:
   entry: main.lua
 `
