@@ -73,6 +73,29 @@ func TestPluginProvider_NilRegistry_DeniesAll(t *testing.T) {
 	assert.Nil(t, attrs, "nil registry must deny attribute resolution (fail-closed)")
 }
 
+func TestPluginProvider_SetRegistry(t *testing.T) {
+	p := NewPluginProvider(nil)
+
+	// Before SetRegistry: returns nil for any plugin
+	attrs, err := p.ResolveSubject(context.Background(), "echo-bot")
+	require.NoError(t, err)
+	assert.Nil(t, attrs, "nil registry should deny")
+
+	// Set registry
+	registry := &mockPluginRegistry{loaded: map[string]bool{"echo-bot": true}}
+	p.SetRegistry(registry)
+
+	// After SetRegistry: loaded plugin returns attrs
+	attrs, err = p.ResolveSubject(context.Background(), "echo-bot")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "echo-bot"}, attrs)
+
+	// Unloaded plugin still returns nil
+	attrs, err = p.ResolveSubject(context.Background(), "unknown")
+	require.NoError(t, err)
+	assert.Nil(t, attrs)
+}
+
 func TestPluginProvider_ResolveResource(t *testing.T) {
 	p := NewPluginProvider(&mockPluginRegistry{})
 	attrs, err := p.ResolveResource(context.Background(), "anything")

@@ -24,6 +24,14 @@ func NewPluginProvider(registry PluginRegistry) *PluginProvider {
 	return &PluginProvider{registry: registry}
 }
 
+// SetRegistry sets the plugin registry for two-phase initialization.
+// Called after plugin.Manager is constructed to break the circular
+// dependency between Engine and Manager. Safe during startup before
+// any concurrent evaluations.
+func (p *PluginProvider) SetRegistry(r PluginRegistry) {
+	p.registry = r
+}
+
 // Namespace returns the attribute namespace for plugin subjects.
 func (p *PluginProvider) Namespace() string { return "plugin" }
 

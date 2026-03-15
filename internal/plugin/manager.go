@@ -219,3 +219,13 @@ func (m *Manager) Close(ctx context.Context) error {
 
 	return nil
 }
+
+
+// IsPluginLoaded returns true if the named plugin is currently loaded.
+// Implements attribute.PluginRegistry for ABAC attribute resolution.
+func (m *Manager) IsPluginLoaded(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.loaded[name]
+	return ok
+}
