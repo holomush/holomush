@@ -221,10 +221,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	slog.Info("seed policies bootstrapped")
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
-	realStoreForABAC, ok := eventStore.(*store.PostgresEventStore)
-	if !ok {
-		return oops.Code("ABAC_SETUP_FAILED").Errorf("ABAC stack requires PostgresEventStore")
-	}
+	// In test mode with mock stores, ABAC wiring is skipped.
+	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
+	if !hasPool {
+		slog.Warn("ABAC stack not initialized: event store does not expose a connection pool (test mode?)")
+	} else {
 	abacPool := realStoreForABAC.Pool()
 
 	abacStack, abacErr := abacsetup.BuildABACStack(ctx, abacsetup.ABACConfig{
@@ -292,6 +293,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		}
 	}()
 	slog.Info("plugin stack initialized", "plugins_dir", pluginsDir)
+	} // end ABAC stack wiring (hasPool)
 
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {

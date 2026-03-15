@@ -71,7 +71,7 @@ func (l *PgListener) listenLoop(ctx context.Context, ch chan<- string) {
 		_, err = conn.Exec(ctx, "LISTEN policy_changed")
 		if err != nil {
 			slog.Warn("pg_notify listener: LISTEN failed", "error", err)
-			conn.Close(ctx)
+			_ = conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 			continue
 		}
 
@@ -82,19 +82,19 @@ func (l *PgListener) listenLoop(ctx context.Context, ch chan<- string) {
 			notification, err := conn.WaitForNotification(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
-					conn.Close(ctx)
+					_ = conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 					return
 				}
 				slog.Warn("pg_notify listener: notification error, reconnecting",
 					"error", err)
-				conn.Close(ctx)
+				_ = conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 				break // reconnect
 			}
 
 			select {
 			case ch <- notification.Payload:
 			case <-ctx.Done():
-				conn.Close(ctx)
+				_ = conn.Close(ctx) //nolint:errcheck // best-effort cleanup
 				return
 			}
 		}

@@ -14,7 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 )
 
-func TestPgListener_ImplementsInterface(t *testing.T) {
+func TestPgListener_ImplementsInterface(_ *testing.T) {
 	var _ policy.Listener = (*policy.PgListener)(nil)
 }
 
