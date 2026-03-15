@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/attribute"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
@@ -394,4 +395,12 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 
 	// Even on error, loaded map should be cleared
 	assert.Empty(t, mgr.ListPlugins(), "ListPlugins() after failed Close() should be empty")
+}
+
+// Compile-time check: Manager implements attribute.PluginRegistry.
+var _ attribute.PluginRegistry = (*plugins.Manager)(nil)
+
+func TestManager_IsPluginLoaded(t *testing.T) {
+	m := plugins.NewManager("/nonexistent")
+	assert.False(t, m.IsPluginLoaded("echo-bot"), "no plugins loaded yet")
 }
