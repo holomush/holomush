@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -23,13 +24,19 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
+	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/world"
+	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/internal/xdg"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -213,6 +220,79 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	}
 	slog.Info("seed policies bootstrapped")
 
+	// Build ABAC engine stack (requires PostgresEventStore for pool access).
+	realStoreForABAC, ok := eventStore.(*store.PostgresEventStore)
+	if !ok {
+		return oops.Code("ABAC_SETUP_FAILED").Errorf("ABAC stack requires PostgresEventStore")
+	}
+	abacPool := realStoreForABAC.Pool()
+
+	abacStack, abacErr := abacsetup.BuildABACStack(ctx, abacsetup.ABACConfig{
+		Pool:          abacPool,
+		CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
+		AuditMode:     audit.ModeDenialsOnly,
+	})
+	if abacErr != nil {
+		return oops.Code("ABAC_SETUP_FAILED").Wrap(abacErr)
+	}
+	defer func() {
+		if closeErr := abacStack.Close(); closeErr != nil {
+			slog.Warn("error closing ABAC stack", "error", closeErr)
+		}
+	}()
+	slog.Info("ABAC engine stack initialized")
+
+	// Start live policy cache invalidation
+	pgListener := policy.NewPgListener(databaseURL)
+	go func() {
+		if listenErr := abacStack.Cache.StartWithListener(ctx, pgListener); listenErr != nil {
+			slog.Error("policy cache listener failed", "error", listenErr)
+		}
+	}()
+
+	// Build world.Service with ABAC engine
+	worldService := world.NewService(world.ServiceConfig{
+		LocationRepo:  worldpostgres.NewLocationRepository(abacPool),
+		ExitRepo:      worldpostgres.NewExitRepository(abacPool),
+		ObjectRepo:    worldpostgres.NewObjectRepository(abacPool),
+		SceneRepo:     worldpostgres.NewSceneRepository(abacPool),
+		CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
+		PropertyRepo:  worldpostgres.NewPropertyRepository(abacPool),
+		Engine:        abacStack.Engine,
+		Transactor:    worldpostgres.NewTransactor(abacPool),
+	})
+
+	// Build plugin stack
+	pluginsDataDir, pluginsDirErr := xdg.DataDir()
+	if pluginsDirErr != nil {
+		return oops.Code("PLUGINS_DIR_FAILED").With("operation", "get plugins directory").Wrap(pluginsDirErr)
+	}
+	pluginsDir := filepath.Join(pluginsDataDir, "plugins")
+
+	hostFuncs := hostfunc.New(nil, // KV store not yet available
+		hostfunc.WithEngine(abacStack.Engine),
+		hostfunc.WithWorldService(worldService),
+	)
+	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
+	pluginManager := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
+	)
+
+	// Complete circular dependency: set plugin registry
+	abacStack.PluginProvider.SetRegistry(pluginManager)
+
+	// Load all discovered plugins
+	if loadErr := pluginManager.LoadAll(ctx); loadErr != nil {
+		slog.Error("failed to load plugins", "error", loadErr)
+	}
+	defer func() {
+		if closeErr := pluginManager.Close(ctx); closeErr != nil {
+			slog.Warn("error closing plugin manager", "error", closeErr)
+		}
+	}()
+	slog.Info("plugin stack initialized", "plugins_dir", pluginsDir)
+
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
 		return oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err)
@@ -230,7 +310,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	// to pass to core.NewEngine. In production, this is always the case.
 	// In tests with mocks, we skip the gRPC server creation.
 	var grpcServer *grpc.Server
-	var listener net.Listener
+	var netListener net.Listener
 
 	// Only create gRPC server if we have a real event store
 	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
@@ -247,12 +327,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		corev1.RegisterCoreServer(grpcServer, coreServer)
 
 		// Start gRPC listener
-		listener, err = net.Listen("tcp", cfg.grpcAddr)
+		netListener, err = net.Listen("tcp", cfg.grpcAddr)
 		if err != nil {
 			return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.grpcAddr).Wrap(err)
 		}
 		defer func() {
-			if closeErr := listener.Close(); closeErr != nil {
+			if closeErr := netListener.Close(); closeErr != nil {
 				slog.Debug("error closing gRPC listener", "error", closeErr)
 			}
 		}()
@@ -312,9 +392,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 	// Start gRPC server in goroutine (only if we have one)
 	errChan := make(chan error, 1)
-	if grpcServer != nil && listener != nil {
+	if grpcServer != nil && netListener != nil {
 		go func() {
-			if serveErr := grpcServer.Serve(listener); serveErr != nil {
+			if serveErr := grpcServer.Serve(netListener); serveErr != nil {
 				errChan <- serveErr
 			}
 		}()
