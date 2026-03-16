@@ -304,6 +304,29 @@ func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
 	return exists
 }
 
+// GetNamespace returns the NamespaceSchema for the given namespace, or nil.
+// NOT goroutine-safe: callers must ensure schema evolution (UpdateNamespace/RemoveNamespace)
+// does not run concurrently with policy evaluation that reads the schema.
+func (s *AttributeSchema) GetNamespace(namespace string) *NamespaceSchema {
+	ns, ok := s.namespaces[namespace]
+	if !ok {
+		return nil
+	}
+	return ns
+}
+
+// Replace replaces an existing namespace schema.
+// Callers MUST validate the schema before calling — use SchemaRegistry.UpdateNamespace instead.
+func (s *AttributeSchema) Replace(namespace string, schema *NamespaceSchema) {
+	s.namespaces[namespace] = schema
+}
+
+// Remove deletes a namespace from the schema.
+// Callers MUST validate removal safety — use SchemaRegistry.RemoveNamespace instead.
+func (s *AttributeSchema) Remove(namespace string) {
+	delete(s.namespaces, namespace)
+}
+
 // PolicySource identifies where a policy originated.
 type PolicySource string
 

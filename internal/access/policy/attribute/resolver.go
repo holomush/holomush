@@ -6,9 +6,10 @@ package attribute
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -30,6 +31,7 @@ type Resolver struct {
 	providers        map[string]AttributeProvider
 	envProviders     map[string]EnvironmentProvider
 	providerOrder    []string // Track registration order
+	circuitBreakers  map[string]*CircuitBreaker
 	envProviderOrder []string
 	logger           *slog.Logger
 }
@@ -41,6 +43,7 @@ func NewResolver(registry *SchemaRegistry) *Resolver {
 		providers:        make(map[string]AttributeProvider),
 		envProviders:     make(map[string]EnvironmentProvider),
 		providerOrder:    make([]string, 0),
+		circuitBreakers:  make(map[string]*CircuitBreaker),
 		envProviderOrder: make([]string, 0),
 		logger:           slog.Default(),
 	}
@@ -59,6 +62,7 @@ func (r *Resolver) RegisterProvider(provider AttributeProvider) error {
 
 	r.providers[namespace] = provider
 	r.providerOrder = append(r.providerOrder, namespace)
+	r.circuitBreakers[namespace] = NewCircuitBreaker(namespace, DefaultCircuitBreakerConfig(), nil)
 
 	// Register schema (skip if namespace already registered to avoid fragile string matching)
 	schema := provider.Schema()
@@ -120,25 +124,25 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 		Environment: make(map[string]any),
 	}
 
-	// Parse subject and resource IDs
-	subjectType, subjectID := splitEntityID(req.Subject)
-	resourceType, resourceID := splitEntityID(req.Resource)
-
 	// Set action name
 	bags.Action["name"] = req.Action
 
 	var errs []error
 
 	// Resolve subject attributes
-	if subjectID != "" {
-		if err := r.resolveEntity(ctx, "subject", subjectType, subjectID, bags.Subject); err != nil {
+	if req.Subject != "" {
+		if err := validateEntityRef(req.Subject); err != nil {
+			errs = append(errs, oops.With("field", "subject").Wrap(err))
+		} else if err := r.resolveEntity(ctx, "subject", req.Subject, bags.Subject); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	// Resolve resource attributes
-	if resourceID != "" {
-		if err := r.resolveEntity(ctx, "resource", resourceType, resourceID, bags.Resource); err != nil {
+	if req.Resource != "" {
+		if err := validateEntityRef(req.Resource); err != nil {
+			errs = append(errs, oops.With("field", "resource").Wrap(err))
+		} else if err := r.resolveEntity(ctx, "resource", req.Resource, bags.Resource); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -151,20 +155,25 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	return bags, errors.Join(errs...)
 }
 
-// splitEntityID splits an entity ID in the format "type:id" into its components.
-func splitEntityID(entityID string) (entityType, id string) {
-	parts := strings.SplitN(entityID, ":", 2)
-	if len(parts) != 2 {
-		return "", ""
+
+// validateEntityRef checks that an entity reference is in "type:id" format
+// with both parts non-empty. This ensures all providers receive validated refs
+// and the ABAC fail-closed guarantee is preserved.
+func validateEntityRef(ref string) error {
+	parts := strings.SplitN(ref, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return oops.Code("INVALID_ENTITY_REF").
+			With("entity_ref", ref).
+			Errorf("invalid entity ref format: expected 'type:id'")
 	}
-	return parts[0], parts[1]
+	return nil
 }
 
 // resolveEntity resolves attributes for a single entity (subject or resource).
 // It iterates all registered providers and merges their attributes into bag.
 // Returns an error wrapping all individual provider errors; partial results
 // from successful providers are still written to bag before the error is returned.
-func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID string, bag map[string]any) error {
+func (r *Resolver) resolveEntity(ctx context.Context, resolveType, entityRef string, bag map[string]any) error {
 	cache := getCacheFromContext(ctx)
 
 	var errs []error
@@ -173,8 +182,13 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID s
 	for _, namespace := range r.providerOrder {
 		provider := r.providers[namespace]
 
+		// Check circuit breaker — skip open-circuit providers
+		if cb := r.circuitBreakers[namespace]; cb != nil && cb.ShouldSkip() {
+			continue
+		}
+
 		// Build cache key
-		cacheKey := fmt.Sprintf("%s:%s:%s", resolveType, namespace, entityID)
+		cacheKey := fmt.Sprintf("%s:%s:%s", resolveType, namespace, entityRef)
 
 		// Check cache first
 		if cached, found := cache.Get(cacheKey); found {
@@ -182,8 +196,17 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID s
 			continue
 		}
 
-		// Resolve from provider with panic recovery
-		attrs, err := r.safeResolve(ctx, provider, resolveType, entityID)
+		// Resolve from provider with panic recovery and circuit breaker recording
+		start := time.Now()
+		attrs, err := r.safeResolve(ctx, provider, resolveType, entityRef)
+		if cb := r.circuitBreakers[namespace]; cb != nil {
+			if err != nil {
+				// Record as high-budget call to push toward tripping
+				cb.RecordCall(cb.config.OpenDuration, cb.config.OpenDuration/2)
+			} else {
+				cb.RecordCall(time.Since(start), cb.config.OpenDuration)
+			}
+		}
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -222,20 +245,20 @@ func (r *Resolver) resolveEnvironment(ctx context.Context, bag map[string]any) e
 }
 
 // safeResolve calls a provider with error and panic recovery
-func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityID string) (attrs map[string]any, retErr error) {
+func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityRef string) (attrs map[string]any, retErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			attrs = nil // defense-in-depth: discard partially-mutated map
 			r.logger.Error("provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"resolve_type", resolveType,
-				"entity_id", entityID,
+				"entity_ref", entityRef,
 				"panic", recovered,
 			)
 			retErr = oops.
 				With("namespace", provider.Namespace()).
 				With("resolve_type", resolveType).
-				With("entity_id", entityID).
+				With("entity_ref", entityRef).
 				Errorf("provider %s panicked during %s resolution", provider.Namespace(), resolveType)
 		}
 	}()
@@ -244,15 +267,15 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 
 	switch resolveType {
 	case "subject":
-		attrs, err = provider.ResolveSubject(ctx, entityID)
+		attrs, err = provider.ResolveSubject(ctx, entityRef)
 	case "resource":
-		attrs, err = provider.ResolveResource(ctx, entityID)
+		attrs, err = provider.ResolveResource(ctx, entityRef)
 	default:
-		return nil, nil
+		return nil, oops.Code("INVALID_RESOLVE_TYPE").With("resolve_type", resolveType).Errorf("unknown resolve type")
 	}
 
 	if err != nil {
-		return nil, oops.With("namespace", provider.Namespace()).With("resolve_type", resolveType).With("entity_id", entityID).Wrap(err)
+		return nil, oops.With("namespace", provider.Namespace()).With("resolve_type", resolveType).With("entity_ref", entityRef).Wrap(err)
 	}
 
 	return attrs, nil
