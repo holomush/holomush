@@ -35,14 +35,14 @@ jobs:
 
       - name: Cache rumdl
         id: cache-rumdl
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/rumdl
           key: rumdl-v0.1.15-${{ runner.os }}-${{ runner.arch }}
 
       - name: Cache dprint
         id: cache-dprint
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/dprint
           key: dprint-v0.51.1-${{ runner.os }}-${{ runner.arch }}
