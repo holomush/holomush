@@ -536,11 +536,9 @@ func TestResolver_Resolve_InvalidEntityIDFormat(t *testing.T) {
 		Resource: "room:01XYZ",
 	}
 
-	bags, err := resolver.Resolve(context.Background(), req)
-	require.NoError(t, err)
+	_, err := resolver.Resolve(context.Background(), req)
+	require.Error(t, err)
 
-	// Should have empty subject bag (invalid format)
-	assert.Empty(t, bags.Subject)
 }
 
 func TestResolver_Resolve_S6_NamespaceValidation(t *testing.T) {

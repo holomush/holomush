@@ -15,18 +15,22 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/samber/oops"
 )
 
 var _ = Describe("ABAC Full Evaluation Path (Canary)", func() {
 	It("exercises the complete evaluation path with seed policies", func() {
 		ctx := context.Background()
 
-		_, _ = env.pool.Exec(ctx, "DELETE FROM characters")
-		_, _ = env.pool.Exec(ctx, "DELETE FROM players")
-		_, _ = env.pool.Exec(ctx, "DELETE FROM locations")
+		_, err := env.pool.Exec(ctx, "DELETE FROM characters")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.pool.Exec(ctx, "DELETE FROM players")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.pool.Exec(ctx, "DELETE FROM locations")
+		Expect(err).NotTo(HaveOccurred())
 
 		locID := core.NewULID()
-		_, err := env.pool.Exec(ctx, `
+		_, err = env.pool.Exec(ctx, `
 			INSERT INTO locations (id, name, description, type, replay_policy)
 			VALUES ($1, 'Canary Location', 'Test.', 'persistent', 'last:0')`,
 			locID.String())
@@ -70,7 +74,7 @@ var _ = Describe("System Bypass", func() {
 		Expect(decision.Effect()).To(Equal(types.EffectSystemBypass))
 	})
 
-	It("rejects system subject without system context", func() {
+	It("rejects system subject without system context with SYSTEM_SUBJECT_REJECTED", func() {
 		req := types.AccessRequest{
 			Subject:  "system",
 			Action:   "read",
@@ -78,5 +82,10 @@ var _ = Describe("System Bypass", func() {
 		}
 		_, err := env.engine.Evaluate(context.Background(), req)
 		Expect(err).To(HaveOccurred())
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue())
+		code, isStr := oopsErr.Code().(string)
+		Expect(isStr).To(BeTrue())
+		Expect(code).To(Equal("SYSTEM_SUBJECT_REJECTED"))
 	})
 })

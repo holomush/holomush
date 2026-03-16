@@ -28,13 +28,16 @@ var _ = Describe("Seed Policy Behavior", func() {
 	BeforeEach(func() {
 		ctx := context.Background()
 
-		_, _ = env.pool.Exec(ctx, "DELETE FROM characters")
-		_, _ = env.pool.Exec(ctx, "DELETE FROM players")
-		_, _ = env.pool.Exec(ctx, "DELETE FROM locations")
+		_, err := env.pool.Exec(ctx, "DELETE FROM characters")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.pool.Exec(ctx, "DELETE FROM players")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.pool.Exec(ctx, "DELETE FROM locations")
+		Expect(err).NotTo(HaveOccurred())
 
 		locID1 = core.NewULID()
 		locID2 = core.NewULID()
-		_, err := env.pool.Exec(ctx, `
+		_, err = env.pool.Exec(ctx, `
 			INSERT INTO locations (id, name, description, type, replay_policy)
 			VALUES ($1, 'Town Square', 'A bustling square.', 'persistent', 'last:0')`,
 			locID1.String())
