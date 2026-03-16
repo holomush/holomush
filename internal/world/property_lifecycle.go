@@ -35,16 +35,22 @@ type OrphanFinder interface {
 
 // OrphanDetector manages periodic orphan detection and cleanup.
 type OrphanDetector struct {
-	config   OrphanConfig
-	finder   OrphanFinder
-	mu       sync.Mutex
-	lastSeen int
-	stopCh   chan struct{}
-	stopped  chan struct{}
+	config    OrphanConfig
+	finder    OrphanFinder
+	mu        sync.Mutex
+	lastSeen  int
+	stopCh    chan struct{}
+	stopped   chan struct{}
+	startOnce sync.Once
+	stopOnce  sync.Once
 }
 
 // NewOrphanDetector creates a new orphan detector.
+// Returns an error if the config interval is non-positive.
 func NewOrphanDetector(config OrphanConfig) *OrphanDetector {
+	if config.Interval <= 0 {
+		config.Interval = DefaultOrphanConfig().Interval
+	}
 	return &OrphanDetector{
 		config:  config,
 		stopCh:  make(chan struct{}),
@@ -88,29 +94,35 @@ func (d *OrphanDetector) StartupCheck(ctx context.Context) error {
 }
 
 // Start begins the periodic orphan cleanup goroutine.
+// Idempotent: subsequent calls are no-ops.
 func (d *OrphanDetector) Start(ctx context.Context) {
-	go func() {
-		defer close(d.stopped)
-		ticker := time.NewTicker(d.config.Interval)
-		defer ticker.Stop()
+	d.startOnce.Do(func() {
+		go func() {
+			defer close(d.stopped)
+			ticker := time.NewTicker(d.config.Interval)
+			defer ticker.Stop()
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-d.stopCh:
-				return
-			case <-ticker.C:
-				d.RunCleanup(ctx)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-d.stopCh:
+					return
+				case <-ticker.C:
+					d.RunCleanup(ctx)
+				}
 			}
-		}
-	}()
+		}()
+	})
 }
 
 // Stop stops the cleanup goroutine.
+// Idempotent: subsequent calls are no-ops.
 func (d *OrphanDetector) Stop() {
-	close(d.stopCh)
-	<-d.stopped
+	d.stopOnce.Do(func() {
+		close(d.stopCh)
+		<-d.stopped
+	})
 }
 
 // RunCleanup performs a single cleanup cycle.

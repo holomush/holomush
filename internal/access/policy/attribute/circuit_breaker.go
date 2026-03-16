@@ -47,14 +47,16 @@ type callRecord struct {
 }
 
 // CircuitBreaker tracks provider health and short-circuits when degraded.
+// CircuitBreaker tracks provider health and short-circuits when degraded.
 type CircuitBreaker struct {
-	mu           sync.Mutex
-	provider     string
-	config       CircuitBreakerConfig
-	state        CircuitState
-	calls        []callRecord
-	openedAt     time.Time
-	tripsCounter prometheus.Counter
+	mu            sync.Mutex
+	provider      string
+	config        CircuitBreakerConfig
+	state         CircuitState
+	calls         []callRecord
+	openedAt      time.Time
+	tripsCounter  prometheus.Counter
+	probeInFlight bool
 }
 
 // NewCircuitBreaker creates a circuit breaker for the named provider.
@@ -68,26 +70,53 @@ func NewCircuitBreaker(provider string, config CircuitBreakerConfig, tripsCounte
 	}
 }
 
+// maybeTransitionToHalfOpen transitions from open to half-open if the open
+// duration has elapsed. Must be called with cb.mu held.
+func (cb *CircuitBreaker) maybeTransitionToHalfOpen() {
+	if cb.state == CircuitStateOpen && time.Since(cb.openedAt) >= cb.config.OpenDuration {
+		cb.state = CircuitStateHalfOpen
+		cb.probeInFlight = false
+	}
+}
+
 // State returns the current circuit state.
 func (cb *CircuitBreaker) State() CircuitState {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	if cb.state == CircuitStateOpen && time.Since(cb.openedAt) >= cb.config.OpenDuration {
-		cb.state = CircuitStateHalfOpen
-	}
-
+	cb.maybeTransitionToHalfOpen()
 	return cb.state
 }
 
-// ShouldSkip returns true if the provider should be skipped (circuit open).
+// ShouldSkip returns true if the provider should be skipped (circuit open and no probe available).
 func (cb *CircuitBreaker) ShouldSkip() bool {
-	return cb.State() == CircuitStateOpen
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.maybeTransitionToHalfOpen()
+	return cb.state == CircuitStateOpen || (cb.state == CircuitStateHalfOpen && cb.probeInFlight)
+}
+
+// TryAcquireProbe atomically checks if a probe is available and acquires it.
+// Returns true only for the first caller when the circuit is half-open and no
+// probe is in flight. Subsequent callers get false until the probe completes.
+func (cb *CircuitBreaker) TryAcquireProbe() bool {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.maybeTransitionToHalfOpen()
+	if cb.state == CircuitStateHalfOpen && !cb.probeInFlight {
+		cb.probeInFlight = true
+		return true
+	}
+	return false
 }
 
 // IsProbe returns true if the circuit is half-open and should allow a single probe.
+//
+// Deprecated: Use TryAcquireProbe for safe one-shot probe admission.
 func (cb *CircuitBreaker) IsProbe() bool {
-	return cb.State() == CircuitStateHalfOpen
+	return cb.TryAcquireProbe()
 }
 
 // RecordCall records a provider call with its duration and budget.
@@ -113,6 +142,7 @@ func (cb *CircuitBreaker) RecordProbeSuccess() {
 
 	cb.state = CircuitStateClosed
 	cb.calls = cb.calls[:0]
+	cb.probeInFlight = false
 	slog.Info("provider circuit breaker closed after successful probe",
 		"provider", cb.provider,
 	)
@@ -125,6 +155,7 @@ func (cb *CircuitBreaker) RecordProbeFailure() {
 
 	cb.state = CircuitStateOpen
 	cb.openedAt = time.Now()
+	cb.probeInFlight = false
 	slog.Warn("provider circuit breaker re-opened after failed probe",
 		"provider", cb.provider,
 	)
@@ -158,7 +189,7 @@ func (cb *CircuitBreaker) checkTrip() {
 	}
 
 	ratio := float64(exceeding) / float64(len(cb.calls))
-	if ratio >= cb.config.CallRatioThreshold {
+	if ratio > cb.config.CallRatioThreshold {
 		cb.state = CircuitStateOpen
 		cb.openedAt = time.Now()
 		slog.Warn("provider circuit breaker opened",

@@ -13,19 +13,21 @@ import (
 )
 
 type mockOrphanFinder struct {
-	countResult  int
-	countErr     error
-	deleteResult int
-	deleteErr    error
-	deleteCalled bool
+	countResult    int
+	countErr       error
+	deleteResult   int
+	deleteErr      error
+	deleteCalled   bool
+	deleteOlderThan time.Duration
 }
 
 func (m *mockOrphanFinder) CountOrphans(_ context.Context) (int, error) {
 	return m.countResult, m.countErr
 }
 
-func (m *mockOrphanFinder) DeleteOrphans(_ context.Context, _ time.Duration) (int, error) {
+func (m *mockOrphanFinder) DeleteOrphans(_ context.Context, olderThan time.Duration) (int, error) {
 	m.deleteCalled = true
+	m.deleteOlderThan = olderThan
 	return m.deleteResult, m.deleteErr
 }
 
@@ -65,6 +67,7 @@ func TestOrphanDetector_Cleanup_WarnsFirstThenDeletes(t *testing.T) {
 
 	detector.RunCleanup(context.Background())
 	assert.True(t, finder.deleteCalled)
+	assert.Equal(t, 24*time.Hour, finder.deleteOlderThan)
 }
 
 func TestOrphanDetector_Cleanup_NoOrphans_NoDeletion(t *testing.T) {

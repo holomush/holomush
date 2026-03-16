@@ -33,21 +33,33 @@ type Engine struct {
 // Compile-time check that Engine implements AccessPolicyEngine.
 var _ types.AccessPolicyEngine = (*Engine)(nil)
 
+// degradedCount tracks how many Engine instances are in degraded mode process-wide.
+// The gauge reflects degradedCount > 0, ensuring accuracy when multiple engines exist.
+var degradedCount atomic.Int32
+
 // EnterDegradedMode puts the engine into degraded mode.
 // All subsequent Evaluate() calls return EffectDefaultDeny until cleared.
+// Idempotent: repeated calls are no-ops.
 func (e *Engine) EnterDegradedMode(reason string) {
-	e.degraded.Store(true)
-	degradedModeGauge.Set(1)
-	slog.Error("ABAC engine entering degraded mode — all requests will be denied",
-		"reason", reason,
-	)
+	if e.degraded.CompareAndSwap(false, true) {
+		degradedCount.Add(1)
+		degradedModeGauge.Set(1)
+		slog.Error("ABAC engine entering degraded mode — all requests will be denied",
+			"reason", reason,
+		)
+	}
 }
 
 // ClearDegradedMode restores normal engine operation.
+// Idempotent: repeated calls are no-ops.
 func (e *Engine) ClearDegradedMode() {
-	e.degraded.Store(false)
-	degradedModeGauge.Set(0)
-	slog.Info("ABAC engine degraded mode cleared — normal evaluation resumed")
+	if e.degraded.CompareAndSwap(true, false) {
+		count := degradedCount.Add(-1)
+		if count <= 0 {
+			degradedModeGauge.Set(0)
+		}
+		slog.Info("ABAC engine degraded mode cleared — normal evaluation resumed")
+	}
 }
 
 // IsDegraded returns true if the engine is in degraded mode.

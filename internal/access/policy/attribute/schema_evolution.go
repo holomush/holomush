@@ -6,9 +6,10 @@ package attribute
 import (
 	"fmt"
 	"log/slog"
-	"strings"
+	"regexp"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/samber/oops"
 )
 
 // SchemaChanges describes the differences between an old and new namespace schema.
@@ -57,13 +58,20 @@ type PolicyReference struct {
 }
 
 // ScanPoliciesForAttributes scans DSL texts for references to removed namespace attributes.
+// Uses identifier-boundary matching to avoid false positives (e.g., "supercharacter.role"
+// when scanning for "character.role").
 func ScanPoliciesForAttributes(namespace string, removedKeys, dslTexts []string) []PolicyReference {
 	var refs []PolicyReference
 
 	for _, dsl := range dslTexts {
 		for _, key := range removedKeys {
-			pattern := fmt.Sprintf("%s.%s", namespace, key)
-			if strings.Contains(dsl, pattern) {
+			pattern := fmt.Sprintf(`(^|[^A-Za-z0-9_])%s\.%s([^A-Za-z0-9_]|$)`,
+				regexp.QuoteMeta(namespace), regexp.QuoteMeta(key))
+			matched, err := regexp.MatchString(pattern, dsl)
+			if err != nil {
+				continue
+			}
+			if matched {
 				refs = append(refs, PolicyReference{
 					DSLText:   dsl,
 					Attribute: key,
@@ -100,9 +108,15 @@ func LogSchemaChanges(namespace string, changes SchemaChanges) {
 }
 
 // EvaluateNamespaceRemoval checks if a namespace can be safely removed.
+// Uses identifier-boundary matching to avoid false positives.
 func EvaluateNamespaceRemoval(namespace string, dslTexts []string) error {
+	pattern := fmt.Sprintf(`(^|[^A-Za-z0-9_])%s\.`, regexp.QuoteMeta(namespace))
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return fmt.Errorf("invalid namespace pattern %q: %w", namespace, err)
+	}
 	for _, dsl := range dslTexts {
-		if strings.Contains(dsl, namespace+".") {
+		if re.MatchString(dsl) {
 			return fmt.Errorf("cannot remove namespace %q: referenced by enabled policies", namespace)
 		}
 	}
@@ -110,7 +124,25 @@ func EvaluateNamespaceRemoval(namespace string, dslTexts []string) error {
 }
 
 // UpdateNamespace replaces a namespace schema with a new version.
+// Validates the new schema before diffing/replacing (same checks as Register).
 func (r *SchemaRegistry) UpdateNamespace(namespace string, newSchema *types.NamespaceSchema, dslTexts []string) (SchemaChanges, error) {
+	if namespace == "" {
+		return SchemaChanges{}, oops.In("attribute").Errorf("namespace cannot be empty")
+	}
+	if newSchema == nil {
+		return SchemaChanges{}, oops.In("attribute").With("namespace", namespace).Errorf("schema cannot be nil")
+	}
+	if len(newSchema.Attributes) == 0 {
+		return SchemaChanges{}, oops.In("attribute").With("namespace", namespace).Errorf("schema must have at least one attribute")
+	}
+	for key, attrType := range newSchema.Attributes {
+		if attrType < 0 || attrType > types.AttrTypeStringList {
+			return SchemaChanges{}, oops.In("attribute").
+				With("namespace", namespace).With("key", key).
+				Errorf("invalid attribute type: %d", attrType)
+		}
+	}
+
 	oldNS := r.schema.GetNamespace(namespace)
 	if oldNS == nil {
 		if err := r.Register(namespace, newSchema); err != nil {

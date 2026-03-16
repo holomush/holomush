@@ -119,10 +119,6 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 		Environment: make(map[string]any),
 	}
 
-	// Parse subject and resource IDs
-	
-	
-
 	// Set action name
 	bags.Action["name"] = req.Action
 
@@ -130,14 +126,18 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 
 	// Resolve subject attributes
 	if req.Subject != "" {
-		if err := r.resolveEntity(ctx, "subject", req.Subject, bags.Subject); err != nil {
+		if err := validateEntityRef(req.Subject); err != nil {
+			errs = append(errs, oops.With("field", "subject").Wrap(err))
+		} else if err := r.resolveEntity(ctx, "subject", req.Subject, bags.Subject); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	// Resolve resource attributes
 	if req.Resource != "" {
-		if err := r.resolveEntity(ctx, "resource", req.Resource, bags.Resource); err != nil {
+		if err := validateEntityRef(req.Resource); err != nil {
+			errs = append(errs, oops.With("field", "resource").Wrap(err))
+		} else if err := r.resolveEntity(ctx, "resource", req.Resource, bags.Resource); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -150,6 +150,19 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	return bags, errors.Join(errs...)
 }
 
+
+// validateEntityRef checks that an entity reference is in "type:id" format
+// with both parts non-empty. This ensures all providers receive validated refs
+// and the ABAC fail-closed guarantee is preserved.
+func validateEntityRef(ref string) error {
+	parts := strings.SplitN(ref, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return oops.Code("INVALID_ENTITY_REF").
+			With("entity_ref", ref).
+			Errorf("invalid entity ref format: expected 'type:id'")
+	}
+	return nil
+}
 
 // resolveEntity resolves attributes for a single entity (subject or resource).
 // It iterates all registered providers and merges their attributes into bag.
