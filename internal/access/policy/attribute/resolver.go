@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -121,8 +120,8 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	}
 
 	// Parse subject and resource IDs
-	subjectType, subjectID := splitEntityID(req.Subject)
-	resourceType, resourceID := splitEntityID(req.Resource)
+	
+	
 
 	// Set action name
 	bags.Action["name"] = req.Action
@@ -130,15 +129,15 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	var errs []error
 
 	// Resolve subject attributes
-	if subjectID != "" {
-		if err := r.resolveEntity(ctx, "subject", subjectType, subjectID, bags.Subject); err != nil {
+	if req.Subject != "" {
+		if err := r.resolveEntity(ctx, "subject", req.Subject, bags.Subject); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	// Resolve resource attributes
-	if resourceID != "" {
-		if err := r.resolveEntity(ctx, "resource", resourceType, resourceID, bags.Resource); err != nil {
+	if req.Resource != "" {
+		if err := r.resolveEntity(ctx, "resource", req.Resource, bags.Resource); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -151,20 +150,12 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	return bags, errors.Join(errs...)
 }
 
-// splitEntityID splits an entity ID in the format "type:id" into its components.
-func splitEntityID(entityID string) (entityType, id string) {
-	parts := strings.SplitN(entityID, ":", 2)
-	if len(parts) != 2 {
-		return "", ""
-	}
-	return parts[0], parts[1]
-}
 
 // resolveEntity resolves attributes for a single entity (subject or resource).
 // It iterates all registered providers and merges their attributes into bag.
 // Returns an error wrapping all individual provider errors; partial results
 // from successful providers are still written to bag before the error is returned.
-func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID string, bag map[string]any) error {
+func (r *Resolver) resolveEntity(ctx context.Context, resolveType, entityRef string, bag map[string]any) error {
 	cache := getCacheFromContext(ctx)
 
 	var errs []error
@@ -174,7 +165,7 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID s
 		provider := r.providers[namespace]
 
 		// Build cache key
-		cacheKey := fmt.Sprintf("%s:%s:%s", resolveType, namespace, entityID)
+		cacheKey := fmt.Sprintf("%s:%s:%s", resolveType, namespace, entityRef)
 
 		// Check cache first
 		if cached, found := cache.Get(cacheKey); found {
@@ -183,7 +174,7 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, _, entityID s
 		}
 
 		// Resolve from provider with panic recovery
-		attrs, err := r.safeResolve(ctx, provider, resolveType, entityID)
+		attrs, err := r.safeResolve(ctx, provider, resolveType, entityRef)
 		if err != nil {
 			errs = append(errs, err)
 			continue

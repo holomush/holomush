@@ -304,6 +304,25 @@ func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
 	return exists
 }
 
+// GetNamespace returns the NamespaceSchema for the given namespace, or nil.
+func (s *AttributeSchema) GetNamespace(namespace string) *NamespaceSchema {
+	ns, ok := s.namespaces[namespace]
+	if !ok {
+		return nil
+	}
+	return ns
+}
+
+// Replace replaces an existing namespace schema.
+func (s *AttributeSchema) Replace(namespace string, schema *NamespaceSchema) {
+	s.namespaces[namespace] = schema
+}
+
+// Remove deletes a namespace from the schema.
+func (s *AttributeSchema) Remove(namespace string) {
+	delete(s.namespaces, namespace)
+}
+
 // PolicySource identifies where a policy originated.
 type PolicySource string
 

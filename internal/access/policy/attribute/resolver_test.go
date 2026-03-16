@@ -177,11 +177,11 @@ func TestResolver_Resolve_SingleProvider(t *testing.T) {
 			"type":  types.AttrTypeString,
 		},
 	}
-	provider.subjectData["01ABC"] = map[string]any{
+	provider.subjectData["character:01ABC"] = map[string]any{
 		"role":  "admin",
 		"level": 5,
 	}
-	provider.resourceData["01XYZ"] = map[string]any{
+	provider.resourceData["room:01XYZ"] = map[string]any{
 		"owner": "01ABC",
 		"type":  "room",
 	}
@@ -222,7 +222,7 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 			"level": types.AttrTypeFloat,
 		},
 	}
-	provider1.subjectData["01ABC"] = map[string]any{
+	provider1.subjectData["character:01ABC"] = map[string]any{
 		"role":  "admin",
 		"level": 5,
 	}
@@ -235,7 +235,7 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 			"permissions": types.AttrTypeStringList,
 		},
 	}
-	provider2.subjectData["01ABC"] = map[string]any{
+	provider2.subjectData["character:01ABC"] = map[string]any{
 		"role":        "superuser", // Duplicate key - should override
 		"permissions": []string{"read", "write"},
 	}
@@ -272,7 +272,7 @@ func TestResolver_Resolve_ListMerging(t *testing.T) {
 			"tags": types.AttrTypeStringList,
 		},
 	}
-	provider1.subjectData["01ABC"] = map[string]any{
+	provider1.subjectData["character:01ABC"] = map[string]any{
 		"tags": []string{"admin", "moderator"},
 	}
 
@@ -283,7 +283,7 @@ func TestResolver_Resolve_ListMerging(t *testing.T) {
 			"tags": types.AttrTypeStringList,
 		},
 	}
-	provider2.subjectData["01ABC"] = map[string]any{
+	provider2.subjectData["character:01ABC"] = map[string]any{
 		"tags": []string{"verified", "premium"},
 	}
 
@@ -314,7 +314,7 @@ func TestResolver_Resolve_ProviderError(t *testing.T) {
 
 	// Provider that works
 	provider2 := newResolverMockAttributeProvider("working")
-	provider2.subjectData["01ABC"] = map[string]any{
+	provider2.subjectData["character:01ABC"] = map[string]any{
 		"role": "user",
 	}
 
@@ -349,7 +349,7 @@ func TestResolver_Resolve_ProviderPanic(t *testing.T) {
 
 	// Provider that works
 	provider2 := newResolverMockAttributeProvider("working")
-	provider2.subjectData["01ABC"] = map[string]any{
+	provider2.subjectData["character:01ABC"] = map[string]any{
 		"role": "user",
 	}
 
@@ -376,10 +376,10 @@ func TestResolver_Resolve_PerRequestCache(t *testing.T) {
 	resolver := NewResolver(registry)
 
 	provider := newResolverMockAttributeProvider("character")
-	provider.subjectData["01ABC"] = map[string]any{
+	provider.subjectData["character:01ABC"] = map[string]any{
 		"role": "admin",
 	}
-	provider.resourceData["01ABC"] = map[string]any{
+	provider.resourceData["character:01ABC"] = map[string]any{
 		"role": "admin",
 	}
 
@@ -396,8 +396,8 @@ func TestResolver_Resolve_PerRequestCache(t *testing.T) {
 
 	// Should be called once each for subject and resource
 	// (different resolve types, separate cache keys)
-	subjectCalls := provider.callCount["subject:01ABC"]
-	resourceCalls := provider.callCount["resource:01ABC"]
+	subjectCalls := provider.callCount["subject:character:01ABC"]
+	resourceCalls := provider.callCount["resource:character:01ABC"]
 	assert.Equal(t, 1, subjectCalls)
 	assert.Equal(t, 1, resourceCalls)
 
@@ -554,7 +554,7 @@ func TestResolver_Resolve_S6_NamespaceValidation(t *testing.T) {
 			"role": types.AttrTypeString,
 		},
 	}
-	provider.subjectData["01ABC"] = map[string]any{
+	provider.subjectData["character:01ABC"] = map[string]any{
 		"role":             "admin",
 		"unregistered_key": "should be rejected",
 	}

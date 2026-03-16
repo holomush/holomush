@@ -1851,3 +1851,90 @@ func TestEngine_ResolverPanic_FailsClosed(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "must deny on provider panic")
 	assert.True(t, decision.IsInfraFailure(), "must return infra-failure decision")
 }
+
+// --- Degraded Mode Tests (T31) ---
+
+func TestEngine_DegradedMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		degraded   bool
+		wantEffect types.Effect
+		wantReason string
+	}{
+		{
+			name:       "degraded mode returns default deny",
+			degraded:   true,
+			wantEffect: types.EffectDefaultDeny,
+			wantReason: "degraded_mode",
+		},
+		{
+			name:       "normal mode evaluates normally",
+			degraded:   false,
+			wantEffect: types.EffectDefaultDeny,
+			wantReason: "no applicable policies",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, _ := createTestEngine(t, nil)
+			if tt.degraded {
+				engine.EnterDegradedMode("test corruption")
+			}
+
+			decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+				Subject:  "character:test-id",
+				Action:   "read",
+				Resource: "location:loc-id",
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEffect, decision.Effect())
+			assert.Contains(t, decision.Reason(), tt.wantReason)
+		})
+	}
+}
+
+func TestEngine_DegradedMode_ClearResumesNormal(t *testing.T) {
+	engine, _ := createTestEngine(t, nil)
+	engine.EnterDegradedMode("test")
+
+	decision, _ := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject: "character:x", Action: "read", Resource: "location:y",
+	})
+	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
+	assert.Contains(t, decision.Reason(), "degraded_mode")
+
+	engine.ClearDegradedMode()
+	decision, _ = engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject: "character:x", Action: "read", Resource: "location:y",
+	})
+	assert.NotContains(t, decision.Reason(), "degraded_mode")
+}
+
+func TestEngine_DegradedMode_SystemBypassStillWorks(t *testing.T) {
+	engine, _ := createTestEngine(t, nil)
+	engine.EnterDegradedMode("test")
+
+	ctx := access.WithSystemSubject(context.Background())
+	decision, err := engine.Evaluate(ctx, types.AccessRequest{
+		Subject:  "system",
+		Action:   "read",
+		Resource: "location:loc-id",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
+}
+
+func TestEngine_OnCorruptForbidPolicy_EntersDegraded(t *testing.T) {
+	engine, _ := createTestEngine(t, nil)
+	engine.OnPolicyCorruption("policy-123", types.PolicyEffectForbid)
+	assert.True(t, engine.IsDegraded())
+}
+
+func TestEngine_OnCorruptPermitPolicy_DoesNotEnterDegraded(t *testing.T) {
+	engine, _ := createTestEngine(t, nil)
+	engine.OnPolicyCorruption("policy-456", types.PolicyEffectPermit)
+	assert.False(t, engine.IsDegraded())
+}
