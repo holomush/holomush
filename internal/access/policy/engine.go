@@ -68,7 +68,7 @@ func (e *Engine) IsDegraded() bool {
 }
 
 // OnPolicyCorruption handles detection of a corrupted policy during cache reload.
-// Forbid/deny policies trigger degraded mode; permit policies are auto-disabled.
+// Forbid policies trigger degraded mode; permit policies are auto-disabled.
 func (e *Engine) OnPolicyCorruption(policyID string, effect types.PolicyEffect) {
 	switch effect {
 	case types.PolicyEffectForbid:
@@ -91,17 +91,17 @@ func NewEngine(resolver *attribute.Resolver, cache *Cache, sessions SessionResol
 }
 
 // Evaluate evaluates an access request against the policy engine.
-// This implementation covers Steps 0-7 (full evaluation algorithm).
+// This implementation covers Steps 1-10 (full evaluation algorithm).
 func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.Decision, error) {
 	start := time.Now()
 
-	// Step 0a: Context cancellation check
+	// Step 1: Context cancellation check
 	if err := ctx.Err(); err != nil {
 		return types.NewDecision(types.EffectDefaultDeny, "context cancelled", "infra:context-cancelled"),
 			oops.Wrapf(err, "context cancelled before evaluation")
 	}
 
-	// Step 1: System bypass — defense-in-depth (S1)
+	// Step 2: System bypass — defense-in-depth (S1)
 	if req.Subject == "system" {
 		if !access.IsSystemContext(ctx) {
 			slog.ErrorContext(ctx, "system subject used without system context (S1 violation)",
@@ -134,7 +134,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		return decision, nil
 	}
 
-	// Step 0b: Degraded mode check — AFTER system bypass so system ops still work
+	// Step 3: Degraded mode check — AFTER system bypass so system ops still work
 	if e.degraded.Load() {
 		slog.ErrorContext(ctx, "CRITICAL: ABAC engine in degraded mode — denying all requests",
 			"subject", req.Subject,
@@ -160,12 +160,12 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		return decision, nil
 	}
 
-	// Step 1b: Input validation — reject empty fields
+	// Step 4: Input validation — reject empty fields
 	if err := validateRequest(req); err != nil {
 		return types.Decision{}, err
 	}
 
-	// Step 2: Session resolution
+	// Step 5: Session resolution
 	if strings.HasPrefix(req.Subject, "session:") {
 		sessionID := strings.TrimPrefix(req.Subject, "session:")
 		characterID, err := e.sessions.ResolveSession(ctx, sessionID)
@@ -211,7 +211,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		req.Subject = access.CharacterSubject(characterID)
 	}
 
-	// Step 3: Eager attribute resolution — fail-closed on provider errors.
+	// Step 6: Eager attribute resolution — fail-closed on provider errors.
 	bags, resolveErr := e.resolver.Resolve(ctx, req)
 	if resolveErr != nil {
 		errutil.LogErrorContext(ctx, "attribute resolution failed — fail-closed",
@@ -238,7 +238,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
-	// Step 3b: Staleness check — fail-closed when cache is stale
+	// Step 6b: Staleness check — fail-closed when cache is stale
 	if e.cache.IsStale() {
 		slog.WarnContext(ctx, "policy cache stale — denying request fail-closed",
 			"subject", req.Subject,
@@ -268,7 +268,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		return decision, nil
 	}
 
-	// Step 4: Load snapshot and filter policies
+	// Step 7: Load snapshot and filter policies
 	snap := e.cache.Snapshot()
 	candidates := e.findApplicablePolicies(req, snap.Policies)
 
@@ -297,7 +297,7 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		return decision, nil
 	}
 
-	// Step 5: Evaluate conditions for each candidate policy
+	// Step 8: Evaluate conditions for each candidate policy
 	satisfied := make([]types.PolicyMatch, 0, len(candidates))
 	for _, candidate := range candidates {
 		met := e.evaluatePolicy(candidate, bags)
@@ -309,14 +309,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		})
 	}
 
-	// Step 6: Deny-overrides combination
+	// Step 9: Deny-overrides combination
 	decision := e.combineDecisions(satisfied)
 	decision.SetAttributes(bags)
 	if err := decision.Validate(); err != nil {
 		return decision, oops.Wrapf(err, "decision validation failed")
 	}
 
-	// Step 7: Audit the decision
+	// Step 10: Audit the decision
 	entry := audit.Entry{
 		Subject:    req.Subject,
 		Action:     req.Action,

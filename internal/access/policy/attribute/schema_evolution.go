@@ -61,20 +61,31 @@ type PolicyReference struct {
 // Uses identifier-boundary matching to avoid false positives (e.g., "supercharacter.role"
 // when scanning for "character.role").
 func ScanPoliciesForAttributes(namespace string, removedKeys, dslTexts []string) []PolicyReference {
-	var refs []PolicyReference
+	// Pre-compile regexes per key to avoid O(N*K) compilations
+	type keyPattern struct {
+		key string
+		re  *regexp.Regexp
+	}
+	patterns := make([]keyPattern, 0, len(removedKeys))
+	for _, key := range removedKeys {
+		pattern := fmt.Sprintf(`(^|[^A-Za-z0-9_])%s\.%s([^A-Za-z0-9_]|$)`,
+			regexp.QuoteMeta(namespace), regexp.QuoteMeta(key))
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			slog.Warn("schema evolution: failed to compile attribute scan pattern",
+				"namespace", namespace, "key", key, "error", err)
+			continue
+		}
+		patterns = append(patterns, keyPattern{key: key, re: re})
+	}
 
+	var refs []PolicyReference
 	for _, dsl := range dslTexts {
-		for _, key := range removedKeys {
-			pattern := fmt.Sprintf(`(^|[^A-Za-z0-9_])%s\.%s([^A-Za-z0-9_]|$)`,
-				regexp.QuoteMeta(namespace), regexp.QuoteMeta(key))
-			matched, err := regexp.MatchString(pattern, dsl)
-			if err != nil {
-				continue
-			}
-			if matched {
+		for _, kp := range patterns {
+			if kp.re.MatchString(dsl) {
 				refs = append(refs, PolicyReference{
 					DSLText:   dsl,
-					Attribute: key,
+					Attribute: kp.key,
 				})
 			}
 		}
@@ -179,7 +190,7 @@ func (r *SchemaRegistry) RemoveNamespace(namespace string, dslTexts []string) er
 		return err
 	}
 	r.schema.Remove(namespace)
-	slog.Error("schema evolution: namespace removed",
+	slog.Warn("schema evolution: namespace removed",
 		"namespace", namespace,
 	)
 	return nil

@@ -4,6 +4,7 @@
 package attribute
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -30,6 +31,26 @@ type CircuitBreakerConfig struct {
 	OpenDuration       time.Duration
 }
 
+// Validate returns an error if any config field is invalid.
+func (c CircuitBreakerConfig) Validate() error {
+	if c.WindowDuration <= 0 {
+		return fmt.Errorf("WindowDuration must be positive, got %v", c.WindowDuration)
+	}
+	if c.BudgetThreshold <= 0 || c.BudgetThreshold > 1 {
+		return fmt.Errorf("BudgetThreshold must be in (0,1], got %v", c.BudgetThreshold)
+	}
+	if c.CallRatioThreshold <= 0 || c.CallRatioThreshold > 1 {
+		return fmt.Errorf("CallRatioThreshold must be in (0,1], got %v", c.CallRatioThreshold)
+	}
+	if c.MinCalls <= 0 {
+		return fmt.Errorf("MinCalls must be positive, got %d", c.MinCalls)
+	}
+	if c.OpenDuration <= 0 {
+		return fmt.Errorf("OpenDuration must be positive, got %v", c.OpenDuration)
+	}
+	return nil
+}
+
 // DefaultCircuitBreakerConfig returns the MUST-level spec parameters.
 func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 	return CircuitBreakerConfig{
@@ -46,7 +67,6 @@ type callRecord struct {
 	utilization float64
 }
 
-// CircuitBreaker tracks provider health and short-circuits when degraded.
 // CircuitBreaker tracks provider health and short-circuits when degraded.
 type CircuitBreaker struct {
 	mu            sync.Mutex
@@ -112,15 +132,13 @@ func (cb *CircuitBreaker) TryAcquireProbe() bool {
 	return false
 }
 
-// IsProbe returns true if the circuit is half-open and should allow a single probe.
-//
-// Deprecated: Use TryAcquireProbe for safe one-shot probe admission.
-func (cb *CircuitBreaker) IsProbe() bool {
-	return cb.TryAcquireProbe()
-}
-
 // RecordCall records a provider call with its duration and budget.
+// Non-positive budgets are ignored to prevent division by zero.
 func (cb *CircuitBreaker) RecordCall(actualDuration, budget time.Duration) {
+	if budget <= 0 {
+		return
+	}
+
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -192,7 +210,7 @@ func (cb *CircuitBreaker) checkTrip() {
 	if ratio > cb.config.CallRatioThreshold {
 		cb.state = CircuitStateOpen
 		cb.openedAt = time.Now()
-		slog.Warn("provider circuit breaker opened",
+		slog.Error("provider circuit breaker opened: budget utilization threshold exceeded",
 			"provider", cb.provider,
 			"exceeding_calls", exceeding,
 			"total_calls", len(cb.calls),

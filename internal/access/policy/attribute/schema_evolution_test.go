@@ -106,3 +106,22 @@ func TestSchemaRegistry_RemoveNamespace_AllowedWhenUnreferenced(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, reg.HasNamespace("plugin_x"))
 }
+
+func TestDetectSchemaChanges_NilAttributes(t *testing.T) {
+	// Empty old, something new — all additions
+	changes := DetectSchemaChanges(
+		&types.NamespaceSchema{Attributes: map[string]types.AttrType{}},
+		&types.NamespaceSchema{Attributes: map[string]types.AttrType{"x": types.AttrTypeString}},
+	)
+	assert.Equal(t, []string{"x"}, changes.Added)
+	assert.Empty(t, changes.Removed)
+}
+
+func TestUpdateNamespace_NilSchemaReturnsError(t *testing.T) {
+	reg := NewSchemaRegistry()
+	require.NoError(t, reg.Register("ns", &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"a": types.AttrTypeString},
+	}))
+	_, err := reg.UpdateNamespace("ns", nil, nil)
+	assert.Error(t, err)
+}

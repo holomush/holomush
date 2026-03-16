@@ -30,6 +30,7 @@ type Resolver struct {
 	providers        map[string]AttributeProvider
 	envProviders     map[string]EnvironmentProvider
 	providerOrder    []string // Track registration order
+	circuitBreakers  map[string]*CircuitBreaker
 	envProviderOrder []string
 	logger           *slog.Logger
 }
@@ -41,6 +42,7 @@ func NewResolver(registry *SchemaRegistry) *Resolver {
 		providers:        make(map[string]AttributeProvider),
 		envProviders:     make(map[string]EnvironmentProvider),
 		providerOrder:    make([]string, 0),
+		circuitBreakers:  make(map[string]*CircuitBreaker),
 		envProviderOrder: make([]string, 0),
 		logger:           slog.Default(),
 	}
@@ -59,6 +61,7 @@ func (r *Resolver) RegisterProvider(provider AttributeProvider) error {
 
 	r.providers[namespace] = provider
 	r.providerOrder = append(r.providerOrder, namespace)
+	r.circuitBreakers[namespace] = NewCircuitBreaker(namespace, DefaultCircuitBreakerConfig(), nil)
 
 	// Register schema (skip if namespace already registered to avoid fragile string matching)
 	schema := provider.Schema()
@@ -178,6 +181,11 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, entityRef str
 	for _, namespace := range r.providerOrder {
 		provider := r.providers[namespace]
 
+		// Check circuit breaker — skip open-circuit providers
+		if cb := r.circuitBreakers[namespace]; cb != nil && cb.ShouldSkip() {
+			continue
+		}
+
 		// Build cache key
 		cacheKey := fmt.Sprintf("%s:%s:%s", resolveType, namespace, entityRef)
 
@@ -253,7 +261,7 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 	case "resource":
 		attrs, err = provider.ResolveResource(ctx, entityID)
 	default:
-		return nil, nil
+		return nil, oops.Code("INVALID_RESOLVE_TYPE").With("resolve_type", resolveType).Errorf("unknown resolve type")
 	}
 
 	if err != nil {

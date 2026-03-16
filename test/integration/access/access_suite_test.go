@@ -7,6 +7,7 @@ package access_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -190,7 +191,7 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	}
 
 	testWriter := &testAuditWriter{}
-	walPath := filepath.Join(os.TempDir(), "holomush-test-audit.jsonl")
+	walPath := filepath.Join(os.TempDir(), fmt.Sprintf("holomush-test-audit-%d.jsonl", os.Getpid()))
 	auditLogger := audit.NewLogger(audit.ModeAll, testWriter, walPath)
 
 	engine := policy.NewEngine(resolver, cache, nil, auditLogger)

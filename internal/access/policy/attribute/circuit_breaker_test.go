@@ -4,6 +4,8 @@
 package attribute
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -100,4 +102,52 @@ func TestCircuitBreaker_ShouldSkip(t *testing.T) {
 	}
 
 	assert.True(t, cb.ShouldSkip())
+}
+
+func TestCircuitBreaker_TryAcquireProbe_OnlyOneWins(t *testing.T) {
+	config := DefaultCircuitBreakerConfig()
+	config.OpenDuration = 100 * time.Millisecond
+	cb := NewCircuitBreaker("test", config, nil)
+
+	// Trip the breaker
+	for range 10 {
+		cb.RecordCall(100*time.Millisecond, 80*time.Millisecond)
+	}
+	time.Sleep(150 * time.Millisecond)
+	require.Equal(t, CircuitStateHalfOpen, cb.State())
+
+	// Race 50 goroutines — only one should acquire probe
+	winners := int32(0)
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if cb.TryAcquireProbe() {
+				atomic.AddInt32(&winners, 1)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int32(1), winners, "exactly one goroutine should win the probe")
+}
+
+func TestCircuitBreaker_RecordCall_ZeroBudget(t *testing.T) {
+	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
+	// Should not panic or corrupt state
+	cb.RecordCall(100*time.Millisecond, 0)
+	assert.Equal(t, CircuitStateClosed, cb.State())
+}
+
+func TestCircuitBreakerConfig_Validate(t *testing.T) {
+	valid := DefaultCircuitBreakerConfig()
+	assert.NoError(t, valid.Validate())
+
+	invalid := valid
+	invalid.MinCalls = 0
+	assert.Error(t, invalid.Validate())
+
+	invalid = valid
+	invalid.WindowDuration = 0
+	assert.Error(t, invalid.Validate())
 }

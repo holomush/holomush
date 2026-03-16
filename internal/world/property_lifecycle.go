@@ -125,11 +125,18 @@ func (d *OrphanDetector) Start(ctx context.Context) {
 }
 
 // Stop stops the cleanup goroutine.
-// Idempotent: subsequent calls are no-ops.
+// Idempotent: subsequent calls are no-ops. Safe to call even if Start was never called.
 func (d *OrphanDetector) Stop() {
 	d.stopOnce.Do(func() {
 		close(d.stopCh)
-		<-d.stopped
+		// Only wait for the goroutine if Start was called.
+		// startOnce.Do with an empty func returns immediately if Start already ran,
+		// or runs the empty func (meaning Start was never called, so no goroutine to wait for).
+		started := true
+		d.startOnce.Do(func() { started = false })
+		if started {
+			<-d.stopped
+		}
 	})
 }
 
