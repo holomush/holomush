@@ -37,6 +37,11 @@ func (e Effect) String() string {
 	return fmt.Sprintf("unknown(%d)", int(e))
 }
 
+// Valid returns true if e is a known Effect value.
+func (e Effect) Valid() bool {
+	return e >= 0 && int(e) < len(effectStrings)
+}
+
 // PolicyEffect is a string type used in policy declarations to specify
 // the intended effect when a policy matches.
 type PolicyEffect string
@@ -81,6 +86,17 @@ func (pe PolicyEffect) ToEffect() Effect {
 		return EffectDefaultDeny
 	}
 }
+
+// Action constants for well-known ABAC actions.
+const (
+	ActionRead    = "read"
+	ActionWrite   = "write"
+	ActionDelete  = "delete"
+	ActionEnter   = "enter"
+	ActionExecute = "execute"
+	ActionEmit    = "emit"
+	ActionUse     = "use"
+)
 
 // AccessRequest represents a subject attempting an action on a resource.
 //

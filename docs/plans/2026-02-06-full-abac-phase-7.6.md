@@ -58,6 +58,10 @@ This task uses **5 atomic commits** (T28-pkg1 through T28-pkg5), each covering s
 - [ ] Rollback strategy documented ([Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md)): `git revert` of Task 28 commit(s) restores `AccessControl.Check()` call sites
 - [ ] Database rollback procedure documented ([Decision #65](../specs/decisions/epic7/phase-7.6/065-git-revert-migration-rollback.md#database-migration-rollback-procedure)) covering all 3 migration files (000015, 000016, 000017) with down-migration order, backup requirements, and data recovery steps
 
+**Breaking Changes:**
+
+- **Lua API:** `list_commands` host function return format changed from flat string list to structured table with `name` and `incomplete` fields per command entry. Plugins using the old format will need updating.
+
 **Files:**
 
 - Modify: `cmd/holomush/main.go` (or server bootstrap file) — DI wiring
