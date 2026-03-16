@@ -45,7 +45,8 @@ type accessTestEnv struct {
 	cache       *policy.Cache
 	charRepo    *worldpg.CharacterRepository
 	locRepo     *worldpg.LocationRepository
-	auditWriter *testAuditWriter
+	auditWriter  *testAuditWriter
+	auditLogger  *audit.Logger
 }
 
 type testAuditWriter struct {
@@ -81,6 +82,14 @@ func (w *testAuditWriter) Entries() []audit.Entry {
 	cp := make([]audit.Entry, len(w.entries))
 	copy(cp, w.entries)
 	return cp
+}
+
+// noopSessionResolver returns an error for all session resolutions.
+// Prevents nil pointer panics if Evaluate receives a "session:" subject.
+type noopSessionResolver struct{}
+
+func (n *noopSessionResolver) ResolveSession(_ context.Context, _ string) (string, error) {
+	return "", fmt.Errorf("session resolution not configured in test")
 }
 
 type noopPartitionCreator struct{}
@@ -194,7 +203,7 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	walPath := filepath.Join(os.TempDir(), fmt.Sprintf("holomush-test-audit-%d.jsonl", os.Getpid()))
 	auditLogger := audit.NewLogger(audit.ModeAll, testWriter, walPath)
 
-	engine := policy.NewEngine(resolver, cache, nil, auditLogger)
+	engine := policy.NewEngine(resolver, cache, &noopSessionResolver{}, auditLogger)
 
 	return &accessTestEnv{
 		ctx:         ctx,
@@ -205,11 +214,15 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		cache:       cache,
 		charRepo:    charRepo,
 		locRepo:     locRepo,
-		auditWriter: testWriter,
+		auditWriter:  testWriter,
+		auditLogger:  auditLogger,
 	}, nil
 }
 
 func (e *accessTestEnv) cleanup() {
+	if e.auditLogger != nil {
+		_ = e.auditLogger.Close()
+	}
 	if e.pool != nil {
 		e.pool.Close()
 	}

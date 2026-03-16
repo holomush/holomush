@@ -77,6 +77,12 @@ func (e *Engine) OnPolicyCorruption(policyID string, effect types.PolicyEffect) 
 		slog.Error("corrupted permit policy auto-disabled",
 			"policy_id", policyID,
 		)
+	default:
+		slog.Error("corrupted policy with unexpected effect type",
+			"policy_id", policyID,
+			"effect", string(effect),
+		)
+		e.EnterDegradedMode(fmt.Sprintf("corrupted policy with unknown effect %q: %s", effect, policyID))
 	}
 }
 

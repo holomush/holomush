@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 	"fmt"
 	"log/slog"
 
@@ -195,8 +196,17 @@ func (r *Resolver) resolveEntity(ctx context.Context, resolveType, entityRef str
 			continue
 		}
 
-		// Resolve from provider with panic recovery
+		// Resolve from provider with panic recovery and circuit breaker recording
+		start := time.Now()
 		attrs, err := r.safeResolve(ctx, provider, resolveType, entityRef)
+		if cb := r.circuitBreakers[namespace]; cb != nil {
+			if err != nil {
+				// Record as high-budget call to push toward tripping
+				cb.RecordCall(cb.config.OpenDuration, cb.config.OpenDuration/2)
+			} else {
+				cb.RecordCall(time.Since(start), cb.config.OpenDuration)
+			}
+		}
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -235,20 +245,20 @@ func (r *Resolver) resolveEnvironment(ctx context.Context, bag map[string]any) e
 }
 
 // safeResolve calls a provider with error and panic recovery
-func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityID string) (attrs map[string]any, retErr error) {
+func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, resolveType, entityRef string) (attrs map[string]any, retErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			attrs = nil // defense-in-depth: discard partially-mutated map
 			r.logger.Error("provider panicked during resolution",
 				"namespace", provider.Namespace(),
 				"resolve_type", resolveType,
-				"entity_id", entityID,
+				"entity_ref", entityRef,
 				"panic", recovered,
 			)
 			retErr = oops.
 				With("namespace", provider.Namespace()).
 				With("resolve_type", resolveType).
-				With("entity_id", entityID).
+				With("entity_ref", entityRef).
 				Errorf("provider %s panicked during %s resolution", provider.Namespace(), resolveType)
 		}
 	}()
@@ -257,15 +267,15 @@ func (r *Resolver) safeResolve(ctx context.Context, provider AttributeProvider, 
 
 	switch resolveType {
 	case "subject":
-		attrs, err = provider.ResolveSubject(ctx, entityID)
+		attrs, err = provider.ResolveSubject(ctx, entityRef)
 	case "resource":
-		attrs, err = provider.ResolveResource(ctx, entityID)
+		attrs, err = provider.ResolveResource(ctx, entityRef)
 	default:
 		return nil, oops.Code("INVALID_RESOLVE_TYPE").With("resolve_type", resolveType).Errorf("unknown resolve type")
 	}
 
 	if err != nil {
-		return nil, oops.With("namespace", provider.Namespace()).With("resolve_type", resolveType).With("entity_id", entityID).Wrap(err)
+		return nil, oops.With("namespace", provider.Namespace()).With("resolve_type", resolveType).With("entity_ref", entityRef).Wrap(err)
 	}
 
 	return attrs, nil

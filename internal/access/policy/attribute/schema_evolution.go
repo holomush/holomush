@@ -33,8 +33,17 @@ func (sc SchemaChanges) IsEmpty() bool {
 func DetectSchemaChanges(oldSchema, newSchema *types.NamespaceSchema) SchemaChanges {
 	var changes SchemaChanges
 
-	for key, newType := range newSchema.Attributes {
-		oldType, exists := oldSchema.Attributes[key]
+	oldAttrs := make(map[string]types.AttrType)
+	newAttrs := make(map[string]types.AttrType)
+	if oldSchema != nil && oldSchema.Attributes != nil {
+		oldAttrs = oldSchema.Attributes
+	}
+	if newSchema != nil && newSchema.Attributes != nil {
+		newAttrs = newSchema.Attributes
+	}
+
+	for key, newType := range newAttrs {
+		oldType, exists := oldAttrs[key]
 		if !exists {
 			changes.Added = append(changes.Added, key)
 		} else if oldType != newType {
@@ -42,8 +51,8 @@ func DetectSchemaChanges(oldSchema, newSchema *types.NamespaceSchema) SchemaChan
 		}
 	}
 
-	for key := range oldSchema.Attributes {
-		if _, exists := newSchema.Attributes[key]; !exists {
+	for key := range oldAttrs {
+		if _, exists := newAttrs[key]; !exists {
 			changes.Removed = append(changes.Removed, key)
 		}
 	}
@@ -136,6 +145,10 @@ func EvaluateNamespaceRemoval(namespace string, dslTexts []string) error {
 
 // UpdateNamespace replaces a namespace schema with a new version.
 // Validates the new schema before diffing/replacing (same checks as Register).
+// Unlike RemoveNamespace (which blocks removal if policies reference the namespace),
+// UpdateNamespace intentionally proceeds despite referenced attributes — removed
+// attributes are flagged for administrator review but do not block the schema update,
+// since the plugin reload must complete and the old schema is no longer valid.
 func (r *SchemaRegistry) UpdateNamespace(namespace string, newSchema *types.NamespaceSchema, dslTexts []string) (SchemaChanges, error) {
 	if namespace == "" {
 		return SchemaChanges{}, oops.In("attribute").Errorf("namespace cannot be empty")

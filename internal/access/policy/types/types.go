@@ -305,6 +305,8 @@ func (s *AttributeSchema) IsRegistered(namespace, key string) bool {
 }
 
 // GetNamespace returns the NamespaceSchema for the given namespace, or nil.
+// NOT goroutine-safe: callers must ensure schema evolution (UpdateNamespace/RemoveNamespace)
+// does not run concurrently with policy evaluation that reads the schema.
 func (s *AttributeSchema) GetNamespace(namespace string) *NamespaceSchema {
 	ns, ok := s.namespaces[namespace]
 	if !ok {
