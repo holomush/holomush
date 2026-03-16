@@ -5,10 +5,11 @@ package world
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/samber/oops"
 )
 
 // OrphanConfig configures the property orphan cleanup goroutine.
@@ -46,7 +47,7 @@ type OrphanDetector struct {
 }
 
 // NewOrphanDetector creates a new orphan detector.
-// Returns an error if the config interval is non-positive.
+// Silently defaults a non-positive interval to 24h.
 func NewOrphanDetector(config OrphanConfig) *OrphanDetector {
 	if config.Interval <= 0 {
 		config.Interval = DefaultOrphanConfig().Interval
@@ -59,20 +60,27 @@ func NewOrphanDetector(config OrphanConfig) *OrphanDetector {
 }
 
 // SetFinder sets the OrphanFinder implementation.
+// Must be called before Start or StartupCheck.
 func (d *OrphanDetector) SetFinder(finder OrphanFinder) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.finder = finder
 }
 
 // StartupCheck counts orphans on server startup and logs appropriately.
 func (d *OrphanDetector) StartupCheck(ctx context.Context) error {
-	if d.finder == nil {
+	d.mu.Lock()
+	finder := d.finder
+	d.mu.Unlock()
+
+	if finder == nil {
 		return nil
 	}
 
-	count, err := d.finder.CountOrphans(ctx)
+	count, err := finder.CountOrphans(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "orphan startup check failed", "error", err)
-		return fmt.Errorf("orphan startup check: %w", err)
+		return oops.Code("ORPHAN_STARTUP_CHECK_FAILED").Wrap(err)
 	}
 
 	if count > d.config.Threshold {
@@ -127,11 +135,15 @@ func (d *OrphanDetector) Stop() {
 
 // RunCleanup performs a single cleanup cycle.
 func (d *OrphanDetector) RunCleanup(ctx context.Context) {
-	if d.finder == nil {
+	d.mu.Lock()
+	finder := d.finder
+	d.mu.Unlock()
+
+	if finder == nil {
 		return
 	}
 
-	count, err := d.finder.CountOrphans(ctx)
+	count, err := finder.CountOrphans(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "orphan scan failed", "error", err)
 		return
@@ -156,7 +168,7 @@ func (d *OrphanDetector) RunCleanup(ctx context.Context) {
 		return
 	}
 
-	deleted, err := d.finder.DeleteOrphans(ctx, d.config.GracePeriod)
+	deleted, err := finder.DeleteOrphans(ctx, d.config.GracePeriod)
 	if err != nil {
 		slog.ErrorContext(ctx, "orphan cleanup failed", "error", err)
 		return

@@ -113,11 +113,11 @@ func EvaluateNamespaceRemoval(namespace string, dslTexts []string) error {
 	pattern := fmt.Sprintf(`(^|[^A-Za-z0-9_])%s\.`, regexp.QuoteMeta(namespace))
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return fmt.Errorf("invalid namespace pattern %q: %w", namespace, err)
+		return oops.In("attribute").With("namespace", namespace).Wrap(err)
 	}
 	for _, dsl := range dslTexts {
 		if re.MatchString(dsl) {
-			return fmt.Errorf("cannot remove namespace %q: referenced by enabled policies", namespace)
+			return oops.In("attribute").With("namespace", namespace).Errorf("cannot remove namespace: referenced by enabled policies")
 		}
 	}
 	return nil
