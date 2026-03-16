@@ -1,0 +1,70 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices"
+  ],
+  "schedule": ["before 9am on monday"],
+  "timezone": "America/New_York",
+  "labels": ["dependencies"],
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Auto-merge minor/patch Go deps",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "addLabels": ["go"]
+    },
+    {
+      "description": "Auto-merge GitHub Actions (minor/patch)",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "groupName": "GitHub Actions",
+      "addLabels": ["github-actions"]
+    },
+    {
+      "description": "Auto-merge Docker minor/patch",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "addLabels": ["docker"]
+    },
+    {
+      "description": "Group OpenTelemetry packages",
+      "matchPackagePrefixes": ["go.opentelemetry.io/otel"],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Group pgx packages",
+      "matchPackagePrefixes": ["github.com/jackc/pgx"],
+      "groupName": "pgx"
+    },
+    {
+      "description": "Group testify packages",
+      "matchPackagePrefixes": ["github.com/stretchr/testify"],
+      "groupName": "testify"
+    },
+    {
+      "description": "Group golang.org/x packages",
+      "matchPackagePrefixes": ["golang.org/x/"],
+      "groupName": "golang.org/x"
+    },
+    {
+      "description": "Group Google packages (grpc, protobuf)",
+      "matchPackagePrefixes": ["google.golang.org/"],
+      "groupName": "Google Go"
+    },
+    {
+      "description": "Major version bumps require manual review",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "addLabels": ["major-update"]
+    }
+  ],
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
+  "commitMessagePrefix": "deps:",
+  "commitMessageAction": "bump",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2
+}
