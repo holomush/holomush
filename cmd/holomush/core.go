@@ -229,83 +229,83 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		// if this ever happens unexpectedly in production.
 		slog.Error("ABAC stack not initialized: event store does not expose a connection pool")
 	} else {
-	abacPool := realStoreForABAC.Pool()
+		abacPool := realStoreForABAC.Pool()
 
-	abacStack, abacErr := abacsetup.BuildABACStack(ctx, abacsetup.ABACConfig{
-		Pool:          abacPool,
-		CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
-		AuditMode:     audit.ModeDenialsOnly,
-	})
-	if abacErr != nil {
-		return oops.Code("ABAC_SETUP_FAILED").Wrap(abacErr)
-	}
-	defer func() {
-		if closeErr := abacStack.Close(); closeErr != nil {
-			slog.Warn("error closing ABAC stack", "error", closeErr)
+		abacStack, abacErr := abacsetup.BuildABACStack(ctx, abacsetup.ABACConfig{
+			Pool:          abacPool,
+			CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
+			AuditMode:     audit.ModeDenialsOnly,
+		})
+		if abacErr != nil {
+			return oops.Code("ABAC_SETUP_FAILED").Wrap(abacErr)
 		}
-	}()
-	slog.Info("ABAC engine stack initialized")
+		defer func() {
+			if closeErr := abacStack.Close(); closeErr != nil {
+				slog.Warn("error closing ABAC stack", "error", closeErr)
+			}
+		}()
+		slog.Info("ABAC engine stack initialized")
 
-	// Start live policy cache invalidation (dedicated context to avoid race with later ctx reassignment)
-	listenerCtx, listenerCancel := context.WithCancel(ctx)
-	defer listenerCancel()
-	pgListener := policy.NewPgListener(databaseURL)
-	go func() {
-		if listenErr := abacStack.Cache.StartWithListener(listenerCtx, pgListener); listenErr != nil {
-			slog.Error("policy cache listener failed", "error", listenErr)
+		// Start live policy cache invalidation (dedicated context to avoid race with later ctx reassignment)
+		listenerCtx, listenerCancel := context.WithCancel(ctx)
+		defer listenerCancel()
+		pgListener := policy.NewPgListener(databaseURL)
+		go func() {
+			if listenErr := abacStack.Cache.StartWithListener(listenerCtx, pgListener); listenErr != nil {
+				slog.Error("policy cache listener failed", "error", listenErr)
+			}
+		}()
+
+		// Build world.Service with ABAC engine
+		worldService := world.NewService(world.ServiceConfig{
+			LocationRepo:  worldpostgres.NewLocationRepository(abacPool),
+			ExitRepo:      worldpostgres.NewExitRepository(abacPool),
+			ObjectRepo:    worldpostgres.NewObjectRepository(abacPool),
+			SceneRepo:     worldpostgres.NewSceneRepository(abacPool),
+			CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
+			PropertyRepo:  worldpostgres.NewPropertyRepository(abacPool),
+			Engine:        abacStack.Engine,
+			Transactor:    worldpostgres.NewTransactor(abacPool),
+		})
+
+		// Build plugin stack
+		var pluginsBaseDir string
+		if cfg.dataDir != "" {
+			pluginsBaseDir = cfg.dataDir
+		} else {
+			var pluginsDirErr error
+			pluginsBaseDir, pluginsDirErr = xdg.DataDir()
+			if pluginsDirErr != nil {
+				return oops.Code("PLUGINS_DIR_FAILED").With("operation", "get plugins directory").Wrap(pluginsDirErr)
+			}
 		}
-	}()
+		pluginsDir := filepath.Join(pluginsBaseDir, "plugins")
 
-	// Build world.Service with ABAC engine
-	worldService := world.NewService(world.ServiceConfig{
-		LocationRepo:  worldpostgres.NewLocationRepository(abacPool),
-		ExitRepo:      worldpostgres.NewExitRepository(abacPool),
-		ObjectRepo:    worldpostgres.NewObjectRepository(abacPool),
-		SceneRepo:     worldpostgres.NewSceneRepository(abacPool),
-		CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
-		PropertyRepo:  worldpostgres.NewPropertyRepository(abacPool),
-		Engine:        abacStack.Engine,
-		Transactor:    worldpostgres.NewTransactor(abacPool),
-	})
+		hostFuncs := hostfunc.New(nil, // KV store not yet available
+			hostfunc.WithEngine(abacStack.Engine),
+			hostfunc.WithWorldService(worldService),
+		)
+		luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
+		pluginManager := plugins.NewManager(pluginsDir,
+			plugins.WithLuaHost(luaHost),
+			plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
+		)
 
-	// Build plugin stack
-	var pluginsBaseDir string
-	if cfg.dataDir != "" {
-		pluginsBaseDir = cfg.dataDir
-	} else {
-		var pluginsDirErr error
-		pluginsBaseDir, pluginsDirErr = xdg.DataDir()
-		if pluginsDirErr != nil {
-			return oops.Code("PLUGINS_DIR_FAILED").With("operation", "get plugins directory").Wrap(pluginsDirErr)
+		// Complete circular dependency: set plugin registry
+		abacStack.PluginProvider.SetRegistry(pluginManager)
+
+		// Load all discovered plugins
+		if loadErr := pluginManager.LoadAll(ctx); loadErr != nil {
+			slog.Error("failed to load plugins", "error", loadErr)
 		}
-	}
-	pluginsDir := filepath.Join(pluginsBaseDir, "plugins")
-
-	hostFuncs := hostfunc.New(nil, // KV store not yet available
-		hostfunc.WithEngine(abacStack.Engine),
-		hostfunc.WithWorldService(worldService),
-	)
-	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-	pluginManager := plugins.NewManager(pluginsDir,
-		plugins.WithLuaHost(luaHost),
-		plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
-	)
-
-	// Complete circular dependency: set plugin registry
-	abacStack.PluginProvider.SetRegistry(pluginManager)
-
-	// Load all discovered plugins
-	if loadErr := pluginManager.LoadAll(ctx); loadErr != nil {
-		slog.Error("failed to load plugins", "error", loadErr)
-	}
-	defer func() {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer shutdownCancel()
-		if closeErr := pluginManager.Close(shutdownCtx); closeErr != nil {
-			slog.Warn("error closing plugin manager", "error", closeErr)
-		}
-	}()
-	slog.Info("plugin stack initialized", "plugins_dir", pluginsDir)
+		defer func() {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer shutdownCancel()
+			if closeErr := pluginManager.Close(shutdownCtx); closeErr != nil {
+				slog.Warn("error closing plugin manager", "error", closeErr)
+			}
+		}()
+		slog.Info("plugin stack initialized", "plugins_dir", pluginsDir)
 	} // end ABAC stack wiring (hasPool)
 
 	certsDir, err := deps.CertsDirGetter()

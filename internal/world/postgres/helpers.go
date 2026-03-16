@@ -28,9 +28,9 @@ type execer interface {
 // txKey is the context key for an active pgx.Tx.
 type txKey struct{}
 
-// TxFromContext returns the active pgx.Tx stored in context by InTransaction,
+// txFromContext returns the active pgx.Tx stored in context by InTransaction,
 // or nil if no transaction is active.
-func TxFromContext(ctx context.Context) pgx.Tx {
+func txFromContext(ctx context.Context) pgx.Tx {
 	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
 	if !ok {
 		return nil
@@ -40,7 +40,7 @@ func TxFromContext(ctx context.Context) pgx.Tx {
 
 // execerFromCtx returns the active transaction from context, or falls back to the pool.
 func execerFromCtx(ctx context.Context, pool execer) execer {
-	if tx := TxFromContext(ctx); tx != nil {
+	if tx := txFromContext(ctx); tx != nil {
 		return tx
 	}
 	return pool

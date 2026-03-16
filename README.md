@@ -8,23 +8,24 @@ A modern MUSH platform combining classic text-based multiplayer gameplay with co
 
 ## Status
 
-**Phase 1 Complete** - Telnet server with event-sourced architecture, session persistence, and event replay.
+**Core systems implemented** — Telnet server, event-sourced architecture, Lua plugin system, world model, and ABAC access control.
 
 ### What Works Now
 
-- Connect via telnet and authenticate
-- Chat using `say` and `pose` commands
-- Disconnect and reconnect with missed event replay
-- Events persisted to PostgreSQL or in-memory store
-- WASM plugin host proof-of-concept
+- Telnet server with session persistence and event replay
+- Lua plugin system (gopher-lua) with manifest-defined ABAC policies
+- World model: locations, exits, objects, scenes, characters
+- ABAC (Attribute-Based Access Control) with Cedar-inspired policy DSL
+- Seed policies for player, builder, and admin roles
+- Plugin policy lifecycle: install on load, remove on unload, atomic replace
+- `say`, `pose`, `look`, `go`, building commands (`dig`, `link`)
 
 ### Planned Features
 
 - Web client (SvelteKit PWA)
-- Multiple locations and movement
 - Character creation and player accounts
-- Full WASM plugin API
-- ABAC access control
+- Go binary plugins (go-plugin) for complex extensions
+- Operator admin tools and control plane
 
 ## Quick Start
 
@@ -32,6 +33,7 @@ A modern MUSH platform combining classic text-based multiplayer gameplay with co
 
 - Go 1.23+
 - [Task](https://taskfile.dev/) (task runner)
+- PostgreSQL (for data storage)
 - Docker (for integration tests)
 
 ### Build and Run
@@ -63,7 +65,22 @@ telnet localhost 4000
 | `look`                  | Describe current location            |
 | `say <message>`         | Speak to others in the room          |
 | `pose <action>`         | Emote an action (e.g., `pose waves`) |
+| `go <exit>`             | Move through an exit                 |
+| `dig <exit> to "<loc>"` | Create a new location with exit      |
+| `link <exit> to <target>`| Link current location to another     |
+| `help`                  | List available commands               |
 | `quit`                  | Disconnect (session persists)        |
+
+## Architecture
+
+- **Go core** with event-oriented architecture
+- **Dual protocol**: telnet + web (planned)
+- **Lua plugins** (gopher-lua) with go-plugin for complex extensions (planned)
+- **PostgreSQL** for production data (in-memory store available for development)
+- **ABAC engine** with Cedar-inspired DSL, in-memory policy cache, pg_notify invalidation
+- **SvelteKit PWA** for web client (planned)
+
+See [Architecture](site/docs/contributors/architecture.md) for details.
 
 ## Development
 
@@ -81,6 +98,12 @@ task lint
 
 # Format code
 task fmt
+
+# Generate EBNF grammar + railroad diagram
+task generate:ebnf
+
+# Generate plugin JSON schema
+task generate:schema
 ```
 
 See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
@@ -116,10 +139,8 @@ See [Verifying Releases](docs/reference/verifying-releases.md) for complete inst
 
 ## Documentation
 
-- [Getting Started](docs/reference/getting-started.md) - Setup and usage guide
-- [Architecture Overview](docs/reference/architecture-overview.md) - System design summary
-- [Full Architecture Design](docs/plans/2026-01-17-holomush-architecture-design.md) - Detailed specifications
-- [Verifying Releases](docs/reference/verifying-releases.md) - How to verify signed releases
+- [Architecture](site/docs/contributors/architecture.md) - System design overview
+- [Plugin Guide](site/docs/developers/plugin-guide.md) - Writing plugins with ABAC policies
 - [Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## License

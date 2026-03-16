@@ -1234,7 +1234,6 @@ func TestGetCommandHelp_NoCapabilities_NoCheck(t *testing.T) {
 	assert.Equal(t, lua.LNil, errVal)
 }
 
-
 func TestGetCommandHelp_NilEngine_FailsClosed(t *testing.T) {
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
