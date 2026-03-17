@@ -13,11 +13,11 @@ import (
 )
 
 type mockOrphanFinder struct {
-	countResult    int
-	countErr       error
-	deleteResult   int
-	deleteErr      error
-	deleteCalled   bool
+	countResult     int
+	countErr        error
+	deleteResult    int
+	deleteErr       error
+	deleteCalled    bool
 	deleteOlderThan time.Duration
 }
 

@@ -23,6 +23,7 @@ import (
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // mockEventStore implements EventStore for testing.
@@ -108,6 +109,22 @@ func (m *mockGRPCClient) Close() error {
 		return m.closeFunc()
 	}
 	return nil
+}
+
+func (m *mockGRPCClient) Authenticate(_ context.Context, _ *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) HandleCommand(_ context.Context, _ *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) Disconnect(_ context.Context, _ *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+	return nil, nil
 }
 
 // mockMigrator implements AutoMigrator for testing.

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -34,6 +35,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
@@ -337,8 +339,18 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		creds := credentials.NewTLS(tlsConfig)
 		grpcServer = grpc.NewServer(grpc.Creds(creds))
 
-		// Create and register Core service
-		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster)
+		// Create guest authenticator with a well-known start location.
+		// TODO(telnet-e2e): Make start location configurable via world seed data.
+		startLocationID, parseErr := ulid.Parse("01HK153X0006AFVGQT61FPQX3S")
+		if parseErr != nil {
+			return oops.Code("INVALID_START_LOCATION").Wrap(parseErr)
+		}
+		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
+
+		// Create and register Core service with guest authentication
+		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster,
+			holoGRPC.WithAuthenticator(guestAuth),
+		)
 		corev1.RegisterCoreServer(grpcServer, coreServer)
 
 		// Start gRPC listener
