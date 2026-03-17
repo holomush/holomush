@@ -6,10 +6,10 @@ package attribute
 import (
 	"context"
 	"errors"
-	"strings"
-	"time"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -154,7 +154,6 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 
 	return bags, errors.Join(errs...)
 }
-
 
 // validateEntityRef checks that an entity reference is in "type:id" format
 // with both parts non-empty. This ensures all providers receive validated refs

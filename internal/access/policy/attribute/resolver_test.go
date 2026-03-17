@@ -538,7 +538,6 @@ func TestResolver_Resolve_InvalidEntityIDFormat(t *testing.T) {
 
 	_, err := resolver.Resolve(context.Background(), req)
 	require.Error(t, err)
-
 }
 
 func TestResolver_Resolve_S6_NamespaceValidation(t *testing.T) {

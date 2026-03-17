@@ -280,114 +280,9 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	}), "Error should mention TLS/certificate issue, got: %v", err)
 }
 
-// TestHandleTelnetConnection tests the telnet handler.
-func TestHandleTelnetConnection(t *testing.T) {
-	// Create a pipe to simulate a connection
-	server, client := net.Pipe()
-
-	// Run handler in goroutine (it will close the server side)
-	done := make(chan struct{})
-	go func() {
-		handleTelnetConnection(server)
-		close(done)
-	}()
-
-	// Read all output from the client side until EOF
-	// Set a read deadline to prevent hanging if handler doesn't close connection
-	var output strings.Builder
-	buf := make([]byte, 1024)
-	require.NoError(t, client.SetReadDeadline(time.Now().Add(5*time.Second)), "failed to set read deadline")
-	for {
-		n, err := client.Read(buf)
-		if n > 0 {
-			output.Write(buf[:n])
-		}
-		if err != nil {
-			break
-		}
-	}
-
-	result := output.String()
-
-	// Verify the welcome messages are sent
-	assert.Contains(t, result, "Welcome to HoloMUSH Gateway", "output missing welcome message")
-	assert.Contains(t, result, "Gateway is connected to core", "output missing status message")
-	assert.Contains(t, result, "Disconnecting", "output missing disconnect message")
-
-	// Wait for handler to finish with timeout
-	select {
-	case <-done:
-		// Handler finished
-	case <-time.After(5 * time.Second):
-		t.Fatal("handler did not finish within timeout")
-	}
-}
-
-// TestHandleTelnetConnection_WriteError tests handling when writes fail.
-func TestHandleTelnetConnection_WriteError(t *testing.T) {
-	// Create a pipe and close the client side immediately to cause write errors
-	server, client := net.Pipe()
-	require.NoError(t, client.Close(), "failed to close client")
-
-	// Run handler - should handle write errors gracefully without panic
-	done := make(chan struct{})
-	go func() {
-		handleTelnetConnection(server)
-		close(done)
-	}()
-
-	// Wait for handler to finish - it should complete without panic
-	<-done
-}
-
-// mockNetConn is a mock net.Conn that fails after N writes.
-type mockNetConn struct {
-	net.Conn
-	writesUntilFail int
-	writeCount      int
-	closed          bool
-}
-
-func (m *mockNetConn) Write(p []byte) (int, error) {
-	m.writeCount++
-	if m.writeCount >= m.writesUntilFail {
-		return 0, fmt.Errorf("mock write error on write %d", m.writeCount)
-	}
-	return len(p), nil
-}
-
-func (m *mockNetConn) Close() error {
-	m.closed = true
-	return nil
-}
-
-func (m *mockNetConn) Read(_ []byte) (int, error) {
-	return 0, fmt.Errorf("mock read error")
-}
-
-func (m *mockNetConn) LocalAddr() net.Addr {
-	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}
-}
-
-func (m *mockNetConn) RemoteAddr() net.Addr {
-	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 54321}
-}
-
-// TestHandleTelnetConnection_SecondWriteFails tests when second write fails.
-func TestHandleTelnetConnection_SecondWriteFails(t *testing.T) {
-	// Mock that fails on second write (status message)
-	mock := &mockNetConn{writesUntilFail: 2}
-
-	done := make(chan struct{})
-	go func() {
-		handleTelnetConnection(mock)
-		close(done)
-	}()
-
-	<-done
-
-	assert.True(t, mock.closed, "connection should be closed after handler completes")
-}
+// Note: Tests for the old placeholder handleTelnetConnection were removed
+// when it was replaced by telnet.GatewayHandler. The GatewayHandler has its
+// own comprehensive unit tests in internal/telnet/gateway_handler_test.go.
 
 func TestGatewayCommand_InvalidCACN(t *testing.T) {
 	// Create a certs directory with a CA that has wrong CN prefix
@@ -680,7 +575,7 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 	// Run the accept loop in a goroutine
 	done := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, mock, cancel)
+		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, cancel)
 		close(done)
 	}()
 

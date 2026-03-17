@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -20,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/xdg"
 )
@@ -237,7 +237,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	defer signal.Stop(sigChan)
 
 	// Start accepting telnet connections in goroutine with backoff on errors
-	go runTelnetAcceptLoop(ctx, telnetListener, cancel)
+	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, cancel)
 
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
@@ -278,32 +278,6 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 
 	slog.Info("shutdown complete")
 	return nil
-}
-
-// handleTelnetConnection handles a telnet connection.
-// This is a placeholder until the gRPC-based telnet handler is implemented.
-func handleTelnetConnection(conn net.Conn) {
-	defer func() {
-		if err := conn.Close(); err != nil {
-			slog.Debug("error closing telnet connection", "error", err)
-		}
-	}()
-
-	// Send a welcome message indicating the gateway is running but not fully implemented
-	_, err := fmt.Fprintln(conn, "Welcome to HoloMUSH Gateway!")
-	if err != nil {
-		slog.Debug("failed to send welcome message", "error", err)
-		return
-	}
-	_, err = fmt.Fprintln(conn, "Gateway is connected to core but telnet handler is pending implementation.")
-	if err != nil {
-		slog.Debug("failed to send status message", "error", err)
-		return
-	}
-	// Error intentionally ignored: connection closes immediately after, so logging
-	// a write failure here would be noise (client may have already disconnected).
-	//nolint:errcheck // write error ignored on connection close
-	fmt.Fprintln(conn, "Disconnecting...")
 }
 
 // acceptBackoff manages exponential backoff for the accept loop.
@@ -348,7 +322,7 @@ func (b *acceptBackoff) wait() time.Duration {
 
 // runTelnetAcceptLoop accepts telnet connections with exponential backoff on errors.
 // The cancel function is called on panic to trigger graceful shutdown.
-func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, cancel func()) {
+func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPCClient, cancel func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("panic in telnet accept loop, triggering shutdown",
@@ -383,6 +357,7 @@ func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, cancel func
 			}
 		}
 		backoff.success()
-		go handleTelnetConnection(conn)
+		handler := telnet.NewGatewayHandler(conn, client)
+		go handler.Handle(ctx)
 	}
 }

@@ -45,8 +45,8 @@ type accessTestEnv struct {
 	cache       *policy.Cache
 	charRepo    *worldpg.CharacterRepository
 	locRepo     *worldpg.LocationRepository
-	auditWriter  *testAuditWriter
-	auditLogger  *audit.Logger
+	auditWriter *testAuditWriter
+	auditLogger *audit.Logger
 }
 
 type testAuditWriter struct {
@@ -214,8 +214,8 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 		cache:       cache,
 		charRepo:    charRepo,
 		locRepo:     locRepo,
-		auditWriter:  testWriter,
-		auditLogger:  auditLogger,
+		auditWriter: testWriter,
+		auditLogger: auditLogger,
 	}, nil
 }
 
