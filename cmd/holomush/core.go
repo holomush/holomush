@@ -347,9 +347,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		}
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
-		// Create and register Core service with guest authentication
+		// Create and register Core service with guest authentication + cleanup hook
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster,
 			holoGRPC.WithAuthenticator(guestAuth),
+			holoGRPC.WithDisconnectHook(func(info holoGRPC.SessionInfo) {
+				if info.IsGuest {
+					guestAuth.ReleaseGuest(info.CharacterName)
+				}
+			}),
 		)
 		corev1.RegisterCoreServer(grpcServer, coreServer)
 

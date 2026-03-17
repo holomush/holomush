@@ -22,6 +22,17 @@ type PosePayload struct {
 	Action string `json:"action"`
 }
 
+// ArrivePayload is the JSON payload for arrive events.
+type ArrivePayload struct {
+	CharacterName string `json:"character_name"`
+}
+
+// LeavePayload is the JSON payload for leave events.
+type LeavePayload struct {
+	CharacterName string `json:"character_name"`
+	Reason        string `json:"reason"`
+}
+
 // Engine is the core game engine.
 type Engine struct {
 	store       EventStore
@@ -84,6 +95,62 @@ func (e *Engine) HandlePose(ctx context.Context, charID, locationID ulid.ULID, a
 
 	if err := e.store.Append(ctx, event); err != nil {
 		return oops.With("operation", "append_pose_event").Wrap(err)
+	}
+
+	// Broadcast to subscribers (nil-safe)
+	if e.broadcaster != nil {
+		e.broadcaster.Broadcast(event)
+	}
+
+	return nil
+}
+
+// HandleConnect processes a character connecting to a location.
+func (e *Engine) HandleConnect(ctx context.Context, charID, locationID ulid.ULID, charName string) error {
+	payload, err := json.Marshal(ArrivePayload{CharacterName: charName})
+	if err != nil {
+		return oops.With("operation", "marshal_arrive_payload").Wrap(err)
+	}
+
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:" + locationID.String(),
+		Type:      EventTypeArrive,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: charID.String()},
+		Payload:   payload,
+	}
+
+	if err := e.store.Append(ctx, event); err != nil {
+		return oops.With("operation", "append_arrive_event").Wrap(err)
+	}
+
+	// Broadcast to subscribers (nil-safe)
+	if e.broadcaster != nil {
+		e.broadcaster.Broadcast(event)
+	}
+
+	return nil
+}
+
+// HandleDisconnect processes a character disconnecting from a location.
+func (e *Engine) HandleDisconnect(ctx context.Context, charID, locationID ulid.ULID, charName, reason string) error {
+	payload, err := json.Marshal(LeavePayload{CharacterName: charName, Reason: reason})
+	if err != nil {
+		return oops.With("operation", "marshal_leave_payload").Wrap(err)
+	}
+
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:" + locationID.String(),
+		Type:      EventTypeLeave,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: charID.String()},
+		Payload:   payload,
+	}
+
+	if err := e.store.Append(ctx, event); err != nil {
+		return oops.With("operation", "append_leave_event").Wrap(err)
 	}
 
 	// Broadcast to subscribers (nil-safe)

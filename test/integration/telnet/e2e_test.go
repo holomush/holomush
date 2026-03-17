@@ -125,6 +125,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		telnetAddr   string
 		telnetLis    net.Listener
 		acceptCancel context.CancelFunc
+		guestAuth    *telnet.GuestAuthenticator
 	)
 
 	BeforeEach(func() {
@@ -190,10 +191,17 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 		// 8. Create GuestAuthenticator
 		startLocation = ulid.Make()
-		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
+		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 9. Create gRPC server
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, grpcpkg.WithAuthenticator(guestAuth))
+		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster,
+			grpcpkg.WithAuthenticator(guestAuth),
+			grpcpkg.WithDisconnectHook(func(info grpcpkg.SessionInfo) {
+				if info.IsGuest {
+					guestAuth.ReleaseGuest(info.CharacterName)
+				}
+			}),
+		)
 		grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 		corev1.RegisterCoreServer(grpcServer, coreServer)
 
@@ -455,6 +463,81 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 				}
 			}
 			Expect(foundSay).To(BeTrue(), "expected a say event in persisted events")
+		})
+	})
+
+	Describe("Lifecycle Events", func() {
+		It("emits arrive event on guest connect", func() {
+			client, err := newTestTelnetClient(telnetAddr)
+			Expect(err).NotTo(HaveOccurred())
+			defer client.Close()
+
+			connectAsGuest(client)
+
+			time.Sleep(200 * time.Millisecond)
+
+			events, err := eventStore.Replay(testCtx,
+				"location:"+startLocation.String(), ulid.ULID{}, 100)
+			Expect(err).NotTo(HaveOccurred())
+
+			found := false
+			for _, e := range events {
+				if string(e.Type) == "arrive" {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "expected arrive event in store")
+		})
+
+		It("emits leave event on guest disconnect", func() {
+			client, err := newTestTelnetClient(telnetAddr)
+			Expect(err).NotTo(HaveOccurred())
+
+			connectAsGuest(client)
+			client.SendLine("quit")
+			_ = client.ReadLine() // Goodbye
+			client.Close()
+
+			// Leave event should appear in the location stream
+			Eventually(func() bool {
+				events, err := eventStore.Replay(testCtx,
+					"location:"+startLocation.String(), ulid.ULID{}, 100)
+				if err != nil {
+					return false
+				}
+				for _, e := range events {
+					if string(e.Type) == string(core.EventTypeLeave) {
+						return true
+					}
+				}
+				return false
+			}, 5*time.Second, 100*time.Millisecond).Should(BeTrue(), "expected leave event in store")
+		})
+
+		It("releases guest name after disconnect", func() {
+			// Connect a guest
+			c, err := newTestTelnetClient(telnetAddr)
+			Expect(err).NotTo(HaveOccurred())
+			connectAsGuest(c)
+
+			// Active count should be at least 1
+			// (other tests in this BeforeEach may also have active guests)
+			initialActive := guestAuth.ActiveCount()
+			Expect(initialActive).To(BeNumerically(">=", 1))
+
+			// Disconnect
+			c.SendLine("quit")
+			_ = c.ReadLine() // Goodbye
+			c.Close()
+
+			// Wait for disconnect RPC + hook to fire
+			Eventually(func() int {
+				return guestAuth.ActiveCount()
+			}, 5*time.Second, 100*time.Millisecond).Should(
+				BeNumerically("<", initialActive),
+				"expected active guest count to decrease after disconnect",
+			)
 		})
 	})
 })

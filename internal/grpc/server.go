@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"log/slog"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -26,6 +27,7 @@ type AuthResult struct {
 	CharacterID   ulid.ULID
 	CharacterName string
 	LocationID    ulid.ULID
+	IsGuest       bool
 }
 
 // Authenticator validates credentials and returns character info.
@@ -42,9 +44,11 @@ type SessionStore interface {
 
 // SessionInfo contains information about a gRPC session.
 type SessionInfo struct {
-	CharacterID  ulid.ULID
-	LocationID   ulid.ULID
-	ConnectionID ulid.ULID
+	CharacterID   ulid.ULID
+	LocationID    ulid.ULID
+	ConnectionID  ulid.ULID
+	CharacterName string
+	IsGuest       bool
 }
 
 // InMemorySessionStore is an in-memory implementation of SessionStore.
@@ -91,6 +95,7 @@ type CoreServer struct {
 	broadcaster   *core.Broadcaster
 	authenticator Authenticator
 	sessionStore  SessionStore
+	disconnectHooks []func(SessionInfo)
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
@@ -110,6 +115,13 @@ func WithAuthenticator(auth Authenticator) CoreServerOption {
 func WithSessionStore(store SessionStore) CoreServerOption {
 	return func(s *CoreServer) {
 		s.sessionStore = store
+	}
+}
+
+// WithDisconnectHook registers a hook called after a session disconnects.
+func WithDisconnectHook(hook func(SessionInfo)) CoreServerOption {
+	return func(s *CoreServer) {
+		s.disconnectHooks = append(s.disconnectHooks, hook)
 	}
 }
 
@@ -173,10 +185,22 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 
 	// Store session info for command processing
 	s.sessionStore.Set(sessionID.String(), &SessionInfo{
-		CharacterID:  result.CharacterID,
-		LocationID:   result.LocationID,
-		ConnectionID: connID,
+		CharacterID:   result.CharacterID,
+		LocationID:    result.LocationID,
+		ConnectionID:  connID,
+		CharacterName: result.CharacterName,
+		IsGuest:       result.IsGuest,
 	})
+
+	// Emit arrive event (best-effort — session is valid even if event fails)
+	if err := s.engine.HandleConnect(ctx, result.CharacterID, result.LocationID, result.CharacterName); err != nil {
+		slog.WarnContext(ctx, "arrive event failed",
+			"request_id", requestID,
+			"session_id", sessionID.String(),
+			"character_id", result.CharacterID.String(),
+			"error", err,
+		)
+	}
 
 	slog.InfoContext(ctx, "authentication successful",
 		"request_id", requestID,
@@ -377,8 +401,44 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}, nil
 	}
 
+	// Emit leave event while session is still active
+	if err := s.engine.HandleDisconnect(ctx, info.CharacterID, info.LocationID, info.CharacterName, "quit"); err != nil {
+			slog.WarnContext(ctx, "leave event failed",
+				"request_id", requestID,
+				"character_id", info.CharacterID.String(),
+				"error", err,
+		)
+	}
+
 	// Disconnect from session manager
 	s.sessions.Disconnect(info.CharacterID, info.ConnectionID)
+
+	// End session for guests
+	if info.IsGuest {
+		if err := s.sessions.EndSession(info.CharacterID); err != nil {
+			slog.WarnContext(ctx, "end guest session failed",
+				"request_id", requestID,
+				"character_id", info.CharacterID.String(),
+				"error", err,
+			)
+		}
+	}
+
+	// Run disconnect hooks with panic recovery
+	for _, hook := range s.disconnectHooks {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.ErrorContext(ctx, "disconnect hook panicked",
+						"request_id", requestID,
+						"panic", r,
+						"stack", string(debug.Stack()),
+					)
+				}
+			}()
+			hook(*info)
+		}()
+	}
 
 	// Remove from session store
 	s.sessionStore.Delete(req.SessionId)

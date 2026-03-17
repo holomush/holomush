@@ -111,6 +111,7 @@ func TestCoreServer_Authenticate_Success(t *testing.T) {
 	}
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  NewInMemorySessionStore(),
@@ -146,6 +147,7 @@ func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
 	}
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager(), core.NewBroadcaster()),
 		sessions:      core.NewSessionManager(),
 		authenticator: auth,
 		sessionStore:  NewInMemorySessionStore(),
@@ -220,6 +222,7 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
@@ -251,6 +254,7 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -324,6 +328,7 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	sessions.Connect(charID, connID)
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions: sessions,
 		sessionStore: &mockSessionStore{
 			sessions: map[string]*SessionInfo{
@@ -438,6 +443,7 @@ func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		sessionStore:  NewInMemorySessionStore(),
 		authenticator: nil, // No authenticator configured
@@ -475,6 +481,7 @@ func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
 	}
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  NewInMemorySessionStore(),
@@ -739,6 +746,7 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
@@ -770,6 +778,7 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -842,6 +851,7 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -904,6 +914,7 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	sessions.Connect(charID, connID)
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions: sessions,
 		sessionStore: &mockSessionStore{
 			sessions: map[string]*SessionInfo{
@@ -931,6 +942,7 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
@@ -1070,6 +1082,7 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 	}
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
@@ -1121,6 +1134,7 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 	})
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: sessionStore,
 	}
@@ -1231,6 +1245,7 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	})
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
@@ -1397,6 +1412,7 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -1554,6 +1570,7 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -1680,6 +1697,7 @@ func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		sessionStore:  NewInMemorySessionStore(),
 		authenticator: nil,
@@ -1716,6 +1734,7 @@ func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
 	}
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager(), core.NewBroadcaster()),
 		sessions:      core.NewSessionManager(),
 		authenticator: auth,
 		sessionStore:  NewInMemorySessionStore(),
@@ -1742,6 +1761,7 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
@@ -1863,6 +1883,7 @@ func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -2020,6 +2041,7 @@ func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
 	}
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  NewInMemorySessionStore(),
@@ -2266,10 +2288,224 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 	}
 }
 
+func TestCoreServer_DisconnectHook(t *testing.T) {
+	charID := core.NewULID()
+	locationID := core.NewULID()
+	sessionID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := core.NewMemoryEventStore()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	var hookCalled bool
+	var hookInfo SessionInfo
+	server := NewCoreServer(engine, sessions, broadcaster,
+		WithDisconnectHook(func(info SessionInfo) {
+			hookCalled = true
+			hookInfo = info
+		}),
+	)
+	connID := core.NewULID()
+	server.sessionStore.Set(sessionID.String(), &SessionInfo{
+		CharacterID:   charID,
+		LocationID:    locationID,
+		ConnectionID:  connID,
+		CharacterName: "GuestChar",
+		IsGuest:       true,
+	})
+
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta:      &corev1.RequestMeta{RequestId: "hook-test", Timestamp: timestamppb.Now()},
+		SessionId: sessionID.String(),
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	assert.True(t, hookCalled, "disconnect hook was not called")
+	assert.Equal(t, charID, hookInfo.CharacterID)
+	assert.Equal(t, "GuestChar", hookInfo.CharacterName)
+	assert.True(t, hookInfo.IsGuest)
+}
+
+
+
+func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
+	charID := core.NewULID()
+	locationID := core.NewULID()
+	sessionID := core.NewULID()
+
+	store := core.NewMemoryEventStore()
+	sessions := core.NewSessionManager()
+	engine := core.NewEngine(store, sessions, core.NewBroadcaster())
+
+	hookCallCount := 0
+	server := &CoreServer{
+		engine:      engine,
+		sessions:    sessions,
+		broadcaster: core.NewBroadcaster(),
+		authenticator: &mockAuthenticator{
+			authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
+				return &AuthResult{
+					CharacterID:   charID,
+					CharacterName: "PanicTest",
+					LocationID:    locationID,
+					IsGuest:       true,
+				}, nil
+			},
+		},
+		sessionStore: NewInMemorySessionStore(),
+		newSessionID: func() ulid.ULID { return sessionID },
+		disconnectHooks: []func(SessionInfo){
+			func(_ SessionInfo) { panic("hook panic") },
+			func(_ SessionInfo) { hookCallCount++ },
+		},
+	}
+
+	ctx := context.Background()
+	authResp, err := server.Authenticate(ctx, &corev1.AuthRequest{
+		Username: "guest",
+		Meta:     &corev1.RequestMeta{RequestId: "test"},
+	})
+	require.NoError(t, err)
+	require.True(t, authResp.Success)
+
+	// Disconnect should not panic — recovery catches it
+	discResp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+		SessionId: authResp.SessionId,
+		Meta:      &corev1.RequestMeta{RequestId: "test"},
+	})
+	require.NoError(t, err)
+	require.True(t, discResp.Success)
+
+	// Second hook should still run after first panicked
+	assert.Equal(t, 1, hookCallCount, "second hook should run despite first hook panicking")
+}
+
+func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
+	charID := core.NewULID()
+	locationID := core.NewULID()
+	sessionID := core.NewULID()
+	connID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, connID)
+
+	store := core.NewMemoryEventStore()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := NewCoreServer(engine, sessions, broadcaster)
+	server.sessionStore.Set(sessionID.String(), &SessionInfo{
+		CharacterID:   charID,
+		LocationID:    locationID,
+		ConnectionID:  connID,
+		CharacterName: "RegularChar",
+		IsGuest:       false,
+	})
+
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta:      &corev1.RequestMeta{RequestId: "non-guest-test", Timestamp: timestamppb.Now()},
+		SessionId: sessionID.String(),
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// Session should still exist (EndSession was NOT called for non-guests)
+	session := sessions.GetSession(charID)
+	require.NotNil(t, session, "session should still exist for non-guest after disconnect")
+}
+
+func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
+	charID := core.NewULID()
+	locationID := core.NewULID()
+	sessionID := core.NewULID()
+	sessions := core.NewSessionManager()
+
+	store := core.NewMemoryEventStore()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	auth := &mockAuthenticator{
+		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
+			return &AuthResult{
+				CharacterID:   charID,
+				CharacterName: "ArriveChar",
+				LocationID:    locationID,
+			}, nil
+		},
+	}
+
+	server := NewCoreServer(engine, sessions, broadcaster,
+		WithAuthenticator(auth),
+	)
+	server.newSessionID = func() ulid.ULID { return sessionID }
+
+	ctx := context.Background()
+	req := &corev1.AuthRequest{
+		Meta:     &corev1.RequestMeta{RequestId: "arrive-test", Timestamp: timestamppb.Now()},
+		Username: "user",
+		Password: "pass",
+	}
+
+	resp, err := server.Authenticate(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	require.Len(t, events, 1, "expected exactly one arrive event")
+	assert.Equal(t, core.EventTypeArrive, events[0].Type)
+}
+
+func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
+	charID := core.NewULID()
+	locationID := core.NewULID()
+	sessionID := core.NewULID()
+	connID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, connID)
+
+	store := core.NewMemoryEventStore()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	server := NewCoreServer(engine, sessions, broadcaster)
+	server.sessionStore.Set(sessionID.String(), &SessionInfo{
+		CharacterID:   charID,
+		LocationID:    locationID,
+		ConnectionID:  connID,
+		CharacterName: "LeaveChar",
+		IsGuest:       false,
+	})
+
+	ctx := context.Background()
+	req := &corev1.DisconnectRequest{
+		Meta:      &corev1.RequestMeta{RequestId: "leave-test", Timestamp: timestamppb.Now()},
+		SessionId: sessionID.String(),
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	require.Len(t, events, 1, "expected exactly one leave event")
+	assert.Equal(t, core.EventTypeLeave, events[0].Type)
+}
+
 func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}

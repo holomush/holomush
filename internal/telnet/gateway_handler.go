@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package telnet implements the telnet gateway, connecting raw TCP/telnet
+// clients to the HoloMUSH core via gRPC.
 package telnet
 
 import (
@@ -324,6 +326,14 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.Event) {
 			return
 		}
 		h.send(fmt.Sprintf("%s %s", actorPrefix, p.Action))
+
+	case string(core.EventTypeArrive):
+		// Arrival notifications are persisted but not yet displayed to clients.
+		slog.Debug("gateway: arrive event received", "session_id", h.sessionID)
+
+	case string(core.EventTypeLeave):
+		// Leave notifications are persisted but not yet displayed to clients.
+		slog.Debug("gateway: leave event received", "session_id", h.sessionID)
 
 	default:
 		slog.Warn("gateway: unknown event type", "type", ev.GetType())
