@@ -5,6 +5,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -251,4 +252,87 @@ func TestEngine_ReplayEvents_StoreError(t *testing.T) {
 	_, err := engine.ReplayEvents(ctx, charID, "location:test", 10)
 	require.Error(t, err, "Expected error from failing store")
 	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
+}
+
+func TestEngine_HandleConnect(t *testing.T) {
+	store := NewMemoryEventStore()
+	sessions := NewSessionManager()
+	broadcaster := NewBroadcaster()
+	engine := NewEngine(store, sessions, broadcaster)
+
+	ctx := context.Background()
+	charID := NewULID()
+	locationID := NewULID()
+
+	stream := "location:" + locationID.String()
+	ch := broadcaster.Subscribe(stream)
+	defer broadcaster.Unsubscribe(stream, ch)
+
+	err := engine.HandleConnect(ctx, charID, locationID, "Alyssa")
+	require.NoError(t, err)
+
+	// Verify event was stored with correct type, stream, actor
+	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, EventTypeArrive, events[0].Type)
+	assert.Equal(t, stream, events[0].Stream)
+	assert.Equal(t, ActorCharacter, events[0].Actor.Kind)
+	assert.Equal(t, charID.String(), events[0].Actor.ID)
+
+	// Verify payload
+	var payload ArrivePayload
+	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
+	assert.Equal(t, "Alyssa", payload.CharacterName)
+
+	// Verify broadcast
+	select {
+	case event := <-ch:
+		assert.Equal(t, EventTypeArrive, event.Type)
+		assert.Equal(t, stream, event.Stream)
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Timeout waiting for broadcast event")
+	}
+}
+
+func TestEngine_HandleDisconnect(t *testing.T) {
+	store := NewMemoryEventStore()
+	sessions := NewSessionManager()
+	broadcaster := NewBroadcaster()
+	engine := NewEngine(store, sessions, broadcaster)
+
+	ctx := context.Background()
+	charID := NewULID()
+	locationID := NewULID()
+
+	stream := "location:" + locationID.String()
+	ch := broadcaster.Subscribe(stream)
+	defer broadcaster.Unsubscribe(stream, ch)
+
+	err := engine.HandleDisconnect(ctx, charID, locationID, "Alyssa", "quit")
+	require.NoError(t, err)
+
+	// Verify event was stored with correct type, stream, actor
+	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, EventTypeLeave, events[0].Type)
+	assert.Equal(t, stream, events[0].Stream)
+	assert.Equal(t, ActorCharacter, events[0].Actor.Kind)
+	assert.Equal(t, charID.String(), events[0].Actor.ID)
+
+	// Verify payload
+	var payload LeavePayload
+	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
+	assert.Equal(t, "Alyssa", payload.CharacterName)
+	assert.Equal(t, "quit", payload.Reason)
+
+	// Verify broadcast
+	select {
+	case event := <-ch:
+		assert.Equal(t, EventTypeLeave, event.Type)
+		assert.Equal(t, stream, event.Stream)
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Timeout waiting for broadcast event")
+	}
 }

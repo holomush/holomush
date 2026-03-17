@@ -35,7 +35,7 @@ var elements = []string{
 	"Silver", "Titanium", "Xenon", "Zinc", "Zircon",
 }
 
-// GemstoneElementTheme generates names like "Sapphire_Neon".
+// GemstoneElementTheme generates names like "Amber_Argon".
 type GemstoneElementTheme struct{}
 
 // NewGemstoneElementTheme creates a new GemstoneElementTheme.
@@ -88,7 +88,15 @@ func (a *GuestAuthenticator) Authenticate(_ context.Context, username, _ string)
 		CharacterID:   ulid.Make(),
 		CharacterName: name,
 		LocationID:    a.startLocation,
+		IsGuest:       true,
 	}, nil
+}
+
+// ActiveCount returns the number of currently active guest names.
+func (a *GuestAuthenticator) ActiveCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.active)
 }
 
 // ReleaseGuest removes the name from the active set, freeing it for reuse.
