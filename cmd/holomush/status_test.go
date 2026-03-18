@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/config"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
@@ -545,4 +548,22 @@ func TestFormatStatusTable_AllStopped(t *testing.T) {
 
 	assert.Contains(t, output, "stopped", "output should contain 'stopped'")
 	assert.Contains(t, output, "not running", "output should contain 'not running'")
+}
+
+func TestStatusCommand_ConfigFileLoading(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("status:\n  core_addr: \"10.0.0.1:9001\"\n  gateway_addr: \"10.0.0.1:9002\"\n"), 0o644)
+	require.NoError(t, err)
+
+	cfg := &statusConfig{}
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().StringVar(&cfg.CoreAddr, "core-addr", defaultCoreControlAddr, "")
+	cmd.Flags().StringVar(&cfg.GatewayAddr, "gateway-addr", defaultGatewayControlAddr, "")
+
+	err = config.Load(cfgFile, cmd, cfg, "status")
+	require.NoError(t, err)
+
+	assert.Equal(t, "10.0.0.1:9001", cfg.CoreAddr)
+	assert.Equal(t, "10.0.0.1:9002", cfg.GatewayAddr)
 }

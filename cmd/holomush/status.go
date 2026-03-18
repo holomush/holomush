@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/xdg"
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
@@ -84,6 +85,9 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show status of running HoloMUSH processes",
 		Long:  `Show the health and status of running gateway and core processes.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := config.Load(configFile, cmd, cfg, "status"); err != nil {
+				return err
+			}
 			return runStatus(cmd, cfg)
 		},
 	}
