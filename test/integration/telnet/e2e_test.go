@@ -114,6 +114,14 @@ func connectAsGuest(c *testTelnetClient) string {
 	return match[1]
 }
 
+// waitForPipeline sends a probe command and waits for the echo, proving the
+// full command→event subscription pipeline is ready. This replaces fixed
+// time.Sleep calls that are flaky under CI load.
+func waitForPipeline(c *testTelnetClient) {
+	c.SendLine(`say __ready__`)
+	c.ReadUntil("__ready__", 5*time.Second)
+}
+
 var _ = Describe("Telnet Vertical Slice E2E", func() {
 	var (
 		testCtx      context.Context
@@ -312,8 +320,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			connectAsGuest(clientA)
 			connectAsGuest(clientB)
 
-			// Small delay to let subscriptions establish
-			time.Sleep(200 * time.Millisecond)
+			waitForPipeline(clientA)
+			waitForPipeline(clientB)
 		})
 
 		AfterEach(func() {
@@ -359,7 +367,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			connectAsGuest(clientA)
 			connectAsGuest(clientB)
 
-			time.Sleep(200 * time.Millisecond)
+			waitForPipeline(clientA)
+			waitForPipeline(clientB)
 		})
 
 		AfterEach(func() {
@@ -403,7 +412,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 			connectAsGuest(clientA)
 			connectAsGuest(clientB)
-			time.Sleep(200 * time.Millisecond)
+			waitForPipeline(clientA)
+			waitForPipeline(clientB)
 
 			// A says something, B receives
 			clientA.SendLine(`say Before quit`)
@@ -415,7 +425,6 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			clientA.SendLine("quit")
 			_ = clientA.ReadLine() // Goodbye!
 			clientA.Close()
-			time.Sleep(200 * time.Millisecond)
 
 			// C connects and says something — B should receive
 			clientC, err := newTestTelnetClient(telnetAddr)
@@ -423,7 +432,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			defer clientC.Close()
 
 			connectAsGuest(clientC)
-			time.Sleep(200 * time.Millisecond)
+			waitForPipeline(clientC)
 
 			clientC.SendLine(`say After A left`)
 			_ = clientC.ReadLine()
@@ -439,30 +448,26 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			defer client.Close()
 
 			connectAsGuest(client)
-			time.Sleep(200 * time.Millisecond)
+			waitForPipeline(client)
 
 			client.SendLine(`say Persistence test`)
 			line := client.ReadLine()
 			Expect(line).To(ContainSubstring(`You say, "Persistence test"`))
 
-			// Wait for event to be persisted
-			time.Sleep(500 * time.Millisecond)
-
-			// Replay events from the location stream
+			// Poll for event persistence instead of fixed sleep
 			stream := "location:" + startLocation.String()
-			events, err := eventStore.Replay(testCtx, stream, ulid.ULID{}, 100)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(events)).To(BeNumerically(">", 0), "expected at least one event persisted")
-
-			// Verify at least one say event
-			var foundSay bool
-			for _, ev := range events {
-				if ev.Type == core.EventTypeSay {
-					foundSay = true
-					break
+			Eventually(func() bool {
+				events, err := eventStore.Replay(testCtx, stream, ulid.ULID{}, 100)
+				if err != nil {
+					return false
 				}
-			}
-			Expect(foundSay).To(BeTrue(), "expected a say event in persisted events")
+				for _, ev := range events {
+					if ev.Type == core.EventTypeSay {
+						return true
+					}
+				}
+				return false
+			}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "expected a say event persisted")
 		})
 	})
 
@@ -474,20 +479,20 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 			connectAsGuest(client)
 
-			time.Sleep(200 * time.Millisecond)
-
-			events, err := eventStore.Replay(testCtx,
-				"location:"+startLocation.String(), ulid.ULID{}, 100)
-			Expect(err).NotTo(HaveOccurred())
-
-			found := false
-			for _, e := range events {
-				if string(e.Type) == "arrive" {
-					found = true
-					break
+			// Poll for arrive event persistence
+			Eventually(func() bool {
+				events, err := eventStore.Replay(testCtx,
+					"location:"+startLocation.String(), ulid.ULID{}, 100)
+				if err != nil {
+					return false
 				}
-			}
-			Expect(found).To(BeTrue(), "expected arrive event in store")
+				for _, e := range events {
+					if string(e.Type) == "arrive" {
+						return true
+					}
+				}
+				return false
+			}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "expected arrive event in store")
 		})
 
 		It("emits leave event on guest disconnect", func() {
