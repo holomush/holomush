@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -291,7 +292,7 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 	// Run in goroutine and cancel after a short delay
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- runCoreWithDeps(ctx, cfg, cmd, deps)
+		errChan <- runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	}()
 
 	// Let it start, then cancel
@@ -316,7 +317,7 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, nil)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "grpc-addr")
 }
@@ -337,7 +338,7 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected DATABASE_URL error")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
@@ -364,7 +365,7 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected event store error")
 	assert.Contains(t, err.Error(), "connection refused")
 }
@@ -396,7 +397,7 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected init game ID error")
 	assert.Contains(t, err.Error(), "game ID")
 }
@@ -429,7 +430,7 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected certs dir error")
 	assert.Contains(t, err.Error(), "certs directory")
 }
@@ -465,7 +466,7 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected TLS error")
 	assert.Contains(t, err.Error(), "TLS")
 }
@@ -504,7 +505,7 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected control TLS error")
 	assert.Contains(t, err.Error(), "control TLS")
 }
@@ -546,7 +547,7 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected control server error")
 	assert.Contains(t, err.Error(), "failed to create control server")
 }
@@ -592,7 +593,7 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected control server start error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -647,7 +648,7 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected observability server start error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -1096,7 +1097,7 @@ func TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected BOOTSTRAP_FAILED when event store is not PostgresEventStore")
 	errutil.AssertErrorCode(t, err, "BOOTSTRAP_FAILED")
 	assert.Contains(t, err.Error(), "PostgresEventStore")
@@ -1158,7 +1159,7 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- runCoreWithDeps(ctx, cfg, cmd, deps)
+		errChan <- runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	}()
 
 	time.Sleep(100 * time.Millisecond)

@@ -90,7 +90,11 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, cfg, "core"); err != nil {
 				return err
 			}
-			return runCoreWithDeps(cmd.Context(), cfg, cmd, nil)
+			var gameConfig config.GameConfig
+			if err := config.Load(configFile, cmd, &gameConfig, "game"); err != nil {
+				return err
+			}
+			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, cmd, nil)
 		},
 	}
 
@@ -107,7 +111,7 @@ manages plugins, and handles game state.`,
 
 // runCoreWithDeps starts the core process with injectable dependencies.
 // If deps is nil, default implementations are used.
-func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, deps *CoreDeps) error {
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
 		deps = &CoreDeps{}
 	}
@@ -342,12 +346,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		// Create gRPC server
 		creds := credentials.NewTLS(tlsConfig)
 		grpcServer = grpc.NewServer(grpc.Creds(creds))
-
-		// Load game config for guest start location.
-		var gameConfig config.GameConfig
-		if loadErr := config.Load(configFile, cmd, &gameConfig, "game"); loadErr != nil {
-			return oops.Code("CONFIG_GAME_FAILED").Wrap(loadErr)
-		}
 
 		startLocationStr := gameConfig.GuestStartLocation
 		if startLocationStr == "" {
