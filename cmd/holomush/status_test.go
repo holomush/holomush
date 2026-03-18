@@ -166,25 +166,25 @@ func TestStatusConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: statusConfig{
-				coreAddr:    "127.0.0.1:9001",
-				gatewayAddr: "127.0.0.1:9002",
+				CoreAddr:    "127.0.0.1:9001",
+				GatewayAddr: "127.0.0.1:9002",
 			},
 			wantError: false,
 		},
 		{
 			name: "valid config with json output",
 			cfg: statusConfig{
-				jsonOutput:  true,
-				coreAddr:    "127.0.0.1:9001",
-				gatewayAddr: "127.0.0.1:9002",
+				JSONOutput:  true,
+				CoreAddr:    "127.0.0.1:9001",
+				GatewayAddr: "127.0.0.1:9002",
 			},
 			wantError: false,
 		},
 		{
 			name: "empty core-addr",
 			cfg: statusConfig{
-				coreAddr:    "",
-				gatewayAddr: "127.0.0.1:9002",
+				CoreAddr:    "",
+				GatewayAddr: "127.0.0.1:9002",
 			},
 			wantError: true,
 			errorMsg:  "core-addr is required",
@@ -192,8 +192,8 @@ func TestStatusConfig_Validate(t *testing.T) {
 		{
 			name: "empty gateway-addr",
 			cfg: statusConfig{
-				coreAddr:    "127.0.0.1:9001",
-				gatewayAddr: "",
+				CoreAddr:    "127.0.0.1:9001",
+				GatewayAddr: "",
 			},
 			wantError: true,
 			errorMsg:  "gateway-addr is required",

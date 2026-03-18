@@ -59,17 +59,17 @@ func NewProcessStatusError(component string, err error) ProcessStatus {
 
 // statusConfig holds configuration for the status command.
 type statusConfig struct {
-	jsonOutput  bool
-	coreAddr    string
-	gatewayAddr string
+	JSONOutput  bool   `koanf:"json"`
+	CoreAddr    string `koanf:"core_addr"`
+	GatewayAddr string `koanf:"gateway_addr"`
 }
 
 // Validate checks that the configuration is valid.
 func (cfg *statusConfig) Validate() error {
-	if cfg.coreAddr == "" {
+	if cfg.CoreAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("core-addr is required")
 	}
-	if cfg.gatewayAddr == "" {
+	if cfg.GatewayAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("gateway-addr is required")
 	}
 	return nil
@@ -88,9 +88,9 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&cfg.jsonOutput, "json", false, "output status as JSON")
-	cmd.Flags().StringVar(&cfg.coreAddr, "core-addr", defaultCoreControlAddr, "core control gRPC address")
-	cmd.Flags().StringVar(&cfg.gatewayAddr, "gateway-addr", defaultGatewayControlAddr, "gateway control gRPC address")
+	cmd.Flags().BoolVar(&cfg.JSONOutput, "json", false, "output status as JSON")
+	cmd.Flags().StringVar(&cfg.CoreAddr, "core-addr", defaultCoreControlAddr, "core control gRPC address")
+	cmd.Flags().StringVar(&cfg.GatewayAddr, "gateway-addr", defaultGatewayControlAddr, "gateway control gRPC address")
 
 	return cmd
 }
@@ -104,15 +104,15 @@ func runStatus(cmd *cobra.Command, cfg *statusConfig) error {
 
 	// Query both core and gateway processes
 	statuses := map[string]ProcessStatus{
-		"core":    queryProcessStatusGRPC("core", cfg.coreAddr),
-		"gateway": queryProcessStatusGRPC("gateway", cfg.gatewayAddr),
+		"core":    queryProcessStatusGRPC("core", cfg.CoreAddr),
+		"gateway": queryProcessStatusGRPC("gateway", cfg.GatewayAddr),
 	}
 
 	// Format and output the results
 	var output string
 	var err error
 
-	if cfg.jsonOutput {
+	if cfg.JSONOutput {
 		output, err = formatStatusJSON(statuses)
 		if err != nil {
 			return oops.Code("JSON_FORMAT_FAILED").With("operation", "format JSON").Wrap(err)
