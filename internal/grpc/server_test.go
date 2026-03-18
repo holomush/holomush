@@ -222,7 +222,7 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
@@ -254,7 +254,7 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -328,7 +328,7 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	sessions.Connect(charID, connID)
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:   core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions: sessions,
 		sessionStore: &mockSessionStore{
 			sessions: map[string]*SessionInfo{
@@ -746,7 +746,7 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
@@ -778,7 +778,7 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -851,7 +851,7 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -914,7 +914,7 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	sessions.Connect(charID, connID)
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:   core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions: sessions,
 		sessionStore: &mockSessionStore{
 			sessions: map[string]*SessionInfo{
@@ -942,7 +942,7 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
@@ -1082,7 +1082,7 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
@@ -1134,7 +1134,7 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 	})
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: sessionStore,
 	}
@@ -1245,7 +1245,7 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	})
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
@@ -1412,7 +1412,7 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -1570,7 +1570,7 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -1761,7 +1761,7 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
@@ -1883,7 +1883,7 @@ func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: &mockSessionStore{
@@ -2332,8 +2332,6 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 	assert.True(t, hookInfo.IsGuest)
 }
 
-
-
 func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 	charID := core.NewULID()
 	locationID := core.NewULID()
@@ -2505,7 +2503,7 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
 	}
