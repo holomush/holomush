@@ -10,14 +10,17 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/config"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
@@ -779,4 +782,24 @@ func TestGatewaySignalHandling_ContextCancelAlsoExits(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("context cancel did not exit select within timeout")
 	}
+}
+
+func TestGatewayCommand_ConfigFileLoading(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("gateway:\n  telnet_addr: \":5555\"\n  core_addr: \"core.local:9000\"\n  log_format: \"text\"\n"), 0o644)
+	require.NoError(t, err)
+
+	cfg := &gatewayConfig{}
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().StringVar(&cfg.TelnetAddr, "telnet-addr", defaultTelnetAddr, "")
+	cmd.Flags().StringVar(&cfg.CoreAddr, "core-addr", defaultCoreAddr, "")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "")
+
+	err = config.Load(cfgFile, cmd, cfg, "gateway")
+	require.NoError(t, err)
+
+	assert.Equal(t, ":5555", cfg.TelnetAddr)
+	assert.Equal(t, "core.local:9000", cfg.CoreAddr)
+	assert.Equal(t, "text", cfg.LogFormat)
 }

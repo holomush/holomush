@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -69,6 +70,9 @@ func newGatewayCmd() *cobra.Command {
 		Long: `Start the gateway process which handles incoming connections
 from telnet and web clients, forwarding commands to the core process.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := config.Load(configFile, cmd, cfg, "gateway"); err != nil {
+				return err
+			}
 			return runGatewayWithDeps(cmd.Context(), cfg, cmd, nil)
 		},
 	}
