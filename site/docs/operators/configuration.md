@@ -4,12 +4,14 @@ This guide covers all configuration options for HoloMUSH.
 
 ## Overview
 
-HoloMUSH configuration follows a hierarchy:
+HoloMUSH uses a two-layer configuration system:
 
-1. Command-line flags (highest precedence)
-2. Environment variables (`DATABASE_URL` is env-only — it has no config file equivalent)
-3. Config file (`~/.config/holomush/config.yaml`)
-4. Built-in defaults
+1. Config file (`~/.config/holomush/config.yaml`) — lowest precedence
+2. CLI flags — highest precedence, always override config file values
+
+Built-in defaults apply when neither a config file value nor a CLI flag is provided.
+`DATABASE_URL` is a separate environment variable for database credentials — it is not
+part of the config file system and has no equivalent config key.
 
 Config files are optional. All settings have sensible defaults and every config file
 key has an equivalent CLI flag. You can run HoloMUSH without a config file; flags work
@@ -380,8 +382,8 @@ gateway:
 # Game world configuration.
 game:
   # ULID of the starting location assigned to guest connections.
-  # Flag: --guest-start-location
-  # Default: "" (no guest start location)
+  # Config file only — no CLI flag equivalent.
+  # Default: "01HK153X0006AFVGQT61FPQX3S" (The Nexus seed location)
   guest_start_location: "01JMHZ5H3ZSBVTGARX4MSS1MBH"
 
 # Status command configuration.
