@@ -353,7 +353,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 		startLocationID, parseErr := ulid.Parse(startLocationStr)
 		if parseErr != nil {
-			return oops.Code("INVALID_START_LOCATION").Wrap(parseErr)
+			return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
 		}
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
