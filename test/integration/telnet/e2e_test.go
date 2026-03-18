@@ -115,12 +115,15 @@ func connectAsGuest(c *testTelnetClient) string {
 }
 
 // waitForPipeline sends a probe command and waits for the echo, proving the
-// full command→event subscription pipeline is ready. This replaces fixed
-// time.Sleep calls that are flaky under CI load.
-func waitForPipeline(c *testTelnetClient) {
+// full command→event subscription pipeline is ready. Peers drain the broadcast
+// so probe messages don't leak into subsequent assertions.
+func waitForPipeline(c *testTelnetClient, peers ...*testTelnetClient) {
 	probe := "__ready__:" + ulid.Make().String()
 	c.SendLine("say " + probe)
 	c.ReadUntil(fmt.Sprintf(`You say, "%s"`, probe), 5*time.Second)
+	for _, p := range peers {
+		p.ReadUntil(probe, 5*time.Second)
+	}
 }
 
 var _ = Describe("Telnet Vertical Slice E2E", func() {
@@ -321,8 +324,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			connectAsGuest(clientA)
 			connectAsGuest(clientB)
 
-			waitForPipeline(clientA)
-			waitForPipeline(clientB)
+			waitForPipeline(clientA, clientB)
+			waitForPipeline(clientB, clientA)
 		})
 
 		AfterEach(func() {
@@ -368,8 +371,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			connectAsGuest(clientA)
 			connectAsGuest(clientB)
 
-			waitForPipeline(clientA)
-			waitForPipeline(clientB)
+			waitForPipeline(clientA, clientB)
+			waitForPipeline(clientB, clientA)
 		})
 
 		AfterEach(func() {
@@ -413,8 +416,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 			connectAsGuest(clientA)
 			connectAsGuest(clientB)
-			waitForPipeline(clientA)
-			waitForPipeline(clientB)
+			waitForPipeline(clientA, clientB)
+			waitForPipeline(clientB, clientA)
 
 			// A says something, B receives
 			clientA.SendLine(`say Before quit`)
@@ -433,7 +436,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			defer clientC.Close()
 
 			connectAsGuest(clientC)
-			waitForPipeline(clientC)
+			waitForPipeline(clientC, clientB)
 
 			clientC.SendLine(`say After A left`)
 			_ = clientC.ReadLine()
