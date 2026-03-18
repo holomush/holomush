@@ -345,8 +345,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 		// Load game config for guest start location.
 		var gameConfig config.GameConfig
-		if err := config.Load(configFile, cmd, &gameConfig, "game"); err != nil {
-			return oops.Code("CONFIG_GAME_FAILED").Wrap(err)
+		if loadErr := config.Load(configFile, cmd, &gameConfig, "game"); loadErr != nil {
+			return oops.Code("CONFIG_GAME_FAILED").Wrap(loadErr)
 		}
 
 		startLocationStr := gameConfig.GuestStartLocation
@@ -570,11 +570,11 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	slog.Info("TLS certificates generated")
 
 	// Load the newly generated certificates
-	config, err := tlscerts.LoadServerTLS(certsDir, "core")
+	tlsConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
 	if err != nil {
 		return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load generated certificates").With("certs_dir", certsDir).Wrap(err)
 	}
-	return config, nil
+	return tlsConfig, nil
 }
 
 // fileExists returns true if the file exists, false otherwise.

@@ -787,7 +787,7 @@ func TestGatewaySignalHandling_ContextCancelAlsoExits(t *testing.T) {
 func TestGatewayCommand_ConfigFileLoading(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("gateway:\n  telnet_addr: \":5555\"\n  core_addr: \"core.local:9000\"\n  log_format: \"text\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("gateway:\n  telnet_addr: \":5555\"\n  core_addr: \"core.local:9000\"\n  log_format: \"text\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &gatewayConfig{}

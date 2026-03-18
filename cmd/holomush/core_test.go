@@ -892,7 +892,7 @@ func TestSignalStop_Cleanup(t *testing.T) {
 func TestCoreCommand_ConfigFileLoading(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("core:\n  grpc_addr: \"0.0.0.0:7777\"\n  control_addr: \"0.0.0.0:7778\"\n  log_format: \"text\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("core:\n  grpc_addr: \"0.0.0.0:7777\"\n  control_addr: \"0.0.0.0:7778\"\n  log_format: \"text\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &coreConfig{}

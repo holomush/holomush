@@ -77,6 +77,7 @@ func Load(configPath string, cmd *cobra.Command, target any, section string) err
 
 // resolveConfigPath determines which config file to load.
 // Returns (path, explicit, error) where explicit indicates the user set --config.
+//nolint:gocritic // unnamed results are clearer here than named returns that shadow
 func resolveConfigPath(configPath string) (string, bool, error) {
 	if configPath != "" {
 		if _, err := os.Stat(configPath); err != nil {
@@ -87,10 +88,11 @@ func resolveConfigPath(configPath string) (string, bool, error) {
 		return configPath, true, nil
 	}
 
-	// Try default XDG path.
+	// Try default XDG path. If we can't determine the XDG dir
+	// (e.g., no HOME), skip config file loading gracefully.
 	configDir, err := xdg.ConfigDir()
 	if err != nil {
-		return "", false, nil // Can't determine XDG dir, skip.
+		return "", false, nil //nolint:nilerr // intentional: missing XDG dir is not a config error
 	}
 
 	defaultPath := configDir + "/config.yaml"

@@ -23,7 +23,7 @@ type testConfig struct {
 func newTestCmd(cfg *testConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "test",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
 	}
@@ -36,7 +36,7 @@ func newTestCmd(cfg *testConfig) *cobra.Command {
 func TestLoad_FromYAMLFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n  verbose: true\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n  verbose: true\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -53,7 +53,7 @@ func TestLoad_FromYAMLFile(t *testing.T) {
 func TestLoad_CLIFlagsOverrideConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -70,7 +70,7 @@ func TestLoad_CLIFlagsOverrideConfigFile(t *testing.T) {
 func TestLoad_DefaultFlagsDoNotOverrideConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -107,7 +107,7 @@ func TestLoad_DefaultPathMissing_NoError(t *testing.T) {
 func TestLoad_MalformedYAML_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("{not: valid: yaml: ["), 0o644)
+	err := os.WriteFile(cfgFile, []byte("{not: valid: yaml: ["), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -120,7 +120,7 @@ func TestLoad_MalformedYAML_ReturnsError(t *testing.T) {
 func TestLoad_UnknownKeysIgnored(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  unknown_key: \"should be ignored\"\n  another_unknown: 42\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  unknown_key: \"should be ignored\"\n  another_unknown: 42\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -134,7 +134,7 @@ func TestLoad_UnknownKeysIgnored(t *testing.T) {
 func TestLoad_EmptyConfigFile_UsesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte(""), 0o644)
+	err := os.WriteFile(cfgFile, []byte(""), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -148,7 +148,7 @@ func TestLoad_EmptyConfigFile_UsesDefaults(t *testing.T) {
 func TestLoad_GameConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("game:\n  guest_start_location: \"01JMHZ5H3ZSBVTGARX4MSS1MBH\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("game:\n  guest_start_location: \"01JMHZ5H3ZSBVTGARX4MSS1MBH\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &GameConfig{}
@@ -162,7 +162,7 @@ func TestLoad_GameConfig(t *testing.T) {
 func TestLoad_HyphenFlagMatchesUnderscoreYAML(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("server:\n  log_format: \"text\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("server:\n  log_format: \"text\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}
@@ -180,7 +180,7 @@ func TestLoad_DefaultXDGPath(t *testing.T) {
 
 	holoDir := filepath.Join(dir, "holomush")
 	require.NoError(t, os.MkdirAll(holoDir, 0o700))
-	err := os.WriteFile(filepath.Join(holoDir, "config.yaml"), []byte("server:\n  addr: \"from-xdg:9000\"\n"), 0o644)
+	err := os.WriteFile(filepath.Join(holoDir, "config.yaml"), []byte("server:\n  addr: \"from-xdg:9000\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &testConfig{}

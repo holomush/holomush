@@ -553,7 +553,7 @@ func TestFormatStatusTable_AllStopped(t *testing.T) {
 func TestStatusCommand_ConfigFileLoading(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
-	err := os.WriteFile(cfgFile, []byte("status:\n  core_addr: \"10.0.0.1:9001\"\n  gateway_addr: \"10.0.0.1:9002\"\n"), 0o644)
+	err := os.WriteFile(cfgFile, []byte("status:\n  core_addr: \"10.0.0.1:9001\"\n  gateway_addr: \"10.0.0.1:9002\"\n"), 0o600)
 	require.NoError(t, err)
 
 	cfg := &statusConfig{}
