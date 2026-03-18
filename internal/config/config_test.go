@@ -159,6 +159,26 @@ func TestLoad_GameConfig(t *testing.T) {
 	assert.Equal(t, "01JMHZ5H3ZSBVTGARX4MSS1MBH", cfg.GuestStartLocation)
 }
 
+func TestLoad_ExplicitPathPermissionDenied(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("permission test skipped when running as root")
+	}
+
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n"), 0o600)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(cfgFile, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(cfgFile, 0o600) })
+
+	cfg := &testConfig{}
+	cmd := newTestCmd(cfg)
+
+	err = Load(cfgFile, cmd, cfg, "server")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "not found", "permission error should not be reported as 'not found'")
+}
+
 func TestLoad_HyphenFlagMatchesUnderscoreYAML(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")

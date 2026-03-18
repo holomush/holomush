@@ -6,7 +6,9 @@ package config
 
 import (
 	"errors"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/knadh/koanf/parsers/yaml"
@@ -82,9 +84,20 @@ func Load(configPath string, cmd *cobra.Command, target any, section string) err
 func resolveConfigPath(configPath string) (string, bool, error) {
 	if configPath != "" {
 		if _, err := os.Stat(configPath); err != nil {
-			return "", true, oops.Code("CONFIG_NOT_FOUND").
-				With("path", configPath).
-				Errorf("config file not found: %s", configPath)
+			switch {
+			case errors.Is(err, os.ErrNotExist):
+				return "", true, oops.Code("CONFIG_NOT_FOUND").
+					With("path", configPath).
+					Errorf("config file not found: %s", configPath)
+			case errors.Is(err, os.ErrPermission):
+				return "", true, oops.Code("CONFIG_ACCESS_DENIED").
+					With("path", configPath).
+					Errorf("config file not readable: %s", configPath)
+			default:
+				return "", true, oops.Code("CONFIG_ACCESS_FAILED").
+					With("path", configPath).
+					Wrap(err)
+			}
 		}
 		return configPath, true, nil
 	}
@@ -93,10 +106,11 @@ func resolveConfigPath(configPath string) (string, bool, error) {
 	// (e.g., no HOME), skip config file loading gracefully.
 	configDir, err := xdg.ConfigDir()
 	if err != nil {
-		return "", false, nil //nolint:nilerr // intentional: missing XDG dir is not a config error
+		slog.Debug("XDG config dir unavailable, skipping config file", "error", err)
+		return "", false, nil
 	}
 
-	defaultPath := configDir + "/config.yaml"
+	defaultPath := filepath.Join(configDir, "config.yaml")
 	if _, err := os.Stat(defaultPath); errors.Is(err, os.ErrNotExist) {
 		return "", false, nil // Default path missing, that's fine.
 	} else if err != nil {
