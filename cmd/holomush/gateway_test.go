@@ -10,14 +10,17 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/config"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
@@ -334,30 +337,30 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: gatewayConfig{
-				telnetAddr:  ":4201",
-				coreAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9002",
-				logFormat:   "json",
+				TelnetAddr:  ":4201",
+				CoreAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9002",
+				LogFormat:   "json",
 			},
 			wantError: false,
 		},
 		{
 			name: "valid config with text format",
 			cfg: gatewayConfig{
-				telnetAddr:  ":4201",
-				coreAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9002",
-				logFormat:   "text",
+				TelnetAddr:  ":4201",
+				CoreAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9002",
+				LogFormat:   "text",
 			},
 			wantError: false,
 		},
 		{
 			name: "empty telnet-addr",
 			cfg: gatewayConfig{
-				telnetAddr:  "",
-				coreAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9002",
-				logFormat:   "json",
+				TelnetAddr:  "",
+				CoreAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9002",
+				LogFormat:   "json",
 			},
 			wantError: true,
 			errorMsg:  "telnet-addr is required",
@@ -365,10 +368,10 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "empty core-addr",
 			cfg: gatewayConfig{
-				telnetAddr:  ":4201",
-				coreAddr:    "",
-				controlAddr: "127.0.0.1:9002",
-				logFormat:   "json",
+				TelnetAddr:  ":4201",
+				CoreAddr:    "",
+				ControlAddr: "127.0.0.1:9002",
+				LogFormat:   "json",
 			},
 			wantError: true,
 			errorMsg:  "core-addr is required",
@@ -376,10 +379,10 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "empty control-addr",
 			cfg: gatewayConfig{
-				telnetAddr:  ":4201",
-				coreAddr:    "localhost:9000",
-				controlAddr: "",
-				logFormat:   "json",
+				TelnetAddr:  ":4201",
+				CoreAddr:    "localhost:9000",
+				ControlAddr: "",
+				LogFormat:   "json",
 			},
 			wantError: true,
 			errorMsg:  "control-addr is required",
@@ -387,10 +390,10 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "invalid log-format",
 			cfg: gatewayConfig{
-				telnetAddr:  ":4201",
-				coreAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9002",
-				logFormat:   "invalid",
+				TelnetAddr:  ":4201",
+				CoreAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9002",
+				LogFormat:   "invalid",
 			},
 			wantError: true,
 			errorMsg:  "log-format must be 'json' or 'text'",
@@ -398,10 +401,10 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "empty log-format",
 			cfg: gatewayConfig{
-				telnetAddr:  ":4201",
-				coreAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9002",
-				logFormat:   "",
+				TelnetAddr:  ":4201",
+				CoreAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9002",
+				LogFormat:   "",
 			},
 			wantError: true,
 			errorMsg:  "log-format must be 'json' or 'text'",
@@ -779,4 +782,24 @@ func TestGatewaySignalHandling_ContextCancelAlsoExits(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("context cancel did not exit select within timeout")
 	}
+}
+
+func TestGatewayCommand_ConfigFileLoading(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("gateway:\n  telnet_addr: \":5555\"\n  core_addr: \"core.local:9000\"\n  log_format: \"text\"\n"), 0o600)
+	require.NoError(t, err)
+
+	cfg := &gatewayConfig{}
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().StringVar(&cfg.TelnetAddr, "telnet-addr", defaultTelnetAddr, "")
+	cmd.Flags().StringVar(&cfg.CoreAddr, "core-addr", defaultCoreAddr, "")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "")
+
+	err = config.Load(cfgFile, cmd, cfg, "gateway")
+	require.NoError(t, err)
+
+	assert.Equal(t, ":5555", cfg.TelnetAddr)
+	assert.Equal(t, "core.local:9000", cfg.CoreAddr)
+	assert.Equal(t, "text", cfg.LogFormat)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -245,11 +246,11 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "", // Disable observability server for simplicity
-		logFormat:   "json",
-		gameID:      "test-game-id", // Skip InitGameID call
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "", // Disable observability server for simplicity
+		LogFormat:   "json",
+		GameID:      "test-game-id", // Skip InitGameID call
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -291,7 +292,7 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 	// Run in goroutine and cancel after a short delay
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- runCoreWithDeps(ctx, cfg, cmd, deps)
+		errChan <- runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	}()
 
 	// Let it start, then cancel
@@ -310,13 +311,13 @@ func TestRunCoreWithDeps_HappyPath(t *testing.T) {
 func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "", // Invalid - required
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
+		GRPCAddr:    "", // Invalid - required
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, nil)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "grpc-addr")
 }
@@ -325,9 +326,9 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
 	}
 
 	deps := &CoreDeps{
@@ -337,7 +338,7 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected DATABASE_URL error")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
@@ -346,9 +347,9 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
 	}
 
 	deps := &CoreDeps{
@@ -364,7 +365,7 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected event store error")
 	assert.Contains(t, err.Error(), "connection refused")
 }
@@ -373,10 +374,10 @@ func TestRunCoreWithDeps_EventStoreFactoryError(t *testing.T) {
 func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "", // Will call InitGameID
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "", // Will call InitGameID
 	}
 
 	deps := &CoreDeps{
@@ -396,7 +397,7 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected init game ID error")
 	assert.Contains(t, err.Error(), "game ID")
 }
@@ -405,10 +406,10 @@ func TestRunCoreWithDeps_InitGameIDError(t *testing.T) {
 func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	deps := &CoreDeps{
@@ -429,7 +430,7 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected certs dir error")
 	assert.Contains(t, err.Error(), "certs directory")
 }
@@ -438,10 +439,10 @@ func TestRunCoreWithDeps_CertsDirError(t *testing.T) {
 func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	deps := &CoreDeps{
@@ -465,7 +466,7 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected TLS error")
 	assert.Contains(t, err.Error(), "TLS")
 }
@@ -474,10 +475,10 @@ func TestRunCoreWithDeps_TLSCertError(t *testing.T) {
 func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	deps := &CoreDeps{
@@ -504,7 +505,7 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected control TLS error")
 	assert.Contains(t, err.Error(), "control TLS")
 }
@@ -513,10 +514,10 @@ func TestRunCoreWithDeps_ControlTLSLoadError(t *testing.T) {
 func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	deps := &CoreDeps{
@@ -546,7 +547,7 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected control server error")
 	assert.Contains(t, err.Error(), "failed to create control server")
 }
@@ -555,10 +556,10 @@ func TestRunCoreWithDeps_ControlServerFactoryError(t *testing.T) {
 func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	deps := &CoreDeps{
@@ -592,7 +593,7 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected control server start error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -601,11 +602,11 @@ func TestRunCoreWithDeps_ControlServerStartError(t *testing.T) {
 func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "127.0.0.1:9100",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "127.0.0.1:9100",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -647,7 +648,7 @@ func TestRunCoreWithDeps_ObservabilityServerStartError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected observability server start error")
 	assert.Contains(t, err.Error(), "address already in use")
 }
@@ -657,11 +658,11 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		metricsAddr: "", // Disable observability server for simplicity
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		MetricsAddr: "", // Disable observability server for simplicity
+		LogFormat:   "json",
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -724,10 +725,10 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 func TestRunGatewayWithDeps_ValidationError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  "", // Invalid - required
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  "", // Invalid - required
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	cmd := newMockCmd()
@@ -740,10 +741,10 @@ func TestRunGatewayWithDeps_ValidationError(t *testing.T) {
 func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -764,10 +765,10 @@ func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -791,10 +792,10 @@ func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -821,10 +822,10 @@ func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -854,10 +855,10 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -890,10 +891,10 @@ func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -929,10 +930,10 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	deps := &GatewayDeps{
@@ -972,10 +973,10 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -1019,11 +1020,11 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		metricsAddr: "127.0.0.1:9101",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		MetricsAddr: "127.0.0.1:9101",
+		LogFormat:   "json",
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -1077,10 +1078,10 @@ func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 func TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	deps := &CoreDeps{
@@ -1096,7 +1097,7 @@ func TestRunCoreWithDeps_BootstrapRequiresPostgresEventStore(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	require.Error(t, err, "expected BOOTSTRAP_FAILED when event store is not PostgresEventStore")
 	errutil.AssertErrorCode(t, err, "BOOTSTRAP_FAILED")
 	assert.Contains(t, err.Error(), "PostgresEventStore")
@@ -1107,11 +1108,11 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "127.0.0.1:9100",
-		logFormat:   "json",
-		gameID:      "test-game-id",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "127.0.0.1:9100",
+		LogFormat:   "json",
+		GameID:      "test-game-id",
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -1158,7 +1159,7 @@ func TestRunCoreWithDeps_WithObservability(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- runCoreWithDeps(ctx, cfg, cmd, deps)
+		errChan <- runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -1177,11 +1178,11 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &gatewayConfig{
-		telnetAddr:  ":4201",
-		coreAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9002",
-		metricsAddr: "127.0.0.1:9101",
-		logFormat:   "json",
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		MetricsAddr: "127.0.0.1:9101",
+		LogFormat:   "json",
 	}
 
 	controlErrChan := make(chan error, 1)

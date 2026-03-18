@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -78,17 +79,17 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "", // Disable metrics for this test
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "", // Disable metrics for this test
+		LogFormat:   "json",
 	}
 
 	// Cancel context immediately to prevent waiting for signals
 	cancel()
 
 	// Run core - it should return quickly since context is cancelled
-	_ = runCoreWithDeps(ctx, cfg, NewCoreCmd(), deps)
+	_ = runCoreWithDeps(ctx, cfg, config.GameConfig{}, NewCoreCmd(), deps)
 
 	// Verify migration was called
 	assert.True(t, migrator.upCalled, "Migrator.Up() should be called by default")
@@ -136,14 +137,14 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "",
+		LogFormat:   "json",
 	}
 
 	cancel()
-	_ = runCoreWithDeps(ctx, cfg, NewCoreCmd(), deps)
+	_ = runCoreWithDeps(ctx, cfg, config.GameConfig{}, NewCoreCmd(), deps)
 
 	// Verify migration was NOT called
 	assert.False(t, migrator.upCalled, "Migrator.Up() should NOT be called when disabled")
@@ -180,13 +181,13 @@ func TestAutoMigrate_ErrorSurfaced(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "",
+		LogFormat:   "json",
 	}
 
-	err := runCoreWithDeps(ctx, cfg, NewCoreCmd(), deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, NewCoreCmd(), deps)
 
 	require.Error(t, err, "Migration error should be surfaced")
 	assert.Contains(t, err.Error(), "migration", "Error should mention migration")
@@ -219,13 +220,13 @@ func TestAutoMigrate_MigratorCreationError(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "",
+		LogFormat:   "json",
 	}
 
-	err := runCoreWithDeps(ctx, cfg, NewCoreCmd(), deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, NewCoreCmd(), deps)
 
 	require.Error(t, err, "Migrator creation error should be surfaced")
 	assert.Contains(t, err.Error(), "migration", "Error should mention migration")

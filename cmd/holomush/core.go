@@ -27,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -45,25 +46,25 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	grpcAddr           string
-	controlAddr        string
-	metricsAddr        string
-	dataDir            string
-	gameID             string
-	logFormat          string
-	skipSeedMigrations bool
+	GRPCAddr           string `koanf:"grpc_addr"`
+	ControlAddr        string `koanf:"control_addr"`
+	MetricsAddr        string `koanf:"metrics_addr"`
+	DataDir            string `koanf:"data_dir"`
+	GameID             string `koanf:"game_id"`
+	LogFormat          string `koanf:"log_format"`
+	SkipSeedMigrations bool   `koanf:"skip_seed_migrations"`
 }
 
 // Validate checks that the configuration is valid.
 func (cfg *coreConfig) Validate() error {
-	if cfg.grpcAddr == "" {
+	if cfg.GRPCAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("grpc-addr is required")
 	}
-	if cfg.controlAddr == "" {
+	if cfg.ControlAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("control-addr is required")
 	}
-	if cfg.logFormat != "json" && cfg.logFormat != "text" {
-		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
+	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
+		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.LogFormat)
 	}
 	return nil
 }
@@ -86,26 +87,43 @@ func NewCoreCmd() *cobra.Command {
 		Long: `Start the core process which runs the game engine,
 manages plugins, and handles game state.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCoreWithDeps(cmd.Context(), cfg, cmd, nil)
+			if err := config.Load(configFile, cmd, cfg, "core"); err != nil {
+				return err
+			}
+			var gameConfig config.GameConfig
+			if err := config.Load(configFile, cmd, &gameConfig, "game"); err != nil {
+				return err
+			}
+			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, cmd, nil)
 		},
 	}
 
-	cmd.Flags().StringVar(&cfg.grpcAddr, "grpc-addr", defaultGRPCAddr, "gRPC listen address")
-	cmd.Flags().StringVar(&cfg.controlAddr, "control-addr", defaultCoreControlAddr, "control gRPC listen address with mTLS")
-	cmd.Flags().StringVar(&cfg.metricsAddr, "metrics-addr", defaultCoreMetricsAddr, "metrics/health HTTP address (empty = disabled)")
-	cmd.Flags().StringVar(&cfg.dataDir, "data-dir", "", "data directory (default: XDG_DATA_HOME/holomush)")
-	cmd.Flags().StringVar(&cfg.gameID, "game-id", "", "game ID (default: auto-generated from database)")
-	cmd.Flags().StringVar(&cfg.logFormat, "log-format", defaultLogFormat, "log format (json or text)")
-	cmd.Flags().BoolVar(&cfg.skipSeedMigrations, "skip-seed-migrations", false, "disable automatic seed policy version upgrades during bootstrap")
+	cmd.Flags().StringVar(&cfg.GRPCAddr, "grpc-addr", defaultGRPCAddr, "gRPC listen address")
+	cmd.Flags().StringVar(&cfg.ControlAddr, "control-addr", defaultCoreControlAddr, "control gRPC listen address with mTLS")
+	cmd.Flags().StringVar(&cfg.MetricsAddr, "metrics-addr", defaultCoreMetricsAddr, "metrics/health HTTP address (empty = disabled)")
+	cmd.Flags().StringVar(&cfg.DataDir, "data-dir", "", "data directory (default: XDG_DATA_HOME/holomush)")
+	cmd.Flags().StringVar(&cfg.GameID, "game-id", "", "game ID (default: auto-generated from database)")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "log format (json or text)")
+	cmd.Flags().BoolVar(&cfg.SkipSeedMigrations, "skip-seed-migrations", false, "disable automatic seed policy version upgrades during bootstrap")
 
 	return cmd
 }
 
 // runCoreWithDeps starts the core process with injectable dependencies.
 // If deps is nil, default implementations are used.
-func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, deps *CoreDeps) error {
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
 		deps = &CoreDeps{}
+	}
+
+	// Validate game config early — fail before any side effects (migrations, TLS, etc.)
+	startLocationStr := gameConfig.GuestStartLocation
+	if startLocationStr == "" {
+		startLocationStr = "01HK153X0006AFVGQT61FPQX3S" // The Nexus seed ULID
+	}
+	startLocationID, parseErr := ulid.Parse(startLocationStr)
+	if parseErr != nil {
+		return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
 	}
 
 	// Set up default factories
@@ -151,13 +169,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
-	if err := setupLogging(cfg.logFormat); err != nil {
+	if err := setupLogging(cfg.LogFormat); err != nil {
 		return oops.Code("LOGGING_SETUP_FAILED").With("operation", "set up logging").Wrap(err)
 	}
 
 	slog.Info("starting core process",
-		"grpc_addr", cfg.grpcAddr,
-		"log_format", cfg.logFormat,
+		"grpc_addr", cfg.GRPCAddr,
+		"log_format", cfg.LogFormat,
 	)
 
 	databaseURL := deps.DatabaseURLGetter()
@@ -205,7 +223,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	}
 
 	// Initialize or get game_id
-	gameID := cfg.gameID
+	gameID := cfg.GameID
 	if gameID == "" {
 		gameID, err = eventStore.InitGameID(ctx)
 		if err != nil {
@@ -217,7 +235,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 	// Bootstrap seed policies and audit log partitions (ADR #91, #92).
 	// Fatal on error — server MUST NOT start without seed policies.
-	if bootstrapErr := deps.PolicyBootstrapper(ctx, cfg.skipSeedMigrations); bootstrapErr != nil {
+	if bootstrapErr := deps.PolicyBootstrapper(ctx, cfg.SkipSeedMigrations); bootstrapErr != nil {
 		return oops.Code("BOOTSTRAP_FAILED").With("operation", "bootstrap seed policies").Wrap(bootstrapErr)
 	}
 	slog.Info("seed policies bootstrapped")
@@ -272,8 +290,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 
 		// Build plugin stack
 		var pluginsBaseDir string
-		if cfg.dataDir != "" {
-			pluginsBaseDir = cfg.dataDir
+		if cfg.DataDir != "" {
+			pluginsBaseDir = cfg.DataDir
 		} else {
 			var pluginsDirErr error
 			pluginsBaseDir, pluginsDirErr = xdg.DataDir()
@@ -339,12 +357,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		creds := credentials.NewTLS(tlsConfig)
 		grpcServer = grpc.NewServer(grpc.Creds(creds))
 
-		// Create guest authenticator with a well-known start location.
-		// TODO(telnet-e2e): Make start location configurable via world seed data.
-		startLocationID, parseErr := ulid.Parse("01HK153X0006AFVGQT61FPQX3S")
-		if parseErr != nil {
-			return oops.Code("INVALID_START_LOCATION").Wrap(parseErr)
-		}
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
 		// Create and register Core service with guest authentication + cleanup hook
@@ -359,9 +371,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		corev1.RegisterCoreServer(grpcServer, coreServer)
 
 		// Start gRPC listener
-		netListener, err = net.Listen("tcp", cfg.grpcAddr)
+		netListener, err = net.Listen("tcp", cfg.GRPCAddr)
 		if err != nil {
-			return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.grpcAddr).Wrap(err)
+			return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.GRPCAddr).Wrap(err)
 		}
 		defer func() {
 			if closeErr := netListener.Close(); closeErr != nil {
@@ -369,7 +381,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 			}
 		}()
 
-		slog.Info("gRPC server listening", "addr", cfg.grpcAddr)
+		slog.Info("gRPC server listening", "addr", cfg.GRPCAddr)
 	}
 
 	// Set up graceful shutdown
@@ -386,21 +398,21 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	if err != nil {
 		return oops.Code("CONTROL_SERVER_CREATE_FAILED").With("operation", "create control gRPC server").Wrap(err)
 	}
-	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
+	controlErrChan, err := controlGRPCServer.Start(cfg.ControlAddr, controlTLSConfig)
 	if err != nil {
-		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.controlAddr).Wrap(err)
+		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.ControlAddr).Wrap(err)
 	}
 	// Monitor control server errors in background - cancel context on error
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
 
-	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
+	slog.Info("control gRPC server started", "addr", cfg.ControlAddr)
 
 	// Start observability server if configured
 	var obsServer ObservabilityServer
-	if cfg.metricsAddr != "" {
+	if cfg.MetricsAddr != "" {
 		// For core, we're ready once we reach this point (database is connected,
 		// listener is bound, core components initialized)
-		obsServer = deps.ObservabilityServerFactory(cfg.metricsAddr, func() bool { return true })
+		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
 		// Register command package metrics with the observability server
 		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
 		obsErrChan, err := obsServer.Start()
@@ -410,7 +422,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
 				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
 			}
-			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.metricsAddr).Wrap(err)
+			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.MetricsAddr).Wrap(err)
 		}
 		// Monitor observability server errors - cancel context on error
 		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
@@ -435,7 +447,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 	cmd.Println("Core process started")
 	slog.Info("core process ready",
 		"game_id", gameID,
-		"grpc_addr", cfg.grpcAddr,
+		"grpc_addr", cfg.GRPCAddr,
 	)
 
 	// Wait for shutdown signal or error
@@ -558,11 +570,11 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	slog.Info("TLS certificates generated")
 
 	// Load the newly generated certificates
-	config, err := tlscerts.LoadServerTLS(certsDir, "core")
+	tlsConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
 	if err != nil {
 		return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load generated certificates").With("certs_dir", certsDir).Wrap(err)
 	}
-	return config, nil
+	return tlsConfig, nil
 }
 
 // fileExists returns true if the file exists, false otherwise.

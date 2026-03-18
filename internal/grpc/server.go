@@ -90,11 +90,11 @@ func (s *InMemorySessionStore) Delete(sessionID string) {
 type CoreServer struct {
 	corev1.UnimplementedCoreServer
 
-	engine        *core.Engine
-	sessions      *core.SessionManager
-	broadcaster   *core.Broadcaster
-	authenticator Authenticator
-	sessionStore  SessionStore
+	engine          *core.Engine
+	sessions        *core.SessionManager
+	broadcaster     *core.Broadcaster
+	authenticator   Authenticator
+	sessionStore    SessionStore
 	disconnectHooks []func(SessionInfo)
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
@@ -403,10 +403,10 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 
 	// Emit leave event while session is still active
 	if err := s.engine.HandleDisconnect(ctx, info.CharacterID, info.LocationID, info.CharacterName, "quit"); err != nil {
-			slog.WarnContext(ctx, "leave event failed",
-				"request_id", requestID,
-				"character_id", info.CharacterID.String(),
-				"error", err,
+		slog.WarnContext(ctx, "leave event failed",
+			"request_id", requestID,
+			"character_id", info.CharacterID.String(),
+			"error", err,
 		)
 	}
 

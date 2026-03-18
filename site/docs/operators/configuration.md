@@ -4,12 +4,18 @@ This guide covers all configuration options for HoloMUSH.
 
 ## Overview
 
-HoloMUSH configuration follows a hierarchy:
+HoloMUSH uses a two-layer configuration system:
 
-1. Command-line flags (highest precedence)
-2. Environment variables
-3. Configuration files
-4. Built-in defaults
+1. Config file (`~/.config/holomush/config.yaml`) — lowest precedence
+2. CLI flags — highest precedence, always override config file values
+
+Built-in defaults apply when neither a config file value nor a CLI flag is provided.
+`DATABASE_URL` is a separate environment variable for database credentials — it is not
+part of the config file system and has no equivalent config key.
+
+Config files are optional. All settings have sensible defaults. Most config file keys
+have an equivalent CLI flag; the `game` section is config-file-only. You can run
+HoloMUSH without a config file; flags work exactly as before.
 
 ## Command-Line Reference
 
@@ -39,6 +45,8 @@ holomush core [flags]
 | `--data-dir`     | XDG_DATA_HOME    | Directory for runtime data        |
 | `--game-id`      | Auto-generated   | Unique game instance identifier   |
 | `--log-format`   | `json`           | Log format: `json` or `text`      |
+| `--skip-seed-migrations` | `false` | Disable automatic seed policy upgrades |
+| `--config`       | XDG default      | Path to YAML config file          |
 
 **Example:**
 
@@ -160,7 +168,7 @@ On first startup, core automatically creates:
 | `~/.config/holomush/certs/ca.pem`       | Certificate authority   |
 | `~/.config/holomush/certs/core.pem`     | Core server certificate |
 | `~/.config/holomush/certs/core-key.pem` | Core server private key |
-| `~/.config/holomush/gateway.yaml`       | Gateway configuration   |
+| `~/.config/holomush/config.yaml`        | Server configuration    |
 
 ## Docker Configuration
 
@@ -259,6 +267,170 @@ Addresses support various formats:
 | Metrics address | `127.0.0.1:9100` | Internal network only           |
 | Telnet address  | `:4201`          | Behind load balancer            |
 | SSL mode        | `disable`        | `verify-full`                   |
+
+## Config File
+
+### Location
+
+HoloMUSH looks for a config file at:
+
+```text
+~/.config/holomush/config.yaml
+```
+
+This path respects `XDG_CONFIG_HOME`. If `XDG_CONFIG_HOME` is set, the file is at
+`$XDG_CONFIG_HOME/holomush/config.yaml`.
+
+To use a different file, pass `--config` to any command:
+
+```bash
+holomush core --config /etc/holomush/prod.yaml
+holomush gateway --config /etc/holomush/prod.yaml
+```
+
+### Precedence Rules
+
+| Source       | Precedence | Notes                                         |
+| ------------ | ---------- | --------------------------------------------- |
+| CLI flags    | Highest    | Always win over config file and defaults      |
+| Config file  | Middle     | Overrides built-in defaults only              |
+| `DATABASE_URL` | Env-only | No config file equivalent; set in environment |
+| Defaults     | Lowest     | Used when no flag or config file value exists |
+
+`DATABASE_URL` is intentionally env-only to avoid storing credentials in config files
+that may be checked into version control.
+
+### First-Run Experience
+
+A config file is never required. On first run, all defaults apply and every option is
+available as a CLI flag. You can adopt a config file incrementally — start with nothing
+and add keys only when you want to override a default persistently.
+
+### Full Annotated Example
+
+```yaml
+# Core process configuration.
+# Equivalent to flags on: holomush core
+core:
+  # gRPC listen address — gateway connects here.
+  # Flag: --grpc-addr
+  # Default: "localhost:9000"
+  grpc_addr: "localhost:9000"
+
+  # Control plane mTLS address for admin operations.
+  # Flag: --control-addr
+  # Default: "127.0.0.1:9001"
+  control_addr: "127.0.0.1:9001"
+
+  # Metrics and health HTTP endpoint.
+  # Set to empty string to disable.
+  # Flag: --metrics-addr
+  # Default: "127.0.0.1:9100"
+  metrics_addr: "127.0.0.1:9100"
+
+  # Data directory for persistent runtime files.
+  # Empty string uses XDG_DATA_HOME/holomush (~/.local/share/holomush).
+  # Flag: --data-dir
+  # Default: "" (XDG_DATA_HOME/holomush)
+  data_dir: ""
+
+  # Unique identifier for this game instance.
+  # Empty string triggers auto-generation on first start.
+  # Flag: --game-id
+  # Default: "" (auto-generated)
+  game_id: ""
+
+  # Log output format.
+  # "json" for production/log aggregation, "text" for human-readable output.
+  # Flag: --log-format
+  # Default: "json"
+  log_format: "json"
+
+  # Disable automatic seed policy upgrades on startup.
+  # Flag: --skip-seed-migrations
+  # Default: false
+  skip_seed_migrations: false
+
+# Gateway process configuration.
+# Equivalent to flags on: holomush gateway
+gateway:
+  # Telnet server listen address.
+  # Flag: --telnet-addr
+  # Default: ":4201"
+  telnet_addr: ":4201"
+
+  # Core gRPC server address to connect to.
+  # Flag: --core-addr
+  # Default: "localhost:9000"
+  core_addr: "localhost:9000"
+
+  # Control plane mTLS address for admin operations.
+  # Flag: --control-addr
+  # Default: "127.0.0.1:9002"
+  control_addr: "127.0.0.1:9002"
+
+  # Metrics and health HTTP endpoint.
+  # Set to empty string to disable.
+  # Flag: --metrics-addr
+  # Default: "127.0.0.1:9101"
+  metrics_addr: "127.0.0.1:9101"
+
+  # Log output format.
+  # "json" for production/log aggregation, "text" for human-readable output.
+  # Flag: --log-format
+  # Default: "json"
+  log_format: "json"
+
+# Game world configuration.
+game:
+  # ULID of the starting location assigned to guest connections.
+  # Config file only — no CLI flag equivalent.
+  # Default: "01HK153X0006AFVGQT61FPQX3S" (The Nexus seed location)
+  guest_start_location: "01JMHZ5H3ZSBVTGARX4MSS1MBH"
+
+# Status command configuration.
+# Equivalent to flags on: holomush status
+status:
+  # Core control address to query for health information.
+  # Flag: --core-addr
+  # Default: "127.0.0.1:9001"
+  core_addr: "127.0.0.1:9001"
+
+  # Gateway control address to query for health information.
+  # Flag: --gateway-addr
+  # Default: "127.0.0.1:9002"
+  gateway_addr: "127.0.0.1:9002"
+
+  # Output status as JSON instead of human-readable text.
+  # Flag: --json
+  # Default: false
+  json: false
+```
+
+### Per-Process Config with `--config`
+
+The `--config` flag lets each process load a different file. This is useful when running
+multiple game instances on the same host, or when separating core and gateway configs:
+
+```bash
+# Instance A
+holomush core    --config /etc/holomush/game-a.yaml
+holomush gateway --config /etc/holomush/game-a.yaml
+
+# Instance B — different ports, different game-id
+holomush core    --config /etc/holomush/game-b.yaml
+holomush gateway --config /etc/holomush/game-b.yaml
+```
+
+Each config file contains only the sections relevant to the process reading it.
+A gateway process ignores `core:` keys; a core process ignores `gateway:` keys.
+
+CLI flags still override the selected config file, so you can share a base config and
+override individual values at startup:
+
+```bash
+holomush core --config /etc/holomush/base.yaml --log-format=text
+```
 
 ## Next Steps
 

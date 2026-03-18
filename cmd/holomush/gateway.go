@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -26,26 +27,26 @@ import (
 
 // gatewayConfig holds configuration for the gateway command.
 type gatewayConfig struct {
-	telnetAddr  string
-	coreAddr    string
-	controlAddr string
-	metricsAddr string
-	logFormat   string
+	TelnetAddr  string `koanf:"telnet_addr"`
+	CoreAddr    string `koanf:"core_addr"`
+	ControlAddr string `koanf:"control_addr"`
+	MetricsAddr string `koanf:"metrics_addr"`
+	LogFormat   string `koanf:"log_format"`
 }
 
 // Validate checks that the configuration is valid.
 func (cfg *gatewayConfig) Validate() error {
-	if cfg.telnetAddr == "" {
+	if cfg.TelnetAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("telnet-addr is required")
 	}
-	if cfg.coreAddr == "" {
+	if cfg.CoreAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("core-addr is required")
 	}
-	if cfg.controlAddr == "" {
+	if cfg.ControlAddr == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("control-addr is required")
 	}
-	if cfg.logFormat != "json" && cfg.logFormat != "text" {
-		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.logFormat)
+	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
+		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.LogFormat)
 	}
 	return nil
 }
@@ -69,15 +70,18 @@ func newGatewayCmd() *cobra.Command {
 		Long: `Start the gateway process which handles incoming connections
 from telnet and web clients, forwarding commands to the core process.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := config.Load(configFile, cmd, cfg, "gateway"); err != nil {
+				return err
+			}
 			return runGatewayWithDeps(cmd.Context(), cfg, cmd, nil)
 		},
 	}
 
-	cmd.Flags().StringVar(&cfg.telnetAddr, "telnet-addr", defaultTelnetAddr, "telnet listen address")
-	cmd.Flags().StringVar(&cfg.coreAddr, "core-addr", defaultCoreAddr, "core gRPC server address")
-	cmd.Flags().StringVar(&cfg.controlAddr, "control-addr", defaultGatewayControlAddr, "control gRPC listen address with mTLS")
-	cmd.Flags().StringVar(&cfg.metricsAddr, "metrics-addr", defaultGatewayMetricsAddr, "metrics/health HTTP address (empty = disabled)")
-	cmd.Flags().StringVar(&cfg.logFormat, "log-format", defaultLogFormat, "log format (json or text)")
+	cmd.Flags().StringVar(&cfg.TelnetAddr, "telnet-addr", defaultTelnetAddr, "telnet listen address")
+	cmd.Flags().StringVar(&cfg.CoreAddr, "core-addr", defaultCoreAddr, "core gRPC server address")
+	cmd.Flags().StringVar(&cfg.ControlAddr, "control-addr", defaultGatewayControlAddr, "control gRPC listen address with mTLS")
+	cmd.Flags().StringVar(&cfg.MetricsAddr, "metrics-addr", defaultGatewayMetricsAddr, "metrics/health HTTP address (empty = disabled)")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "log format (json or text)")
 
 	return cmd
 }
@@ -125,14 +129,14 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
-	if err := setupLogging(cfg.logFormat); err != nil {
+	if err := setupLogging(cfg.LogFormat); err != nil {
 		return oops.Code("LOGGING_SETUP_FAILED").With("operation", "set up logging").Wrap(err)
 	}
 
 	slog.Info("starting gateway process",
-		"telnet_addr", cfg.telnetAddr,
-		"core_addr", cfg.coreAddr,
-		"log_format", cfg.logFormat,
+		"telnet_addr", cfg.TelnetAddr,
+		"core_addr", cfg.CoreAddr,
+		"log_format", cfg.LogFormat,
 	)
 
 	certsDir, err := deps.CertsDirGetter()
@@ -156,11 +160,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 
 	// Create gRPC client with mTLS
 	grpcClient, err := deps.GRPCClientFactory(ctx, holoGRPC.ClientConfig{
-		Address:   cfg.coreAddr,
+		Address:   cfg.CoreAddr,
 		TLSConfig: tlsConfig,
 	})
 	if err != nil {
-		return oops.Code("GRPC_CLIENT_CREATE_FAILED").With("operation", "create gRPC client").With("core_addr", cfg.coreAddr).Wrap(err)
+		return oops.Code("GRPC_CLIENT_CREATE_FAILED").With("operation", "create gRPC client").With("core_addr", cfg.CoreAddr).Wrap(err)
 	}
 	defer func() {
 		if closeErr := grpcClient.Close(); closeErr != nil {
@@ -168,7 +172,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		}
 	}()
 
-	slog.Info("gRPC client created", "core_addr", cfg.coreAddr)
+	slog.Info("gRPC client created", "core_addr", cfg.CoreAddr)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -183,36 +187,36 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	if err != nil {
 		return oops.Code("CONTROL_SERVER_CREATE_FAILED").With("operation", "create control gRPC server").Wrap(err)
 	}
-	controlErrChan, err := controlGRPCServer.Start(cfg.controlAddr, controlTLSConfig)
+	controlErrChan, err := controlGRPCServer.Start(cfg.ControlAddr, controlTLSConfig)
 	if err != nil {
-		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.controlAddr).Wrap(err)
+		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.ControlAddr).Wrap(err)
 	}
 	// Monitor control server errors in background - triggers shutdown on error
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
 
-	slog.Info("control gRPC server started", "addr", cfg.controlAddr)
+	slog.Info("control gRPC server started", "addr", cfg.ControlAddr)
 
 	// TODO(grpc-telnet): Replace placeholder telnet handler with gRPC-based implementation.
 	// The current telnet server requires direct core components, which aren't available
 	// in the gateway process. For now, we start a basic listener that demonstrates the
 	// gateway is running.
-	telnetListener, err := deps.ListenerFactory("tcp", cfg.telnetAddr)
+	telnetListener, err := deps.ListenerFactory("tcp", cfg.TelnetAddr)
 	if err != nil {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 		if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
 			slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
 		}
-		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.telnetAddr).Wrap(err)
+		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.TelnetAddr).Wrap(err)
 	}
 
 	slog.Info("telnet server listening", "addr", telnetListener.Addr())
 
 	// Start observability server if configured
 	var obsServer ObservabilityServer
-	if cfg.metricsAddr != "" {
+	if cfg.MetricsAddr != "" {
 		// For gateway, we're ready once telnet listener is up
-		obsServer = deps.ObservabilityServerFactory(cfg.metricsAddr, func() bool { return true })
+		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
 		// Register command package metrics with the observability server
 		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
 		obsErrChan, err := obsServer.Start()
@@ -225,7 +229,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
 				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
 			}
-			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.metricsAddr).Wrap(err)
+			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.MetricsAddr).Wrap(err)
 		}
 		// Monitor observability server errors in background - triggers shutdown on error
 		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
@@ -242,7 +246,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
 		"telnet_addr", telnetListener.Addr().String(),
-		"core_addr", cfg.coreAddr,
+		"core_addr", cfg.CoreAddr,
 	)
 
 	// Wait for shutdown signal
