@@ -562,27 +562,27 @@ func TestCoreConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: coreConfig{
-				grpcAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9001",
-				logFormat:   "json",
+				GRPCAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9001",
+				LogFormat:   "json",
 			},
 			wantError: false,
 		},
 		{
 			name: "valid config with text format",
 			cfg: coreConfig{
-				grpcAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9001",
-				logFormat:   "text",
+				GRPCAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9001",
+				LogFormat:   "text",
 			},
 			wantError: false,
 		},
 		{
 			name: "empty grpc-addr",
 			cfg: coreConfig{
-				grpcAddr:    "",
-				controlAddr: "127.0.0.1:9001",
-				logFormat:   "json",
+				GRPCAddr:    "",
+				ControlAddr: "127.0.0.1:9001",
+				LogFormat:   "json",
 			},
 			wantError: true,
 			errorMsg:  "grpc-addr is required",
@@ -590,9 +590,9 @@ func TestCoreConfig_Validate(t *testing.T) {
 		{
 			name: "empty control-addr",
 			cfg: coreConfig{
-				grpcAddr:    "localhost:9000",
-				controlAddr: "",
-				logFormat:   "json",
+				GRPCAddr:    "localhost:9000",
+				ControlAddr: "",
+				LogFormat:   "json",
 			},
 			wantError: true,
 			errorMsg:  "control-addr is required",
@@ -600,9 +600,9 @@ func TestCoreConfig_Validate(t *testing.T) {
 		{
 			name: "invalid log-format",
 			cfg: coreConfig{
-				grpcAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9001",
-				logFormat:   "invalid",
+				GRPCAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9001",
+				LogFormat:   "invalid",
 			},
 			wantError: true,
 			errorMsg:  "log-format must be 'json' or 'text'",
@@ -610,9 +610,9 @@ func TestCoreConfig_Validate(t *testing.T) {
 		{
 			name: "empty log-format",
 			cfg: coreConfig{
-				grpcAddr:    "localhost:9000",
-				controlAddr: "127.0.0.1:9001",
-				logFormat:   "",
+				GRPCAddr:    "localhost:9000",
+				ControlAddr: "127.0.0.1:9001",
+				LogFormat:   "",
 			},
 			wantError: true,
 			errorMsg:  "log-format must be 'json' or 'text'",

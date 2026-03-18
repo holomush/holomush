@@ -78,10 +78,10 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "", // Disable metrics for this test
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "", // Disable metrics for this test
+		LogFormat:   "json",
 	}
 
 	// Cancel context immediately to prevent waiting for signals
@@ -136,10 +136,10 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "",
+		LogFormat:   "json",
 	}
 
 	cancel()
@@ -180,10 +180,10 @@ func TestAutoMigrate_ErrorSurfaced(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "",
+		LogFormat:   "json",
 	}
 
 	err := runCoreWithDeps(ctx, cfg, NewCoreCmd(), deps)
@@ -219,10 +219,10 @@ func TestAutoMigrate_MigratorCreationError(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		grpcAddr:    "localhost:9000",
-		controlAddr: "127.0.0.1:9001",
-		metricsAddr: "",
-		logFormat:   "json",
+		GRPCAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9001",
+		MetricsAddr: "",
+		LogFormat:   "json",
 	}
 
 	err := runCoreWithDeps(ctx, cfg, NewCoreCmd(), deps)
