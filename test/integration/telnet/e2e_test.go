@@ -118,8 +118,9 @@ func connectAsGuest(c *testTelnetClient) string {
 // full command→event subscription pipeline is ready. This replaces fixed
 // time.Sleep calls that are flaky under CI load.
 func waitForPipeline(c *testTelnetClient) {
-	c.SendLine(`say __ready__`)
-	c.ReadUntil("__ready__", 5*time.Second)
+	probe := "__ready__:" + ulid.Make().String()
+	c.SendLine("say " + probe)
+	c.ReadUntil(fmt.Sprintf(`You say, "%s"`, probe), 5*time.Second)
 }
 
 var _ = Describe("Telnet Vertical Slice E2E", func() {
@@ -454,7 +455,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			line := client.ReadLine()
 			Expect(line).To(ContainSubstring(`You say, "Persistence test"`))
 
-			// Poll for event persistence instead of fixed sleep
+			// Poll for the specific "Persistence test" event (not readiness probes)
 			stream := "location:" + startLocation.String()
 			Eventually(func() bool {
 				events, err := eventStore.Replay(testCtx, stream, ulid.ULID{}, 100)
@@ -462,12 +463,12 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 					return false
 				}
 				for _, ev := range events {
-					if ev.Type == core.EventTypeSay {
+					if ev.Type == core.EventTypeSay && strings.Contains(string(ev.Payload), "Persistence test") {
 						return true
 					}
 				}
 				return false
-			}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "expected a say event persisted")
+			}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "expected 'Persistence test' say event persisted")
 		})
 	})
 
