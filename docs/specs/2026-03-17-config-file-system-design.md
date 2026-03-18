@@ -149,7 +149,9 @@ The `Load` function MUST follow this sequence:
 3. Overlay CLI flags via koanf's posflag provider with `cmd.Flags()`
    (only explicitly-set flags — see Key Name Normalization below)
 4. Unmarshal the relevant section into the typed config struct
-5. Call `Validate()` on the result
+
+Validation remains in each subcommand's `RunE` (after `Load` returns), keeping
+`Load` generic and reusable across struct types.
 
 ### Load Function Signature
 
@@ -300,6 +302,5 @@ New Go module dependencies:
 
 - `github.com/knadh/koanf/v2` — core library
 - `github.com/knadh/koanf/providers/file` — YAML file provider
-- `github.com/knadh/koanf/providers/structs` — struct defaults
 - `github.com/knadh/koanf/parsers/yaml` — YAML parser
 - `github.com/knadh/koanf/providers/posflag` — cobra/pflag integration
