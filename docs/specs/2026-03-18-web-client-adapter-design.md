@@ -301,9 +301,9 @@ from the repo root, reading protos from `api/proto/` and writing output to
 The `task` workflow orchestrates the build:
 
 1. `task web:generate` — run `buf generate` for TypeScript clients
-2. `task web:build` — run `pnpm build` (SvelteKit static adapter)
-3. `task web:embed` — copy `web/build/` to `internal/web/dist/`
-4. `task build` — includes step 3, then `go build` (embeds via `go:embed`)
+1. `task web:build` — run `pnpm build` (SvelteKit static adapter)
+1. `task web:embed` — copy `web/build/` to `internal/web/dist/`
+1. `task build` — includes step 3, then `go build` (embeds via `go:embed`)
 
 For development:
 
@@ -350,11 +350,11 @@ gateway:
 A browser-level test proving the full pipeline:
 
 1. Start gateway (with core) as a test fixture
-2. Build SvelteKit and serve via `--web-dir`
-3. Open the page in headless Chromium
-4. Click "Connect as Guest"
-5. Type a say command
-6. Assert the event echo appears on screen
+1. Build SvelteKit and serve via `--web-dir`
+1. Open the page in headless Chromium
+1. Click "Connect as Guest"
+1. Type a say command
+1. Assert the event echo appears on screen
 
 This lives at `web/tests/e2e.spec.ts` and runs via `pnpm exec playwright test`.
 
