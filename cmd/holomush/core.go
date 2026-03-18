@@ -116,6 +116,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		deps = &CoreDeps{}
 	}
 
+	// Validate game config early — fail before any side effects (migrations, TLS, etc.)
+	startLocationStr := gameConfig.GuestStartLocation
+	if startLocationStr == "" {
+		startLocationStr = "01HK153X0006AFVGQT61FPQX3S" // The Nexus seed ULID
+	}
+	startLocationID, parseErr := ulid.Parse(startLocationStr)
+	if parseErr != nil {
+		return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
+	}
+
 	// Set up default factories
 	if deps.EventStoreFactory == nil {
 		deps.EventStoreFactory = func(ctx context.Context, url string) (EventStore, error) {
@@ -347,14 +357,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		creds := credentials.NewTLS(tlsConfig)
 		grpcServer = grpc.NewServer(grpc.Creds(creds))
 
-		startLocationStr := gameConfig.GuestStartLocation
-		if startLocationStr == "" {
-			startLocationStr = "01HK153X0006AFVGQT61FPQX3S" // The Nexus seed ULID
-		}
-		startLocationID, parseErr := ulid.Parse(startLocationStr)
-		if parseErr != nil {
-			return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
-		}
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
 		// Create and register Core service with guest authentication + cleanup hook

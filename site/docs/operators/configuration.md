@@ -13,9 +13,9 @@ Built-in defaults apply when neither a config file value nor a CLI flag is provi
 `DATABASE_URL` is a separate environment variable for database credentials — it is not
 part of the config file system and has no equivalent config key.
 
-Config files are optional. All settings have sensible defaults and every config file
-key has an equivalent CLI flag. You can run HoloMUSH without a config file; flags work
-exactly as they did before config file support was added.
+Config files are optional. All settings have sensible defaults. Most config file keys
+have an equivalent CLI flag; the `game` section is config-file-only. You can run
+HoloMUSH without a config file; flags work exactly as before.
 
 ## Command-Line Reference
 
@@ -45,6 +45,8 @@ holomush core [flags]
 | `--data-dir`     | XDG_DATA_HOME    | Directory for runtime data        |
 | `--game-id`      | Auto-generated   | Unique game instance identifier   |
 | `--log-format`   | `json`           | Log format: `json` or `text`      |
+| `--skip-seed-migrations` | `false` | Disable automatic seed policy upgrades |
+| `--config`       | XDG default      | Path to YAML config file          |
 
 **Example:**
 
@@ -166,7 +168,7 @@ On first startup, core automatically creates:
 | `~/.config/holomush/certs/ca.pem`       | Certificate authority   |
 | `~/.config/holomush/certs/core.pem`     | Core server certificate |
 | `~/.config/holomush/certs/core-key.pem` | Core server private key |
-| `~/.config/holomush/gateway.yaml`       | Gateway configuration   |
+| `~/.config/holomush/config.yaml`        | Server configuration    |
 
 ## Docker Configuration
 
