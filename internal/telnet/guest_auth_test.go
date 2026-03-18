@@ -18,7 +18,7 @@ import (
 // TestGemstoneElementTheme_Name verifies the theme name.
 func TestGemstoneElementTheme_Name(t *testing.T) {
 	theme := NewGemstoneElementTheme()
-	assert.Equal(t, "GemstoneElement", theme.Name())
+	assert.Equal(t, "gemstone_element", theme.Name())
 }
 
 // TestGemstoneElementTheme_Generate verifies generated names are non-empty and distinct.

@@ -45,7 +45,7 @@ func NewGemstoneElementTheme() *GemstoneElementTheme {
 
 // Name returns the theme identifier.
 func (t *GemstoneElementTheme) Name() string {
-	return "GemstoneElement"
+	return "gemstone_element"
 }
 
 // Generate returns a random (gemstone, element) pair.
