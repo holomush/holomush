@@ -42,17 +42,13 @@ func Load(configPath string, cmd *cobra.Command, target any, section string) err
 	k := koanf.New(".")
 
 	// Step 1: Resolve and load YAML file.
-	path, explicit, err := resolveConfigPath(configPath)
+	path, _, err := resolveConfigPath(configPath)
 	if err != nil {
 		return err
 	}
 
 	if path != "" {
 		if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
-			if explicit {
-				return oops.Code("CONFIG_LOAD_FAILED").With("path", path).Wrap(err)
-			}
-			// Default path exists but is malformed.
 			return oops.Code("CONFIG_PARSE_FAILED").With("path", path).Wrap(err)
 		}
 	}
