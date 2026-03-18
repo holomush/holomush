@@ -10,12 +10,16 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/config"
 )
 
 func TestCoreCommand_Flags(t *testing.T) {
@@ -883,4 +887,24 @@ func TestSignalStop_Cleanup(t *testing.T) {
 	default:
 		// Good - channel is empty after Stop
 	}
+}
+
+func TestCoreCommand_ConfigFileLoading(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("core:\n  grpc_addr: \"0.0.0.0:7777\"\n  control_addr: \"0.0.0.0:7778\"\n  log_format: \"text\"\n"), 0o644)
+	require.NoError(t, err)
+
+	cfg := &coreConfig{}
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().StringVar(&cfg.GRPCAddr, "grpc-addr", defaultGRPCAddr, "")
+	cmd.Flags().StringVar(&cfg.ControlAddr, "control-addr", defaultCoreControlAddr, "")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "")
+
+	err = config.Load(cfgFile, cmd, cfg, "core")
+	require.NoError(t, err)
+
+	assert.Equal(t, "0.0.0.0:7777", cfg.GRPCAddr)
+	assert.Equal(t, "0.0.0.0:7778", cfg.ControlAddr)
+	assert.Equal(t, "text", cfg.LogFormat)
 }

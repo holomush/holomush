@@ -27,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -86,6 +87,9 @@ func NewCoreCmd() *cobra.Command {
 		Long: `Start the core process which runs the game engine,
 manages plugins, and handles game state.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := config.Load(configFile, cmd, cfg, "core"); err != nil {
+				return err
+			}
 			return runCoreWithDeps(cmd.Context(), cfg, cmd, nil)
 		},
 	}
@@ -339,9 +343,17 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, cmd *cobra.Command, d
 		creds := credentials.NewTLS(tlsConfig)
 		grpcServer = grpc.NewServer(grpc.Creds(creds))
 
-		// Create guest authenticator with a well-known start location.
-		// TODO(telnet-e2e): Make start location configurable via world seed data.
-		startLocationID, parseErr := ulid.Parse("01HK153X0006AFVGQT61FPQX3S")
+		// Load game config for guest start location.
+		var gameConfig config.GameConfig
+		if err := config.Load(configFile, cmd, &gameConfig, "game"); err != nil {
+			return oops.Code("CONFIG_GAME_FAILED").Wrap(err)
+		}
+
+		startLocationStr := gameConfig.GuestStartLocation
+		if startLocationStr == "" {
+			startLocationStr = "01HK153X0006AFVGQT61FPQX3S" // The Nexus seed ULID
+		}
+		startLocationID, parseErr := ulid.Parse(startLocationStr)
 		if parseErr != nil {
 			return oops.Code("INVALID_START_LOCATION").Wrap(parseErr)
 		}
