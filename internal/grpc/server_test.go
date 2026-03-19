@@ -2653,3 +2653,374 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 		})
 	}
 }
+
+func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	streamName := "location:" + locationID.String()
+
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	// Historical events that were missed while disconnected
+	historicalID1 := core.NewULID()
+	historicalID2 := core.NewULID()
+	cursorID := core.NewULID() // last event seen before disconnect
+
+	historicalEvents := []core.Event{
+		{
+			ID:        historicalID1,
+			Stream:    streamName,
+			Type:      core.EventTypeSay,
+			Timestamp: time.Now().Add(-2 * time.Second),
+			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+			Payload:   []byte(`{"message":"missed-1"}`),
+		},
+		{
+			ID:        historicalID2,
+			Stream:    streamName,
+			Type:      core.EventTypeSay,
+			Timestamp: time.Now().Add(-1 * time.Second),
+			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor2"},
+			Payload:   []byte(`{"message":"missed-2"}`),
+		},
+	}
+
+	eventStore := &mockEventStore{
+		replayFunc: func(_ context.Context, stream string, afterID ulid.ULID, _ int) ([]core.Event, error) {
+			if stream == streamName && afterID == cursorID {
+				return historicalEvents, nil
+			}
+			return nil, nil
+		},
+	}
+
+	server := &CoreServer{
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		eventStore:  eventStore,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID:  charID,
+				LocationID:   locationID,
+				Status:       session.StatusActive,
+				EventCursors: map[string]ulid.ULID{streamName: cursorID},
+			},
+		}),
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "replay-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId:        sessionID.String(),
+		Streams:          []string{streamName},
+		ReplayFromCursor: true,
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give replay + subscription time to process
+	time.Sleep(100 * time.Millisecond)
+
+	// Send a live event after replay
+	liveID := core.NewULID()
+	liveEvent := core.Event{
+		ID:        liveID,
+		Stream:    streamName,
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor3"},
+		Payload:   []byte(`{"message":"live"}`),
+	}
+	broadcaster.Broadcast(liveEvent)
+
+	// Give time for the live event to arrive
+	time.Sleep(100 * time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	// Verify: historical events come first, then live event
+	require.GreaterOrEqual(t, len(stream.events), 2, "expected at least 2 replayed events")
+
+	// First two events should be the historical ones
+	assert.Equal(t, historicalID1.String(), stream.events[0].Id, "first event should be historical")
+	assert.Equal(t, historicalID2.String(), stream.events[1].Id, "second event should be historical")
+
+	// If the live event arrived, it should be third
+	if len(stream.events) >= 3 {
+		assert.Equal(t, liveID.String(), stream.events[2].Id, "third event should be the live one")
+	}
+}
+
+func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	streamName := "location:" + locationID.String()
+
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	// The event that appears in both replay and live stream
+	duplicateID := core.NewULID()
+	duplicateEvent := core.Event{
+		ID:        duplicateID,
+		Stream:    streamName,
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+		Payload:   []byte(`{"message":"duplicate"}`),
+	}
+
+	cursorID := core.NewULID()
+
+	// Replay returns the event, AND it will be broadcast live during replay
+	replayCalled := make(chan struct{})
+	eventStore := &mockEventStore{
+		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+			close(replayCalled)
+			// Simulate slow replay to let the live event arrive
+			time.Sleep(50 * time.Millisecond)
+			return []core.Event{duplicateEvent}, nil
+		},
+	}
+
+	server := &CoreServer{
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		eventStore:  eventStore,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID:  charID,
+				LocationID:   locationID,
+				Status:       session.StatusActive,
+				EventCursors: map[string]ulid.ULID{streamName: cursorID},
+			},
+		}),
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "dedup-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId:        sessionID.String(),
+		Streams:          []string{streamName},
+		ReplayFromCursor: true,
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Wait for replay to start, then broadcast the same event as a live event
+	select {
+	case <-replayCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("replay was never called")
+	}
+
+	broadcaster.Broadcast(duplicateEvent)
+
+	// Give time for processing
+	time.Sleep(200 * time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	// Count how many times the duplicate event appears
+	count := 0
+	for _, ev := range stream.events {
+		if ev.Id == duplicateID.String() {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "duplicate event should appear exactly once (dedup)")
+}
+
+func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	streamName := "location:" + locationID.String()
+
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	replayCalled := false
+	eventStore := &mockEventStore{
+		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+			replayCalled = true
+			return nil, nil
+		},
+	}
+
+	server := &CoreServer{
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		eventStore:  eventStore,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID:  charID,
+				LocationID:   locationID,
+				Status:       session.StatusActive,
+				EventCursors: map[string]ulid.ULID{}, // empty cursors
+			},
+		}),
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "no-cursor-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId:        sessionID.String(),
+		Streams:          []string{streamName},
+		ReplayFromCursor: true,
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give subscription time to set up
+	time.Sleep(50 * time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	assert.False(t, replayCalled, "replay should not be called when no cursors exist")
+}
+
+func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	streamName := "location:" + locationID.String()
+
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	broadcaster := core.NewBroadcaster()
+
+	replayCalled := false
+	eventStore := &mockEventStore{
+		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+			replayCalled = true
+			return nil, nil
+		},
+	}
+
+	server := &CoreServer{
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		sessions:    sessions,
+		broadcaster: broadcaster,
+		eventStore:  eventStore,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID:  charID,
+				LocationID:   locationID,
+				Status:       session.StatusActive,
+				EventCursors: map[string]ulid.ULID{streamName: core.NewULID()},
+			},
+		}),
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "no-replay-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId:        sessionID.String(),
+		Streams:          []string{streamName},
+		ReplayFromCursor: false, // not requested
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	assert.False(t, replayCalled, "replay should not be called when ReplayFromCursor is false")
+}
+
+func TestEventToProto(t *testing.T) {
+	id := core.NewULID()
+	ts := time.Now()
+	ev := core.Event{
+		ID:        id,
+		Stream:    "location:test",
+		Type:      core.EventTypeSay,
+		Timestamp: ts,
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
+		Payload:   []byte(`{"msg":"hello"}`),
+	}
+
+	proto := eventToProto(ev)
+
+	assert.Equal(t, id.String(), proto.Id)
+	assert.Equal(t, "location:test", proto.Stream)
+	assert.Equal(t, "say", proto.Type)
+	assert.Equal(t, "character", proto.ActorType)
+	assert.Equal(t, "char-1", proto.ActorId)
+	assert.Equal(t, []byte(`{"msg":"hello"}`), proto.Payload)
+	assert.Equal(t, ts.UnixNano()/1e9, proto.Timestamp.AsTime().UnixNano()/1e9)
+}

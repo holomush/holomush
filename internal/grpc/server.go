@@ -41,7 +41,11 @@ type Authenticator interface {
 type SessionDefaults struct {
 	TTL        time.Duration
 	MaxHistory int
+	MaxReplay  int
 }
+
+// defaultMaxReplay is used when MaxReplay is not configured.
+const defaultMaxReplay = 1000
 
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
@@ -52,6 +56,7 @@ type CoreServer struct {
 	broadcaster     *core.Broadcaster
 	authenticator   Authenticator
 	sessionStore    session.Store
+	eventStore      core.EventStore
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
 
@@ -80,6 +85,13 @@ func WithSessionStore(store session.Store) CoreServerOption {
 func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 	return func(s *CoreServer) {
 		s.sessionDefaults = defaults
+	}
+}
+
+// WithEventStore sets the event store for replay support.
+func WithEventStore(store core.EventStore) CoreServerOption {
+	return func(s *CoreServer) {
+		s.eventStore = store
 	}
 }
 
@@ -314,6 +326,19 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 	}
 }
 
+// eventToProto converts a core.Event to a proto Event.
+func eventToProto(ev core.Event) *corev1.Event {
+	return &corev1.Event{
+		Id:        ev.ID.String(),
+		Stream:    ev.Stream,
+		Type:      string(ev.Type),
+		Timestamp: timestamppb.New(ev.Timestamp),
+		ActorType: ev.Actor.Kind.String(),
+		ActorId:   ev.Actor.ID,
+		Payload:   ev.Payload,
+	}
+}
+
 // Subscribe opens a stream of events for the session.
 func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.Event]) error {
 	ctx := stream.Context()
@@ -355,44 +380,171 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// Merge all channels into one
 	merged := mergeChannels(ctx, channels)
 
-	// Send events until context is cancelled
+	// Replay missed events if requested
+	if req.ReplayFromCursor && s.eventStore != nil && len(info.EventCursors) > 0 {
+		if err := s.replayMissedEvents(ctx, info, streams, merged, stream, requestID); err != nil {
+			return err
+		}
+	}
+
+	// Send live events until context is cancelled
+	return s.forwardLiveEvents(ctx, info, merged, stream, requestID, req.SessionId)
+}
+
+// replayMissedEvents replays historical events from the EventStore, then sends
+// any live events that arrived during replay (with deduplication). After this
+// method returns, the caller owns `merged` exclusively for live forwarding.
+func (s *CoreServer) replayMissedEvents(
+	ctx context.Context,
+	info *session.Info,
+	streams []string,
+	merged <-chan core.Event,
+	stream grpc.ServerStreamingServer[corev1.Event],
+	requestID string,
+) error {
+	maxReplay := s.sessionDefaults.MaxReplay
+	if maxReplay <= 0 {
+		maxReplay = defaultMaxReplay
+	}
+
+	// Start drainer goroutine to capture live events while we replay.
+	// Without this, the broadcaster's buffered channel (size 100) can fill
+	// and block, causing event loss.
+	var bufMu sync.Mutex
+	var liveBuf []core.Event
+	stopDrain := make(chan struct{})
+	drainDone := make(chan struct{})
+
+	go func() {
+		defer close(drainDone)
+		for {
+			select {
+			case <-stopDrain:
+				return
+			case <-ctx.Done():
+				return
+			case ev, ok := <-merged:
+				if !ok {
+					return
+				}
+				bufMu.Lock()
+				liveBuf = append(liveBuf, ev)
+				bufMu.Unlock()
+			}
+		}
+	}()
+
+	// Replay historical events from each stream
+	replayedIDs := make(map[ulid.ULID]struct{})
+
+	for _, streamName := range streams {
+		cursor, hasCursor := info.EventCursors[streamName]
+		if !hasCursor {
+			continue
+		}
+
+		events, err := s.eventStore.Replay(ctx, streamName, cursor, maxReplay)
+		if err != nil {
+			slog.WarnContext(ctx, "replay failed for stream",
+				"request_id", requestID,
+				"stream", streamName,
+				"cursor", cursor.String(),
+				"error", err,
+			)
+			continue
+		}
+
+		for _, ev := range events {
+			replayedIDs[ev.ID] = struct{}{}
+
+			if err := stream.Send(eventToProto(ev)); err != nil {
+				close(stopDrain)
+				<-drainDone
+				return oops.Code("SEND_FAILED").
+					With("session_id", info.ID).
+					With("event_id", ev.ID.String()).
+					Wrap(err)
+			}
+			s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
+		}
+
+		slog.DebugContext(ctx, "replayed events",
+			"request_id", requestID,
+			"stream", streamName,
+			"count", len(events),
+		)
+	}
+
+	// Stop the drainer and wait for it to exit
+	close(stopDrain)
+	<-drainDone
+
+	// Drain any remaining events from merged (non-blocking)
+	for {
+		select {
+		case ev, ok := <-merged:
+			if !ok {
+				goto drained
+			}
+			liveBuf = append(liveBuf, ev)
+		default:
+			goto drained
+		}
+	}
+drained:
+
+	// Send buffered live events with deduplication
+	for _, ev := range liveBuf {
+		if _, seen := replayedIDs[ev.ID]; seen {
+			continue
+		}
+		if err := stream.Send(eventToProto(ev)); err != nil {
+			return oops.Code("SEND_FAILED").
+				With("session_id", info.ID).
+				With("event_id", ev.ID.String()).
+				Wrap(err)
+		}
+		s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
+	}
+
+	return nil
+}
+
+// forwardLiveEvents reads from merged and sends events to the client stream
+// until the context is cancelled or the channel is closed.
+func (s *CoreServer) forwardLiveEvents(
+	ctx context.Context,
+	info *session.Info,
+	merged <-chan core.Event,
+	stream grpc.ServerStreamingServer[corev1.Event],
+	requestID string,
+	sessionID string,
+) error {
 	for {
 		select {
 		case <-ctx.Done():
 			slog.DebugContext(ctx, "subscription ended",
 				"request_id", requestID,
-				"session_id", req.SessionId,
+				"session_id", sessionID,
 				"reason", ctx.Err(),
 			)
-			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", req.SessionId).Wrap(ctx.Err())
+			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", sessionID).Wrap(ctx.Err())
 
 		case event, ok := <-merged:
 			if !ok {
 				return nil
 			}
 
-			// Update cursor
 			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
 
-			// Convert to proto and send
-			protoEvent := &corev1.Event{
-				Id:        event.ID.String(),
-				Stream:    event.Stream,
-				Type:      string(event.Type),
-				Timestamp: timestamppb.New(event.Timestamp),
-				ActorType: event.Actor.Kind.String(),
-				ActorId:   event.Actor.ID,
-				Payload:   event.Payload,
-			}
-
-			if err := stream.Send(protoEvent); err != nil {
+			if err := stream.Send(eventToProto(event)); err != nil {
 				slog.WarnContext(ctx, "failed to send event",
 					"request_id", requestID,
-					"session_id", req.SessionId,
+					"session_id", sessionID,
 					"event_id", event.ID.String(),
 					"error", err,
 				)
-				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).With("event_id", event.ID.String()).Wrap(err)
+				return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(err)
 			}
 		}
 	}

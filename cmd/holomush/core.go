@@ -390,6 +390,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		sessionStore := session.NewMemStore()
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
+			holoGRPC.WithEventStore(realStore),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,
