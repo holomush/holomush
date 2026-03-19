@@ -96,8 +96,9 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 	}
 
 	return connect.NewResponse(&webv1.SendCommandResponse{
-		Success: resp.GetSuccess(),
-		Output:  resp.GetOutput(),
+		Success:      resp.GetSuccess(),
+		Output:       resp.GetOutput(),
+		ErrorMessage: resp.GetError(),
 	}), nil
 }
 
@@ -117,11 +118,14 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	for {
 		ev, recvErr := sub.Recv()
 		if recvErr != nil {
-			if errors.Is(recvErr, io.EOF) {
+			if errors.Is(recvErr, io.EOF) ||
+				errors.Is(recvErr, context.Canceled) ||
+				errors.Is(recvErr, context.DeadlineExceeded) {
 				return nil
 			}
-			slog.Debug("web: event stream recv error", "session_id", sessionID, "error", recvErr)
-			return nil
+			slog.WarnContext(ctx, "web: event stream recv error", "session_id", sessionID, "error", recvErr)
+			return connect.NewError(connect.CodeUnavailable,
+				oops.With("session_id", sessionID).Wrap(recvErr))
 		}
 
 		gameEvent := translateEvent(ev)
@@ -130,8 +134,13 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 		}
 
 		if sendErr := stream.Send(gameEvent); sendErr != nil {
-			slog.Debug("web: stream send error", "session_id", sessionID, "error", sendErr)
-			return nil
+			if errors.Is(sendErr, context.Canceled) ||
+				errors.Is(sendErr, context.DeadlineExceeded) {
+				return nil
+			}
+			slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
+			return connect.NewError(connect.CodeUnavailable,
+				oops.With("session_id", sessionID).Wrap(sendErr))
 		}
 	}
 }

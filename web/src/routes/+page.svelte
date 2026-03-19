@@ -65,6 +65,7 @@
     }
     connected = false;
     sessionId = "";
+    characterName = "";
     events = [];
   }
 </script>

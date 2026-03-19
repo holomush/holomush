@@ -23,7 +23,7 @@ tasks:
   # Building
   build:
     desc: Build the server binary
-    deps: [web:embed]
+    deps: ['web:embed']
     cmds:
       - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
@@ -48,14 +48,14 @@ tasks:
   # Docker
   docker:build:
     desc: Build Docker image from locally-compiled Linux binary
-    deps: [web:embed]
+    deps: ['web:embed']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
 
   docker:up:
     desc: Run full stack locally via docker compose
-    deps: [docker:build]
+    deps: ['docker:build']
     cmds:
       - docker compose up
 
@@ -129,7 +129,7 @@ tasks:
   web:build:
     desc: Build SvelteKit static site
     dir: web
-    deps: [web:install, web:generate]
+    deps: ['web:install', 'web:generate']
     cmds:
       - pnpm build
     sources:
@@ -141,7 +141,7 @@ tasks:
 
   web:embed:
     desc: Copy SvelteKit build to internal/web/dist for go:embed
-    deps: [web:build]
+    deps: ['web:build']
     cmds:
       - rm -rf internal/web/dist
       - cp -r web/build internal/web/dist
@@ -149,7 +149,7 @@ tasks:
   web:dev:
     desc: Run SvelteKit dev server
     dir: web
-    deps: [web:install, web:generate]
+    deps: ['web:install', 'web:generate']
     cmds:
       - pnpm dev
 

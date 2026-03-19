@@ -32,7 +32,10 @@ type arriveLeavePayload struct {
 // for the web client. Unknown event types are silently dropped (returns nil).
 // Corrupt payloads are logged and also return nil.
 func translateEvent(ev *corev1.Event) *webv1.GameEvent {
-	ts := ev.GetTimestamp().GetSeconds()
+	var ts int64
+	if ev.GetTimestamp() != nil {
+		ts = ev.GetTimestamp().GetSeconds()
+	}
 
 	switch ev.GetType() {
 	case "say":
