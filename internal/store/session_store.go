@@ -166,6 +166,13 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		return oops.With("operation", "marshal event_cursors").With("session_id", id).Wrap(err)
 	}
 
+	// Coerce nil slice to empty — pgx sends nil Go slices as SQL NULL,
+	// which violates the NOT NULL constraint on command_history.
+	cmdHistory := info.CommandHistory
+	if cmdHistory == nil {
+		cmdHistory = []string{}
+	}
+
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO sessions (id, character_id, character_name, location_id,
 			is_guest, status, grid_present, event_cursors,
@@ -194,7 +201,7 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		string(info.Status),
 		info.GridPresent,
 		cursorsJSON,
-		info.CommandHistory,
+		cmdHistory,
 		info.TTLSeconds,
 		info.MaxHistory,
 		info.DetachedAt,

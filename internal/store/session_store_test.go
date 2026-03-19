@@ -240,6 +240,51 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 	}
 }
 
+// nonNilSliceMatcher verifies that the argument is a non-nil []string.
+// pgx sends nil Go slices as SQL NULL, which violates NOT NULL constraints.
+type nonNilSliceMatcher struct{}
+
+func (m nonNilSliceMatcher) Match(v interface{}) bool {
+	s, ok := v.([]string)
+	return ok && s != nil
+}
+
+func TestPostgresSessionStore_Set_NilCommandHistory(t *testing.T) {
+	// Reproduce the bug: Authenticate creates session.Info with nil CommandHistory.
+	// PostgresSessionStore.Set must coerce nil to empty slice to avoid
+	// "null value in column command_history violates not-null constraint".
+	info := testSessionInfo()
+	info.CommandHistory = nil // this is what Authenticate produces
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectExec(`INSERT INTO sessions`).
+		WithArgs(
+			pgxmock.AnyArg(), // id
+			pgxmock.AnyArg(), // character_id
+			pgxmock.AnyArg(), // character_name
+			pgxmock.AnyArg(), // location_id
+			pgxmock.AnyArg(), // is_guest
+			pgxmock.AnyArg(), // status
+			pgxmock.AnyArg(), // grid_present
+			pgxmock.AnyArg(), // event_cursors
+			nonNilSliceMatcher{}, // command_history: MUST be non-nil
+			pgxmock.AnyArg(), // ttl_seconds
+			pgxmock.AnyArg(), // max_history
+			pgxmock.AnyArg(), // detached_at
+			pgxmock.AnyArg(), // expires_at
+			pgxmock.AnyArg(), // created_at
+		).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	store := NewPostgresSessionStore(mock)
+	err = store.Set(context.Background(), "sess-nil-history", info)
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPostgresSessionStore_Delete(t *testing.T) {
 	tests := []struct {
 		name      string
