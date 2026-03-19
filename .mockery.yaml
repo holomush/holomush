@@ -18,7 +18,6 @@ packages:
       outpkg: mocks
     interfaces:
       Authenticator:
-      SessionStore:
   github.com/holomush/holomush/internal/plugin:
     config:
       dir: "{{.InterfaceDir}}/mocks"

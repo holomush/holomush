@@ -6,13 +6,17 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -152,4 +156,158 @@ func TestHandler_Disconnect_RPCError(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Msg)
+}
+
+func TestHandler_AuthenticatePlayer_Unimplemented(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.AuthenticatePlayer(context.Background(), connect.NewRequest(&webv1.AuthenticatePlayerRequest{
+		Username: "test",
+		Password: "pass",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+func TestHandler_ListCharacters_Unimplemented(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.ListCharacters(context.Background(), connect.NewRequest(&webv1.ListCharactersRequest{
+		PlayerToken: "tok-123",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+func TestHandler_SelectCharacter_Unimplemented(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.SelectCharacter(context.Background(), connect.NewRequest(&webv1.SelectCharacterRequest{
+		PlayerToken: "tok-123",
+		CharacterId: "char-abc",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+func TestHandler_ListSessions_Unimplemented(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.ListSessions(context.Background(), connect.NewRequest(&webv1.ListSessionsRequest{
+		PlayerToken: "tok-123",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+func TestHandler_GetCommandHistory_NoStore(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	_, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
+		SessionId: "sess-abc",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+func TestHandler_GetCommandHistory_Success(t *testing.T) {
+	store := &mockSessionStore{
+		commandHistory: []string{"look", "say hello", "go north"},
+	}
+	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
+
+	resp, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
+		SessionId: "sess-abc",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"look", "say hello", "go north"}, resp.Msg.GetCommands())
+}
+
+func TestHandler_GetCommandHistory_StoreError(t *testing.T) {
+	store := &mockSessionStore{
+		commandHistoryErr: errors.New("db error"),
+	}
+	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
+
+	_, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
+		SessionId: "sess-abc",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
+
+func TestNewHandler_WithOptions(t *testing.T) {
+	store := &mockSessionStore{}
+	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
+	assert.NotNil(t, h.sessionStore)
+}
+
+// mockSessionStore is a minimal test double for session.Store.
+// Only Get and GetCommandHistory are implemented; all other methods panic.
+type mockSessionStore struct {
+	commandHistory    []string
+	commandHistoryErr error
+	getErr            error
+}
+
+func (m *mockSessionStore) Get(_ context.Context, id string) (*session.Info, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	return &session.Info{ID: id, Status: session.StatusActive}, nil
+}
+
+func (m *mockSessionStore) Set(_ context.Context, id string, _ *session.Info) error {
+	return fmt.Errorf("mockSessionStore.Set(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) Delete(_ context.Context, id string) error {
+	return fmt.Errorf("mockSessionStore.Delete(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) FindByCharacter(_ context.Context, id ulid.ULID) (*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.FindByCharacter(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) ListByPlayer(_ context.Context, id ulid.ULID) ([]*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.ListByPlayer(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) ListExpired(_ context.Context) ([]*session.Info, error) {
+	return nil, errors.New("mockSessionStore.ListExpired: not implemented")
+}
+
+func (m *mockSessionStore) UpdateStatus(_ context.Context, id string, _ session.Status, _ *time.Time, _ *time.Time) error {
+	return fmt.Errorf("mockSessionStore.UpdateStatus(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) ReattachCAS(_ context.Context, id string) (bool, error) {
+	return false, fmt.Errorf("mockSessionStore.ReattachCAS(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) UpdateCursors(_ context.Context, id string, _ map[string]ulid.ULID) error {
+	return fmt.Errorf("mockSessionStore.UpdateCursors(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) AppendCommand(_ context.Context, id string, _ string, _ int) error {
+	return fmt.Errorf("mockSessionStore.AppendCommand(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) GetCommandHistory(_ context.Context, _ string) ([]string, error) {
+	return m.commandHistory, m.commandHistoryErr
+}
+
+func (m *mockSessionStore) AddConnection(_ context.Context, conn *session.Connection) error {
+	return fmt.Errorf("mockSessionStore.AddConnection(%q): not implemented", conn.ID)
+}
+
+func (m *mockSessionStore) RemoveConnection(_ context.Context, id ulid.ULID) error {
+	return fmt.Errorf("mockSessionStore.RemoveConnection(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) CountConnections(_ context.Context, id string) (int, error) {
+	return 0, fmt.Errorf("mockSessionStore.CountConnections(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) CountConnectionsByType(_ context.Context, id string, _ string) (int, error) {
+	return 0, fmt.Errorf("mockSessionStore.CountConnectionsByType(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) UpdateGridPresent(_ context.Context, id string, _ bool) error {
+	return fmt.Errorf("mockSessionStore.UpdateGridPresent(%q): not implemented", id)
 }

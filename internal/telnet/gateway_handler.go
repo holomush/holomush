@@ -40,14 +40,15 @@ type CoreClient interface {
 // GatewayHandler manages a single telnet connection, using gRPC to communicate
 // with the core service.
 type GatewayHandler struct {
-	conn      net.Conn
-	reader    *bufio.Reader
-	client    CoreClient
-	sessionID string
-	charName  string
-	authed    bool
-	quitting  bool
-	eventCh   chan *corev1.Event
+	conn         net.Conn
+	reader       *bufio.Reader
+	client       CoreClient
+	sessionID    string
+	connectionID string
+	charName     string
+	authed       bool
+	quitting     bool
+	eventCh      chan *corev1.Event
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
@@ -70,7 +71,8 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 			disconnCtx, disconnCancel := context.WithTimeout(context.Background(), rpcTimeout)
 			defer disconnCancel()
 			if _, err := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
-				SessionId: h.sessionID,
+				SessionId:    h.sessionID,
+				ConnectionId: h.connectionID,
 			}); err != nil {
 				slog.Debug("gateway: disconnect RPC failed", "session_id", h.sessionID, "error", err)
 			}
@@ -186,8 +188,9 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 	defer authCancel()
 
 	resp, err := h.client.Authenticate(authCtx, &corev1.AuthRequest{
-		Username: username,
-		Password: password,
+		Username:   username,
+		Password:   password,
+		ClientType: "telnet",
 	})
 	if err != nil {
 		slog.Error("gateway: authenticate RPC failed", "error", err)
@@ -200,6 +203,7 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 	}
 
 	h.sessionID = resp.GetSessionId()
+	h.connectionID = resp.GetConnectionId()
 	h.charName = resp.GetCharacterName()
 	h.authed = true
 

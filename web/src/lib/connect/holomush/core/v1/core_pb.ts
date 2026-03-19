@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/core/v1/core.proto.
  */
 export const file_holomush_core_v1_core: GenFile = /*@__PURE__*/
-  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXgoLQXV0aFJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEAoIdXNlcm5hbWUYAiABKAkSEAoIcGFzc3dvcmQYAyABKAkingEKDEF1dGhSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBISCgpzZXNzaW9uX2lkGAMgASgJEhQKDGNoYXJhY3Rlcl9pZBgEIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgFIAEoCRINCgVlcnJvchgGIAEoCSJiCg5Db21tYW5kUmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg8KB2NvbW1hbmQYAyABKAkibwoPQ29tbWFuZFJlc3BvbnNlEiwKBG1ldGEYASABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YRIPCgdzdWNjZXNzGAIgASgIEg4KBm91dHB1dBgDIAEoCRINCgVlcnJvchgEIAEoCSJkChBTdWJzY3JpYmVSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHc3RyZWFtcxgDIAMoCSKXAQoFRXZlbnQSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgphY3Rvcl90eXBlGAUgASgJEhAKCGFjdG9yX2lkGAYgASgJEg8KB3BheWxvYWQYByABKAwiVAoRRGlzY29ubmVjdFJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCSJTChJEaXNjb25uZWN0UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgy0AIKBENvcmUSTQoMQXV0aGVudGljYXRlEh0uaG9sb211c2guY29yZS52MS5BdXRoUmVxdWVzdBoeLmhvbG9tdXNoLmNvcmUudjEuQXV0aFJlc3BvbnNlElQKDUhhbmRsZUNvbW1hbmQSIC5ob2xvbXVzaC5jb3JlLnYxLkNvbW1hbmRSZXF1ZXN0GiEuaG9sb211c2guY29yZS52MS5Db21tYW5kUmVzcG9uc2USSgoJU3Vic2NyaWJlEiIuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXF1ZXN0GhcuaG9sb211c2guY29yZS52MS5FdmVudDABElcKCkRpc2Nvbm5lY3QSIy5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiQuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVzcG9uc2VCQFo+Z2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY29yZS92MTtjb3JldjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicwoLQXV0aFJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEAoIdXNlcm5hbWUYAiABKAkSEAoIcGFzc3dvcmQYAyABKAkSEwoLY2xpZW50X3R5cGUYBCABKAkitQEKDEF1dGhSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBISCgpzZXNzaW9uX2lkGAMgASgJEhQKDGNoYXJhY3Rlcl9pZBgEIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgFIAEoCRINCgVlcnJvchgGIAEoCRIVCg1jb25uZWN0aW9uX2lkGAcgASgJImIKDkNvbW1hbmRSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHY29tbWFuZBgDIAEoCSJvCg9Db21tYW5kUmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSDgoGb3V0cHV0GAMgASgJEg0KBWVycm9yGAQgASgJIoABChBTdWJzY3JpYmVSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHc3RyZWFtcxgDIAMoCRIaChJyZXBsYXlfZnJvbV9jdXJzb3IYBCABKAgilwEKBUV2ZW50EgoKAmlkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKYWN0b3JfdHlwZRgFIAEoCRIQCghhY3Rvcl9pZBgGIAEoCRIPCgdwYXlsb2FkGAcgASgMImsKEURpc2Nvbm5lY3RSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCSJTChJEaXNjb25uZWN0UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgy0AIKBENvcmUSTQoMQXV0aGVudGljYXRlEh0uaG9sb211c2guY29yZS52MS5BdXRoUmVxdWVzdBoeLmhvbG9tdXNoLmNvcmUudjEuQXV0aFJlc3BvbnNlElQKDUhhbmRsZUNvbW1hbmQSIC5ob2xvbXVzaC5jb3JlLnYxLkNvbW1hbmRSZXF1ZXN0GiEuaG9sb211c2guY29yZS52MS5Db21tYW5kUmVzcG9uc2USSgoJU3Vic2NyaWJlEiIuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXF1ZXN0GhcuaG9sb211c2guY29yZS52MS5FdmVudDABElcKCkRpc2Nvbm5lY3QSIy5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiQuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVzcG9uc2VCQFo+Z2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY29yZS92MTtjb3JldjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * RequestMeta contains metadata for request correlation and debugging.
@@ -87,6 +87,13 @@ export type AuthRequest = Message<"holomush.core.v1.AuthRequest"> & {
    * @generated from field: string password = 3;
    */
   password: string;
+
+  /**
+   * "terminal", "comms_hub", "telnet"
+   *
+   * @generated from field: string client_type = 4;
+   */
+  clientType: string;
 };
 
 /**
@@ -129,6 +136,11 @@ export type AuthResponse = Message<"holomush.core.v1.AuthResponse"> & {
    * @generated from field: string error = 6;
    */
   error: string;
+
+  /**
+   * @generated from field: string connection_id = 7;
+   */
+  connectionId: string;
 };
 
 /**
@@ -215,6 +227,11 @@ export type SubscribeRequest = Message<"holomush.core.v1.SubscribeRequest"> & {
    * @generated from field: repeated string streams = 3;
    */
   streams: string[];
+
+  /**
+   * @generated from field: bool replay_from_cursor = 4;
+   */
+  replayFromCursor: boolean;
 };
 
 /**
@@ -284,6 +301,13 @@ export type DisconnectRequest = Message<"holomush.core.v1.DisconnectRequest"> & 
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
+
+  /**
+   * optional: remove specific connection
+   *
+   * @generated from field: string connection_id = 3;
+   */
+  connectionId: string;
 };
 
 /**

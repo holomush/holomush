@@ -15,8 +15,8 @@ func TestMigrationsFS_EmbeddedFiles(t *testing.T) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	require.NoError(t, err, "should read embedded migrations directory")
 
-	// We have 7 migrations, each with up and down = 14 files
-	assert.GreaterOrEqual(t, len(entries), 14, "should have at least 14 migration files (7 up + 7 down)")
+	// We have at least 8 migrations, each with up and down = at least 16 files
+	assert.GreaterOrEqual(t, len(entries), 16, "should have at least 16 migration files (8 up + 8 down)")
 
 	// Verify naming pattern - check first migration exists
 	expectedFiles := []string{

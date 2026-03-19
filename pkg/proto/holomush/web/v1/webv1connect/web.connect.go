@@ -44,6 +44,20 @@ const (
 	WebServiceStreamEventsProcedure = "/holomush.web.v1.WebService/StreamEvents"
 	// WebServiceDisconnectProcedure is the fully-qualified name of the WebService's Disconnect RPC.
 	WebServiceDisconnectProcedure = "/holomush.web.v1.WebService/Disconnect"
+	// WebServiceAuthenticatePlayerProcedure is the fully-qualified name of the WebService's
+	// AuthenticatePlayer RPC.
+	WebServiceAuthenticatePlayerProcedure = "/holomush.web.v1.WebService/AuthenticatePlayer"
+	// WebServiceListCharactersProcedure is the fully-qualified name of the WebService's ListCharacters
+	// RPC.
+	WebServiceListCharactersProcedure = "/holomush.web.v1.WebService/ListCharacters"
+	// WebServiceSelectCharacterProcedure is the fully-qualified name of the WebService's
+	// SelectCharacter RPC.
+	WebServiceSelectCharacterProcedure = "/holomush.web.v1.WebService/SelectCharacter"
+	// WebServiceListSessionsProcedure is the fully-qualified name of the WebService's ListSessions RPC.
+	WebServiceListSessionsProcedure = "/holomush.web.v1.WebService/ListSessions"
+	// WebServiceGetCommandHistoryProcedure is the fully-qualified name of the WebService's
+	// GetCommandHistory RPC.
+	WebServiceGetCommandHistoryProcedure = "/holomush.web.v1.WebService/GetCommandHistory"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -57,6 +71,16 @@ type WebServiceClient interface {
 	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.StreamEventsResponse], error)
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
+	// Two-phase login: authenticate player credentials, get a token.
+	AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error)
+	// Two-phase login: list characters available for the authenticated player.
+	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
+	// Two-phase login: select a character, creating or reattaching a session.
+	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
+	// List all sessions for the authenticated player.
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	// Retrieve command history for a session.
+	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -94,15 +118,50 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("Disconnect")),
 			connect.WithClientOptions(opts...),
 		),
+		authenticatePlayer: connect.NewClient[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse](
+			httpClient,
+			baseURL+WebServiceAuthenticatePlayerProcedure,
+			connect.WithSchema(webServiceMethods.ByName("AuthenticatePlayer")),
+			connect.WithClientOptions(opts...),
+		),
+		listCharacters: connect.NewClient[v1.ListCharactersRequest, v1.ListCharactersResponse](
+			httpClient,
+			baseURL+WebServiceListCharactersProcedure,
+			connect.WithSchema(webServiceMethods.ByName("ListCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		selectCharacter: connect.NewClient[v1.SelectCharacterRequest, v1.SelectCharacterResponse](
+			httpClient,
+			baseURL+WebServiceSelectCharacterProcedure,
+			connect.WithSchema(webServiceMethods.ByName("SelectCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+WebServiceListSessionsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("ListSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		getCommandHistory: connect.NewClient[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse](
+			httpClient,
+			baseURL+WebServiceGetCommandHistoryProcedure,
+			connect.WithSchema(webServiceMethods.ByName("GetCommandHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // webServiceClient implements WebServiceClient.
 type webServiceClient struct {
-	login        *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	sendCommand  *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
-	streamEvents *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
-	disconnect   *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	login              *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	sendCommand        *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
+	streamEvents       *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
+	disconnect         *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	authenticatePlayer *connect.Client[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse]
+	listCharacters     *connect.Client[v1.ListCharactersRequest, v1.ListCharactersResponse]
+	selectCharacter    *connect.Client[v1.SelectCharacterRequest, v1.SelectCharacterResponse]
+	listSessions       *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	getCommandHistory  *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
 }
 
 // Login calls holomush.web.v1.WebService.Login.
@@ -125,6 +184,31 @@ func (c *webServiceClient) Disconnect(ctx context.Context, req *connect.Request[
 	return c.disconnect.CallUnary(ctx, req)
 }
 
+// AuthenticatePlayer calls holomush.web.v1.WebService.AuthenticatePlayer.
+func (c *webServiceClient) AuthenticatePlayer(ctx context.Context, req *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error) {
+	return c.authenticatePlayer.CallUnary(ctx, req)
+}
+
+// ListCharacters calls holomush.web.v1.WebService.ListCharacters.
+func (c *webServiceClient) ListCharacters(ctx context.Context, req *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error) {
+	return c.listCharacters.CallUnary(ctx, req)
+}
+
+// SelectCharacter calls holomush.web.v1.WebService.SelectCharacter.
+func (c *webServiceClient) SelectCharacter(ctx context.Context, req *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error) {
+	return c.selectCharacter.CallUnary(ctx, req)
+}
+
+// ListSessions calls holomush.web.v1.WebService.ListSessions.
+func (c *webServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
+// GetCommandHistory calls holomush.web.v1.WebService.GetCommandHistory.
+func (c *webServiceClient) GetCommandHistory(ctx context.Context, req *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error) {
+	return c.getCommandHistory.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// Authenticate as guest or registered user.
@@ -136,6 +220,16 @@ type WebServiceHandler interface {
 	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.StreamEventsResponse]) error
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
+	// Two-phase login: authenticate player credentials, get a token.
+	AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error)
+	// Two-phase login: list characters available for the authenticated player.
+	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
+	// Two-phase login: select a character, creating or reattaching a session.
+	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
+	// List all sessions for the authenticated player.
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	// Retrieve command history for a session.
+	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -169,6 +263,36 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("Disconnect")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceAuthenticatePlayerHandler := connect.NewUnaryHandler(
+		WebServiceAuthenticatePlayerProcedure,
+		svc.AuthenticatePlayer,
+		connect.WithSchema(webServiceMethods.ByName("AuthenticatePlayer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceListCharactersHandler := connect.NewUnaryHandler(
+		WebServiceListCharactersProcedure,
+		svc.ListCharacters,
+		connect.WithSchema(webServiceMethods.ByName("ListCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceSelectCharacterHandler := connect.NewUnaryHandler(
+		WebServiceSelectCharacterProcedure,
+		svc.SelectCharacter,
+		connect.WithSchema(webServiceMethods.ByName("SelectCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceListSessionsHandler := connect.NewUnaryHandler(
+		WebServiceListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(webServiceMethods.ByName("ListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceGetCommandHistoryHandler := connect.NewUnaryHandler(
+		WebServiceGetCommandHistoryProcedure,
+		svc.GetCommandHistory,
+		connect.WithSchema(webServiceMethods.ByName("GetCommandHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceLoginProcedure:
@@ -179,6 +303,16 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceStreamEventsHandler.ServeHTTP(w, r)
 		case WebServiceDisconnectProcedure:
 			webServiceDisconnectHandler.ServeHTTP(w, r)
+		case WebServiceAuthenticatePlayerProcedure:
+			webServiceAuthenticatePlayerHandler.ServeHTTP(w, r)
+		case WebServiceListCharactersProcedure:
+			webServiceListCharactersHandler.ServeHTTP(w, r)
+		case WebServiceSelectCharacterProcedure:
+			webServiceSelectCharacterHandler.ServeHTTP(w, r)
+		case WebServiceListSessionsProcedure:
+			webServiceListSessionsHandler.ServeHTTP(w, r)
+		case WebServiceGetCommandHistoryProcedure:
+			webServiceGetCommandHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -202,4 +336,24 @@ func (UnimplementedWebServiceHandler) StreamEvents(context.Context, *connect.Req
 
 func (UnimplementedWebServiceHandler) Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.Disconnect is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.AuthenticatePlayer is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.ListCharacters is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.SelectCharacter is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.ListSessions is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.GetCommandHistory is not implemented"))
 }
