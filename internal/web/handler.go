@@ -15,6 +15,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -36,15 +38,34 @@ type CoreClient interface {
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 type Handler struct {
-	client CoreClient
+	client       CoreClient
+	sessionStore session.Store
+	tokenRepo    auth.PlayerTokenRepository
 }
 
 // compile-time check that Handler satisfies the generated interface.
 var _ webv1connect.WebServiceHandler = (*Handler)(nil)
 
-// NewHandler creates a new Handler with the given core client.
-func NewHandler(client CoreClient) *Handler {
-	return &Handler{client: client}
+// HandlerOption configures optional Handler dependencies.
+type HandlerOption func(*Handler)
+
+// WithSessionStore sets the session store for session-related RPCs.
+func WithSessionStore(store session.Store) HandlerOption {
+	return func(h *Handler) { h.sessionStore = store }
+}
+
+// WithPlayerTokenRepo sets the player token repository for two-phase login RPCs.
+func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) HandlerOption {
+	return func(h *Handler) { h.tokenRepo = repo }
+}
+
+// NewHandler creates a new Handler with the given core client and options.
+func NewHandler(client CoreClient, opts ...HandlerOption) *Handler {
+	h := &Handler{client: client}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // Login authenticates a user and returns session details.
@@ -108,7 +129,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	sessionID := req.Msg.GetSessionId()
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
-		SessionId: sessionID,
+		SessionId:        sessionID,
+		ReplayFromCursor: req.Msg.GetReplayFromCursor(),
 	})
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,
@@ -158,4 +180,40 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 	}
 
 	return connect.NewResponse(&webv1.DisconnectResponse{}), nil
+}
+
+// AuthenticatePlayer validates player credentials and returns a player token.
+// Stub: returns CodeUnimplemented pending full player account system.
+func (h *Handler) AuthenticatePlayer(_ context.Context, _ *connect.Request[webv1.AuthenticatePlayerRequest]) (*connect.Response[webv1.AuthenticatePlayerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+}
+
+// ListCharacters returns the characters available for an authenticated player.
+// Stub: returns CodeUnimplemented pending full player account system.
+func (h *Handler) ListCharacters(_ context.Context, _ *connect.Request[webv1.ListCharactersRequest]) (*connect.Response[webv1.ListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+}
+
+// SelectCharacter selects a character and creates or reattaches a game session.
+// Stub: returns CodeUnimplemented pending full player account system.
+func (h *Handler) SelectCharacter(_ context.Context, _ *connect.Request[webv1.SelectCharacterRequest]) (*connect.Response[webv1.SelectCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+}
+
+// ListSessions returns all sessions for the authenticated player.
+// Stub: returns CodeUnimplemented pending full player account system.
+func (h *Handler) ListSessions(_ context.Context, _ *connect.Request[webv1.ListSessionsRequest]) (*connect.Response[webv1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+}
+
+// GetCommandHistory returns the command history for a session.
+func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
+	if h.sessionStore == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("session store not configured"))
+	}
+	history, err := h.sessionStore.GetCommandHistory(ctx, req.Msg.GetSessionId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&webv1.GetCommandHistoryResponse{Commands: history}), nil
 }

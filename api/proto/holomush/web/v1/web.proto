@@ -20,6 +20,21 @@ service WebService {
 
   // Disconnect ends the session and triggers cleanup.
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+
+  // Two-phase login: authenticate player credentials, get a token.
+  rpc AuthenticatePlayer(AuthenticatePlayerRequest) returns (AuthenticatePlayerResponse);
+
+  // Two-phase login: list characters available for the authenticated player.
+  rpc ListCharacters(ListCharactersRequest) returns (ListCharactersResponse);
+
+  // Two-phase login: select a character, creating or reattaching a session.
+  rpc SelectCharacter(SelectCharacterRequest) returns (SelectCharacterResponse);
+
+  // List all sessions for the authenticated player.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+
+  // Retrieve command history for a session.
+  rpc GetCommandHistory(GetCommandHistoryRequest) returns (GetCommandHistoryResponse);
 }
 
 message LoginRequest {
@@ -68,3 +83,69 @@ message DisconnectRequest {
 }
 
 message DisconnectResponse {}
+
+// Two-phase login messages
+
+message AuthenticatePlayerRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message AuthenticatePlayerResponse {
+  bool success = 1;
+  string player_token = 2;
+  string error_message = 3;
+  repeated CharacterSummary characters = 4;
+}
+
+message CharacterSummary {
+  string character_id = 1;
+  string character_name = 2;
+  bool has_active_session = 3;
+  string session_status = 4; // "active", "detached", ""
+}
+
+message ListCharactersRequest {
+  string player_token = 1;
+}
+
+message ListCharactersResponse {
+  repeated CharacterSummary characters = 1;
+}
+
+message SelectCharacterRequest {
+  string player_token = 1;
+  string character_id = 2;
+}
+
+message SelectCharacterResponse {
+  bool success = 1;
+  string session_id = 2;
+  string character_name = 3;
+  bool reattached = 4; // true if this was an existing detached session
+  string error_message = 5;
+}
+
+message ListSessionsRequest {
+  string player_token = 1;
+}
+
+message ListSessionsResponse {
+  repeated SessionSummary sessions = 1;
+}
+
+message SessionSummary {
+  string session_id = 1;
+  string character_name = 2;
+  string status = 3;
+  int64 created_at = 4;
+  int64 detached_at = 5;
+}
+
+message GetCommandHistoryRequest {
+  string session_id = 1;
+}
+
+message GetCommandHistoryResponse {
+  repeated string commands = 1;
+}
