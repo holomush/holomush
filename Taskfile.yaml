@@ -239,6 +239,7 @@ tasks:
         addlicense -check -f LICENSE_HEADER \
           -ignore '**/*.pb.go' \
           -ignore 'vendor/**' \
+          -ignore 'internal/web/dist/**' \
           $EXISTING_DIRS
 
   license:add:
@@ -269,6 +270,7 @@ tasks:
         addlicense -f LICENSE_HEADER \
           -ignore '**/*.pb.go' \
           -ignore 'vendor/**' \
+          -ignore 'internal/web/dist/**' \
           $EXISTING_DIRS
 
   lint:
