@@ -589,6 +589,16 @@ func (s *CoreServer) forwardLiveEvents(
 				return nil
 			}
 
+			if err := stream.Send(eventToProto(event)); err != nil {
+				slog.WarnContext(ctx, "failed to send event",
+					"request_id", requestID,
+					"session_id", sessionID,
+					"event_id", event.ID.String(),
+					"error", err,
+				)
+				return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(err)
+			}
+
 			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
 
 			// Persist cursor to store (best-effort, non-blocking).
@@ -601,16 +611,6 @@ func (s *CoreServer) forwardLiveEvents(
 					slog.Warn("cursor persist failed", "session_id", sid, "error", err)
 				}
 			}(sessionID, event.Stream, event.ID)
-
-			if err := stream.Send(eventToProto(event)); err != nil {
-				slog.WarnContext(ctx, "failed to send event",
-					"request_id", requestID,
-					"session_id", sessionID,
-					"event_id", event.ID.String(),
-					"error", err,
-				)
-				return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(err)
-			}
 		}
 	}
 }

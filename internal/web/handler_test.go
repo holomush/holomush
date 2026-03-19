@@ -237,14 +237,18 @@ func TestNewHandler_WithOptions(t *testing.T) {
 }
 
 // mockSessionStore is a minimal test double for session.Store.
-// Only GetCommandHistory is implemented; all other methods panic.
+// Only Get and GetCommandHistory are implemented; all other methods panic.
 type mockSessionStore struct {
 	commandHistory    []string
 	commandHistoryErr error
+	getErr            error
 }
 
-func (m *mockSessionStore) Get(_ context.Context, _ string) (*session.Info, error) {
-	panic("not implemented")
+func (m *mockSessionStore) Get(_ context.Context, id string) (*session.Info, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	return &session.Info{ID: id, Status: session.StatusActive}, nil
 }
 
 func (m *mockSessionStore) Set(_ context.Context, _ string, _ *session.Info) error {

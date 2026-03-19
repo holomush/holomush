@@ -237,11 +237,24 @@ func (h *Handler) ListSessions(_ context.Context, _ *connect.Request[webv1.ListS
 }
 
 // GetCommandHistory returns the command history for a session.
+// TODO: Add full authorization when two-phase login is implemented —
+// verify the caller's player token owns the requested session.
 func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
 	if h.sessionStore == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("session store not configured"))
 	}
-	history, err := h.sessionStore.GetCommandHistory(ctx, req.Msg.GetSessionId())
+
+	sessionID := req.Msg.GetSessionId()
+	if sessionID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session_id is required"))
+	}
+
+	// Verify session exists (basic guard until full auth is wired)
+	if _, err := h.sessionStore.Get(ctx, sessionID); err != nil {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("session not found or not authorized"))
+	}
+
+	history, err := h.sessionStore.GetCommandHistory(ctx, sessionID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
