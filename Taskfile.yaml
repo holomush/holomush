@@ -50,7 +50,7 @@ tasks:
     desc: Build Docker image from locally-compiled Linux binary
     deps: [web:embed]
     cmds:
-      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
+      - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
 
   docker:up:
