@@ -58,6 +58,9 @@ tmp/
 
 # goreleaser
 dist/
+# Allow web client placeholder (needed for go:embed)
+!internal/web/dist/
+!internal/web/dist/index.html
 
 # dprint cache
 .dprint/
