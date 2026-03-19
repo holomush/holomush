@@ -36,6 +36,39 @@ and 3 (portal pages) build on this foundation.
 
 ## Design Decisions
 
+### CharacterRef in Core Package
+
+The `core` package MUST define a `CharacterRef` struct that groups character
+identity fields (ID, Name, LocationID) used by engine methods.
+
+```go
+// core/character.go
+type CharacterRef struct {
+    ID         ulid.ULID
+    Name       string
+    LocationID ulid.ULID
+}
+```
+
+Engine methods (`HandleSay`, `HandlePose`, `HandleConnect`, `HandleDisconnect`)
+MUST accept `CharacterRef` instead of loose `charID`, `locationID`, `charName`
+parameters.
+
+**Rationale:** The engine currently passes character data as loose primitives
+(`charID ulid.ULID`, `charName string`, `locationID ulid.ULID`), duplicating
+fields that exist in `world.Character`. A direct import of `world.Character`
+into `core` is impossible because `world` already imports `core` — creating a
+circular dependency. `CharacterRef` is a lightweight value type that lives in
+`core`, eliminates primitive obsession in engine signatures, and provides a
+single extension point for future character fields in event payloads (e.g.,
+description for hover tooltips). `world.Character` can provide a `Ref()` method
+to convert to `CharacterRef` at the boundary.
+
+All event payloads that reference a character (say, pose, arrive, leave) MUST
+include `character_name` sourced from `CharacterRef.Name`, ensuring protocol
+adapters (telnet, web) can display human-readable names without resolving actor
+IDs.
+
 ### ConnectRPC Instead of Raw WebSocket
 
 The project MUST use [ConnectRPC](https://connectrpc.com) instead of a custom

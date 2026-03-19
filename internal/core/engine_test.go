@@ -22,9 +22,10 @@ func TestEngine_HandleSay(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// Emit say event
-	err := engine.HandleSay(ctx, charID, locationID, "Hello, world!")
+	err := engine.HandleSay(ctx, char, "Hello, world!")
 	require.NoError(t, err)
 
 	// Verify event was stored
@@ -33,6 +34,12 @@ func TestEngine_HandleSay(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 	assert.Equal(t, EventTypeSay, events[0].Type)
+
+	// Verify payload includes character_name
+	var payload SayPayload
+	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
+	assert.Equal(t, "TestChar", payload.CharacterName)
+	assert.Equal(t, "Hello, world!", payload.Message)
 }
 
 func TestEngine_HandlePose(t *testing.T) {
@@ -43,9 +50,10 @@ func TestEngine_HandlePose(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// Emit pose event
-	err := engine.HandlePose(ctx, charID, locationID, "waves hello")
+	err := engine.HandlePose(ctx, char, "waves hello")
 	require.NoError(t, err)
 
 	// Verify event was stored
@@ -54,6 +62,12 @@ func TestEngine_HandlePose(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 	assert.Equal(t, EventTypePose, events[0].Type)
+
+	// Verify payload includes character_name
+	var payload PosePayload
+	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
+	assert.Equal(t, "TestChar", payload.CharacterName)
+	assert.Equal(t, "waves hello", payload.Action)
 }
 
 func TestEngine_HandleSay_BroadcastsEvent(t *testing.T) {
@@ -65,6 +79,7 @@ func TestEngine_HandleSay_BroadcastsEvent(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// Subscribe to the location stream before the event
 	stream := "location:" + locationID.String()
@@ -72,7 +87,7 @@ func TestEngine_HandleSay_BroadcastsEvent(t *testing.T) {
 	defer broadcaster.Unsubscribe(stream, ch)
 
 	// Emit say event
-	err := engine.HandleSay(ctx, charID, locationID, "Hello, world!")
+	err := engine.HandleSay(ctx, char, "Hello, world!")
 	require.NoError(t, err)
 
 	// Verify event was broadcast
@@ -94,6 +109,7 @@ func TestEngine_HandlePose_BroadcastsEvent(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// Subscribe to the location stream before the event
 	stream := "location:" + locationID.String()
@@ -101,7 +117,7 @@ func TestEngine_HandlePose_BroadcastsEvent(t *testing.T) {
 	defer broadcaster.Unsubscribe(stream, ch)
 
 	// Emit pose event
-	err := engine.HandlePose(ctx, charID, locationID, "waves")
+	err := engine.HandlePose(ctx, char, "waves")
 	require.NoError(t, err)
 
 	// Verify event was broadcast
@@ -123,12 +139,13 @@ func TestEngine_NilBroadcaster_DoesNotPanic(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// These should not panic even with nil broadcaster
-	err := engine.HandleSay(ctx, charID, locationID, "Hello")
+	err := engine.HandleSay(ctx, char, "Hello")
 	require.NoError(t, err)
 
-	err = engine.HandlePose(ctx, charID, locationID, "waves")
+	err = engine.HandlePose(ctx, char, "waves")
 	require.NoError(t, err)
 }
 
@@ -141,10 +158,11 @@ func TestEngine_ReplayEvents(t *testing.T) {
 	charID := NewULID()
 	locationID := NewULID()
 	stream := "location:" + locationID.String()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// Create some events
 	for i := 0; i < 5; i++ {
-		err := engine.HandleSay(ctx, charID, locationID, "message")
+		err := engine.HandleSay(ctx, char, "message")
 		require.NoError(t, err)
 	}
 
@@ -164,13 +182,14 @@ func TestEngine_ReplayEvents_WithCursor(t *testing.T) {
 	connID := NewULID()
 	locationID := NewULID()
 	stream := "location:" + locationID.String()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
 	// Connect to create session
 	sessions.Connect(charID, connID)
 
 	// Create some events
 	for i := 0; i < 5; i++ {
-		err := engine.HandleSay(ctx, charID, locationID, "message")
+		err := engine.HandleSay(ctx, char, "message")
 		require.NoError(t, err)
 	}
 
@@ -221,8 +240,9 @@ func TestEngine_HandleSay_StoreError(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
-	err := engine.HandleSay(ctx, charID, locationID, "Hello")
+	err := engine.HandleSay(ctx, char, "Hello")
 	require.Error(t, err, "Expected error from failing store")
 	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
@@ -235,8 +255,9 @@ func TestEngine_HandlePose_StoreError(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
-	err := engine.HandlePose(ctx, charID, locationID, "waves")
+	err := engine.HandlePose(ctx, char, "waves")
 	require.Error(t, err, "Expected error from failing store")
 	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
@@ -263,12 +284,13 @@ func TestEngine_HandleConnect(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "Alyssa", LocationID: locationID}
 
 	stream := "location:" + locationID.String()
 	ch := broadcaster.Subscribe(stream)
 	defer broadcaster.Unsubscribe(stream, ch)
 
-	err := engine.HandleConnect(ctx, charID, locationID, "Alyssa")
+	err := engine.HandleConnect(ctx, char)
 	require.NoError(t, err)
 
 	// Verify event was stored with correct type, stream, actor
@@ -304,12 +326,13 @@ func TestEngine_HandleDisconnect(t *testing.T) {
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
+	char := CharacterRef{ID: charID, Name: "Alyssa", LocationID: locationID}
 
 	stream := "location:" + locationID.String()
 	ch := broadcaster.Subscribe(stream)
 	defer broadcaster.Unsubscribe(stream, ch)
 
-	err := engine.HandleDisconnect(ctx, charID, locationID, "Alyssa", "quit")
+	err := engine.HandleDisconnect(ctx, char, "quit")
 	require.NoError(t, err)
 
 	// Verify event was stored with correct type, stream, actor

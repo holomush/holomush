@@ -41,6 +41,9 @@ func TestGatewayCommand_Flags(t *testing.T) {
 		"--control-addr",
 		"--metrics-addr",
 		"--log-format",
+		"--web-addr",
+		"--web-dir",
+		"--cors-origins",
 	}
 
 	for _, flag := range expectedFlags {
@@ -430,6 +433,22 @@ func TestGatewayConfig_Defaults(t *testing.T) {
 	assert.Equal(t, "localhost:9000", defaultCoreAddr)
 	assert.Equal(t, "127.0.0.1:9002", defaultGatewayControlAddr)
 	assert.Equal(t, "127.0.0.1:9101", defaultGatewayMetricsAddr)
+}
+
+func TestGatewayCommand_WebDefaults(t *testing.T) {
+	cmd := NewGatewayCmd()
+
+	webAddr, err := cmd.Flags().GetString("web-addr")
+	require.NoError(t, err)
+	assert.Equal(t, ":8080", webAddr)
+
+	webDir, err := cmd.Flags().GetString("web-dir")
+	require.NoError(t, err)
+	assert.Empty(t, webDir)
+
+	corsOrigins, err := cmd.Flags().GetStringSlice("cors-origins")
+	require.NoError(t, err)
+	assert.Empty(t, corsOrigins)
 }
 
 // TestControlServerError_TriggersShutdown verifies that when the control gRPC server

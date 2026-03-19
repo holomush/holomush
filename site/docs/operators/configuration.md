@@ -381,6 +381,30 @@ gateway:
   # Default: "json"
   log_format: "json"
 
+  # Web client HTTP server listen address.
+  # Serves the ConnectRPC API and embedded SvelteKit static files.
+  # Flag: --web-addr
+  # Default: ":8080"
+  web_addr: ":8080"
+
+  # Override embedded static files with a filesystem directory.
+  # When set, serves files from this directory instead of the embedded
+  # SvelteKit build. Useful for deploying custom builds without
+  # recompiling the binary.
+  # Flag: --web-dir
+  # Default: "" (use embedded files)
+  web_dir: ""
+
+  # Allowed CORS origins for cross-origin requests.
+  # Required for development when the Vite dev server (localhost:5173)
+  # makes requests to the gateway (localhost:8080).
+  # Default: [] (same-origin only — no CORS headers added)
+  # Flag: --cors-origins
+  cors_origins: []
+  # Example for development:
+  # cors_origins:
+  #   - "http://localhost:5173"
+
 # Game world configuration.
 game:
   # ULID of the starting location assigned to guest connections.

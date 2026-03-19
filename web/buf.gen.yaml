@@ -1,0 +1,11 @@
+# buf.gen.yaml — TypeScript ConnectRPC code generation
+version: v2
+plugins:
+  - remote: buf.build/bufbuild/es
+    out: src/lib/connect
+    opt: target=ts
+  - remote: buf.build/connectrpc/es
+    out: src/lib/connect
+    opt: target=ts
+inputs:
+  - directory: ../api/proto
