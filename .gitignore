@@ -41,6 +41,8 @@ Thumbs.db
 node_modules/
 .svelte-kit/
 web/build/
+web/node_modules/
+web/.svelte-kit/
 .env
 .env.*
 !.env.example

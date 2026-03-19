@@ -23,6 +23,7 @@ tasks:
   # Building
   build:
     desc: Build the server binary
+    deps: [web:embed]
     cmds:
       - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
@@ -79,6 +80,61 @@ tasks:
     generates:
       - site/docs/developers/policy-dsl.ebnf
       - site/docs/developers/policy-dsl-railroad.html
+
+  # Web client
+  web:install:
+    desc: Install web client dependencies
+    dir: web
+    cmds:
+      - pnpm install
+    sources:
+      - web/package.json
+      - web/pnpm-lock.yaml
+
+  web:generate:
+    desc: Generate TypeScript ConnectRPC clients from proto
+    dir: web
+    cmds:
+      - buf generate
+    sources:
+      - web/buf.gen.yaml
+      - api/proto/**/*.proto
+    generates:
+      - web/src/lib/connect/**/*.ts
+
+  web:build:
+    desc: Build SvelteKit static site
+    dir: web
+    deps: [web:install, web:generate]
+    cmds:
+      - pnpm build
+    sources:
+      - web/src/**/*
+      - web/svelte.config.js
+      - web/vite.config.ts
+    generates:
+      - web/build/index.html
+
+  web:embed:
+    desc: Copy SvelteKit build to internal/web/dist for go:embed
+    deps: [web:build]
+    cmds:
+      - rm -rf internal/web/dist
+      - cp -r web/build internal/web/dist
+
+  web:dev:
+    desc: Run SvelteKit dev server
+    dir: web
+    deps: [web:install, web:generate]
+    cmds:
+      - pnpm dev
+
+  web:test:
+    desc: Run Playwright E2E tests (requires running gateway+core stack)
+    dir: web
+    # No deps on web:build — test hits a running server, not the local build
+    cmds:
+      - pnpm exec playwright test
 
   # Testing
   test:
