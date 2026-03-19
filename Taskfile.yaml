@@ -45,6 +45,30 @@ tasks:
       - GOOS=darwin GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-darwin-amd64 {{.MAIN_PKG}}
       - GOOS=darwin GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-darwin-arm64 {{.MAIN_PKG}}
 
+  # Docker
+  docker:build:
+    desc: Build Docker image from locally-compiled Linux binary
+    deps: [web:embed]
+    cmds:
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
+      - docker build -t holomush .
+
+  docker:up:
+    desc: Run full stack locally via docker compose
+    deps: [docker:build]
+    cmds:
+      - docker compose up
+
+  docker:down:
+    desc: Stop and remove containers
+    cmds:
+      - docker compose down
+
+  docker:clean:
+    desc: Stop containers and remove volumes (fresh database)
+    cmds:
+      - docker compose down -v
+
   # Proto generation
   proto:
     desc: Generate Go code from protobuf definitions
