@@ -47,6 +47,7 @@ message SendCommandResponse {
 
 message StreamEventsRequest {
   string session_id = 1;
+  bool replay_from_cursor = 2;
 }
 
 message GameEvent {
@@ -58,6 +59,8 @@ message GameEvent {
 
 message StreamEventsResponse {
   GameEvent event = 1;
+  bool replayed = 2;
+  bool replay_complete = 3;
 }
 
 message DisconnectRequest {

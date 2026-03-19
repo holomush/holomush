@@ -68,6 +68,7 @@ message SubscribeRequest {
   RequestMeta meta = 1;
   string session_id = 2;
   repeated string streams = 3;
+  bool replay_from_cursor = 4;
 }
 
 message Event {

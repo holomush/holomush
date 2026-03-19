@@ -257,10 +257,11 @@ func (x *SendCommandResponse) GetErrorMessage() string {
 }
 
 type StreamEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ReplayFromCursor bool                   `protobuf:"varint,2,opt,name=replay_from_cursor,json=replayFromCursor,proto3" json:"replay_from_cursor,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StreamEventsRequest) Reset() {
@@ -298,6 +299,13 @@ func (x *StreamEventsRequest) GetSessionId() string {
 		return x.SessionId
 	}
 	return ""
+}
+
+func (x *StreamEventsRequest) GetReplayFromCursor() bool {
+	if x != nil {
+		return x.ReplayFromCursor
+	}
+	return false
 }
 
 type GameEvent struct {
@@ -369,10 +377,12 @@ func (x *GameEvent) GetTimestamp() int64 {
 }
 
 type StreamEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Event         *GameEvent             `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Event          *GameEvent             `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	Replayed       bool                   `protobuf:"varint,2,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	ReplayComplete bool                   `protobuf:"varint,3,opt,name=replay_complete,json=replayComplete,proto3" json:"replay_complete,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *StreamEventsResponse) Reset() {
@@ -410,6 +420,20 @@ func (x *StreamEventsResponse) GetEvent() *GameEvent {
 		return x.Event
 	}
 	return nil
+}
+
+func (x *StreamEventsResponse) GetReplayed() bool {
+	if x != nil {
+		return x.Replayed
+	}
+	return false
+}
+
+func (x *StreamEventsResponse) GetReplayComplete() bool {
+	if x != nil {
+		return x.ReplayComplete
+	}
+	return false
 }
 
 type DisconnectRequest struct {
@@ -513,17 +537,20 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x13SendCommandResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\tR\x06output\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"4\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"b\n" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"x\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
+	"\x12replay_from_cursor\x18\x02 \x01(\bR\x10replayFromCursor\"x\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +
 	"\x04text\x18\x03 \x01(\tR\x04text\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"H\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"\x8d\x01\n" +
 	"\x14StreamEventsResponse\x120\n" +
-	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventR\x05event\"2\n" +
+	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventR\x05event\x12\x1a\n" +
+	"\breplayed\x18\x02 \x01(\bR\breplayed\x12'\n" +
+	"\x0freplay_complete\x18\x03 \x01(\bR\x0ereplayComplete\"2\n" +
 	"\x11DisconnectRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\x14\n" +
