@@ -18,3 +18,4 @@ exclude:
   - .worktrees/
   - node_modules/
   - vendor/
+  - web/
