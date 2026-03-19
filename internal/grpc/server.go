@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -35,57 +37,6 @@ type Authenticator interface {
 	Authenticate(ctx context.Context, username, password string) (*AuthResult, error)
 }
 
-// SessionStore tracks gRPC session-to-character mappings.
-type SessionStore interface {
-	Get(sessionID string) (*SessionInfo, bool)
-	Set(sessionID string, info *SessionInfo)
-	Delete(sessionID string)
-}
-
-// SessionInfo contains information about a gRPC session.
-type SessionInfo struct {
-	CharacterID   ulid.ULID
-	LocationID    ulid.ULID
-	ConnectionID  ulid.ULID
-	CharacterName string
-	IsGuest       bool
-}
-
-// InMemorySessionStore is an in-memory implementation of SessionStore.
-type InMemorySessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string]*SessionInfo
-}
-
-// NewInMemorySessionStore creates a new in-memory session store.
-func NewInMemorySessionStore() *InMemorySessionStore {
-	return &InMemorySessionStore{
-		sessions: make(map[string]*SessionInfo),
-	}
-}
-
-// Get retrieves a session by ID.
-func (s *InMemorySessionStore) Get(sessionID string) (*SessionInfo, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	info, ok := s.sessions[sessionID]
-	return info, ok
-}
-
-// Set stores a session.
-func (s *InMemorySessionStore) Set(sessionID string, info *SessionInfo) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessions[sessionID] = info
-}
-
-// Delete removes a session.
-func (s *InMemorySessionStore) Delete(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sessions, sessionID)
-}
-
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
 	corev1.UnimplementedCoreServer
@@ -94,8 +45,8 @@ type CoreServer struct {
 	sessions        *core.SessionManager
 	broadcaster     *core.Broadcaster
 	authenticator   Authenticator
-	sessionStore    SessionStore
-	disconnectHooks []func(SessionInfo)
+	sessionStore    session.Store
+	disconnectHooks []func(session.Info)
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
@@ -112,26 +63,26 @@ func WithAuthenticator(auth Authenticator) CoreServerOption {
 }
 
 // WithSessionStore sets the session store for the server.
-func WithSessionStore(store SessionStore) CoreServerOption {
+func WithSessionStore(store session.Store) CoreServerOption {
 	return func(s *CoreServer) {
 		s.sessionStore = store
 	}
 }
 
 // WithDisconnectHook registers a hook called after a session disconnects.
-func WithDisconnectHook(hook func(SessionInfo)) CoreServerOption {
+func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 	return func(s *CoreServer) {
 		s.disconnectHooks = append(s.disconnectHooks, hook)
 	}
 }
 
 // NewCoreServer creates a new Core gRPC server.
-func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, broadcaster *core.Broadcaster, opts ...CoreServerOption) *CoreServer {
+func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, broadcaster *core.Broadcaster, sessionStore session.Store, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
 		engine:       engine,
 		sessions:     sessions,
 		broadcaster:  broadcaster,
-		sessionStore: NewInMemorySessionStore(),
+		sessionStore: sessionStore,
 		newSessionID: core.NewULID,
 	}
 
@@ -184,13 +135,34 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 	s.sessions.Connect(result.CharacterID, connID)
 
 	// Store session info for command processing
-	s.sessionStore.Set(sessionID.String(), &SessionInfo{
+	now := time.Now()
+	sessionInfo := &session.Info{
+		ID:            sessionID.String(),
 		CharacterID:   result.CharacterID,
-		LocationID:    result.LocationID,
-		ConnectionID:  connID,
 		CharacterName: result.CharacterName,
+		LocationID:    result.LocationID,
 		IsGuest:       result.IsGuest,
-	})
+		Status:        session.StatusActive,
+		GridPresent:   true,
+		EventCursors:  map[string]ulid.ULID{},
+		TTLSeconds:    1800,
+		MaxHistory:    500,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {
+		slog.ErrorContext(ctx, "failed to store session",
+			"request_id", requestID,
+			"session_id", sessionID.String(),
+			"error", err,
+		)
+		return &corev1.AuthResponse{
+			Meta:    responseMeta(requestID),
+			Success: false,
+			Error:   "session creation failed",
+		}, nil
+	}
 
 	// Emit arrive event (best-effort — session is valid even if event fails)
 	char := core.CharacterRef{ID: result.CharacterID, Name: result.CharacterName, LocationID: result.LocationID}
@@ -233,8 +205,9 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 	)
 
 	// Look up session
-	info, ok := s.sessionStore.Get(req.SessionId)
-	if !ok {
+	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	if err != nil {
+		//nolint:nilerr // intentional: convert store error to structured gRPC response
 		return &corev1.CommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
@@ -266,7 +239,7 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 }
 
 // executeCommand parses and executes a command.
-func (s *CoreServer) executeCommand(ctx context.Context, info *SessionInfo, command string) (string, error) {
+func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, command string) (string, error) {
 	parts := strings.SplitN(command, " ", 2)
 	if len(parts) == 0 {
 		return "", oops.Code("EMPTY_COMMAND").Errorf("empty command")
@@ -312,8 +285,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	)
 
 	// Look up session
-	info, ok := s.sessionStore.Get(req.SessionId)
-	if !ok {
+	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	if err != nil {
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
@@ -394,9 +367,9 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	)
 
 	// Look up session
-	info, ok := s.sessionStore.Get(req.SessionId)
-	if !ok {
-		// Session already gone, return success
+	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	if err != nil {
+		//nolint:nilerr // intentional: session already gone, return success (idempotent)
 		return &corev1.DisconnectResponse{
 			Meta:    responseMeta(requestID),
 			Success: true,
@@ -414,7 +387,10 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	}
 
 	// Disconnect from session manager
-	s.sessions.Disconnect(info.CharacterID, info.ConnectionID)
+	// Note: session.Info does not track ConnectionID; connections are managed
+	// separately via session.Connection. Pass zero ULID as a no-op placeholder
+	// until connection tracking is fully migrated.
+	s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
 
 	// End session for guests
 	if info.IsGuest {
@@ -444,7 +420,13 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	}
 
 	// Remove from session store
-	s.sessionStore.Delete(req.SessionId)
+	if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
+		slog.WarnContext(ctx, "failed to delete session",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
+	}
 
 	slog.InfoContext(ctx, "session disconnected",
 		"request_id", requestID,

@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
@@ -279,7 +280,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore, sessions, broadcaster)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster)
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServer(env.grpcServer, coreServer)
 
@@ -350,7 +351,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore, sessions, broadcaster)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster)
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServer(env.grpcServer, coreServer)
 
@@ -513,7 +514,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			sessions := core.NewSessionManager()
 			engine := core.NewEngine(eventStore, sessions, broadcaster)
 
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster)
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServer(env.grpcServer, coreServer)
 

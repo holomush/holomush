@@ -19,9 +19,21 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// newTestSessionStore creates a session.MemStore pre-populated with the given sessions.
+func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) session.Store {
+	t.Helper()
+	store := session.NewMemStore()
+	ctx := context.Background()
+	for id, info := range sessions {
+		require.NoError(t, store.Set(ctx, id, info))
+	}
+	return store
+}
 
 // mockEventStore implements core.EventStore for testing.
 type mockEventStore struct {
@@ -114,7 +126,7 @@ func TestCoreServer_Authenticate_Success(t *testing.T) {
 		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		authenticator: auth,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 		newSessionID:  func() ulid.ULID { return sessionID },
 	}
 
@@ -150,7 +162,7 @@ func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
 		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager(), core.NewBroadcaster()),
 		sessions:      core.NewSessionManager(),
 		authenticator: auth,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 	}
 
 	ctx := context.Background()
@@ -191,14 +203,13 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -224,7 +235,7 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
-		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+		sessionStore: session.NewMemStore(),
 	}
 
 	ctx := context.Background()
@@ -257,14 +268,13 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	// Create a cancellable context
@@ -330,14 +340,12 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	server := &CoreServer{
 		engine:   core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID:  charID,
-					ConnectionID: connID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -357,33 +365,17 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	assert.Equal(t, "disconnect-request-id", resp.Meta.RequestId)
 }
 
-// mockSessionStore tracks session-to-character mappings for the gRPC layer.
-type mockSessionStore struct {
-	sessions map[string]*SessionInfo
-}
-
-func (m *mockSessionStore) Get(sessionID string) (*SessionInfo, bool) {
-	info, ok := m.sessions[sessionID]
-	return info, ok
-}
-
-func (m *mockSessionStore) Set(sessionID string, info *SessionInfo) {
-	m.sessions[sessionID] = info
-}
-
-func (m *mockSessionStore) Delete(sessionID string) {
-	delete(m.sessions, sessionID)
-}
-
 func TestNewCoreServer(t *testing.T) {
 	store := &mockEventStore{}
 	sessions := core.NewSessionManager()
 	broadcaster := core.NewBroadcaster()
+	sessStore := session.NewMemStore()
 
 	server := NewCoreServer(
 		core.NewEngine(store, sessions, broadcaster),
 		sessions,
 		broadcaster,
+		sessStore,
 	)
 
 	require.NotNil(t, server, "NewCoreServer returned nil")
@@ -396,12 +388,13 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	customAuth := &mockAuthenticator{}
-	customStore := NewInMemorySessionStore()
+	customStore := session.NewMemStore()
 
 	server := NewCoreServer(
 		core.NewEngine(store, sessions, broadcaster),
 		sessions,
 		broadcaster,
+		session.NewMemStore(),
 		WithAuthenticator(customAuth),
 		WithSessionStore(customStore),
 	)
@@ -411,41 +404,13 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	assert.Equal(t, customStore, server.sessionStore, "WithSessionStore option not applied")
 }
 
-func TestInMemorySessionStore(t *testing.T) {
-	store := NewInMemorySessionStore()
-
-	sessionID := "test-session-123"
-	info := &SessionInfo{
-		CharacterID:  core.NewULID(),
-		LocationID:   core.NewULID(),
-		ConnectionID: core.NewULID(),
-	}
-
-	// Test Get on non-existent session
-	_, ok := store.Get(sessionID)
-	assert.False(t, ok, "Get() should return false for non-existent session")
-
-	// Test Set
-	store.Set(sessionID, info)
-
-	// Test Get on existing session
-	retrieved, ok := store.Get(sessionID)
-	assert.True(t, ok, "Get() should return true for existing session")
-	assert.Equal(t, info.CharacterID, retrieved.CharacterID, "Retrieved session info doesn't match")
-
-	// Test Delete
-	store.Delete(sessionID)
-	_, ok = store.Get(sessionID)
-	assert.False(t, ok, "Get() should return false after Delete")
-}
-
 func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
 		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 		authenticator: nil, // No authenticator configured
 	}
 
@@ -484,7 +449,7 @@ func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
 		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		authenticator: auth,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 		newSessionID:  func() ulid.ULID { return sessionID },
 	}
 
@@ -520,14 +485,13 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -564,14 +528,13 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -622,14 +585,13 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -668,14 +630,13 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -714,14 +675,13 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -749,7 +709,7 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
-		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+		sessionStore: session.NewMemStore(),
 	}
 
 	ctx := context.Background()
@@ -781,14 +741,13 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -854,14 +813,13 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -916,14 +874,12 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	server := &CoreServer{
 		engine:   core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID:  charID,
-					ConnectionID: connID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -944,7 +900,7 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
-		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+		sessionStore: session.NewMemStore(),
 	}
 
 	ctx := context.Background()
@@ -1072,14 +1028,13 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 
 	broadcaster := core.NewBroadcaster()
 
-	sessionStore := &mockSessionStore{
-		sessions: map[string]*SessionInfo{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-			},
+	sessionStore := newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
 		},
-	}
+	})
 
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
@@ -1127,11 +1082,12 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, connID)
 
-	sessionStore := NewInMemorySessionStore()
-	sessionStore.Set(sessionID.String(), &SessionInfo{
-		CharacterID:  charID,
-		ConnectionID: connID,
-	})
+	ctx := context.Background()
+	sessionStore := session.NewMemStore()
+	require.NoError(t, sessionStore.Set(ctx, sessionID.String(), &session.Info{
+		CharacterID: charID,
+		Status:      session.StatusActive,
+	}))
 
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
@@ -1140,11 +1096,10 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 	}
 
 	// Verify session exists before disconnect
-	_, ok := sessionStore.Get(sessionID.String())
-	require.True(t, ok, "Session should exist before disconnect")
+	_, err := sessionStore.Get(ctx, sessionID.String())
+	require.NoError(t, err, "Session should exist before disconnect")
 
 	// Disconnect the session
-	ctx := context.Background()
 	req := &corev1.DisconnectRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "cleanup-test",
@@ -1158,8 +1113,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 	assert.True(t, resp.Success, "Disconnect() should succeed")
 
 	// Verify session is cleaned up
-	_, ok = sessionStore.Get(sessionID.String())
-	assert.False(t, ok, "Session should be removed after disconnect")
+	_, err = sessionStore.Get(ctx, sessionID.String())
+	assert.Error(t, err, "Session should be removed after disconnect")
 }
 
 func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
@@ -1178,14 +1133,13 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions, broadcaster)
 
-	sessionStore := &mockSessionStore{
-		sessions: map[string]*SessionInfo{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-			},
+	sessionStore := newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
 		},
-	}
+	})
 
 	server := &CoreServer{
 		engine:       engine,
@@ -1212,14 +1166,15 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 	}
 
 	// Session should still exist after activity
-	_, ok := sessionStore.Get(sessionID.String())
-	assert.True(t, ok, "Session should persist after activity")
+	_, err := sessionStore.Get(ctx, sessionID.String())
+	assert.NoError(t, err, "Session should persist after activity")
 }
 
 func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	sessions := core.NewSessionManager()
 	broadcaster := core.NewBroadcaster()
-	sessionStore := NewInMemorySessionStore()
+	ctx := context.Background()
+	sessionStore := session.NewMemStore()
 
 	// Create two sessions
 	session1ID := core.NewULID()
@@ -1227,22 +1182,22 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	conn1ID := core.NewULID()
 	location1ID := core.NewULID()
 	sessions.Connect(char1ID, conn1ID)
-	sessionStore.Set(session1ID.String(), &SessionInfo{
-		CharacterID:  char1ID,
-		ConnectionID: conn1ID,
-		LocationID:   location1ID,
-	})
+	require.NoError(t, sessionStore.Set(ctx, session1ID.String(), &session.Info{
+		CharacterID: char1ID,
+		LocationID:  location1ID,
+		Status:      session.StatusActive,
+	}))
 
 	session2ID := core.NewULID()
 	char2ID := core.NewULID()
 	conn2ID := core.NewULID()
 	location2ID := core.NewULID()
 	sessions.Connect(char2ID, conn2ID)
-	sessionStore.Set(session2ID.String(), &SessionInfo{
-		CharacterID:  char2ID,
-		ConnectionID: conn2ID,
-		LocationID:   location2ID,
-	})
+	require.NoError(t, sessionStore.Set(ctx, session2ID.String(), &session.Info{
+		CharacterID: char2ID,
+		LocationID:  location2ID,
+		Status:      session.StatusActive,
+	}))
 
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
@@ -1252,7 +1207,6 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	}
 
 	// Disconnect only session 1
-	ctx := context.Background()
 	req := &corev1.DisconnectRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "multi-session-test",
@@ -1266,12 +1220,12 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	assert.True(t, resp.Success, "Disconnect() should succeed")
 
 	// Verify session 1 is cleaned up
-	_, ok := sessionStore.Get(session1ID.String())
-	assert.False(t, ok, "Session 1 should be removed after disconnect")
+	_, err = sessionStore.Get(ctx, session1ID.String())
+	assert.Error(t, err, "Session 1 should be removed after disconnect")
 
 	// Verify session 2 still exists
-	_, ok = sessionStore.Get(session2ID.String())
-	assert.True(t, ok, "Session 2 should still exist after session 1 disconnect")
+	_, err = sessionStore.Get(ctx, session2ID.String())
+	assert.NoError(t, err, "Session 2 should still exist after session 1 disconnect")
 }
 
 // =============================================================================
@@ -1304,14 +1258,13 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	// Create a context with a short timeout
@@ -1360,14 +1313,13 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1415,14 +1367,13 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1523,14 +1474,13 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 			server := &CoreServer{
 				engine:   engine,
 				sessions: sessions,
-				sessionStore: &mockSessionStore{
-					sessions: map[string]*SessionInfo{
-						sessionID.String(): {
-							CharacterID: charID,
-							LocationID:  locationID,
-						},
+				sessionStore: newTestSessionStore(t, map[string]*session.Info{
+					sessionID.String(): {
+						CharacterID: charID,
+						LocationID:  locationID,
+						Status:      session.StatusActive,
 					},
-				},
+				}),
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
@@ -1573,14 +1523,13 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	// Create context with timeout
@@ -1659,14 +1608,13 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	// Even with a short timeout, an empty command should fail fast
@@ -1699,7 +1647,7 @@ func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
 	server := &CoreServer{
 		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 		authenticator: nil,
 	}
 
@@ -1737,7 +1685,7 @@ func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
 		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager(), core.NewBroadcaster()),
 		sessions:      core.NewSessionManager(),
 		authenticator: auth,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 	}
 
 	ctx := context.Background()
@@ -1763,7 +1711,7 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
-		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+		sessionStore: session.NewMemStore(),
 	}
 
 	ctx := context.Background()
@@ -1823,14 +1771,13 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -1886,14 +1833,13 @@ func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:    sessions,
 		broadcaster: broadcaster,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	tests := []struct {
@@ -1972,14 +1918,13 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -2044,7 +1989,7 @@ func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
 		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:      sessions,
 		authenticator: auth,
-		sessionStore:  NewInMemorySessionStore(),
+		sessionStore:  session.NewMemStore(),
 		newSessionID:  func() ulid.ULID { return sessionID },
 	}
 
@@ -2085,14 +2030,13 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -2172,14 +2116,13 @@ func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -2227,14 +2170,13 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 	server := &CoreServer{
 		engine:   engine,
 		sessions: sessions,
-		sessionStore: &mockSessionStore{
-			sessions: map[string]*SessionInfo{
-				sessionID.String(): {
-					CharacterID: charID,
-					LocationID:  locationID,
-				},
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
 			},
-		},
+		}),
 	}
 
 	ctx := context.Background()
@@ -2300,23 +2242,22 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 	engine := core.NewEngine(store, sessions, broadcaster)
 
 	var hookCalled bool
-	var hookInfo SessionInfo
-	server := NewCoreServer(engine, sessions, broadcaster,
-		WithDisconnectHook(func(info SessionInfo) {
+	var hookInfo session.Info
+	sessStore := session.NewMemStore()
+	server := NewCoreServer(engine, sessions, broadcaster, sessStore,
+		WithDisconnectHook(func(info session.Info) {
 			hookCalled = true
 			hookInfo = info
 		}),
 	)
-	connID := core.NewULID()
-	server.sessionStore.Set(sessionID.String(), &SessionInfo{
+	ctx := context.Background()
+	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 		CharacterID:   charID,
 		LocationID:    locationID,
-		ConnectionID:  connID,
 		CharacterName: "GuestChar",
 		IsGuest:       true,
-	})
-
-	ctx := context.Background()
+		Status:        session.StatusActive,
+	}))
 	req := &corev1.DisconnectRequest{
 		Meta:      &corev1.RequestMeta{RequestId: "hook-test", Timestamp: timestamppb.Now()},
 		SessionId: sessionID.String(),
@@ -2356,11 +2297,11 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 				}, nil
 			},
 		},
-		sessionStore: NewInMemorySessionStore(),
+		sessionStore: session.NewMemStore(),
 		newSessionID: func() ulid.ULID { return sessionID },
-		disconnectHooks: []func(SessionInfo){
-			func(_ SessionInfo) { panic("hook panic") },
-			func(_ SessionInfo) { hookCallCount++ },
+		disconnectHooks: []func(session.Info){
+			func(_ session.Info) { panic("hook panic") },
+			func(_ session.Info) { hookCallCount++ },
 		},
 	}
 
@@ -2396,16 +2337,17 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions, broadcaster)
 
-	server := NewCoreServer(engine, sessions, broadcaster)
-	server.sessionStore.Set(sessionID.String(), &SessionInfo{
+	sessStore := session.NewMemStore()
+	server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+	ctx := context.Background()
+	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 		CharacterID:   charID,
 		LocationID:    locationID,
-		ConnectionID:  connID,
 		CharacterName: "RegularChar",
 		IsGuest:       false,
-	})
+		Status:        session.StatusActive,
+	}))
 
-	ctx := context.Background()
 	req := &corev1.DisconnectRequest{
 		Meta:      &corev1.RequestMeta{RequestId: "non-guest-test", Timestamp: timestamppb.Now()},
 		SessionId: sessionID.String(),
@@ -2416,8 +2358,8 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Session should still exist (EndSession was NOT called for non-guests)
-	session := sessions.GetSession(charID)
-	require.NotNil(t, session, "session should still exist for non-guest after disconnect")
+	sess := sessions.GetSession(charID)
+	require.NotNil(t, sess, "session should still exist for non-guest after disconnect")
 }
 
 func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
@@ -2440,7 +2382,7 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 		},
 	}
 
-	server := NewCoreServer(engine, sessions, broadcaster,
+	server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore(),
 		WithAuthenticator(auth),
 	)
 	server.newSessionID = func() ulid.ULID { return sessionID }
@@ -2474,16 +2416,16 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions, broadcaster)
 
-	server := NewCoreServer(engine, sessions, broadcaster)
-	server.sessionStore.Set(sessionID.String(), &SessionInfo{
+	server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+	ctx := context.Background()
+	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 		CharacterID:   charID,
 		LocationID:    locationID,
-		ConnectionID:  connID,
 		CharacterName: "LeaveChar",
 		IsGuest:       false,
-	})
+		Status:        session.StatusActive,
+	}))
 
-	ctx := context.Background()
 	req := &corev1.DisconnectRequest{
 		Meta:      &corev1.RequestMeta{RequestId: "leave-test", Timestamp: timestamppb.Now()},
 		SessionId: sessionID.String(),
@@ -2505,7 +2447,7 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
 		sessions:     sessions,
-		sessionStore: &mockSessionStore{sessions: make(map[string]*SessionInfo)},
+		sessionStore: session.NewMemStore(),
 	}
 
 	ctx := context.Background()

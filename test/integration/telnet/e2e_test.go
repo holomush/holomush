@@ -27,6 +27,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -206,9 +207,9 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 9. Create gRPC server
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster,
+		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore(),
 			grpcpkg.WithAuthenticator(guestAuth),
-			grpcpkg.WithDisconnectHook(func(info grpcpkg.SessionInfo) {
+			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)
 				}

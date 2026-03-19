@@ -35,6 +35,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -360,9 +361,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
 		// Create and register Core service with guest authentication + cleanup hook
-		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster,
+		sessionStore := session.NewMemStore()
+		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
-			holoGRPC.WithDisconnectHook(func(info holoGRPC.SessionInfo) {
+			holoGRPC.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)
 				}
