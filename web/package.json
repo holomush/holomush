@@ -11,6 +11,7 @@
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^1.10.1",
     "@connectrpc/protoc-gen-connect-es": "^1.7.0",
+    "@playwright/test": "^1.58.2",
     "@sveltejs/adapter-static": "^3.0.0",
     "@sveltejs/kit": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
