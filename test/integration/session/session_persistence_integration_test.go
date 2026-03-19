@@ -206,12 +206,19 @@ var _ = Describe("Session Persistence", func() {
 			// Cancel the subscription (simulates disconnect)
 			subCancel()
 
-			// Wait for cursor to persist (best-effort goroutine)
-			time.Sleep(200 * time.Millisecond)
+			// Poll until cursor persists (best-effort goroutine writes async)
+			locationStream := "location:" + startLocation.String()
+			Eventually(func() bool {
+				sess, err := sessionStore.Get(testCtx, sessionID)
+				if err != nil {
+					return false
+				}
+				_, hasCursor := sess.EventCursors[locationStream]
+				return hasCursor
+			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).Should(BeTrue())
 
 			// Append events directly to the event store to simulate activity
 			// while the client was disconnected
-			locationStream := "location:" + startLocation.String()
 			for i := 0; i < 3; i++ {
 				missedEvent := core.Event{
 					ID:        core.NewULID(),
@@ -414,6 +421,7 @@ var _ = Describe("Session Persistence", func() {
 			start := make(chan struct{})
 			for i := 0; i < racers; i++ {
 				go func() {
+					defer GinkgoRecover()
 					defer wg.Done()
 					<-start // synchronize start
 					ok, err := sessionStore.ReattachCAS(testCtx, sessionID)

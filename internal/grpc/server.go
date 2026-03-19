@@ -656,7 +656,12 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}, nil
 	}
 
-	// Count remaining connections by type
+	// Count remaining connections by type.
+	// NOTE: These counts are read separately from the RemoveConnection above,
+	// creating a small race window. In practice this is benign — concurrent
+	// disconnects may both observe totalCount==0 and both call UpdateStatus,
+	// but UpdateStatus is idempotent. A proper transactional
+	// RemoveConnectionAndCount would eliminate this race.
 	totalCount, err := s.sessionStore.CountConnections(ctx, req.SessionId)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to count connections",
