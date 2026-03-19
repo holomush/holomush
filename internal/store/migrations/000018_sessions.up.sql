@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+
 -- Drop the legacy sessions table from migration 001 (simple character_id/last_event_id tracker).
 -- The new schema below replaces it with a full-featured persistent session model.
 DROP TABLE IF EXISTS sessions;
