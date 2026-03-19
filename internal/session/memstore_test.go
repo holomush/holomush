@@ -5,6 +5,8 @@ package session
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,4 +229,35 @@ func TestMemStore_ListExpired(t *testing.T) {
 	expired, err := store.ListExpired(ctx)
 	require.NoError(t, err)
 	assert.Len(t, expired, 1)
+}
+
+func TestMemStore_ConcurrentAccess(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	const goroutines = 10
+	const opsPerGoroutine = 20
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := range goroutines {
+		go func(n int) {
+			defer wg.Done()
+			for j := range opsPerGoroutine {
+				id := fmt.Sprintf("session-%d-%d", n, j)
+				info := &Info{ID: id, Status: StatusActive}
+
+				// interleave Set, Get, and Delete without caring about errors
+				// (sessions may not exist yet); the goal is to detect data races.
+				_ = store.Set(ctx, id, info)
+				_, _ = store.Get(ctx, id)
+				_ = store.Delete(ctx, id)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	// No assertion needed — the test passes if the race detector finds no issues.
+	assert.True(t, true)
 }
