@@ -20,7 +20,9 @@ func TestFileServer_Embedded_ServesIndex(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "HoloMUSH")
+	// SvelteKit production builds render "HoloMUSH" client-side via JS hydration.
+	// The static HTML shell always contains the sveltekit bootstrap marker.
+	assert.Contains(t, rec.Body.String(), "sveltekit")
 }
 
 func TestFileServer_Embedded_SPAFallback(t *testing.T) {
@@ -29,7 +31,7 @@ func TestFileServer_Embedded_SPAFallback(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "HoloMUSH")
+	assert.Contains(t, rec.Body.String(), "sveltekit")
 }
 
 func TestFileServer_Override(t *testing.T) {
