@@ -193,7 +193,8 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 	})
 
 	// Emit arrive event (best-effort — session is valid even if event fails)
-	if err := s.engine.HandleConnect(ctx, result.CharacterID, result.LocationID, result.CharacterName); err != nil {
+	char := core.CharacterRef{ID: result.CharacterID, Name: result.CharacterName, LocationID: result.LocationID}
+	if err := s.engine.HandleConnect(ctx, char); err != nil {
 		slog.WarnContext(ctx, "arrive event failed",
 			"request_id", requestID,
 			"session_id", sessionID.String(),
@@ -277,15 +278,16 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *SessionInfo, comm
 		arg = parts[1]
 	}
 
+	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 	switch cmd {
 	case "say":
-		if err := s.engine.HandleSay(ctx, info.CharacterID, info.LocationID, arg); err != nil {
+		if err := s.engine.HandleSay(ctx, char, arg); err != nil {
 			return "", oops.Code("COMMAND_FAILED").With("command", "say").Wrap(err)
 		}
 		return "You say: " + arg, nil
 
 	case "pose", ":":
-		if err := s.engine.HandlePose(ctx, info.CharacterID, info.LocationID, arg); err != nil {
+		if err := s.engine.HandlePose(ctx, char, arg); err != nil {
 			return "", oops.Code("COMMAND_FAILED").With("command", "pose").Wrap(err)
 		}
 		return "", nil
@@ -402,7 +404,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	}
 
 	// Emit leave event while session is still active
-	if err := s.engine.HandleDisconnect(ctx, info.CharacterID, info.LocationID, info.CharacterName, "quit"); err != nil {
+	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
+	if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
 		slog.WarnContext(ctx, "leave event failed",
 			"request_id", requestID,
 			"character_id", info.CharacterID.String(),

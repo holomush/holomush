@@ -316,7 +316,7 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.Event) {
 			h.send(fmt.Sprintf("%s <corrupted message>", actorPrefix))
 			return
 		}
-		h.send(fmt.Sprintf("%s says, %q", actorPrefix, p.Message))
+		h.send(fmt.Sprintf("%s says, %q", p.CharacterName, p.Message))
 
 	case string(core.EventTypePose):
 		var p core.PosePayload
@@ -325,7 +325,7 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.Event) {
 			h.send(fmt.Sprintf("%s <corrupted action>", actorPrefix))
 			return
 		}
-		h.send(fmt.Sprintf("%s %s", actorPrefix, p.Action))
+		h.send(fmt.Sprintf("%s %s", p.CharacterName, p.Action))
 
 	case string(core.EventTypeArrive):
 		// Arrival notifications are persisted but not yet displayed to clients.
