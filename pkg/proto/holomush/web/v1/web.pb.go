@@ -12,6 +12,7 @@ package webv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,6 +24,58 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type EventChannel int32
+
+const (
+	EventChannel_EVENT_CHANNEL_UNSPECIFIED EventChannel = 0
+	EventChannel_EVENT_CHANNEL_TERMINAL    EventChannel = 1
+	EventChannel_EVENT_CHANNEL_STATE       EventChannel = 2
+	EventChannel_EVENT_CHANNEL_BOTH        EventChannel = 3
+)
+
+// Enum value maps for EventChannel.
+var (
+	EventChannel_name = map[int32]string{
+		0: "EVENT_CHANNEL_UNSPECIFIED",
+		1: "EVENT_CHANNEL_TERMINAL",
+		2: "EVENT_CHANNEL_STATE",
+		3: "EVENT_CHANNEL_BOTH",
+	}
+	EventChannel_value = map[string]int32{
+		"EVENT_CHANNEL_UNSPECIFIED": 0,
+		"EVENT_CHANNEL_TERMINAL":    1,
+		"EVENT_CHANNEL_STATE":       2,
+		"EVENT_CHANNEL_BOTH":        3,
+	}
+)
+
+func (x EventChannel) Enum() *EventChannel {
+	p := new(EventChannel)
+	*p = x
+	return p
+}
+
+func (x EventChannel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EventChannel) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_web_v1_web_proto_enumTypes[0].Descriptor()
+}
+
+func (EventChannel) Type() protoreflect.EnumType {
+	return &file_holomush_web_v1_web_proto_enumTypes[0]
+}
+
+func (x EventChannel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EventChannel.Descriptor instead.
+func (EventChannel) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{0}
+}
 
 type LoginRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -314,6 +367,8 @@ type GameEvent struct {
 	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
 	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
 	Timestamp     int64                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Channel       EventChannel           `protobuf:"varint,5,opt,name=channel,proto3,enum=holomush.web.v1.EventChannel" json:"channel,omitempty"`
+	Metadata      *structpb.Struct       `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -374,6 +429,20 @@ func (x *GameEvent) GetTimestamp() int64 {
 		return x.Timestamp
 	}
 	return 0
+}
+
+func (x *GameEvent) GetChannel() EventChannel {
+	if x != nil {
+		return x.Channel
+	}
+	return EventChannel_EVENT_CHANNEL_UNSPECIFIED
+}
+
+func (x *GameEvent) GetMetadata() *structpb.Struct {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
 }
 
 type StreamEventsResponse struct {
@@ -1176,7 +1245,7 @@ var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
 
 const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
-	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\"F\n" +
+	"\x19holomush/web/v1/web.proto\x12\x0fholomush.web.v1\x1a\x1cgoogle/protobuf/struct.proto\"F\n" +
 	"\fLoginRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x94\x01\n" +
@@ -1197,12 +1266,14 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
-	"\x12replay_from_cursor\x18\x02 \x01(\bR\x10replayFromCursor\"x\n" +
+	"\x12replay_from_cursor\x18\x02 \x01(\bR\x10replayFromCursor\"\xe6\x01\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +
 	"\x04text\x18\x03 \x01(\tR\x04text\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"\x8d\x01\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\x127\n" +
+	"\achannel\x18\x05 \x01(\x0e2\x1d.holomush.web.v1.EventChannelR\achannel\x123\n" +
+	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x8d\x01\n" +
 	"\x14StreamEventsResponse\x120\n" +
 	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventR\x05event\x12\x1a\n" +
 	"\breplayed\x18\x02 \x01(\bR\breplayed\x12'\n" +
@@ -1261,7 +1332,12 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"7\n" +
 	"\x19GetCommandHistoryResponse\x12\x1a\n" +
-	"\bcommands\x18\x01 \x03(\tR\bcommands2\xe5\x06\n" +
+	"\bcommands\x18\x01 \x03(\tR\bcommands*z\n" +
+	"\fEventChannel\x12\x1d\n" +
+	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
+	"\x13EVENT_CHANNEL_STATE\x10\x02\x12\x16\n" +
+	"\x12EVENT_CHANNEL_BOTH\x10\x032\xe5\x06\n" +
 	"\n" +
 	"WebService\x12F\n" +
 	"\x05Login\x12\x1d.holomush.web.v1.LoginRequest\x1a\x1e.holomush.web.v1.LoginResponse\x12X\n" +
@@ -1288,58 +1364,63 @@ func file_holomush_web_v1_web_proto_rawDescGZIP() []byte {
 	return file_holomush_web_v1_web_proto_rawDescData
 }
 
+var file_holomush_web_v1_web_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_holomush_web_v1_web_proto_goTypes = []any{
-	(*LoginRequest)(nil),               // 0: holomush.web.v1.LoginRequest
-	(*LoginResponse)(nil),              // 1: holomush.web.v1.LoginResponse
-	(*SendCommandRequest)(nil),         // 2: holomush.web.v1.SendCommandRequest
-	(*SendCommandResponse)(nil),        // 3: holomush.web.v1.SendCommandResponse
-	(*StreamEventsRequest)(nil),        // 4: holomush.web.v1.StreamEventsRequest
-	(*GameEvent)(nil),                  // 5: holomush.web.v1.GameEvent
-	(*StreamEventsResponse)(nil),       // 6: holomush.web.v1.StreamEventsResponse
-	(*DisconnectRequest)(nil),          // 7: holomush.web.v1.DisconnectRequest
-	(*DisconnectResponse)(nil),         // 8: holomush.web.v1.DisconnectResponse
-	(*AuthenticatePlayerRequest)(nil),  // 9: holomush.web.v1.AuthenticatePlayerRequest
-	(*AuthenticatePlayerResponse)(nil), // 10: holomush.web.v1.AuthenticatePlayerResponse
-	(*CharacterSummary)(nil),           // 11: holomush.web.v1.CharacterSummary
-	(*ListCharactersRequest)(nil),      // 12: holomush.web.v1.ListCharactersRequest
-	(*ListCharactersResponse)(nil),     // 13: holomush.web.v1.ListCharactersResponse
-	(*SelectCharacterRequest)(nil),     // 14: holomush.web.v1.SelectCharacterRequest
-	(*SelectCharacterResponse)(nil),    // 15: holomush.web.v1.SelectCharacterResponse
-	(*ListSessionsRequest)(nil),        // 16: holomush.web.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),       // 17: holomush.web.v1.ListSessionsResponse
-	(*SessionSummary)(nil),             // 18: holomush.web.v1.SessionSummary
-	(*GetCommandHistoryRequest)(nil),   // 19: holomush.web.v1.GetCommandHistoryRequest
-	(*GetCommandHistoryResponse)(nil),  // 20: holomush.web.v1.GetCommandHistoryResponse
+	(EventChannel)(0),                  // 0: holomush.web.v1.EventChannel
+	(*LoginRequest)(nil),               // 1: holomush.web.v1.LoginRequest
+	(*LoginResponse)(nil),              // 2: holomush.web.v1.LoginResponse
+	(*SendCommandRequest)(nil),         // 3: holomush.web.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),        // 4: holomush.web.v1.SendCommandResponse
+	(*StreamEventsRequest)(nil),        // 5: holomush.web.v1.StreamEventsRequest
+	(*GameEvent)(nil),                  // 6: holomush.web.v1.GameEvent
+	(*StreamEventsResponse)(nil),       // 7: holomush.web.v1.StreamEventsResponse
+	(*DisconnectRequest)(nil),          // 8: holomush.web.v1.DisconnectRequest
+	(*DisconnectResponse)(nil),         // 9: holomush.web.v1.DisconnectResponse
+	(*AuthenticatePlayerRequest)(nil),  // 10: holomush.web.v1.AuthenticatePlayerRequest
+	(*AuthenticatePlayerResponse)(nil), // 11: holomush.web.v1.AuthenticatePlayerResponse
+	(*CharacterSummary)(nil),           // 12: holomush.web.v1.CharacterSummary
+	(*ListCharactersRequest)(nil),      // 13: holomush.web.v1.ListCharactersRequest
+	(*ListCharactersResponse)(nil),     // 14: holomush.web.v1.ListCharactersResponse
+	(*SelectCharacterRequest)(nil),     // 15: holomush.web.v1.SelectCharacterRequest
+	(*SelectCharacterResponse)(nil),    // 16: holomush.web.v1.SelectCharacterResponse
+	(*ListSessionsRequest)(nil),        // 17: holomush.web.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),       // 18: holomush.web.v1.ListSessionsResponse
+	(*SessionSummary)(nil),             // 19: holomush.web.v1.SessionSummary
+	(*GetCommandHistoryRequest)(nil),   // 20: holomush.web.v1.GetCommandHistoryRequest
+	(*GetCommandHistoryResponse)(nil),  // 21: holomush.web.v1.GetCommandHistoryResponse
+	(*structpb.Struct)(nil),            // 22: google.protobuf.Struct
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
-	5,  // 0: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
-	11, // 1: holomush.web.v1.AuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	11, // 2: holomush.web.v1.ListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	18, // 3: holomush.web.v1.ListSessionsResponse.sessions:type_name -> holomush.web.v1.SessionSummary
-	0,  // 4: holomush.web.v1.WebService.Login:input_type -> holomush.web.v1.LoginRequest
-	2,  // 5: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
-	4,  // 6: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
-	7,  // 7: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
-	9,  // 8: holomush.web.v1.WebService.AuthenticatePlayer:input_type -> holomush.web.v1.AuthenticatePlayerRequest
-	12, // 9: holomush.web.v1.WebService.ListCharacters:input_type -> holomush.web.v1.ListCharactersRequest
-	14, // 10: holomush.web.v1.WebService.SelectCharacter:input_type -> holomush.web.v1.SelectCharacterRequest
-	16, // 11: holomush.web.v1.WebService.ListSessions:input_type -> holomush.web.v1.ListSessionsRequest
-	19, // 12: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
-	1,  // 13: holomush.web.v1.WebService.Login:output_type -> holomush.web.v1.LoginResponse
-	3,  // 14: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	6,  // 15: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
-	8,  // 16: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	10, // 17: holomush.web.v1.WebService.AuthenticatePlayer:output_type -> holomush.web.v1.AuthenticatePlayerResponse
-	13, // 18: holomush.web.v1.WebService.ListCharacters:output_type -> holomush.web.v1.ListCharactersResponse
-	15, // 19: holomush.web.v1.WebService.SelectCharacter:output_type -> holomush.web.v1.SelectCharacterResponse
-	17, // 20: holomush.web.v1.WebService.ListSessions:output_type -> holomush.web.v1.ListSessionsResponse
-	20, // 21: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
-	13, // [13:22] is the sub-list for method output_type
-	4,  // [4:13] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	0,  // 0: holomush.web.v1.GameEvent.channel:type_name -> holomush.web.v1.EventChannel
+	22, // 1: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
+	6,  // 2: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
+	12, // 3: holomush.web.v1.AuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	12, // 4: holomush.web.v1.ListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	19, // 5: holomush.web.v1.ListSessionsResponse.sessions:type_name -> holomush.web.v1.SessionSummary
+	1,  // 6: holomush.web.v1.WebService.Login:input_type -> holomush.web.v1.LoginRequest
+	3,  // 7: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
+	5,  // 8: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
+	8,  // 9: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
+	10, // 10: holomush.web.v1.WebService.AuthenticatePlayer:input_type -> holomush.web.v1.AuthenticatePlayerRequest
+	13, // 11: holomush.web.v1.WebService.ListCharacters:input_type -> holomush.web.v1.ListCharactersRequest
+	15, // 12: holomush.web.v1.WebService.SelectCharacter:input_type -> holomush.web.v1.SelectCharacterRequest
+	17, // 13: holomush.web.v1.WebService.ListSessions:input_type -> holomush.web.v1.ListSessionsRequest
+	20, // 14: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
+	2,  // 15: holomush.web.v1.WebService.Login:output_type -> holomush.web.v1.LoginResponse
+	4,  // 16: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	7,  // 17: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	9,  // 18: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	11, // 19: holomush.web.v1.WebService.AuthenticatePlayer:output_type -> holomush.web.v1.AuthenticatePlayerResponse
+	14, // 20: holomush.web.v1.WebService.ListCharacters:output_type -> holomush.web.v1.ListCharactersResponse
+	16, // 21: holomush.web.v1.WebService.SelectCharacter:output_type -> holomush.web.v1.SelectCharacterResponse
+	18, // 22: holomush.web.v1.WebService.ListSessions:output_type -> holomush.web.v1.ListSessionsResponse
+	21, // 23: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
+	15, // [15:24] is the sub-list for method output_type
+	6,  // [6:15] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_holomush_web_v1_web_proto_init() }
@@ -1352,13 +1433,14 @@ func file_holomush_web_v1_web_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_web_v1_web_proto_rawDesc), len(file_holomush_web_v1_web_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_holomush_web_v1_web_proto_goTypes,
 		DependencyIndexes: file_holomush_web_v1_web_proto_depIdxs,
+		EnumInfos:         file_holomush_web_v1_web_proto_enumTypes,
 		MessageInfos:      file_holomush_web_v1_web_proto_msgTypes,
 	}.Build()
 	File_holomush_web_v1_web_proto = out.File
