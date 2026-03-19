@@ -86,6 +86,7 @@ func (m *MemStore) FindByCharacter(_ context.Context, characterID ulid.ULID) (*I
 
 // ListByPlayer returns all non-expired sessions. MemStore does not track
 // player-to-character relationships, so this returns all non-expired sessions.
+// TODO: filter by playerID when player-character relationship table exists.
 func (m *MemStore) ListByPlayer(_ context.Context, _ ulid.ULID) ([]*Info, error) {
 	// MemStore does not track player-to-character relationships.
 	// This is a stub that returns all non-expired sessions.
@@ -211,8 +212,21 @@ func (m *MemStore) GetCommandHistory(_ context.Context, id string) ([]string, er
 	return result, nil
 }
 
+// validClientTypes is the set of allowed client_type values for MemStore.
+var validClientTypes = map[string]bool{
+	"terminal":  true,
+	"comms_hub": true,
+	"telnet":    true,
+}
+
 // AddConnection registers a new connection to a session.
 func (m *MemStore) AddConnection(_ context.Context, conn *Connection) error {
+	if !validClientTypes[conn.ClientType] {
+		return oops.With("operation", "add connection").
+			With("client_type", conn.ClientType).
+			Errorf("invalid client_type %q: must be one of terminal, comms_hub, telnet", conn.ClientType)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

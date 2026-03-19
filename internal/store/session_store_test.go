@@ -1023,6 +1023,95 @@ func TestPostgresSessionStore_CountConnections(t *testing.T) {
 	}
 }
 
+func TestPostgresSessionStore_UpdateGridPresent(t *testing.T) {
+	tests := []struct {
+		name      string
+		id        string
+		present   bool
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:    "sets grid_present true",
+			id:      "sess-abc",
+			present: true,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`UPDATE sessions SET grid_present = \$2, updated_at = NOW\(\) WHERE id = \$1`).
+					WithArgs("sess-abc", true).
+					WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+			},
+		},
+		{
+			name:    "sets grid_present false",
+			id:      "sess-abc",
+			present: false,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`UPDATE sessions SET grid_present = \$2, updated_at = NOW\(\) WHERE id = \$1`).
+					WithArgs("sess-abc", false).
+					WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+			},
+		},
+		{
+			name:    "database error",
+			id:      "sess-abc",
+			present: true,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`UPDATE sessions SET grid_present = \$2, updated_at = NOW\(\) WHERE id = \$1`).
+					WithArgs("sess-abc", true).
+					WillReturnError(errors.New("connection lost"))
+			},
+			wantErr: true,
+			errMsg:  "connection lost",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			require.NoError(t, err)
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			store := NewPostgresSessionStore(mock)
+			err = store.UpdateGridPresent(context.Background(), tt.id, tt.present)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestPostgresSessionStore_AddConnection_InvalidClientType(t *testing.T) {
+	connID := core.NewULID()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	conn := &session.Connection{
+		ID:          connID,
+		SessionID:   "sess-abc",
+		ClientType:  "invalid_type",
+		Streams:     []string{},
+		ConnectedAt: now,
+	}
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	store := NewPostgresSessionStore(mock)
+	err = store.AddConnection(context.Background(), conn)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid_type")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestPostgresSessionStore_CountConnectionsByType(t *testing.T) {
 	tests := []struct {
 		name       string

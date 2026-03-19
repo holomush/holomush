@@ -6,6 +6,7 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -251,62 +252,62 @@ func (m *mockSessionStore) Get(_ context.Context, id string) (*session.Info, err
 	return &session.Info{ID: id, Status: session.StatusActive}, nil
 }
 
-func (m *mockSessionStore) Set(_ context.Context, _ string, _ *session.Info) error {
-	panic("not implemented")
+func (m *mockSessionStore) Set(_ context.Context, id string, _ *session.Info) error {
+	return fmt.Errorf("mockSessionStore.Set(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) Delete(_ context.Context, _ string) error {
-	panic("not implemented")
+func (m *mockSessionStore) Delete(_ context.Context, id string) error {
+	return fmt.Errorf("mockSessionStore.Delete(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
-	panic("not implemented")
+func (m *mockSessionStore) FindByCharacter(_ context.Context, id ulid.ULID) (*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.FindByCharacter(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) ListByPlayer(_ context.Context, _ ulid.ULID) ([]*session.Info, error) {
-	panic("not implemented")
+func (m *mockSessionStore) ListByPlayer(_ context.Context, id ulid.ULID) ([]*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.ListByPlayer(%q): not implemented", id)
 }
 
 func (m *mockSessionStore) ListExpired(_ context.Context) ([]*session.Info, error) {
-	panic("not implemented")
+	return nil, errors.New("mockSessionStore.ListExpired: not implemented")
 }
 
-func (m *mockSessionStore) UpdateStatus(_ context.Context, _ string, _ session.Status, _ *time.Time, _ *time.Time) error {
-	panic("not implemented")
+func (m *mockSessionStore) UpdateStatus(_ context.Context, id string, _ session.Status, _ *time.Time, _ *time.Time) error {
+	return fmt.Errorf("mockSessionStore.UpdateStatus(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) ReattachCAS(_ context.Context, _ string) (bool, error) {
-	panic("not implemented")
+func (m *mockSessionStore) ReattachCAS(_ context.Context, id string) (bool, error) {
+	return false, fmt.Errorf("mockSessionStore.ReattachCAS(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) UpdateCursors(_ context.Context, _ string, _ map[string]ulid.ULID) error {
-	panic("not implemented")
+func (m *mockSessionStore) UpdateCursors(_ context.Context, id string, _ map[string]ulid.ULID) error {
+	return fmt.Errorf("mockSessionStore.UpdateCursors(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) AppendCommand(_ context.Context, _ string, _ string, _ int) error {
-	panic("not implemented")
+func (m *mockSessionStore) AppendCommand(_ context.Context, id string, _ string, _ int) error {
+	return fmt.Errorf("mockSessionStore.AppendCommand(%q): not implemented", id)
 }
 
 func (m *mockSessionStore) GetCommandHistory(_ context.Context, _ string) ([]string, error) {
 	return m.commandHistory, m.commandHistoryErr
 }
 
-func (m *mockSessionStore) AddConnection(_ context.Context, _ *session.Connection) error {
-	panic("not implemented")
+func (m *mockSessionStore) AddConnection(_ context.Context, conn *session.Connection) error {
+	return fmt.Errorf("mockSessionStore.AddConnection(%q): not implemented", conn.ID)
 }
 
-func (m *mockSessionStore) RemoveConnection(_ context.Context, _ ulid.ULID) error {
-	panic("not implemented")
+func (m *mockSessionStore) RemoveConnection(_ context.Context, id ulid.ULID) error {
+	return fmt.Errorf("mockSessionStore.RemoveConnection(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) CountConnections(_ context.Context, _ string) (int, error) {
-	panic("not implemented")
+func (m *mockSessionStore) CountConnections(_ context.Context, id string) (int, error) {
+	return 0, fmt.Errorf("mockSessionStore.CountConnections(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) CountConnectionsByType(_ context.Context, _ string, _ string) (int, error) {
-	panic("not implemented")
+func (m *mockSessionStore) CountConnectionsByType(_ context.Context, id string, _ string) (int, error) {
+	return 0, fmt.Errorf("mockSessionStore.CountConnectionsByType(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) UpdateGridPresent(_ context.Context, _ string, _ bool) error {
-	panic("not implemented")
+func (m *mockSessionStore) UpdateGridPresent(_ context.Context, id string, _ bool) error {
+	return fmt.Errorf("mockSessionStore.UpdateGridPresent(%q): not implemented", id)
 }

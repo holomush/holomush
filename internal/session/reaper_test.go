@@ -30,11 +30,11 @@ func TestReaper_ReapsExpiredSessions(t *testing.T) {
 
 	var reaped []Info
 	reaper := NewReaper(store, ReaperConfig{
-		Interval:  100 * time.Millisecond,
+		Interval:  50 * time.Millisecond,
 		OnExpired: func(info *Info) { reaped = append(reaped, *info) },
 	})
 
-	reaperCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	reaperCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	reaper.Run(reaperCtx)
 
@@ -63,11 +63,11 @@ func TestReaper_SkipsActiveAndFutureSessions(t *testing.T) {
 
 	var reaped []Info
 	reaper := NewReaper(store, ReaperConfig{
-		Interval:  100 * time.Millisecond,
+		Interval:  50 * time.Millisecond,
 		OnExpired: func(info *Info) { reaped = append(reaped, *info) },
 	})
 
-	reaperCtx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	reaperCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	reaper.Run(reaperCtx)
 

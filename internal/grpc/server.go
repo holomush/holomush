@@ -120,6 +120,9 @@ func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, broadcast
 }
 
 // Authenticate validates credentials and creates a session.
+// Connection registration is intentionally omitted here — the caller (telnet
+// gateway or web StreamEvents handler) registers the connection after auth so
+// it can supply the correct client type and stream list.
 func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -205,7 +208,9 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 	// Connect to session manager (after successful persistence to avoid orphaned state)
 	s.sessions.Connect(result.CharacterID, connID)
 
-	// Register connection with client type
+	// Register connection with client type.
+	// For the web path, StreamEvents will re-register with the correct stream list;
+	// this initial registration covers the gRPC-native (telnet gateway) path.
 	connInfo := &session.Connection{
 		ID:          connID,
 		SessionID:   sessionID.String(),
@@ -214,7 +219,8 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		ConnectedAt: now,
 	}
 	if err := s.sessionStore.AddConnection(ctx, connInfo); err != nil {
-		slog.WarnContext(ctx, "failed to register connection",
+		// Error level: connection count will be wrong, affecting lifecycle decisions.
+		slog.ErrorContext(ctx, "failed to register connection",
 			"request_id", requestID,
 			"session_id", sessionID.String(),
 			"connection_id", connID.String(),
@@ -263,14 +269,23 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 		"command", req.Command,
 	)
 
-	// Look up session
+	// Look up session — distinguish not-found from other store errors.
 	info, err := s.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
+		errMsg := "session not found"
+		if oopsErr, ok := oops.AsOops(err); !ok || oopsErr.Code() != "SESSION_NOT_FOUND" {
+			errMsg = "session lookup failed"
+			slog.ErrorContext(ctx, "session store error",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"error", err,
+			)
+		}
 		//nolint:nilerr // intentional: convert store error to structured gRPC response
 		return &corev1.CommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
-			Error:   "session not found",
+			Error:   errMsg,
 		}, nil
 	}
 
@@ -341,21 +356,44 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 			slog.WarnContext(ctx, "session delete failed", "error", err)
 		}
 		s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
-		for _, hook := range s.disconnectHooks {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.ErrorContext(ctx, "disconnect hook panicked", "panic", r)
-					}
-				}()
-				hook(*info)
-			}()
-		}
+		s.runDisconnectHooks(ctx, *info)
 		return "Goodbye!", nil
 
 	default:
 		return "", oops.Code("UNKNOWN_COMMAND").With("command", cmd).Errorf("unknown command: %s", cmd)
 	}
+}
+
+// runDisconnectHooks runs all registered disconnect hooks with panic recovery.
+func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) {
+	for _, hook := range s.disconnectHooks {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.ErrorContext(ctx, "disconnect hook panicked",
+						"panic", r,
+						"stack", string(debug.Stack()),
+					)
+				}
+			}()
+			hook(info)
+		}()
+	}
+}
+
+// persistCursorAsync persists a cursor update to the session store in a background
+// goroutine (best-effort, non-blocking). Uses context.Background() intentionally:
+// the request ctx may be cancelled before the goroutine runs, but we still want
+// the durable cursor write to complete.
+//
+//nolint:gosec // G118: intentional use of Background ctx for post-request durability
+func (s *CoreServer) persistCursorAsync(sessionID string, streamName string, eventID ulid.ULID) {
+	go func() {
+		if err := s.sessionStore.UpdateCursors(context.Background(),
+			sessionID, map[string]ulid.ULID{streamName: eventID}); err != nil {
+			slog.Warn("cursor persist failed", "session_id", sessionID, "error", err)
+		}
+	}()
 }
 
 // eventToProto converts a core.Event to a proto Event.
@@ -498,17 +536,13 @@ func (s *CoreServer) replayMissedEvents(
 					Wrap(err)
 			}
 			s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
+		}
 
-			// Persist cursor to store (best-effort, non-blocking).
-			// context.Background() is intentional: request ctx may be cancelled before
-			// the goroutine runs, but we still want the durable cursor write to complete.
-			//nolint:gosec // G118: intentional use of Background ctx for post-request durability
-			go func(sid string, streamName string, eventID ulid.ULID) {
-				if err := s.sessionStore.UpdateCursors(context.Background(), sid,
-					map[string]ulid.ULID{streamName: eventID}); err != nil {
-					slog.Warn("cursor persist failed", "session_id", sid, "error", err)
-				}
-			}(info.ID, ev.Stream, ev.ID)
+		// Persist only the final cursor per stream after all replay events are sent
+		// (batch update rather than per-event goroutines).
+		if len(events) > 0 {
+			last := events[len(events)-1]
+			s.persistCursorAsync(info.ID, streamName, last.ID)
 		}
 
 		slog.DebugContext(ctx, "replayed events",
@@ -523,18 +557,18 @@ func (s *CoreServer) replayMissedEvents(
 	<-drainDone
 
 	// Drain any remaining events from merged (non-blocking)
+drainLoop:
 	for {
 		select {
 		case ev, ok := <-merged:
 			if !ok {
-				goto drained
+				break drainLoop
 			}
 			liveBuf = append(liveBuf, ev)
 		default:
-			goto drained
+			break drainLoop
 		}
 	}
-drained:
 
 	// Send buffered live events with deduplication
 	for _, ev := range liveBuf {
@@ -548,17 +582,7 @@ drained:
 				Wrap(err)
 		}
 		s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
-
-		// Persist cursor to store (best-effort, non-blocking).
-		// context.Background() is intentional: request ctx may be cancelled before
-		// the goroutine runs, but we still want the durable cursor write to complete.
-		//nolint:gosec // G118: intentional use of Background ctx for post-request durability
-		go func(sid string, streamName string, eventID ulid.ULID) {
-			if err := s.sessionStore.UpdateCursors(context.Background(), sid,
-				map[string]ulid.ULID{streamName: eventID}); err != nil {
-				slog.Warn("cursor persist failed", "session_id", sid, "error", err)
-			}
-		}(info.ID, ev.Stream, ev.ID)
+		s.persistCursorAsync(info.ID, ev.Stream, ev.ID)
 	}
 
 	return nil
@@ -582,6 +606,9 @@ func (s *CoreServer) forwardLiveEvents(
 				"session_id", sessionID,
 				"reason", ctx.Err(),
 			)
+			if ctx.Err() == context.Canceled {
+				return nil // normal client disconnect
+			}
 			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", sessionID).Wrap(ctx.Err())
 
 		case event, ok := <-merged:
@@ -600,17 +627,7 @@ func (s *CoreServer) forwardLiveEvents(
 			}
 
 			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
-
-			// Persist cursor to store (best-effort, non-blocking).
-			// context.Background() is intentional: request ctx may be cancelled before
-			// the goroutine runs, but we still want the durable cursor write to complete.
-			//nolint:gosec // G118: intentional use of Background ctx for post-request durability
-			go func(sid string, streamName string, eventID ulid.ULID) {
-				if err := s.sessionStore.UpdateCursors(context.Background(), sid,
-					map[string]ulid.ULID{streamName: eventID}); err != nil {
-					slog.Warn("cursor persist failed", "session_id", sid, "error", err)
-				}
-			}(sessionID, event.Stream, event.ID)
+			s.persistCursorAsync(sessionID, event.Stream, event.ID)
 		}
 	}
 }
@@ -662,12 +679,15 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	// disconnects may both observe totalCount==0 and both call UpdateStatus,
 	// but UpdateStatus is idempotent. A proper transactional
 	// RemoveConnectionAndCount would eliminate this race.
+	// TODO: replace two CountConnectionsByType calls with a single query.
 	totalCount, err := s.sessionStore.CountConnections(ctx, req.SessionId)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to count connections",
+		slog.WarnContext(ctx, "failed to count connections — skipping lifecycle transition",
 			"request_id", requestID,
+			"session_id", req.SessionId,
 			"error", err,
 		)
+		return &corev1.DisconnectResponse{Meta: responseMeta(requestID), Success: true}, nil
 	}
 
 	termCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "terminal")
@@ -715,20 +735,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 			}
 
 			// Run disconnect hooks for guests
-			for _, hook := range s.disconnectHooks {
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							slog.ErrorContext(ctx, "disconnect hook panicked",
-								"request_id", requestID,
-								"panic", r,
-								"stack", string(debug.Stack()),
-							)
-						}
-					}()
-					hook(*info)
-				}()
-			}
+			s.runDisconnectHooks(ctx, *info)
 		} else {
 			// Non-guest: detach session with TTL instead of deleting
 			now := time.Now()

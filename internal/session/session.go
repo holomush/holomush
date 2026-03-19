@@ -95,6 +95,7 @@ type Store interface {
 	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
 
 	// ListByPlayer returns all non-expired sessions for a player's characters.
+	// TODO: filter by playerID when player-character relationship table exists.
 	ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*Info, error)
 
 	// ListExpired returns all sessions past their expiry time.

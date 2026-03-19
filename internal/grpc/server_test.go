@@ -839,8 +839,8 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 
 	select {
 	case err := <-done:
-		// Context cancellation expected
-		assert.Error(t, err, "Subscribe() should return error on context cancellation")
+		// context.Canceled is a normal client disconnect — Subscribe returns nil.
+		assert.NoError(t, err, "Subscribe() should return nil on normal context cancellation")
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
@@ -1536,7 +1536,8 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	// Wait for subscription to end
 	select {
 	case err := <-done:
-		assert.Error(t, err, "Subscribe() should return error when cancelled")
+		// context.Canceled is a normal client disconnect — Subscribe returns nil.
+		assert.NoError(t, err, "Subscribe() should return nil on normal context cancellation")
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after context cancellation")
 	}

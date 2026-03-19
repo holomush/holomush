@@ -34,6 +34,40 @@ const sessionSelectColumns = `id, character_id, character_name, location_id,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at`
 
+// parseSessionRow parses the scalar fields scanned from a session row into a
+// session.Info. Both scanSession and scanSessions call Scan with the same
+// variable set and then delegate here to avoid duplicating the parse logic.
+func parseSessionRow(info *session.Info, charIDStr, locIDStr, statusStr string, cursorsJSON []byte) error {
+	charID, err := ulid.Parse(charIDStr)
+	if err != nil {
+		return oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
+	}
+	info.CharacterID = charID
+
+	locID, err := ulid.Parse(locIDStr)
+	if err != nil {
+		return oops.With("operation", "parse location_id").With("raw_id", locIDStr).Wrap(err)
+	}
+	info.LocationID = locID
+
+	status := session.Status(statusStr)
+	if !status.IsValid() {
+		return oops.With("operation", "validate status").With("status", statusStr).
+			Errorf("unknown session status %q", statusStr)
+	}
+	info.Status = status
+
+	if len(cursorsJSON) > 0 {
+		cursors := make(map[string]ulid.ULID)
+		if err := json.Unmarshal(cursorsJSON, &cursors); err != nil {
+			return oops.With("operation", "unmarshal event_cursors").Wrap(err)
+		}
+		info.EventCursors = cursors
+	}
+
+	return nil
+}
+
 // scanSession scans a pgx.Row into a session.Info.
 func scanSession(row pgx.Row) (*session.Info, error) {
 	var info session.Info
@@ -61,26 +95,8 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
 	}
 
-	charID, err := ulid.Parse(charIDStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
-	}
-	info.CharacterID = charID
-
-	locID, err := ulid.Parse(locIDStr)
-	if err != nil {
-		return nil, oops.With("operation", "parse location_id").With("raw_id", locIDStr).Wrap(err)
-	}
-	info.LocationID = locID
-
-	info.Status = session.Status(statusStr)
-
-	if len(cursorsJSON) > 0 {
-		cursors := make(map[string]ulid.ULID)
-		if err := json.Unmarshal(cursorsJSON, &cursors); err != nil {
-			return nil, oops.With("operation", "unmarshal event_cursors").Wrap(err)
-		}
-		info.EventCursors = cursors
+	if err := parseSessionRow(&info, charIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
+		return nil, err
 	}
 
 	return &info, nil
@@ -116,26 +132,8 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
 		}
 
-		charID, err := ulid.Parse(charIDStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
-		}
-		info.CharacterID = charID
-
-		locID, err := ulid.Parse(locIDStr)
-		if err != nil {
-			return nil, oops.With("operation", "parse location_id").With("raw_id", locIDStr).Wrap(err)
-		}
-		info.LocationID = locID
-
-		info.Status = session.Status(statusStr)
-
-		if len(cursorsJSON) > 0 {
-			cursors := make(map[string]ulid.ULID)
-			if err := json.Unmarshal(cursorsJSON, &cursors); err != nil {
-				return nil, oops.With("operation", "unmarshal event_cursors").Wrap(err)
-			}
-			info.EventCursors = cursors
+		if err := parseSessionRow(&info, charIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
+			return nil, err
 		}
 
 		result = append(result, &info)
@@ -235,6 +233,7 @@ func (s *PostgresSessionStore) FindByCharacter(ctx context.Context, characterID 
 }
 
 // ListByPlayer returns all non-expired sessions for a player's characters.
+// TODO: filter by playerID when player-character relationship table exists.
 // Note: player_id is not stored in the sessions table yet (will be added in
 // chunk 5). For now, returns all non-expired sessions.
 func (s *PostgresSessionStore) ListByPlayer(ctx context.Context, _ ulid.ULID) ([]*session.Info, error) {
@@ -323,8 +322,21 @@ func (s *PostgresSessionStore) GetCommandHistory(ctx context.Context, id string)
 	return history, nil
 }
 
+// validClientTypes is the set of allowed client_type values.
+var validClientTypes = map[string]bool{
+	"terminal":   true,
+	"comms_hub":  true,
+	"telnet":     true,
+}
+
 // AddConnection registers a new connection to a session.
 func (s *PostgresSessionStore) AddConnection(ctx context.Context, conn *session.Connection) error {
+	if !validClientTypes[conn.ClientType] {
+		return oops.With("operation", "add connection").
+			With("client_type", conn.ClientType).
+			Errorf("invalid client_type %q: must be one of terminal, comms_hub, telnet", conn.ClientType)
+	}
+
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO session_connections (id, session_id, client_type, streams, connected_at)
 		 VALUES ($1, $2, $3, $4, $5)`,

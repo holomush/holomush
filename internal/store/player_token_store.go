@@ -54,10 +54,10 @@ func (s *PostgresPlayerTokenStore) GetByToken(ctx context.Context, token string)
 	).Scan(&pt.Token, &playerIDStr, &pt.CreatedAt, &pt.ExpiresAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.Code("TOKEN_NOT_FOUND").With("token", token).Wrap(err)
+		return nil, oops.Code("TOKEN_NOT_FOUND").With("token_prefix", safePrefix(token)).Wrap(err)
 	}
 	if err != nil {
-		return nil, oops.With("operation", "get player token").With("token", token).Wrap(err)
+		return nil, oops.With("operation", "get player token").With("token_prefix", safePrefix(token)).Wrap(err)
 	}
 
 	playerID, err := ulid.Parse(playerIDStr)
@@ -69,7 +69,7 @@ func (s *PostgresPlayerTokenStore) GetByToken(ctx context.Context, token string)
 	if pt.IsExpired() {
 		// Clean up the expired token and signal expiry to caller.
 		_, _ = s.pool.Exec(ctx, `DELETE FROM player_tokens WHERE token = $1`, token) //nolint:errcheck // best-effort cleanup; token already expired
-		return nil, oops.Code("TOKEN_EXPIRED").With("token", token).Errorf("token has expired")
+		return nil, oops.Code("TOKEN_EXPIRED").With("token_prefix", safePrefix(token)).Errorf("token has expired")
 	}
 
 	return &pt, nil
@@ -79,9 +79,17 @@ func (s *PostgresPlayerTokenStore) GetByToken(ctx context.Context, token string)
 func (s *PostgresPlayerTokenStore) DeleteByToken(ctx context.Context, token string) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM player_tokens WHERE token = $1`, token)
 	if err != nil {
-		return oops.With("operation", "delete player token").With("token", token).Wrap(err)
+		return oops.With("operation", "delete player token").With("token_prefix", safePrefix(token)).Wrap(err)
 	}
 	return nil
+}
+
+// safePrefix returns the first 8 characters of a token for safe logging.
+func safePrefix(token string) string {
+	if len(token) <= 8 {
+		return token
+	}
+	return token[:8]
 }
 
 // DeleteByPlayer removes all tokens for a player.

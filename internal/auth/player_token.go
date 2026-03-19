@@ -5,9 +5,12 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
 
 // PlayerToken is an opaque token for two-phase login.
@@ -20,11 +23,16 @@ type PlayerToken struct {
 	ExpiresAt time.Time
 }
 
-// NewPlayerToken creates a player token with a ULID as the token value.
+// NewPlayerToken creates a player token with 32 bytes of cryptographically
+// random entropy encoded as hex.
 func NewPlayerToken(playerID ulid.ULID, ttl time.Duration) (*PlayerToken, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, oops.Wrap(err)
+	}
 	now := time.Now()
 	return &PlayerToken{
-		Token:     ulid.Make().String(),
+		Token:     hex.EncodeToString(b),
 		PlayerID:  playerID,
 		CreatedAt: now,
 		ExpiresAt: now.Add(ttl),

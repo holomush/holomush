@@ -169,6 +169,49 @@ func TestMemStore_ListByPlayer_ReturnsAllNonExpired(t *testing.T) {
 	assert.Len(t, results, 2) // active + detached, not expired
 }
 
+func TestMemStore_UpdateGridPresent(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	info := &Info{ID: "session-1", Status: StatusActive, GridPresent: false}
+	require.NoError(t, store.Set(ctx, "session-1", info))
+
+	require.NoError(t, store.UpdateGridPresent(ctx, "session-1", true))
+
+	got, err := store.Get(ctx, "session-1")
+	require.NoError(t, err)
+	assert.True(t, got.GridPresent)
+
+	require.NoError(t, store.UpdateGridPresent(ctx, "session-1", false))
+
+	got, err = store.Get(ctx, "session-1")
+	require.NoError(t, err)
+	assert.False(t, got.GridPresent)
+}
+
+func TestMemStore_UpdateGridPresent_NotFound(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	err := store.UpdateGridPresent(ctx, "nonexistent", true)
+	assert.Error(t, err)
+}
+
+func TestMemStore_AddConnection_InvalidClientType(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	conn := &Connection{
+		ID:         ulid.Make(),
+		SessionID:  "session-1",
+		ClientType: "unknown_type",
+		Streams:    []string{},
+	}
+	err := store.AddConnection(ctx, conn)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown_type")
+}
+
 func TestMemStore_ListExpired(t *testing.T) {
 	store := NewMemStore()
 	ctx := context.Background()

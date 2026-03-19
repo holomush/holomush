@@ -28,6 +28,9 @@ const (
 	rpcTimeout = 10 * time.Second
 )
 
+// errUnimplemented is returned by stub RPCs that are not yet implemented.
+var errUnimplemented = connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
@@ -134,6 +137,9 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	// Register connection for the duration of the stream
 	if h.sessionStore != nil {
 		connID := core.NewULID()
+		// ClientType is "terminal" because StreamEvents is the terminal-mode
+		// streaming endpoint. A future comms_hub client type would be registered
+		// via a separate route.
 		conn := &session.Connection{
 			ID:          connID,
 			SessionID:   sessionID,
@@ -215,25 +221,25 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 // AuthenticatePlayer validates player credentials and returns a player token.
 // Stub: returns CodeUnimplemented pending full player account system.
 func (h *Handler) AuthenticatePlayer(_ context.Context, _ *connect.Request[webv1.AuthenticatePlayerRequest]) (*connect.Response[webv1.AuthenticatePlayerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+	return nil, errUnimplemented
 }
 
 // ListCharacters returns the characters available for an authenticated player.
 // Stub: returns CodeUnimplemented pending full player account system.
 func (h *Handler) ListCharacters(_ context.Context, _ *connect.Request[webv1.ListCharactersRequest]) (*connect.Response[webv1.ListCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+	return nil, errUnimplemented
 }
 
 // SelectCharacter selects a character and creates or reattaches a game session.
 // Stub: returns CodeUnimplemented pending full player account system.
 func (h *Handler) SelectCharacter(_ context.Context, _ *connect.Request[webv1.SelectCharacterRequest]) (*connect.Response[webv1.SelectCharacterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+	return nil, errUnimplemented
 }
 
 // ListSessions returns all sessions for the authenticated player.
 // Stub: returns CodeUnimplemented pending full player account system.
 func (h *Handler) ListSessions(_ context.Context, _ *connect.Request[webv1.ListSessionsRequest]) (*connect.Response[webv1.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
+	return nil, errUnimplemented
 }
 
 // GetCommandHistory returns the command history for a session.

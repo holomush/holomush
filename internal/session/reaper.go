@@ -55,9 +55,19 @@ func (r *Reaper) reapExpired(ctx context.Context) {
 	}
 
 	for _, info := range expired {
-		// Notify callback (emit leave events, release guest characters)
+		// Notify callback (emit leave events, release guest characters).
+		// Wrapped in a closure with panic recovery so a misbehaving callback
+		// cannot abort reaping of remaining sessions.
 		if r.config.OnExpired != nil {
-			r.config.OnExpired(info)
+			func() {
+				defer func() {
+					if p := recover(); p != nil {
+						slog.WarnContext(ctx, "reaper: OnExpired callback panicked",
+							"session_id", info.ID, "panic", p)
+					}
+				}()
+				r.config.OnExpired(info)
+			}()
 		}
 
 		// Mark as expired and delete
