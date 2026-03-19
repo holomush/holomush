@@ -22,16 +22,20 @@ import (
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/web"
 	"github.com/holomush/holomush/internal/xdg"
 )
 
 // gatewayConfig holds configuration for the gateway command.
 type gatewayConfig struct {
-	TelnetAddr  string `koanf:"telnet_addr"`
-	CoreAddr    string `koanf:"core_addr"`
-	ControlAddr string `koanf:"control_addr"`
-	MetricsAddr string `koanf:"metrics_addr"`
-	LogFormat   string `koanf:"log_format"`
+	TelnetAddr  string   `koanf:"telnet_addr"`
+	CoreAddr    string   `koanf:"core_addr"`
+	ControlAddr string   `koanf:"control_addr"`
+	MetricsAddr string   `koanf:"metrics_addr"`
+	LogFormat   string   `koanf:"log_format"`
+	WebAddr     string   `koanf:"web_addr"`
+	WebDir      string   `koanf:"web_dir"`
+	CORSOrigins []string `koanf:"cors_origins"`
 }
 
 // Validate checks that the configuration is valid.
@@ -57,6 +61,7 @@ const (
 	defaultCoreAddr           = "localhost:9000"
 	defaultGatewayControlAddr = "127.0.0.1:9002"
 	defaultGatewayMetricsAddr = "127.0.0.1:9101"
+	defaultWebAddr            = ":8080"
 )
 
 // newGatewayCmd creates the gateway subcommand with all flags configured.
@@ -82,6 +87,9 @@ from telnet and web clients, forwarding commands to the core process.`,
 	cmd.Flags().StringVar(&cfg.ControlAddr, "control-addr", defaultGatewayControlAddr, "control gRPC listen address with mTLS")
 	cmd.Flags().StringVar(&cfg.MetricsAddr, "metrics-addr", defaultGatewayMetricsAddr, "metrics/health HTTP address (empty = disabled)")
 	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "log format (json or text)")
+	cmd.Flags().StringVar(&cfg.WebAddr, "web-addr", defaultWebAddr, "web HTTP listen address")
+	cmd.Flags().StringVar(&cfg.WebDir, "web-dir", "", "override embedded static files with directory path")
+	cmd.Flags().StringSliceVar(&cfg.CORSOrigins, "cors-origins", nil, "allowed CORS origins (e.g., http://localhost:5173)")
 
 	return cmd
 }
@@ -219,7 +227,8 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
 		// Register command package metrics with the observability server
 		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
-		obsErrChan, err := obsServer.Start()
+		var obsErrChan <-chan error
+		obsErrChan, err = obsServer.Start()
 		if err != nil {
 			if closeErr := telnetListener.Close(); closeErr != nil {
 				slog.Warn("failed to close telnet listener during cleanup", "error", closeErr)
@@ -236,6 +245,37 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		slog.Info("observability server started", "addr", obsServer.Addr())
 	}
 
+	// Start web HTTP server
+	webHandler := web.NewHandler(grpcClient)
+	webServer := web.NewServer(web.Config{
+		Addr:        cfg.WebAddr,
+		Handler:     webHandler,
+		WebDir:      cfg.WebDir,
+		CORSOrigins: cfg.CORSOrigins,
+	})
+	webErrChan, err := webServer.Start()
+	if err != nil {
+		// Clean up already-started servers
+		if obsServer != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if stopErr := obsServer.Stop(shutdownCtx); stopErr != nil {
+				slog.Warn("failed to stop observability server during cleanup", "error", stopErr)
+			}
+		}
+		if closeErr := telnetListener.Close(); closeErr != nil {
+			slog.Warn("failed to close telnet listener during cleanup", "error", closeErr)
+		}
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
+			slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
+		}
+		return oops.Code("WEB_SERVER_START_FAILED").With("operation", "start web HTTP server").With("addr", cfg.WebAddr).Wrap(err)
+	}
+	go monitorServerErrors(ctx, cancel, webErrChan, "web-http")
+	// Note: Start() already logs "web HTTP server started" — no duplicate log here.
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
@@ -247,6 +287,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	slog.Info("gateway process ready",
 		"telnet_addr", telnetListener.Addr().String(),
 		"core_addr", cfg.CoreAddr,
+		"web_addr", webServer.Addr(),
 	)
 
 	// Wait for shutdown signal
@@ -268,6 +309,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	// Stop servers
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
+
+	// Stop web HTTP server
+	if err := webServer.Stop(shutdownCtx); err != nil {
+		slog.Warn("error stopping web HTTP server", "error", err)
+	}
 
 	if obsServer != nil {
 		if err := obsServer.Stop(shutdownCtx); err != nil {

@@ -66,6 +66,8 @@ func TestServer_ConnectRPCRouting(t *testing.T) {
 	defer cancel()
 	require.NoError(t, srv.Stop(ctx))
 
-	for range errCh {
+	// Drain channel to confirm clean shutdown (no errors).
+	for err := range errCh {
+		t.Errorf("unexpected server error after stop: %v", err)
 	}
 }

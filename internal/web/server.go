@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -47,8 +48,9 @@ func NewServer(cfg Config) *Server {
 
 	return &Server{
 		httpServer: &http.Server{
-			Addr:    cfg.Addr,
-			Handler: handler,
+			Addr:              cfg.Addr,
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
 		},
 		errCh: make(chan error, 1),
 	}
@@ -58,7 +60,7 @@ func NewServer(cfg Config) *Server {
 func (s *Server) Start() (<-chan error, error) {
 	ln, err := net.Listen("tcp", s.httpServer.Addr)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck // caller wraps with oops context
 	}
 	s.listener = ln
 
@@ -76,7 +78,7 @@ func (s *Server) Start() (<-chan error, error) {
 
 // Stop gracefully shuts down the HTTP server.
 func (s *Server) Stop(ctx context.Context) error {
-	return s.httpServer.Shutdown(ctx)
+	return s.httpServer.Shutdown(ctx) //nolint:wrapcheck // caller logs and handles shutdown errors
 }
 
 // Addr returns the actual address the server is listening on.
