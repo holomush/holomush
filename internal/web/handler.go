@@ -16,6 +16,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -74,8 +75,9 @@ func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginReq
 	defer cancel()
 
 	resp, err := h.client.Authenticate(authCtx, &corev1.AuthRequest{
-		Username: req.Msg.GetUsername(),
-		Password: req.Msg.GetPassword(),
+		Username:   req.Msg.GetUsername(),
+		Password:   req.Msg.GetPassword(),
+		ClientType: "terminal",
 	})
 	if err != nil {
 		slog.Error("web: authenticate RPC failed", "error", err)
@@ -124,9 +126,37 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 }
 
 // StreamEvents subscribes to core events for a session and forwards them to
-// the client as GameEvent messages.
+// the client as GameEvent messages. Registers a connection for the duration
+// of the stream and cleans it up when the stream closes.
 func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.StreamEventsRequest], stream *connect.ServerStream[webv1.StreamEventsResponse]) error {
 	sessionID := req.Msg.GetSessionId()
+
+	// Register connection for the duration of the stream
+	if h.sessionStore != nil {
+		connID := core.NewULID()
+		conn := &session.Connection{
+			ID:          connID,
+			SessionID:   sessionID,
+			ClientType:  "terminal",
+			ConnectedAt: time.Now(),
+		}
+		if err := h.sessionStore.AddConnection(ctx, conn); err != nil {
+			slog.WarnContext(ctx, "web: failed to register stream connection",
+				"session_id", sessionID,
+				"error", err,
+			)
+		} else {
+			defer func() {
+				if removeErr := h.sessionStore.RemoveConnection(context.Background(), connID); removeErr != nil {
+					slog.Warn("web: failed to remove stream connection",
+						"session_id", sessionID,
+						"connection_id", connID.String(),
+						"error", removeErr,
+					)
+				}
+			}()
+		}
+	}
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:        sessionID,

@@ -260,6 +260,22 @@ func (m *MemStore) CountConnectionsByType(_ context.Context, sessionID, clientTy
 	return count, nil
 }
 
+// UpdateGridPresent sets the grid_present flag on a session.
+func (m *MemStore) UpdateGridPresent(_ context.Context, id string, present bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.sessions[id]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", id).
+			Errorf("session not found")
+	}
+	info.GridPresent = present
+	info.UpdatedAt = time.Now()
+	return nil
+}
+
 // copyInfo returns a defensive copy of an Info to prevent external modification.
 func copyInfo(info *Info) *Info {
 	cursors := make(map[string]ulid.ULID, len(info.EventCursors))

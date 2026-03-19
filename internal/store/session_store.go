@@ -372,3 +372,15 @@ func (s *PostgresSessionStore) CountConnectionsByType(ctx context.Context, sessi
 	}
 	return count, nil
 }
+
+// UpdateGridPresent sets the grid_present flag on a session.
+func (s *PostgresSessionStore) UpdateGridPresent(ctx context.Context, id string, present bool) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET grid_present = $2, updated_at = NOW() WHERE id = $1`,
+		id, present)
+	if err != nil {
+		return oops.With("operation", "update grid present").
+			With("session_id", id).Wrap(err)
+	}
+	return nil
+}

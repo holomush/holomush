@@ -2434,8 +2434,9 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	// Disconnect should not panic — recovery catches it
 	discResp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-		SessionId: authResp.SessionId,
-		Meta:      &corev1.RequestMeta{RequestId: "test"},
+		SessionId:    authResp.SessionId,
+		ConnectionId: authResp.ConnectionId,
+		Meta:         &corev1.RequestMeta{RequestId: "test"},
 	})
 	require.NoError(t, err)
 	require.True(t, discResp.Success)
@@ -3163,4 +3164,250 @@ func TestEventToProto(t *testing.T) {
 	assert.Equal(t, "char-1", proto.ActorId)
 	assert.Equal(t, []byte(`{"msg":"hello"}`), proto.Payload)
 	assert.Equal(t, ts.UnixNano()/1e9, proto.Timestamp.AsTime().UnixNano()/1e9)
+}
+
+// =============================================================================
+// Connection Type Tracking + Grid Presence Tests (Chunk 7)
+// =============================================================================
+
+func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
+	charID := core.NewULID()
+	locationID := core.NewULID()
+	sessionID := core.NewULID()
+	sessions := core.NewSessionManager()
+
+	store := core.NewMemoryEventStore()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	auth := &mockAuthenticator{
+		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
+			return &AuthResult{
+				CharacterID:   charID,
+				CharacterName: "ConnChar",
+				LocationID:    locationID,
+			}, nil
+		},
+	}
+
+	sessStore := session.NewMemStore()
+	server := NewCoreServer(engine, sessions, broadcaster, sessStore,
+		WithAuthenticator(auth),
+	)
+	server.newSessionID = func() ulid.ULID { return sessionID }
+
+	ctx := context.Background()
+
+	t.Run("default client_type is terminal", func(t *testing.T) {
+		resp, err := server.Authenticate(ctx, &corev1.AuthRequest{
+			Meta:     &corev1.RequestMeta{RequestId: "conn-test", Timestamp: timestamppb.Now()},
+			Username: "user",
+			Password: "pass",
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+		assert.NotEmpty(t, resp.ConnectionId)
+
+		count, err := sessStore.CountConnections(ctx, sessionID.String())
+		require.NoError(t, err)
+		assert.Equal(t, 1, count)
+
+		termCount, err := sessStore.CountConnectionsByType(ctx, sessionID.String(), "terminal")
+		require.NoError(t, err)
+		assert.Equal(t, 1, termCount)
+	})
+
+	t.Run("telnet client_type", func(t *testing.T) {
+		telSessionID := core.NewULID()
+		server.newSessionID = func() ulid.ULID { return telSessionID }
+
+		resp, err := server.Authenticate(ctx, &corev1.AuthRequest{
+			Meta:       &corev1.RequestMeta{RequestId: "tel-conn-test", Timestamp: timestamppb.Now()},
+			Username:   "user",
+			Password:   "pass",
+			ClientType: "telnet",
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+		assert.NotEmpty(t, resp.ConnectionId)
+
+		telCount, err := sessStore.CountConnectionsByType(ctx, telSessionID.String(), "telnet")
+		require.NoError(t, err)
+		assert.Equal(t, 1, telCount)
+	})
+}
+
+func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
+	t.Run("last terminal disconnects with comms_hub remaining emits leave", func(t *testing.T) {
+		charID := core.NewULID()
+		locationID := core.NewULID()
+		sessionID := core.NewULID()
+
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, core.NewULID())
+
+		eventStore := core.NewMemoryEventStore()
+		broadcaster := core.NewBroadcaster()
+		engine := core.NewEngine(eventStore, sessions, broadcaster)
+
+		sessStore := session.NewMemStore()
+		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+		ctx := context.Background()
+
+		// Create session
+		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+			ID:            sessionID.String(),
+			CharacterID:   charID,
+			LocationID:    locationID,
+			CharacterName: "PhaseChar",
+			IsGuest:       false,
+			Status:        session.StatusActive,
+			GridPresent:   true,
+			TTLSeconds:    1800,
+		}))
+
+		// Register a terminal connection and a comms_hub connection
+		termConnID := core.NewULID()
+		commsConnID := core.NewULID()
+		require.NoError(t, sessStore.AddConnection(ctx, &session.Connection{
+			ID: termConnID, SessionID: sessionID.String(), ClientType: "terminal",
+		}))
+		require.NoError(t, sessStore.AddConnection(ctx, &session.Connection{
+			ID: commsConnID, SessionID: sessionID.String(), ClientType: "comms_hub",
+		}))
+
+		// Disconnect with terminal connection ID
+		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+			Meta:         &corev1.RequestMeta{RequestId: "phase-test", Timestamp: timestamppb.Now()},
+			SessionId:    sessionID.String(),
+			ConnectionId: termConnID.String(),
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+
+		// Session should still exist and be active (not detached)
+		info, err := sessStore.Get(ctx, sessionID.String())
+		require.NoError(t, err)
+		assert.Equal(t, session.StatusActive, info.Status, "session should stay active")
+		assert.False(t, info.GridPresent, "grid_present should be false after phase-out")
+
+		// Leave event should have been emitted
+		events, err := eventStore.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		require.NoError(t, err)
+		require.Len(t, events, 1, "expected leave event on phase-out")
+		assert.Equal(t, core.EventTypeLeave, events[0].Type)
+	})
+
+	t.Run("all connections disconnect causes detach for non-guest", func(t *testing.T) {
+		charID := core.NewULID()
+		locationID := core.NewULID()
+		sessionID := core.NewULID()
+
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, core.NewULID())
+
+		eventStore := core.NewMemoryEventStore()
+		broadcaster := core.NewBroadcaster()
+		engine := core.NewEngine(eventStore, sessions, broadcaster)
+
+		sessStore := session.NewMemStore()
+		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+		ctx := context.Background()
+
+		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+			ID:            sessionID.String(),
+			CharacterID:   charID,
+			LocationID:    locationID,
+			CharacterName: "DetachChar",
+			IsGuest:       false,
+			Status:        session.StatusActive,
+			GridPresent:   true,
+			TTLSeconds:    1800,
+		}))
+
+		// Register one terminal connection
+		termConnID := core.NewULID()
+		require.NoError(t, sessStore.AddConnection(ctx, &session.Connection{
+			ID: termConnID, SessionID: sessionID.String(), ClientType: "terminal",
+		}))
+
+		// Disconnect it
+		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+			Meta:         &corev1.RequestMeta{RequestId: "detach-test", Timestamp: timestamppb.Now()},
+			SessionId:    sessionID.String(),
+			ConnectionId: termConnID.String(),
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+
+		// Session should be detached
+		info, err := sessStore.Get(ctx, sessionID.String())
+		require.NoError(t, err)
+		assert.Equal(t, session.StatusDetached, info.Status, "session should be detached")
+		assert.NotNil(t, info.DetachedAt)
+		assert.NotNil(t, info.ExpiresAt)
+
+		// No leave event for non-guest detach (reaper handles)
+		events, err := eventStore.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		require.NoError(t, err)
+		assert.Empty(t, events, "non-guest full disconnect should NOT emit leave event")
+	})
+
+	t.Run("terminal disconnects but another terminal remains — no phase-out", func(t *testing.T) {
+		charID := core.NewULID()
+		locationID := core.NewULID()
+		sessionID := core.NewULID()
+
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, core.NewULID())
+
+		eventStore := core.NewMemoryEventStore()
+		broadcaster := core.NewBroadcaster()
+		engine := core.NewEngine(eventStore, sessions, broadcaster)
+
+		sessStore := session.NewMemStore()
+		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+		ctx := context.Background()
+
+		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+			ID:            sessionID.String(),
+			CharacterID:   charID,
+			LocationID:    locationID,
+			CharacterName: "MultiTermChar",
+			IsGuest:       false,
+			Status:        session.StatusActive,
+			GridPresent:   true,
+			TTLSeconds:    1800,
+		}))
+
+		// Register two terminal connections
+		termConnID1 := core.NewULID()
+		termConnID2 := core.NewULID()
+		require.NoError(t, sessStore.AddConnection(ctx, &session.Connection{
+			ID: termConnID1, SessionID: sessionID.String(), ClientType: "terminal",
+		}))
+		require.NoError(t, sessStore.AddConnection(ctx, &session.Connection{
+			ID: termConnID2, SessionID: sessionID.String(), ClientType: "terminal",
+		}))
+
+		// Disconnect first terminal
+		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+			Meta:         &corev1.RequestMeta{RequestId: "multi-term-test", Timestamp: timestamppb.Now()},
+			SessionId:    sessionID.String(),
+			ConnectionId: termConnID1.String(),
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+
+		// Session should still be active and grid-present
+		info, err := sessStore.Get(ctx, sessionID.String())
+		require.NoError(t, err)
+		assert.Equal(t, session.StatusActive, info.Status)
+		assert.True(t, info.GridPresent, "should stay grid-present with terminal remaining")
+
+		// No leave event
+		events, err := eventStore.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		require.NoError(t, err)
+		assert.Empty(t, events, "no leave event when terminals remain")
+	})
 }

@@ -302,3 +302,7 @@ func (m *mockSessionStore) CountConnections(_ context.Context, _ string) (int, e
 func (m *mockSessionStore) CountConnectionsByType(_ context.Context, _ string, _ string) (int, error) {
 	panic("not implemented")
 }
+
+func (m *mockSessionStore) UpdateGridPresent(_ context.Context, _ string, _ bool) error {
+	panic("not implemented")
+}

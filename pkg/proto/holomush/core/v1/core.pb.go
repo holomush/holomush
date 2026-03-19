@@ -136,6 +136,7 @@ type AuthRequest struct {
 	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	Password      string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	ClientType    string                 `protobuf:"bytes,4,opt,name=client_type,json=clientType,proto3" json:"client_type,omitempty"` // "terminal", "comms_hub", "telnet"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,6 +192,13 @@ func (x *AuthRequest) GetPassword() string {
 	return ""
 }
 
+func (x *AuthRequest) GetClientType() string {
+	if x != nil {
+		return x.ClientType
+	}
+	return ""
+}
+
 type AuthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -199,6 +207,7 @@ type AuthResponse struct {
 	CharacterId   string                 `protobuf:"bytes,4,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	CharacterName string                 `protobuf:"bytes,5,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
 	Error         string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	ConnectionId  string                 `protobuf:"bytes,7,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -271,6 +280,13 @@ func (x *AuthResponse) GetCharacterName() string {
 func (x *AuthResponse) GetError() string {
 	if x != nil {
 		return x.Error
+	}
+	return ""
+}
+
+func (x *AuthResponse) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -567,6 +583,7 @@ type DisconnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ConnectionId  string                 `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"` // optional: remove specific connection
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -611,6 +628,13 @@ func (x *DisconnectRequest) GetMeta() *RequestMeta {
 func (x *DisconnectRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *DisconnectRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -679,11 +703,13 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\fResponseMeta\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x128\n" +
-	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"x\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x99\x01\n" +
 	"\vAuthRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x03 \x01(\tR\bpassword\"\xdb\x01\n" +
+	"\bpassword\x18\x03 \x01(\tR\bpassword\x12\x1f\n" +
+	"\vclient_type\x18\x04 \x01(\tR\n" +
+	"clientType\"\x80\x02\n" +
 	"\fAuthResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1d\n" +
@@ -691,7 +717,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12!\n" +
 	"\fcharacter_id\x18\x04 \x01(\tR\vcharacterId\x12%\n" +
 	"\x0echaracter_name\x18\x05 \x01(\tR\rcharacterName\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error\"|\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\x12#\n" +
+	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"|\n" +
 	"\x0eCommandRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -716,11 +743,12 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"actor_type\x18\x05 \x01(\tR\tactorType\x12\x19\n" +
 	"\bactor_id\x18\x06 \x01(\tR\aactorId\x12\x18\n" +
-	"\apayload\x18\a \x01(\fR\apayload\"e\n" +
+	"\apayload\x18\a \x01(\fR\apayload\"\x8a\x01\n" +
 	"\x11DisconnectRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\"b\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12#\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"b\n" +
 	"\x12DisconnectResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess2\xd0\x02\n" +

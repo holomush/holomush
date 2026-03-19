@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse } from "./web_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, ListCharactersRequest, ListCharactersResponse, ListSessionsRequest, ListSessionsResponse, LoginRequest, LoginResponse, SelectCharacterRequest, SelectCharacterResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -58,6 +58,61 @@ export const WebService = {
       name: "Disconnect",
       I: DisconnectRequest,
       O: DisconnectResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Two-phase login: authenticate player credentials, get a token.
+     *
+     * @generated from rpc holomush.web.v1.WebService.AuthenticatePlayer
+     */
+    authenticatePlayer: {
+      name: "AuthenticatePlayer",
+      I: AuthenticatePlayerRequest,
+      O: AuthenticatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Two-phase login: list characters available for the authenticated player.
+     *
+     * @generated from rpc holomush.web.v1.WebService.ListCharacters
+     */
+    listCharacters: {
+      name: "ListCharacters",
+      I: ListCharactersRequest,
+      O: ListCharactersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Two-phase login: select a character, creating or reattaching a session.
+     *
+     * @generated from rpc holomush.web.v1.WebService.SelectCharacter
+     */
+    selectCharacter: {
+      name: "SelectCharacter",
+      I: SelectCharacterRequest,
+      O: SelectCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * List all sessions for the authenticated player.
+     *
+     * @generated from rpc holomush.web.v1.WebService.ListSessions
+     */
+    listSessions: {
+      name: "ListSessions",
+      I: ListSessionsRequest,
+      O: ListSessionsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Retrieve command history for a session.
+     *
+     * @generated from rpc holomush.web.v1.WebService.GetCommandHistory
+     */
+    getCommandHistory: {
+      name: "GetCommandHistory",
+      I: GetCommandHistoryRequest,
+      O: GetCommandHistoryResponse,
       kind: MethodKind.Unary,
     },
   }

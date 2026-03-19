@@ -129,4 +129,7 @@ type Store interface {
 	// CountConnectionsByType returns the number of active connections of a
 	// specific client type for a session.
 	CountConnectionsByType(ctx context.Context, sessionID string, clientType string) (int, error)
+
+	// UpdateGridPresent sets the grid_present flag on a session.
+	UpdateGridPresent(ctx context.Context, id string, present bool) error
 }

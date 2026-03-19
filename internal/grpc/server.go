@@ -157,6 +157,12 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 	sessionID := s.newSessionID()
 	connID := core.NewULID()
 
+	// Determine client type from request (default: "terminal")
+	clientType := req.ClientType
+	if clientType == "" {
+		clientType = "terminal"
+	}
+
 	// Connect to session manager
 	s.sessions.Connect(result.CharacterID, connID)
 
@@ -199,6 +205,23 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		}, nil
 	}
 
+	// Register connection with client type
+	connInfo := &session.Connection{
+		ID:          connID,
+		SessionID:   sessionID.String(),
+		ClientType:  clientType,
+		Streams:     []string{"location:" + result.LocationID.String()},
+		ConnectedAt: now,
+	}
+	if err := s.sessionStore.AddConnection(ctx, connInfo); err != nil {
+		slog.WarnContext(ctx, "failed to register connection",
+			"request_id", requestID,
+			"session_id", sessionID.String(),
+			"connection_id", connID.String(),
+			"error", err,
+		)
+	}
+
 	// Emit arrive event (best-effort — session is valid even if event fails)
 	char := core.CharacterRef{ID: result.CharacterID, Name: result.CharacterName, LocationID: result.LocationID}
 	if err := s.engine.HandleConnect(ctx, char); err != nil {
@@ -223,6 +246,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		SessionId:     sessionID.String(),
 		CharacterId:   result.CharacterID.String(),
 		CharacterName: result.CharacterName,
+		ConnectionId:  connID.String(),
 	}, nil
 }
 
@@ -591,11 +615,11 @@ func (s *CoreServer) forwardLiveEvents(
 	}
 }
 
-// Disconnect detaches a session when the last connection closes.
-// Non-guest sessions transition to detached status with TTL-based expiry
-// so the player can reconnect. Guest sessions are deleted immediately.
-// Leave events are NOT emitted here for non-guests — the reaper handles
-// that when the TTL expires. Use the "quit" command for immediate termination.
+// Disconnect removes a connection and handles session lifecycle.
+// When all terminal/telnet connections close but comms_hub remains, the
+// character phases out (leave event) but the session stays active.
+// When ALL connections close, non-guest sessions detach with TTL;
+// guest sessions are deleted immediately.
 func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -605,7 +629,22 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	slog.DebugContext(ctx, "disconnect request",
 		"request_id", requestID,
 		"session_id", req.SessionId,
+		"connection_id", req.ConnectionId,
 	)
+
+	// Remove specific connection if provided
+	if req.ConnectionId != "" {
+		connID, parseErr := ulid.Parse(req.ConnectionId)
+		if parseErr == nil {
+			if err := s.sessionStore.RemoveConnection(ctx, connID); err != nil {
+				slog.WarnContext(ctx, "failed to remove connection",
+					"request_id", requestID,
+					"connection_id", req.ConnectionId,
+					"error", err,
+				)
+			}
+		}
+	}
 
 	// Look up session
 	info, err := s.sessionStore.Get(ctx, req.SessionId)
@@ -617,8 +656,8 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}, nil
 	}
 
-	// Check remaining connections
-	count, err := s.sessionStore.CountConnections(ctx, req.SessionId)
+	// Count remaining connections by type
+	totalCount, err := s.sessionStore.CountConnections(ctx, req.SessionId)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to count connections",
 			"request_id", requestID,
@@ -626,7 +665,24 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		)
 	}
 
-	if count == 0 {
+	termCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "terminal")
+	if err != nil {
+		slog.WarnContext(ctx, "failed to count terminal connections",
+			"request_id", requestID,
+			"error", err,
+		)
+	}
+	telCount, err := s.sessionStore.CountConnectionsByType(ctx, req.SessionId, "telnet")
+	if err != nil {
+		slog.WarnContext(ctx, "failed to count telnet connections",
+			"request_id", requestID,
+			"error", err,
+		)
+	}
+	gridConns := termCount + telCount
+
+	if totalCount == 0 {
+		// No connections at all
 		if info.IsGuest {
 			// Guests can't reconnect — delete immediately
 			char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
@@ -687,6 +743,23 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 			s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
 			// Do NOT emit leave event — player may reconnect.
 			// Reaper handles leave events when TTL expires.
+		}
+	} else if gridConns == 0 && info.GridPresent {
+		// Only comms_hub connections remain — phase out from grid
+		char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
+		if err := s.engine.HandleDisconnect(ctx, char, "phased out"); err != nil {
+			slog.WarnContext(ctx, "phase-out leave event failed",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"error", err,
+			)
+		}
+		if err := s.sessionStore.UpdateGridPresent(ctx, req.SessionId, false); err != nil {
+			slog.WarnContext(ctx, "failed to update grid presence",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"error", err,
+			)
 		}
 	}
 

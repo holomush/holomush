@@ -40,6 +40,7 @@ message AuthRequest {
   RequestMeta meta = 1;
   string username = 2;
   string password = 3;
+  string client_type = 4;  // "terminal", "comms_hub", "telnet"
 }
 
 message AuthResponse {
@@ -49,6 +50,7 @@ message AuthResponse {
   string character_id = 4;
   string character_name = 5;
   string error = 6;
+  string connection_id = 7;
 }
 
 message CommandRequest {
@@ -84,6 +86,7 @@ message Event {
 message DisconnectRequest {
   RequestMeta meta = 1;
   string session_id = 2;
+  string connection_id = 3;  // optional: remove specific connection
 }
 
 message DisconnectResponse {
