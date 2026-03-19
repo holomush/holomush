@@ -40,6 +40,7 @@ Thumbs.db
 # Node (for web client)
 node_modules/
 .svelte-kit/
+web/build/
 .env
 .env.*
 !.env.example
