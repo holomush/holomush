@@ -48,7 +48,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 
 	// Set defaults
 	if cfg.KeepaliveTime == 0 {
-		cfg.KeepaliveTime = 10 * time.Second
+		cfg.KeepaliveTime = 30 * time.Second
 	}
 	if cfg.KeepaliveTimeout == 0 {
 		cfg.KeepaliveTimeout = 5 * time.Second
