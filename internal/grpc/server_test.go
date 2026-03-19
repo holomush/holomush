@@ -2831,8 +2831,10 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		},
 	}
 
+	replayDone := make(chan struct{})
 	eventStore := &mockEventStore{
 		replayFunc: func(_ context.Context, stream string, afterID ulid.ULID, _ int) ([]core.Event, error) {
+			defer close(replayDone)
 			if stream == streamName && afterID == cursorID {
 				return historicalEvents, nil
 			}
@@ -2874,8 +2876,12 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		done <- server.Subscribe(req, stream)
 	}()
 
-	// Give replay + subscription time to process
-	time.Sleep(100 * time.Millisecond)
+	// Wait for replay to complete before broadcasting the live event.
+	select {
+	case <-replayDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("replay was never called")
+	}
 
 	// Send a live event after replay
 	liveID := core.NewULID()
@@ -2888,9 +2894,6 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		Payload:   []byte(`{"message":"live"}`),
 	}
 	broadcaster.Broadcast(liveEvent)
-
-	// Give time for the live event to arrive
-	time.Sleep(100 * time.Millisecond)
 
 	cancel()
 
@@ -3065,9 +3068,6 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 		done <- server.Subscribe(req, stream)
 	}()
 
-	// Give subscription time to set up
-	time.Sleep(50 * time.Millisecond)
-
 	cancel()
 
 	select {
@@ -3132,7 +3132,6 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 		done <- server.Subscribe(req, stream)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {

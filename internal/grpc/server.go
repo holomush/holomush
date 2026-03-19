@@ -281,7 +281,6 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 				"error", err,
 			)
 		}
-		//nolint:nilerr // intentional: convert store error to structured gRPC response
 		return &corev1.CommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
@@ -385,9 +384,7 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 // goroutine (best-effort, non-blocking). Uses context.Background() intentionally:
 // the request ctx may be cancelled before the goroutine runs, but we still want
 // the durable cursor write to complete.
-//
-//nolint:gosec // G118: intentional use of Background ctx for post-request durability
-func (s *CoreServer) persistCursorAsync(sessionID string, streamName string, eventID ulid.ULID) {
+func (s *CoreServer) persistCursorAsync(sessionID, streamName string, eventID ulid.ULID) {
 	go func() {
 		if err := s.sessionStore.UpdateCursors(context.Background(),
 			sessionID, map[string]ulid.ULID{streamName: eventID}); err != nil {
