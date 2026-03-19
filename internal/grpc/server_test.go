@@ -337,18 +337,20 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, connID)
 
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		CharacterID: charID,
+		Status:      session.StatusActive,
+		TTLSeconds:  1800,
+	}))
+
 	server := &CoreServer{
-		engine:   core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
-		sessions: sessions,
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				Status:      session.StatusActive,
-			},
-		}),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		sessions:     sessions,
+		sessionStore: sessStore,
 	}
 
-	ctx := context.Background()
 	req := &corev1.DisconnectRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "disconnect-request-id",
@@ -363,6 +365,13 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	assert.True(t, resp.Success)
 	require.NotNil(t, resp.Meta)
 	assert.Equal(t, "disconnect-request-id", resp.Meta.RequestId)
+
+	// Non-guest session should be detached, not deleted
+	info, err := sessStore.Get(ctx, sessionID.String())
+	require.NoError(t, err, "session should still exist after disconnect")
+	assert.Equal(t, session.StatusDetached, info.Status)
+	assert.NotNil(t, info.DetachedAt)
+	assert.NotNil(t, info.ExpiresAt)
 }
 
 func TestNewCoreServer(t *testing.T) {
@@ -701,6 +710,64 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 	assert.NotEmpty(t, resp.Error, "error should contain error message")
 }
 
+func TestCoreServer_HandleCommand_Quit(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := core.NewMemoryEventStore()
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:            sessionID.String(),
+		CharacterID:   charID,
+		LocationID:    locationID,
+		CharacterName: "QuitChar",
+		IsGuest:       false,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	var hookCalled bool
+	server := NewCoreServer(engine, sessions, broadcaster, sessStore,
+		WithDisconnectHook(func(_ session.Info) {
+			hookCalled = true
+		}),
+	)
+
+	req := &corev1.CommandRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "quit-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Command:   "quit",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+	assert.Equal(t, "Goodbye!", resp.Output)
+
+	// Session should be deleted immediately
+	_, err = sessStore.Get(ctx, sessionID.String())
+	assert.Error(t, err, "session should be deleted after quit command")
+
+	// Leave event should be emitted
+	events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	require.Len(t, events, 1, "expected exactly one leave event")
+	assert.Equal(t, core.EventTypeLeave, events[0].Type)
+
+	// Disconnect hooks should fire
+	assert.True(t, hookCalled, "disconnect hook should be called on quit")
+}
+
 func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 	broadcaster := core.NewBroadcaster()
@@ -871,18 +938,19 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, connID)
 
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		CharacterID: charID,
+		Status:      session.StatusActive,
+	}))
+
 	server := &CoreServer{
-		engine:   core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
-		sessions: sessions,
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				Status:      session.StatusActive,
-			},
-		}),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		sessions:     sessions,
+		sessionStore: sessStore,
 	}
 
-	ctx := context.Background()
 	req := &corev1.DisconnectRequest{
 		Meta:      nil, // No meta
 		SessionId: sessionID.String(),
@@ -892,6 +960,11 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, resp.Success)
+
+	// Non-guest session should be detached, not deleted
+	info, err := sessStore.Get(ctx, sessionID.String())
+	require.NoError(t, err, "session should still exist after disconnect")
+	assert.Equal(t, session.StatusDetached, info.Status)
 }
 
 func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
@@ -1076,45 +1149,89 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 }
 
 func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
-	charID := core.NewULID()
-	sessionID := core.NewULID()
-	connID := core.NewULID()
-	sessions := core.NewSessionManager()
-	sessions.Connect(charID, connID)
+	t.Run("guest session is deleted", func(t *testing.T) {
+		charID := core.NewULID()
+		sessionID := core.NewULID()
+		connID := core.NewULID()
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, connID)
 
-	ctx := context.Background()
-	sessionStore := session.NewMemStore()
-	require.NoError(t, sessionStore.Set(ctx, sessionID.String(), &session.Info{
-		CharacterID: charID,
-		Status:      session.StatusActive,
-	}))
+		ctx := context.Background()
+		sessionStore := session.NewMemStore()
+		require.NoError(t, sessionStore.Set(ctx, sessionID.String(), &session.Info{
+			CharacterID: charID,
+			IsGuest:     true,
+			Status:      session.StatusActive,
+		}))
 
-	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
-		sessions:     sessions,
-		sessionStore: sessionStore,
-	}
+		server := &CoreServer{
+			engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+			sessions:     sessions,
+			sessionStore: sessionStore,
+		}
 
-	// Verify session exists before disconnect
-	_, err := sessionStore.Get(ctx, sessionID.String())
-	require.NoError(t, err, "Session should exist before disconnect")
+		_, err := sessionStore.Get(ctx, sessionID.String())
+		require.NoError(t, err, "Session should exist before disconnect")
 
-	// Disconnect the session
-	req := &corev1.DisconnectRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "cleanup-test",
-			Timestamp: timestamppb.Now(),
-		},
-		SessionId: sessionID.String(),
-	}
+		req := &corev1.DisconnectRequest{
+			Meta: &corev1.RequestMeta{
+				RequestId: "cleanup-test-guest",
+				Timestamp: timestamppb.Now(),
+			},
+			SessionId: sessionID.String(),
+		}
 
-	resp, err := server.Disconnect(ctx, req)
-	require.NoError(t, err)
-	assert.True(t, resp.Success, "Disconnect() should succeed")
+		resp, err := server.Disconnect(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "Disconnect() should succeed")
 
-	// Verify session is cleaned up
-	_, err = sessionStore.Get(ctx, sessionID.String())
-	assert.Error(t, err, "Session should be removed after disconnect")
+		_, err = sessionStore.Get(ctx, sessionID.String())
+		assert.Error(t, err, "Guest session should be removed after disconnect")
+	})
+
+	t.Run("non-guest session is detached", func(t *testing.T) {
+		charID := core.NewULID()
+		sessionID := core.NewULID()
+		connID := core.NewULID()
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, connID)
+
+		ctx := context.Background()
+		sessionStore := session.NewMemStore()
+		require.NoError(t, sessionStore.Set(ctx, sessionID.String(), &session.Info{
+			CharacterID: charID,
+			IsGuest:     false,
+			Status:      session.StatusActive,
+			TTLSeconds:  1800,
+		}))
+
+		server := &CoreServer{
+			engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+			sessions:     sessions,
+			sessionStore: sessionStore,
+		}
+
+		_, err := sessionStore.Get(ctx, sessionID.String())
+		require.NoError(t, err, "Session should exist before disconnect")
+
+		req := &corev1.DisconnectRequest{
+			Meta: &corev1.RequestMeta{
+				RequestId: "cleanup-test-nonguest",
+				Timestamp: timestamppb.Now(),
+			},
+			SessionId: sessionID.String(),
+		}
+
+		resp, err := server.Disconnect(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "Disconnect() should succeed")
+
+		info, err := sessionStore.Get(ctx, sessionID.String())
+		require.NoError(t, err, "Non-guest session should still exist after disconnect")
+		assert.Equal(t, session.StatusDetached, info.Status)
+		assert.NotNil(t, info.DetachedAt)
+		assert.NotNil(t, info.ExpiresAt)
+	})
 }
 
 func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
@@ -1219,13 +1336,15 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success, "Disconnect() should succeed")
 
-	// Verify session 1 is cleaned up
-	_, err = sessionStore.Get(ctx, session1ID.String())
-	assert.Error(t, err, "Session 1 should be removed after disconnect")
+	// Verify session 1 is detached (not deleted) for non-guest
+	info1, err := sessionStore.Get(ctx, session1ID.String())
+	require.NoError(t, err, "Session 1 should still exist after disconnect (detached)")
+	assert.Equal(t, session.StatusDetached, info1.Status)
 
-	// Verify session 2 still exists
-	_, err = sessionStore.Get(ctx, session2ID.String())
-	assert.NoError(t, err, "Session 2 should still exist after session 1 disconnect")
+	// Verify session 2 still exists and is active
+	info2, err := sessionStore.Get(ctx, session2ID.String())
+	require.NoError(t, err, "Session 2 should still exist after session 1 disconnect")
+	assert.Equal(t, session.StatusActive, info2.Status)
 }
 
 // =============================================================================
@@ -2346,6 +2465,7 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 		CharacterName: "RegularChar",
 		IsGuest:       false,
 		Status:        session.StatusActive,
+		TTLSeconds:    1800,
 	}))
 
 	req := &corev1.DisconnectRequest{
@@ -2357,9 +2477,12 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 
-	// Session should still exist (EndSession was NOT called for non-guests)
-	sess := sessions.GetSession(charID)
-	require.NotNil(t, sess, "session should still exist for non-guest after disconnect")
+	// Session should be detached, not deleted
+	info, err := sessStore.Get(ctx, sessionID.String())
+	require.NoError(t, err, "session should still exist for non-guest after disconnect")
+	assert.Equal(t, session.StatusDetached, info.Status)
+	assert.NotNil(t, info.DetachedAt)
+	assert.NotNil(t, info.ExpiresAt)
 }
 
 func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
@@ -2405,40 +2528,79 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 }
 
 func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
-	charID := core.NewULID()
-	locationID := core.NewULID()
-	sessionID := core.NewULID()
-	connID := core.NewULID()
-	sessions := core.NewSessionManager()
-	sessions.Connect(charID, connID)
+	t.Run("guest disconnect emits leave event", func(t *testing.T) {
+		charID := core.NewULID()
+		locationID := core.NewULID()
+		sessionID := core.NewULID()
+		connID := core.NewULID()
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, connID)
 
-	store := core.NewMemoryEventStore()
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+		store := core.NewMemoryEventStore()
+		broadcaster := core.NewBroadcaster()
+		engine := core.NewEngine(store, sessions, broadcaster)
 
-	server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
-	ctx := context.Background()
-	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
-		CharacterID:   charID,
-		LocationID:    locationID,
-		CharacterName: "LeaveChar",
-		IsGuest:       false,
-		Status:        session.StatusActive,
-	}))
+		server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+		ctx := context.Background()
+		require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
+			CharacterID:   charID,
+			LocationID:    locationID,
+			CharacterName: "GuestChar",
+			IsGuest:       true,
+			Status:        session.StatusActive,
+		}))
 
-	req := &corev1.DisconnectRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "leave-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-	}
+		req := &corev1.DisconnectRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "leave-test-guest", Timestamp: timestamppb.Now()},
+			SessionId: sessionID.String(),
+		}
 
-	resp, err := server.Disconnect(ctx, req)
-	require.NoError(t, err)
-	assert.True(t, resp.Success)
+		resp, err := server.Disconnect(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
 
-	events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
-	require.NoError(t, err)
-	require.Len(t, events, 1, "expected exactly one leave event")
-	assert.Equal(t, core.EventTypeLeave, events[0].Type)
+		events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		require.NoError(t, err)
+		require.Len(t, events, 1, "expected exactly one leave event for guest")
+		assert.Equal(t, core.EventTypeLeave, events[0].Type)
+	})
+
+	t.Run("non-guest disconnect does not emit leave event", func(t *testing.T) {
+		charID := core.NewULID()
+		locationID := core.NewULID()
+		sessionID := core.NewULID()
+		connID := core.NewULID()
+		sessions := core.NewSessionManager()
+		sessions.Connect(charID, connID)
+
+		store := core.NewMemoryEventStore()
+		broadcaster := core.NewBroadcaster()
+		engine := core.NewEngine(store, sessions, broadcaster)
+
+		server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+		ctx := context.Background()
+		require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
+			CharacterID:   charID,
+			LocationID:    locationID,
+			CharacterName: "RegularChar",
+			IsGuest:       false,
+			Status:        session.StatusActive,
+			TTLSeconds:    1800,
+		}))
+
+		req := &corev1.DisconnectRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "leave-test-nonguest", Timestamp: timestamppb.Now()},
+			SessionId: sessionID.String(),
+		}
+
+		resp, err := server.Disconnect(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+
+		events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+		require.NoError(t, err)
+		assert.Empty(t, events, "non-guest disconnect should NOT emit leave event")
+	})
 }
 
 func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {

@@ -265,6 +265,27 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 		}
 		return "", nil
 
+	case "quit":
+		// Explicit quit — terminate session immediately
+		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
+			slog.WarnContext(ctx, "leave event failed", "error", err)
+		}
+		if err := s.sessionStore.Delete(ctx, info.ID); err != nil {
+			slog.WarnContext(ctx, "session delete failed", "error", err)
+		}
+		s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
+		for _, hook := range s.disconnectHooks {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.ErrorContext(ctx, "disconnect hook panicked", "panic", r)
+					}
+				}()
+				hook(*info)
+			}()
+		}
+		return "Goodbye!", nil
+
 	default:
 		return "", oops.Code("UNKNOWN_COMMAND").With("command", cmd).Errorf("unknown command: %s", cmd)
 	}
@@ -354,7 +375,11 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 }
 
-// Disconnect ends a session.
+// Disconnect detaches a session when the last connection closes.
+// Non-guest sessions transition to detached status with TTL-based expiry
+// so the player can reconnect. Guest sessions are deleted immediately.
+// Leave events are NOT emitted here for non-guests — the reaper handles
+// that when the TTL expires. Use the "quit" command for immediate termination.
 func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -376,56 +401,77 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		}, nil
 	}
 
-	// Emit leave event while session is still active
-	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-	if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
-		slog.WarnContext(ctx, "leave event failed",
+	// Check remaining connections
+	count, err := s.sessionStore.CountConnections(ctx, req.SessionId)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to count connections",
 			"request_id", requestID,
-			"character_id", info.CharacterID.String(),
 			"error", err,
 		)
 	}
 
-	// Disconnect from session manager
-	// Note: session.Info does not track ConnectionID; connections are managed
-	// separately via session.Connection. Pass zero ULID as a no-op placeholder
-	// until connection tracking is fully migrated.
-	s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
+	if count == 0 {
+		if info.IsGuest {
+			// Guests can't reconnect — delete immediately
+			char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
+			if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
+				slog.WarnContext(ctx, "leave event failed",
+					"request_id", requestID,
+					"error", err,
+				)
+			}
 
-	// End session for guests
-	if info.IsGuest {
-		if err := s.sessions.EndSession(info.CharacterID); err != nil {
-			slog.WarnContext(ctx, "end guest session failed",
-				"request_id", requestID,
-				"character_id", info.CharacterID.String(),
-				"error", err,
-			)
+			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
+				slog.WarnContext(ctx, "failed to delete guest session",
+					"request_id", requestID,
+					"error", err,
+				)
+			}
+
+			s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
+			if err := s.sessions.EndSession(info.CharacterID); err != nil {
+				slog.WarnContext(ctx, "end guest session failed",
+					"request_id", requestID,
+					"character_id", info.CharacterID.String(),
+					"error", err,
+				)
+			}
+
+			// Run disconnect hooks for guests
+			for _, hook := range s.disconnectHooks {
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							slog.ErrorContext(ctx, "disconnect hook panicked",
+								"request_id", requestID,
+								"panic", r,
+								"stack", string(debug.Stack()),
+							)
+						}
+					}()
+					hook(*info)
+				}()
+			}
+		} else {
+			// Non-guest: detach session with TTL instead of deleting
+			now := time.Now()
+			ttlSeconds := info.TTLSeconds
+			if ttlSeconds <= 0 {
+				ttlSeconds = 1800 // default 30 minutes
+			}
+			expiresAt := now.Add(time.Duration(ttlSeconds) * time.Second)
+			if err := s.sessionStore.UpdateStatus(ctx, req.SessionId,
+				session.StatusDetached, &now, &expiresAt); err != nil {
+				slog.WarnContext(ctx, "failed to detach session",
+					"request_id", requestID,
+					"error", err,
+				)
+			}
+
+			s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
+			// Do NOT emit leave event — player may reconnect.
+			// Reaper handles leave events when TTL expires.
 		}
-	}
-
-	// Run disconnect hooks with panic recovery
-	for _, hook := range s.disconnectHooks {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.ErrorContext(ctx, "disconnect hook panicked",
-						"request_id", requestID,
-						"panic", r,
-						"stack", string(debug.Stack()),
-					)
-				}
-			}()
-			hook(*info)
-		}()
-	}
-
-	// Remove from session store
-	if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
-		slog.WarnContext(ctx, "failed to delete session",
-			"request_id", requestID,
-			"session_id", req.SessionId,
-			"error", err,
-		)
 	}
 
 	slog.InfoContext(ctx, "session disconnected",
