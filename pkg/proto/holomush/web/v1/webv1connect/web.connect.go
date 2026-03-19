@@ -54,7 +54,7 @@ type WebServiceClient interface {
 	SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error)
 	// Server-streaming event feed. Client receives game events
 	// (say, pose, arrive, leave) as they occur.
-	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.GameEvent], error)
+	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.StreamEventsResponse], error)
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
 }
@@ -82,7 +82,7 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("SendCommand")),
 			connect.WithClientOptions(opts...),
 		),
-		streamEvents: connect.NewClient[v1.StreamEventsRequest, v1.GameEvent](
+		streamEvents: connect.NewClient[v1.StreamEventsRequest, v1.StreamEventsResponse](
 			httpClient,
 			baseURL+WebServiceStreamEventsProcedure,
 			connect.WithSchema(webServiceMethods.ByName("StreamEvents")),
@@ -101,7 +101,7 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 type webServiceClient struct {
 	login        *connect.Client[v1.LoginRequest, v1.LoginResponse]
 	sendCommand  *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
-	streamEvents *connect.Client[v1.StreamEventsRequest, v1.GameEvent]
+	streamEvents *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
 	disconnect   *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
 }
 
@@ -116,7 +116,7 @@ func (c *webServiceClient) SendCommand(ctx context.Context, req *connect.Request
 }
 
 // StreamEvents calls holomush.web.v1.WebService.StreamEvents.
-func (c *webServiceClient) StreamEvents(ctx context.Context, req *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.GameEvent], error) {
+func (c *webServiceClient) StreamEvents(ctx context.Context, req *connect.Request[v1.StreamEventsRequest]) (*connect.ServerStreamForClient[v1.StreamEventsResponse], error) {
 	return c.streamEvents.CallServerStream(ctx, req)
 }
 
@@ -133,7 +133,7 @@ type WebServiceHandler interface {
 	SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error)
 	// Server-streaming event feed. Client receives game events
 	// (say, pose, arrive, leave) as they occur.
-	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.GameEvent]) error
+	StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.StreamEventsResponse]) error
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
 }
@@ -196,7 +196,7 @@ func (UnimplementedWebServiceHandler) SendCommand(context.Context, *connect.Requ
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.SendCommand is not implemented"))
 }
 
-func (UnimplementedWebServiceHandler) StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.GameEvent]) error {
+func (UnimplementedWebServiceHandler) StreamEvents(context.Context, *connect.Request[v1.StreamEventsRequest], *connect.ServerStream[v1.StreamEventsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.StreamEvents is not implemented"))
 }
 

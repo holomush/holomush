@@ -16,7 +16,7 @@ service WebService {
 
   // Server-streaming event feed. Client receives game events
   // (say, pose, arrive, leave) as they occur.
-  rpc StreamEvents(StreamEventsRequest) returns (stream GameEvent);
+  rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
 
   // Disconnect ends the session and triggers cleanup.
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
@@ -54,6 +54,10 @@ message GameEvent {
   string character_name = 2;
   string text = 3;
   int64 timestamp = 4;
+}
+
+message StreamEventsResponse {
+  GameEvent event = 1;
 }
 
 message DisconnectRequest {

@@ -38,7 +38,7 @@ type WebServiceClient interface {
 	SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error)
 	// Server-streaming event feed. Client receives game events
 	// (say, pose, arrive, leave) as they occur.
-	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GameEvent], error)
+	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamEventsResponse], error)
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error)
 }
@@ -71,13 +71,13 @@ func (c *webServiceClient) SendCommand(ctx context.Context, in *SendCommandReque
 	return out, nil
 }
 
-func (c *webServiceClient) StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GameEvent], error) {
+func (c *webServiceClient) StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamEventsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &WebService_ServiceDesc.Streams[0], WebService_StreamEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[StreamEventsRequest, GameEvent]{ClientStream: stream}
+	x := &grpc.GenericClientStream[StreamEventsRequest, StreamEventsResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (c *webServiceClient) StreamEvents(ctx context.Context, in *StreamEventsReq
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type WebService_StreamEventsClient = grpc.ServerStreamingClient[GameEvent]
+type WebService_StreamEventsClient = grpc.ServerStreamingClient[StreamEventsResponse]
 
 func (c *webServiceClient) Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -110,7 +110,7 @@ type WebServiceServer interface {
 	SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error)
 	// Server-streaming event feed. Client receives game events
 	// (say, pose, arrive, leave) as they occur.
-	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[GameEvent]) error
+	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[StreamEventsResponse]) error
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
@@ -129,7 +129,7 @@ func (UnimplementedWebServiceServer) Login(context.Context, *LoginRequest) (*Log
 func (UnimplementedWebServiceServer) SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendCommand not implemented")
 }
-func (UnimplementedWebServiceServer) StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[GameEvent]) error {
+func (UnimplementedWebServiceServer) StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[StreamEventsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamEvents not implemented")
 }
 func (UnimplementedWebServiceServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error) {
@@ -197,11 +197,11 @@ func _WebService_StreamEvents_Handler(srv interface{}, stream grpc.ServerStream)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(WebServiceServer).StreamEvents(m, &grpc.GenericServerStream[StreamEventsRequest, GameEvent]{ServerStream: stream})
+	return srv.(WebServiceServer).StreamEvents(m, &grpc.GenericServerStream[StreamEventsRequest, StreamEventsResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type WebService_StreamEventsServer = grpc.ServerStreamingServer[GameEvent]
+type WebService_StreamEventsServer = grpc.ServerStreamingServer[StreamEventsResponse]
 
 func _WebService_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DisconnectRequest)

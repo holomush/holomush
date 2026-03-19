@@ -104,7 +104,7 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 
 // StreamEvents subscribes to core events for a session and forwards them to
 // the client as GameEvent messages.
-func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.StreamEventsRequest], stream *connect.ServerStream[webv1.GameEvent]) error {
+func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.StreamEventsRequest], stream *connect.ServerStream[webv1.StreamEventsResponse]) error {
 	sessionID := req.Msg.GetSessionId()
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
@@ -133,7 +133,7 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			continue
 		}
 
-		if sendErr := stream.Send(gameEvent); sendErr != nil {
+		if sendErr := stream.Send(&webv1.StreamEventsResponse{Event: gameEvent}); sendErr != nil {
 			if errors.Is(sendErr, context.Canceled) ||
 				errors.Is(sendErr, context.DeadlineExceeded) {
 				return nil

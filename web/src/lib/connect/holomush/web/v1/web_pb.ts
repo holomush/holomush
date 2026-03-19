@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/web/v1/web.proto.
  */
 export const file_holomush_web_v1_web: GenFile = /*@__PURE__*/
-  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEiMgoMTG9naW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJImMKDUxvZ2luUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNgoSU2VuZENvbW1hbmRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDAoEdGV4dBgCIAEoCSJNChNTZW5kQ29tbWFuZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGb3V0cHV0GAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiKQoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIlIKCUdhbWVFdmVudBIMCgR0eXBlGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEgwKBHRleHQYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDIicKEURpc2Nvbm5lY3RSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiFAoSRGlzY29ubmVjdFJlc3BvbnNlMtkCCgpXZWJTZXJ2aWNlEkYKBUxvZ2luEh0uaG9sb211c2gud2ViLnYxLkxvZ2luUmVxdWVzdBoeLmhvbG9tdXNoLndlYi52MS5Mb2dpblJlc3BvbnNlElgKC1NlbmRDb21tYW5kEiMuaG9sb211c2gud2ViLnYxLlNlbmRDb21tYW5kUmVxdWVzdBokLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlc3BvbnNlElIKDFN0cmVhbUV2ZW50cxIkLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudDABElUKCkRpc2Nvbm5lY3QSIi5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlcXVlc3QaIy5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlc3BvbnNlQj5aPGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3dlYi92MTt3ZWJ2MWIGcHJvdG8z");
+  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEiMgoMTG9naW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJImMKDUxvZ2luUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNgoSU2VuZENvbW1hbmRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDAoEdGV4dBgCIAEoCSJNChNTZW5kQ29tbWFuZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGb3V0cHV0GAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiKQoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIlIKCUdhbWVFdmVudBIMCgR0eXBlGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEgwKBHRleHQYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDIkEKFFN0cmVhbUV2ZW50c1Jlc3BvbnNlEikKBWV2ZW50GAEgASgLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudCInChFEaXNjb25uZWN0UmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIhQKEkRpc2Nvbm5lY3RSZXNwb25zZTLkAgoKV2ViU2VydmljZRJGCgVMb2dpbhIdLmhvbG9tdXNoLndlYi52MS5Mb2dpblJlcXVlc3QaHi5ob2xvbXVzaC53ZWIudjEuTG9naW5SZXNwb25zZRJYCgtTZW5kQ29tbWFuZBIjLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlcXVlc3QaJC5ob2xvbXVzaC53ZWIudjEuU2VuZENvbW1hbmRSZXNwb25zZRJdCgxTdHJlYW1FdmVudHMSJC5ob2xvbXVzaC53ZWIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBolLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXNwb25zZTABElUKCkRpc2Nvbm5lY3QSIi5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlcXVlc3QaIy5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlc3BvbnNlQj5aPGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3dlYi92MTt3ZWJ2MWIGcHJvdG8z");
 
 /**
  * @generated from message holomush.web.v1.LoginRequest
@@ -168,6 +168,23 @@ export const GameEventSchema: GenMessage<GameEvent> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 5);
 
 /**
+ * @generated from message holomush.web.v1.StreamEventsResponse
+ */
+export type StreamEventsResponse = Message<"holomush.web.v1.StreamEventsResponse"> & {
+  /**
+   * @generated from field: holomush.web.v1.GameEvent event = 1;
+   */
+  event?: GameEvent;
+};
+
+/**
+ * Describes the message holomush.web.v1.StreamEventsResponse.
+ * Use `create(StreamEventsResponseSchema)` to create a new message.
+ */
+export const StreamEventsResponseSchema: GenMessage<StreamEventsResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 6);
+
+/**
  * @generated from message holomush.web.v1.DisconnectRequest
  */
 export type DisconnectRequest = Message<"holomush.web.v1.DisconnectRequest"> & {
@@ -182,7 +199,7 @@ export type DisconnectRequest = Message<"holomush.web.v1.DisconnectRequest"> & {
  * Use `create(DisconnectRequestSchema)` to create a new message.
  */
 export const DisconnectRequestSchema: GenMessage<DisconnectRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 6);
+  messageDesc(file_holomush_web_v1_web, 7);
 
 /**
  * @generated from message holomush.web.v1.DisconnectResponse
@@ -195,7 +212,7 @@ export type DisconnectResponse = Message<"holomush.web.v1.DisconnectResponse"> &
  * Use `create(DisconnectResponseSchema)` to create a new message.
  */
 export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 7);
+  messageDesc(file_holomush_web_v1_web, 8);
 
 /**
  * @generated from service holomush.web.v1.WebService
@@ -230,7 +247,7 @@ export const WebService: GenService<{
   streamEvents: {
     methodKind: "server_streaming";
     input: typeof StreamEventsRequestSchema;
-    output: typeof GameEventSchema;
+    output: typeof StreamEventsResponseSchema;
   },
   /**
    * Disconnect ends the session and triggers cleanup.

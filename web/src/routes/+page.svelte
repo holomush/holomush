@@ -31,13 +31,15 @@
 
   async function startEventStream() {
     try {
-      for await (const event of client.streamEvents({ sessionId })) {
+      for await (const resp of client.streamEvents({ sessionId })) {
+        const ev = resp.event;
+        if (!ev) continue;
         events = [
           ...events,
           {
-            type: event.type,
-            characterName: event.characterName,
-            text: event.text,
+            type: ev.type,
+            characterName: ev.characterName,
+            text: ev.text,
           },
         ];
       }

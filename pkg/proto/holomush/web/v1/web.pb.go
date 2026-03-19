@@ -368,6 +368,50 @@ func (x *GameEvent) GetTimestamp() int64 {
 	return 0
 }
 
+type StreamEventsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Event         *GameEvent             `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamEventsResponse) Reset() {
+	*x = StreamEventsResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamEventsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamEventsResponse) ProtoMessage() {}
+
+func (x *StreamEventsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamEventsResponse.ProtoReflect.Descriptor instead.
+func (*StreamEventsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *StreamEventsResponse) GetEvent() *GameEvent {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
 type DisconnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -377,7 +421,7 @@ type DisconnectRequest struct {
 
 func (x *DisconnectRequest) Reset() {
 	*x = DisconnectRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[6]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +433,7 @@ func (x *DisconnectRequest) String() string {
 func (*DisconnectRequest) ProtoMessage() {}
 
 func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[6]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +446,7 @@ func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectRequest.ProtoReflect.Descriptor instead.
 func (*DisconnectRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{6}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DisconnectRequest) GetSessionId() string {
@@ -420,7 +464,7 @@ type DisconnectResponse struct {
 
 func (x *DisconnectResponse) Reset() {
 	*x = DisconnectResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[7]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +476,7 @@ func (x *DisconnectResponse) String() string {
 func (*DisconnectResponse) ProtoMessage() {}
 
 func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[7]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +489,7 @@ func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectResponse.ProtoReflect.Descriptor instead.
 func (*DisconnectResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{7}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{8}
 }
 
 var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
@@ -477,16 +521,18 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +
 	"\x04text\x18\x03 \x01(\tR\x04text\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"2\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"H\n" +
+	"\x14StreamEventsResponse\x120\n" +
+	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventR\x05event\"2\n" +
 	"\x11DisconnectRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\x14\n" +
-	"\x12DisconnectResponse2\xd9\x02\n" +
+	"\x12DisconnectResponse2\xe4\x02\n" +
 	"\n" +
 	"WebService\x12F\n" +
 	"\x05Login\x12\x1d.holomush.web.v1.LoginRequest\x1a\x1e.holomush.web.v1.LoginResponse\x12X\n" +
-	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12R\n" +
-	"\fStreamEvents\x12$.holomush.web.v1.StreamEventsRequest\x1a\x1a.holomush.web.v1.GameEvent0\x01\x12U\n" +
+	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12]\n" +
+	"\fStreamEvents\x12$.holomush.web.v1.StreamEventsRequest\x1a%.holomush.web.v1.StreamEventsResponse0\x01\x12U\n" +
 	"\n" +
 	"Disconnect\x12\".holomush.web.v1.DisconnectRequest\x1a#.holomush.web.v1.DisconnectResponseB\xbb\x01\n" +
 	"\x13com.holomush.web.v1B\bWebProtoP\x01Z<github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1\xa2\x02\x03HWX\xaa\x02\x0fHolomush.Web.V1\xca\x02\x0fHolomush\\Web\\V1\xe2\x02\x1bHolomush\\Web\\V1\\GPBMetadata\xea\x02\x11Holomush::Web::V1b\x06proto3"
@@ -503,31 +549,33 @@ func file_holomush_web_v1_web_proto_rawDescGZIP() []byte {
 	return file_holomush_web_v1_web_proto_rawDescData
 }
 
-var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_holomush_web_v1_web_proto_goTypes = []any{
-	(*LoginRequest)(nil),        // 0: holomush.web.v1.LoginRequest
-	(*LoginResponse)(nil),       // 1: holomush.web.v1.LoginResponse
-	(*SendCommandRequest)(nil),  // 2: holomush.web.v1.SendCommandRequest
-	(*SendCommandResponse)(nil), // 3: holomush.web.v1.SendCommandResponse
-	(*StreamEventsRequest)(nil), // 4: holomush.web.v1.StreamEventsRequest
-	(*GameEvent)(nil),           // 5: holomush.web.v1.GameEvent
-	(*DisconnectRequest)(nil),   // 6: holomush.web.v1.DisconnectRequest
-	(*DisconnectResponse)(nil),  // 7: holomush.web.v1.DisconnectResponse
+	(*LoginRequest)(nil),         // 0: holomush.web.v1.LoginRequest
+	(*LoginResponse)(nil),        // 1: holomush.web.v1.LoginResponse
+	(*SendCommandRequest)(nil),   // 2: holomush.web.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),  // 3: holomush.web.v1.SendCommandResponse
+	(*StreamEventsRequest)(nil),  // 4: holomush.web.v1.StreamEventsRequest
+	(*GameEvent)(nil),            // 5: holomush.web.v1.GameEvent
+	(*StreamEventsResponse)(nil), // 6: holomush.web.v1.StreamEventsResponse
+	(*DisconnectRequest)(nil),    // 7: holomush.web.v1.DisconnectRequest
+	(*DisconnectResponse)(nil),   // 8: holomush.web.v1.DisconnectResponse
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
-	0, // 0: holomush.web.v1.WebService.Login:input_type -> holomush.web.v1.LoginRequest
-	2, // 1: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
-	4, // 2: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
-	6, // 3: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
-	1, // 4: holomush.web.v1.WebService.Login:output_type -> holomush.web.v1.LoginResponse
-	3, // 5: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	5, // 6: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.GameEvent
-	7, // 7: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	4, // [4:8] is the sub-list for method output_type
-	0, // [0:4] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5, // 0: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
+	0, // 1: holomush.web.v1.WebService.Login:input_type -> holomush.web.v1.LoginRequest
+	2, // 2: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
+	4, // 3: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
+	7, // 4: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
+	1, // 5: holomush.web.v1.WebService.Login:output_type -> holomush.web.v1.LoginResponse
+	3, // 6: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	6, // 7: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	8, // 8: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_holomush_web_v1_web_proto_init() }
@@ -541,7 +589,7 @@ func file_holomush_web_v1_web_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_web_v1_web_proto_rawDesc), len(file_holomush_web_v1_web_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
