@@ -84,6 +84,9 @@ site/.venv/
 *.egg-info/
 .ansible/
 
+# Superpowers brainstorming artifacts
+.superpowers/
+
 # Dolt database files (added by bd init)
 .dolt/
 *.db
