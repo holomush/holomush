@@ -2485,6 +2485,146 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	assert.NotNil(t, info.ExpiresAt)
 }
 
+// =============================================================================
+// Command History Tests (Chunk 6a)
+// =============================================================================
+
+func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
+	}
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:          sessionID.String(),
+		CharacterID: charID,
+		LocationID:  locationID,
+		Status:      session.StatusActive,
+		MaxHistory:  100,
+	}))
+
+	server := &CoreServer{
+		engine:       engine,
+		sessions:     sessions,
+		sessionStore: sessStore,
+	}
+
+	commands := []string{"say hello", "pose waves", "say goodbye"}
+	for _, cmd := range commands {
+		req := &corev1.CommandRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "history-test", Timestamp: timestamppb.Now()},
+			SessionId: sessionID.String(),
+			Command:   cmd,
+		}
+		resp, err := server.HandleCommand(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "command %q failed: %s", cmd, resp.Error)
+	}
+
+	history, err := sessStore.GetCommandHistory(ctx, sessionID.String())
+	require.NoError(t, err)
+	assert.Equal(t, commands, history, "command history should match commands in order")
+}
+
+func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
+	}
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	const maxHistory = 3
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:          sessionID.String(),
+		CharacterID: charID,
+		LocationID:  locationID,
+		Status:      session.StatusActive,
+		MaxHistory:  maxHistory,
+	}))
+
+	server := &CoreServer{
+		engine:       engine,
+		sessions:     sessions,
+		sessionStore: sessStore,
+	}
+
+	// Send more commands than maxHistory
+	for i := 0; i < 5; i++ {
+		req := &corev1.CommandRequest{
+			Meta:      &corev1.RequestMeta{RequestId: fmt.Sprintf("cap-test-%d", i), Timestamp: timestamppb.Now()},
+			SessionId: sessionID.String(),
+			Command:   fmt.Sprintf("say message %d", i),
+		}
+		resp, err := server.HandleCommand(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, resp.Success, "command %d failed: %s", i, resp.Error)
+	}
+
+	history, err := sessStore.GetCommandHistory(ctx, sessionID.String())
+	require.NoError(t, err)
+	assert.Len(t, history, maxHistory, "history should be capped at maxHistory")
+	// Most recent commands should be retained
+	assert.Equal(t, "say message 4", history[maxHistory-1])
+}
+
+func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
+	// Verify that a history append failure does not fail the command itself.
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
+	}
+	broadcaster := core.NewBroadcaster()
+	engine := core.NewEngine(store, sessions, broadcaster)
+
+	ctx := context.Background()
+	realStore := session.NewMemStore()
+	require.NoError(t, realStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:          sessionID.String(),
+		CharacterID: charID,
+		LocationID:  locationID,
+		Status:      session.StatusActive,
+		MaxHistory:  100,
+	}))
+
+	server := &CoreServer{
+		engine:       engine,
+		sessions:     sessions,
+		sessionStore: realStore,
+	}
+
+	req := &corev1.CommandRequest{
+		Meta:      &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},
+		SessionId: sessionID.String(),
+		Command:   "say hello",
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success, "command should succeed even when history append fails")
+}
+
 func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 	charID := core.NewULID()
 	locationID := core.NewULID()

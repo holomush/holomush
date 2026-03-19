@@ -250,6 +250,14 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 		}, nil
 	}
 
+	// Record command in session history (best-effort)
+	if appendErr := s.sessionStore.AppendCommand(ctx, req.SessionId, req.Command, info.MaxHistory); appendErr != nil {
+		slog.WarnContext(ctx, "command history append failed",
+			"session_id", req.SessionId,
+			"error", appendErr,
+		)
+	}
+
 	// Parse and execute command
 	output, err := s.executeCommand(ctx, info, req.Command)
 	if err != nil {
