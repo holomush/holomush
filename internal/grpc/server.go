@@ -466,6 +466,17 @@ func (s *CoreServer) replayMissedEvents(
 					Wrap(err)
 			}
 			s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
+
+			// Persist cursor to store (best-effort, non-blocking).
+			// context.Background() is intentional: request ctx may be cancelled before
+			// the goroutine runs, but we still want the durable cursor write to complete.
+			//nolint:gosec // G118: intentional use of Background ctx for post-request durability
+			go func(sid string, streamName string, eventID ulid.ULID) {
+				if err := s.sessionStore.UpdateCursors(context.Background(), sid,
+					map[string]ulid.ULID{streamName: eventID}); err != nil {
+					slog.Warn("cursor persist failed", "session_id", sid, "error", err)
+				}
+			}(info.ID, ev.Stream, ev.ID)
 		}
 
 		slog.DebugContext(ctx, "replayed events",
@@ -505,6 +516,17 @@ drained:
 				Wrap(err)
 		}
 		s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
+
+		// Persist cursor to store (best-effort, non-blocking).
+		// context.Background() is intentional: request ctx may be cancelled before
+		// the goroutine runs, but we still want the durable cursor write to complete.
+		//nolint:gosec // G118: intentional use of Background ctx for post-request durability
+		go func(sid string, streamName string, eventID ulid.ULID) {
+			if err := s.sessionStore.UpdateCursors(context.Background(), sid,
+				map[string]ulid.ULID{streamName: eventID}); err != nil {
+				slog.Warn("cursor persist failed", "session_id", sid, "error", err)
+			}
+		}(info.ID, ev.Stream, ev.ID)
 	}
 
 	return nil
@@ -536,6 +558,17 @@ func (s *CoreServer) forwardLiveEvents(
 			}
 
 			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
+
+			// Persist cursor to store (best-effort, non-blocking).
+			// context.Background() is intentional: request ctx may be cancelled before
+			// the goroutine runs, but we still want the durable cursor write to complete.
+			//nolint:gosec // G118: intentional use of Background ctx for post-request durability
+			go func(sid string, streamName string, eventID ulid.ULID) {
+				if err := s.sessionStore.UpdateCursors(context.Background(), sid,
+					map[string]ulid.ULID{streamName: eventID}); err != nil {
+					slog.Warn("cursor persist failed", "session_id", sid, "error", err)
+				}
+			}(sessionID, event.Stream, event.ID)
 
 			if err := stream.Send(eventToProto(event)); err != nil {
 				slog.WarnContext(ctx, "failed to send event",
