@@ -387,7 +387,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
 		// Create and register Core service with guest authentication + cleanup hook
-		sessionStore := session.NewMemStore()
+		sessionStore := store.NewPostgresSessionStore(realStore.Pool())
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
