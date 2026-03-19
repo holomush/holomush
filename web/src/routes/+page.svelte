@@ -12,6 +12,11 @@
   let events: Array<{ type: string; characterName: string; text: string }> = $state([]);
   let error = $state("");
 
+  // AbortController cancels the active StreamEvents when disconnecting.
+  // Without this, old streams keep running after reconnect (causing dupes)
+  // and the UI stays "connected" after server restarts.
+  let streamAbort: AbortController | null = null;
+
   async function login() {
     error = "";
     try {
@@ -30,8 +35,15 @@
   }
 
   async function startEventStream() {
+    streamAbort?.abort();
+    const abort = new AbortController();
+    streamAbort = abort;
+
     try {
-      for await (const resp of client.streamEvents({ sessionId })) {
+      for await (const resp of client.streamEvents(
+        { sessionId },
+        { signal: abort.signal },
+      )) {
         const ev = resp.event;
         if (!ev) continue;
         events = [
@@ -43,8 +55,17 @@
           },
         ];
       }
+      // Stream ended cleanly (server closed it)
+      if (connected && !abort.signal.aborted) {
+        error = "Connection to server lost.";
+        connected = false;
+      }
     } catch {
-      // Stream ended
+      // Stream cancelled (disconnect) or network error
+      if (connected && !abort.signal.aborted) {
+        error = "Connection to server lost.";
+        connected = false;
+      }
     }
   }
 
@@ -60,6 +81,8 @@
   }
 
   async function disconnect() {
+    streamAbort?.abort();
+    streamAbort = null;
     try {
       await client.disconnect({ sessionId });
     } catch {
