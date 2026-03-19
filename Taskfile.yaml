@@ -172,15 +172,15 @@ tasks:
       - go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - go tool cover -html=coverage.out -o coverage.html
 
+  test:integration:
+    desc: Run integration tests (requires Docker for testcontainers)
+    cmds:
+      - go test -race -v -tags=integration -count=1 ./internal/store/ ./test/integration/...
+
   test:short:
     desc: Run short tests only
     cmds:
       - go test -short -v ./...
-
-  test:integration:
-    desc: Run integration tests (requires Docker)
-    cmds:
-      - go test -race -v -tags=integration ./...
 
   test:ginkgo:
     desc: Run ginkgo integration tests with parallelism
