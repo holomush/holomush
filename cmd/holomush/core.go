@@ -47,13 +47,16 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	GRPCAddr           string `koanf:"grpc_addr"`
-	ControlAddr        string `koanf:"control_addr"`
-	MetricsAddr        string `koanf:"metrics_addr"`
-	DataDir            string `koanf:"data_dir"`
-	GameID             string `koanf:"game_id"`
-	LogFormat          string `koanf:"log_format"`
-	SkipSeedMigrations bool   `koanf:"skip_seed_migrations"`
+	GRPCAddr               string `koanf:"grpc_addr"`
+	ControlAddr            string `koanf:"control_addr"`
+	MetricsAddr            string `koanf:"metrics_addr"`
+	DataDir                string `koanf:"data_dir"`
+	GameID                 string `koanf:"game_id"`
+	LogFormat              string `koanf:"log_format"`
+	SkipSeedMigrations     bool   `koanf:"skip_seed_migrations"`
+	SessionTTL             string `koanf:"session_ttl"`
+	SessionMaxHistory      int    `koanf:"session_max_history"`
+	SessionReaperInterval  string `koanf:"session_reaper_interval"`
 }
 
 // Validate checks that the configuration is valid.
@@ -106,6 +109,9 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.GameID, "game-id", "", "game ID (default: auto-generated from database)")
 	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", defaultLogFormat, "log format (json or text)")
 	cmd.Flags().BoolVar(&cfg.SkipSeedMigrations, "skip-seed-migrations", false, "disable automatic seed policy version upgrades during bootstrap")
+	cmd.Flags().StringVar(&cfg.SessionTTL, "session-ttl", "30m", "default session TTL after disconnect")
+	cmd.Flags().IntVar(&cfg.SessionMaxHistory, "session-max-history", 500, "max command history entries per session")
+	cmd.Flags().StringVar(&cfg.SessionReaperInterval, "session-reaper-interval", "30s", "session reaper check interval")
 
 	return cmd
 }
@@ -342,11 +348,31 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	slog.Info("TLS certificates ready", "certs_dir", certsDir)
 
+	// Parse session configuration durations (apply defaults for empty values)
+	if cfg.SessionTTL == "" {
+		cfg.SessionTTL = "30m"
+	}
+	sessionTTL, err := time.ParseDuration(cfg.SessionTTL)
+	if err != nil {
+		return oops.Code("CONFIG_INVALID").With("field", "session_ttl").Wrap(err)
+	}
+	if cfg.SessionReaperInterval == "" {
+		cfg.SessionReaperInterval = "30s"
+	}
+	reaperInterval, err := time.ParseDuration(cfg.SessionReaperInterval)
+	if err != nil {
+		return oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Wrap(err)
+	}
+	if cfg.SessionMaxHistory <= 0 {
+		cfg.SessionMaxHistory = 500
+	}
+
 	// For testing, we need the event store to be *store.PostgresEventStore
 	// to pass to core.NewEngine. In production, this is always the case.
 	// In tests with mocks, we skip the gRPC server creation.
 	var grpcServer *grpc.Server
 	var netListener net.Listener
+	var sessionReaper *session.Reaper
 
 	// Only create gRPC server if we have a real event store
 	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
@@ -364,6 +390,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		sessionStore := session.NewMemStore()
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
+			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
+				TTL:        sessionTTL,
+				MaxHistory: cfg.SessionMaxHistory,
+			}),
 			holoGRPC.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)
@@ -371,6 +401,27 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			}),
 		)
 		corev1.RegisterCoreServer(grpcServer, coreServer)
+
+		// Start session reaper
+		sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{
+			Interval: reaperInterval,
+			OnExpired: func(info *session.Info) {
+				// Emit leave event
+				char := core.CharacterRef{
+					ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
+				}
+				if dcErr := engine.HandleDisconnect(ctx, char, "session expired"); dcErr != nil {
+					slog.Warn("reaper: leave event failed",
+						"session_id", info.ID,
+						"error", dcErr,
+					)
+				}
+				// Release guest character
+				if info.IsGuest {
+					guestAuth.ReleaseGuest(info.CharacterName)
+				}
+			},
+		})
 
 		// Start gRPC listener
 		netListener, err = net.Listen("tcp", cfg.GRPCAddr)
@@ -389,6 +440,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Set up graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Start session reaper goroutine (if created)
+	if sessionReaper != nil {
+		go sessionReaper.Run(ctx)
+	}
 
 	// Start control gRPC server (always enabled)
 	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "core")

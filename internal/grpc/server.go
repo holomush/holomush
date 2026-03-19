@@ -37,6 +37,12 @@ type Authenticator interface {
 	Authenticate(ctx context.Context, username, password string) (*AuthResult, error)
 }
 
+// SessionDefaults configures default values for new sessions.
+type SessionDefaults struct {
+	TTL        time.Duration
+	MaxHistory int
+}
+
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
 	corev1.UnimplementedCoreServer
@@ -46,6 +52,7 @@ type CoreServer struct {
 	broadcaster     *core.Broadcaster
 	authenticator   Authenticator
 	sessionStore    session.Store
+	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
@@ -66,6 +73,13 @@ func WithAuthenticator(auth Authenticator) CoreServerOption {
 func WithSessionStore(store session.Store) CoreServerOption {
 	return func(s *CoreServer) {
 		s.sessionStore = store
+	}
+}
+
+// WithSessionDefaults sets the default session parameters.
+func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
+	return func(s *CoreServer) {
+		s.sessionDefaults = defaults
 	}
 }
 
@@ -136,6 +150,15 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 
 	// Store session info for command processing
 	now := time.Now()
+	ttlSeconds := int(s.sessionDefaults.TTL.Seconds())
+	if ttlSeconds <= 0 {
+		ttlSeconds = 1800 // fallback
+	}
+	maxHistory := s.sessionDefaults.MaxHistory
+	if maxHistory <= 0 {
+		maxHistory = 500 // fallback
+	}
+
 	sessionInfo := &session.Info{
 		ID:            sessionID.String(),
 		CharacterID:   result.CharacterID,
@@ -145,8 +168,8 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		Status:        session.StatusActive,
 		GridPresent:   true,
 		EventCursors:  map[string]ulid.ULID{},
-		TTLSeconds:    1800,
-		MaxHistory:    500,
+		TTLSeconds:    ttlSeconds,
+		MaxHistory:    maxHistory,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
