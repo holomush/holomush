@@ -163,9 +163,6 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		clientType = "terminal"
 	}
 
-	// Connect to session manager
-	s.sessions.Connect(result.CharacterID, connID)
-
 	// Store session info for command processing
 	now := time.Now()
 	ttlSeconds := int(s.sessionDefaults.TTL.Seconds())
@@ -204,6 +201,9 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 			Error:   "session creation failed",
 		}, nil
 	}
+
+	// Connect to session manager (after successful persistence to avoid orphaned state)
+	s.sessions.Connect(result.CharacterID, connID)
 
 	// Register connection with client type
 	connInfo := &session.Connection{
