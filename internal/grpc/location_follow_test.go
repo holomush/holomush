@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/holomush/holomush/internal/session"
+
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -244,7 +246,17 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 		},
 	}
 
-	lf := &locationFollower{worldQuerier: wq}
+	// Presence comes from active sessions at the location, not character repo.
+	ss := session.NewMemStore()
+	_ = ss.Set(context.Background(), "s1", &session.Info{
+		ID:            "s1",
+		CharacterID:   charID,
+		CharacterName: "Alice",
+		LocationID:    locID,
+		Status:        session.StatusActive,
+	})
+
+	lf := &locationFollower{worldQuerier: wq, sessionStore: ss}
 	ev, err := lf.buildLocationState(context.Background(), locID)
 	require.NoError(t, err)
 	require.NotNil(t, ev)
@@ -258,6 +270,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, "Hall", payload.Location.Name)
 	assert.Len(t, payload.Exits, 1)
 	assert.Len(t, payload.Present, 1)
+	assert.Equal(t, "Alice", payload.Present[0].Name)
 }
 
 func TestConvertExits_GRPCPackage(t *testing.T) {

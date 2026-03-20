@@ -31,6 +31,7 @@ type locationFollower struct {
 	characterID  ulid.ULID
 	currentLocID ulid.ULID
 	worldQuerier WorldQuerier
+	sessionStore session.Store
 	broadcaster  *core.Broadcaster
 }
 
@@ -104,9 +105,23 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 		return nil, oops.With("location_id", locationID.String()).Wrap(err)
 	}
 
-	chars, err := lf.worldQuerier.GetCharactersByLocation(ctx, systemSubjectID, locationID, world.ListOptions{})
-	if err != nil {
-		return nil, oops.With("location_id", locationID.String()).Wrap(err)
+	// Presence = active sessions at this location, not character repo entries.
+	// Guest characters exist only in sessions, not the character repository.
+	var present []core.LocationStateChar
+	if lf.sessionStore != nil {
+		sessions, sessErr := lf.sessionStore.ListActiveByLocation(ctx, locationID)
+		if sessErr != nil {
+			slog.WarnContext(ctx, "location_state: failed to list sessions at location",
+				"location_id", locationID.String(), "error", sessErr)
+		} else {
+			present = make([]core.LocationStateChar, 0, len(sessions))
+			for _, sess := range sessions {
+				present = append(present, core.LocationStateChar{
+					Name: sess.CharacterName,
+					Idle: false,
+				})
+			}
+		}
 	}
 
 	payload := core.LocationStatePayload{
@@ -116,7 +131,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 			Description: loc.Description,
 		},
 		Exits:   convertExits(exits),
-		Present: convertCharacters(chars),
+		Present: present,
 	}
 
 	payloadJSON, err := json.Marshal(payload)
