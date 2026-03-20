@@ -62,7 +62,7 @@ message HandleCommandRequest {
 message HandleCommandResponse {
   ResponseMeta meta = 1;
   bool success = 2;
-  string output = 3;
+  reserved 3; // was: string output (now delivered via command_response events)
   string error = 4;
 }
 

@@ -131,6 +131,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				eventRecv = ch
 			}
 			if h.quitting {
+				// Drain pending events briefly so the "Goodbye!" command_response
+				// (emitted by the quit RPC) reaches the client before we close.
+				h.drainEvents(eventRecv)
 				return
 			}
 
@@ -157,10 +160,10 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 	case "pose":
 		h.handlePose(ctx, arg)
 	case "quit":
-		h.handleQuit()
+		h.handleQuit(ctx)
 	default:
 		if cmd != "" {
-			h.send("Unknown command: " + cmd)
+			h.handleGenericCommand(ctx, cmd, arg)
 		}
 	}
 	return nil
@@ -267,7 +270,7 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 		h.send("Error: Your message could not be sent. Please try again.")
 		return
 	}
-	h.send(fmt.Sprintf("You say, %q", message))
+	// Output comes via broadcast say event on the location stream.
 }
 
 func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
@@ -291,12 +294,69 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 		h.send("Error: Your action could not be sent. Please try again.")
 		return
 	}
-	h.send(fmt.Sprintf("%s %s", h.charName, action))
+	// Output comes via broadcast pose event on the location stream.
 }
 
-func (h *GatewayHandler) handleQuit() {
-	h.send("Goodbye!")
+func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg string) {
+	if !h.authed {
+		h.send("Unknown command: " + cmd)
+		return
+	}
+
+	fullCmd := cmd
+	if arg != "" {
+		fullCmd = cmd + " " + arg
+	}
+
+	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cmdCancel()
+
+	if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
+		SessionId: h.sessionID,
+		Command:   fullCmd,
+	}); err != nil {
+		slog.Error("gateway: command failed", "session_id", h.sessionID, "command", cmd, "error", err)
+		h.send("Error processing command.")
+	}
+	// Output (or error) comes via command_response event on the character stream.
+}
+
+func (h *GatewayHandler) handleQuit(ctx context.Context) {
+	if h.authed {
+		// Forward quit to the server so it can emit events and clean up.
+		cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
+		defer cmdCancel()
+
+		if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
+			SessionId: h.sessionID,
+			Command:   "quit",
+		}); err != nil {
+			slog.Warn("gateway: quit command failed", "session_id", h.sessionID, "error", err)
+		}
+	}
 	h.quitting = true
+}
+
+// drainEvents reads from the event channel for a short window, forwarding any
+// pending events (e.g. the "Goodbye!" command_response from quit) to the client
+// before the connection closes.
+func (h *GatewayHandler) drainEvents(eventRecv <-chan *corev1.SubscribeResponse) {
+	if eventRecv == nil {
+		return
+	}
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		select {
+		case ev, ok := <-eventRecv:
+			if !ok {
+				return
+			}
+			h.sendProtoEvent(ev)
+		case <-timer.C:
+			return
+		}
+	}
 }
 
 func (h *GatewayHandler) send(msg string) {
@@ -330,6 +390,14 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.SubscribeResponse) {
 			return
 		}
 		h.send(fmt.Sprintf("%s %s", p.CharacterName, p.Action))
+
+	case string(core.EventTypeCommandResponse):
+		var p core.CommandResponsePayload
+		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
+			slog.Error("gateway: failed to unmarshal command_response payload", "error", err)
+			return
+		}
+		h.send(p.Text)
 
 	case string(core.EventTypeArrive):
 		// Arrival notifications are persisted but not yet displayed to clients.

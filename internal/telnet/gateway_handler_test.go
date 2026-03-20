@@ -32,6 +32,7 @@ type mockCoreClient struct {
 
 	cmdResp *corev1.HandleCommandResponse
 	cmdErr  error
+	cmdFn   func(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
 
 	subStream corev1.CoreService_SubscribeClient
 	subErr    error
@@ -44,7 +45,10 @@ func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateR
 	return m.authResp, m.authErr
 }
 
-func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+func (m *mockCoreClient) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+	if m.cmdFn != nil {
+		return m.cmdFn(ctx, req)
+	}
 	return m.cmdResp, m.cmdErr
 }
 
@@ -113,24 +117,23 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	line = strings.TrimRight(line, "\r\n")
 	assert.Contains(t, line, "Guest-7")
 
-	// Disconnect cleanly.
+	// Disconnect cleanly. "Goodbye!" is now delivered via event stream,
+	// not inline — the handler just exits.
 	_, err = clientConn.Write([]byte("quit\n"))
 	require.NoError(t, err)
-
-	// Read goodbye.
-	line, err = r.ReadString('\n')
-	require.NoError(t, err)
-	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Goodbye")
 
 	<-done
 }
 
 // TestGatewayHandler_SayCommand verifies that after authentication a "say"
-// command echoes back in the correct format.
+// command is forwarded to the server. Output is no longer echoed inline — it
+// arrives via broadcast events on the location stream.
 func TestGatewayHandler_SayCommand(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 
+	var receivedCmd string
+	cmdCalled := make(chan struct{})
 	client := &mockCoreClient{
 		authResp: &corev1.AuthenticateResponse{
 			Success:       true,
@@ -138,7 +141,11 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 			CharacterId:   "char-2",
 			CharacterName: "Tester",
 		},
-		cmdResp: &corev1.HandleCommandResponse{Success: true},
+		cmdFn: func(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+			receivedCmd = req.GetCommand()
+			close(cmdCalled)
+			return &corev1.HandleCommandResponse{Success: true}, nil
+		},
 		// Prevent Subscribe goroutine from launching.
 		subErr:   errors.New("no subscribe in this test"),
 		discResp: &corev1.DisconnectResponse{Success: true},
@@ -166,19 +173,16 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	_, err = r.ReadString('\n')
 	require.NoError(t, err)
 
-	// Say something.
+	// Say something — the command is forwarded to the server.
 	_, err = clientConn.Write([]byte("say Hello world\n"))
 	require.NoError(t, err)
 
-	// Read echo.
-	line, err := r.ReadString('\n')
-	require.NoError(t, err)
-	line = strings.TrimRight(line, "\r\n")
-	assert.Equal(t, `You say, "Hello world"`, line)
+	// Wait for the command to reach the server.
+	<-cmdCalled
+	assert.Equal(t, "say Hello world", receivedCmd)
 
 	// Clean up.
-	_, _ = clientConn.Write([]byte("quit\n"))
-	_, _ = r.ReadString('\n')
+	cancel()
 	<-done
 }
 

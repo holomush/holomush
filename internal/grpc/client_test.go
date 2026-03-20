@@ -65,7 +65,6 @@ func (m *mockCoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCo
 			Timestamp: timestamppb.Now(),
 		},
 		Success: true,
-		Output:  "Command executed: " + req.GetCommand(),
 	}, nil
 }
 
@@ -232,7 +231,6 @@ func TestClient_HandleCommand(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
-	assert.Equal(t, "Command executed: look", resp.GetOutput())
 }
 
 func TestClient_Disconnect(t *testing.T) {

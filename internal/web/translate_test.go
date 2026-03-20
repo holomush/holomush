@@ -213,6 +213,32 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 	assert.Len(t, exits, 1)
 }
 
+func TestTranslateEvent_CommandResponse(t *testing.T) {
+	ev := &corev1.SubscribeResponse{
+		Type:    "command_response",
+		Payload: mustMarshal(t, map[string]interface{}{"text": "Goodbye!", "is_error": false}),
+	}
+
+	got := translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "command_response", got.GetType())
+	assert.Equal(t, "Goodbye!", got.GetText())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+}
+
+func TestTranslateEvent_CommandResponseError(t *testing.T) {
+	ev := &corev1.SubscribeResponse{
+		Type:    "command_response",
+		Payload: mustMarshal(t, map[string]interface{}{"text": "Unknown command: foo", "is_error": true}),
+	}
+
+	got := translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "command_error", got.GetType())
+	assert.Equal(t, "Unknown command: foo", got.GetText())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+}
+
 func TestTranslateEvent_Unknown(t *testing.T) {
 	ev := &corev1.SubscribeResponse{
 		Type:    "teleport",

@@ -355,7 +355,6 @@ type HandleCommandResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
-	Output        string                 `protobuf:"bytes,3,opt,name=output,proto3" json:"output,omitempty"`
 	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -403,13 +402,6 @@ func (x *HandleCommandResponse) GetSuccess() bool {
 		return x.Success
 	}
 	return false
-}
-
-func (x *HandleCommandResponse) GetOutput() string {
-	if x != nil {
-		return x.Output
-	}
-	return ""
 }
 
 func (x *HandleCommandResponse) GetError() string {
@@ -723,12 +715,11 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
-	"\acommand\x18\x03 \x01(\tR\acommand\"\x93\x01\n" +
+	"\acommand\x18\x03 \x01(\tR\acommand\"\x81\x01\n" +
 	"\x15HandleCommandResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x16\n" +
-	"\x06output\x18\x03 \x01(\tR\x06output\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"\xac\x01\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05errorJ\x04\b\x03\x10\x04\"\xac\x01\n" +
 	"\x10SubscribeRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +

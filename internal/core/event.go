@@ -29,6 +29,9 @@ const (
 	EventTypeObjectExamine EventType = "object_examine"
 	EventTypeObjectGive    EventType = "object_give"
 
+	// Command response event type
+	EventTypeCommandResponse EventType = "command_response"
+
 	// UI state event types
 	EventTypeLocationState EventType = "location_state"
 	EventTypeExitUpdate    EventType = "exit_update"
