@@ -28,7 +28,45 @@ const (
 	EventTypeObjectUse     EventType = "object_use"
 	EventTypeObjectExamine EventType = "object_examine"
 	EventTypeObjectGive    EventType = "object_give"
+
+	// UI state event types
+	EventTypeRoomState  EventType = "room_state"
+	EventTypeExitUpdate EventType = "exit_update"
 )
+
+// RoomStatePayload is the JSON payload for room_state events, providing a
+// full snapshot of the character's current location.
+type RoomStatePayload struct {
+	Location RoomStateLocation `json:"location"`
+	Exits    []RoomStateExit   `json:"exits"`
+	Present  []RoomStateChar   `json:"present"`
+}
+
+// RoomStateLocation describes the location in a room_state event.
+type RoomStateLocation struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// RoomStateExit describes an exit visible from the current location.
+type RoomStateExit struct {
+	Direction string `json:"direction"`
+	Name      string `json:"name"`
+	Locked    bool   `json:"locked"`
+}
+
+// RoomStateChar describes a character present in the current location.
+type RoomStateChar struct {
+	Name string `json:"name"`
+	Idle bool   `json:"idle"`
+}
+
+// ExitUpdatePayload is the JSON payload for exit_update events, providing a
+// delta update to the exits in the current location.
+type ExitUpdatePayload struct {
+	Exits []RoomStateExit `json:"exits"`
+}
 
 // ActorKind identifies what type of entity caused an event.
 type ActorKind uint8
