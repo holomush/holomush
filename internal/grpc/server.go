@@ -643,7 +643,6 @@ drainLoop:
 	return nil
 }
 
-
 // Disconnect removes a connection and handles session lifecycle.
 // When all terminal/telnet connections close but comms_hub remains, the
 // character phases out (leave event) but the session stays active.

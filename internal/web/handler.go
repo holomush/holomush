@@ -66,7 +66,6 @@ func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) HandlerOption {
 	return func(h *Handler) { h.tokenRepo = repo }
 }
 
-
 // NewHandler creates a new Handler with the given core client and options.
 func NewHandler(client CoreClient, opts ...HandlerOption) *Handler {
 	h := &Handler{client: client}

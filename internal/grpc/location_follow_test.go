@@ -59,8 +59,8 @@ func (s *capturingStream) Context() context.Context {
 func (s *capturingStream) SetHeader(_ metadata.MD) error  { return nil }
 func (s *capturingStream) SendHeader(_ metadata.MD) error { return nil }
 func (s *capturingStream) SetTrailer(_ metadata.MD)       {}
-func (s *capturingStream) SendMsg(_ interface{}) error     { return nil }
-func (s *capturingStream) RecvMsg(_ interface{}) error     { return nil }
+func (s *capturingStream) SendMsg(_ interface{}) error    { return nil }
+func (s *capturingStream) RecvMsg(_ interface{}) error    { return nil }
 
 func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	charID := ulid.Make()
@@ -275,4 +275,3 @@ func TestConvertExits_GRPCPackage(t *testing.T) {
 	assert.Equal(t, "south", result[1].Direction)
 	assert.True(t, result[1].Locked)
 }
-

@@ -48,16 +48,16 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	GRPCAddr               string `koanf:"grpc_addr"`
-	ControlAddr            string `koanf:"control_addr"`
-	MetricsAddr            string `koanf:"metrics_addr"`
-	DataDir                string `koanf:"data_dir"`
-	GameID                 string `koanf:"game_id"`
-	LogFormat              string `koanf:"log_format"`
-	SkipSeedMigrations     bool   `koanf:"skip_seed_migrations"`
-	SessionTTL             string `koanf:"session_ttl"`
-	SessionMaxHistory      int    `koanf:"session_max_history"`
-	SessionReaperInterval  string `koanf:"session_reaper_interval"`
+	GRPCAddr              string `koanf:"grpc_addr"`
+	ControlAddr           string `koanf:"control_addr"`
+	MetricsAddr           string `koanf:"metrics_addr"`
+	DataDir               string `koanf:"data_dir"`
+	GameID                string `koanf:"game_id"`
+	LogFormat             string `koanf:"log_format"`
+	SkipSeedMigrations    bool   `koanf:"skip_seed_migrations"`
+	SessionTTL            string `koanf:"session_ttl"`
+	SessionMaxHistory     int    `koanf:"session_max_history"`
+	SessionReaperInterval string `koanf:"session_reaper_interval"`
 }
 
 // Validate checks that the configuration is valid.

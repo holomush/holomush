@@ -65,7 +65,7 @@ func TestDocumentedEventTypes(t *testing.T) {
 		string(EventTypeObjectUse):     true,
 		string(EventTypeObjectExamine): true,
 		string(EventTypeObjectGive):    true,
-		string(EventTypeLocationState):     true,
+		string(EventTypeLocationState): true,
 		string(EventTypeExitUpdate):    true,
 	}
 

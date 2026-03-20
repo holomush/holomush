@@ -119,7 +119,8 @@ func (m *MemStore) ListExpired(_ context.Context) ([]*Info, error) {
 
 // UpdateStatus transitions a session's status.
 func (m *MemStore) UpdateStatus(_ context.Context, id string, status Status,
-	detachedAt *time.Time, expiresAt *time.Time) error {
+	detachedAt *time.Time, expiresAt *time.Time,
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

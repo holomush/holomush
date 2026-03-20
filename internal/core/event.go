@@ -37,7 +37,7 @@ const (
 // LocationStatePayload is the JSON payload for location_state events, providing
 // a full snapshot of the character's current location.
 type LocationStatePayload struct {
-	Location LocationStateInfo `json:"location"`
+	Location LocationStateInfo   `json:"location"`
 	Exits    []LocationStateExit `json:"exits"`
 	Present  []LocationStateChar `json:"present"`
 }

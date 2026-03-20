@@ -90,3 +90,4 @@ site/.venv/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+web/test-results/

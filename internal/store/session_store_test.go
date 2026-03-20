@@ -24,21 +24,21 @@ import (
 func testSessionInfo() *session.Info {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	return &session.Info{
-		ID:            "sess-abc",
-		CharacterID:   core.NewULID(),
-		CharacterName: "TestChar",
-		LocationID:    core.NewULID(),
-		IsGuest:       false,
-		Status:        session.StatusActive,
-		GridPresent:   true,
-		EventCursors:  map[string]ulid.ULID{"location:room-1": core.NewULID()},
+		ID:             "sess-abc",
+		CharacterID:    core.NewULID(),
+		CharacterName:  "TestChar",
+		LocationID:     core.NewULID(),
+		IsGuest:        false,
+		Status:         session.StatusActive,
+		GridPresent:    true,
+		EventCursors:   map[string]ulid.ULID{"location:room-1": core.NewULID()},
 		CommandHistory: []string{"look", "say hello"},
-		TTLSeconds:    3600,
-		MaxHistory:    50,
-		DetachedAt:    nil,
-		ExpiresAt:     nil,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		TTLSeconds:     3600,
+		MaxHistory:     50,
+		DetachedAt:     nil,
+		ExpiresAt:      nil,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 }
 
@@ -262,20 +262,20 @@ func TestPostgresSessionStore_Set_NilCommandHistory(t *testing.T) {
 
 	mock.ExpectExec(`INSERT INTO sessions`).
 		WithArgs(
-			pgxmock.AnyArg(), // id
-			pgxmock.AnyArg(), // character_id
-			pgxmock.AnyArg(), // character_name
-			pgxmock.AnyArg(), // location_id
-			pgxmock.AnyArg(), // is_guest
-			pgxmock.AnyArg(), // status
-			pgxmock.AnyArg(), // grid_present
-			pgxmock.AnyArg(), // event_cursors
+			pgxmock.AnyArg(),     // id
+			pgxmock.AnyArg(),     // character_id
+			pgxmock.AnyArg(),     // character_name
+			pgxmock.AnyArg(),     // location_id
+			pgxmock.AnyArg(),     // is_guest
+			pgxmock.AnyArg(),     // status
+			pgxmock.AnyArg(),     // grid_present
+			pgxmock.AnyArg(),     // event_cursors
 			nonNilSliceMatcher{}, // command_history: MUST be non-nil
-			pgxmock.AnyArg(), // ttl_seconds
-			pgxmock.AnyArg(), // max_history
-			pgxmock.AnyArg(), // detached_at
-			pgxmock.AnyArg(), // expires_at
-			pgxmock.AnyArg(), // created_at
+			pgxmock.AnyArg(),     // ttl_seconds
+			pgxmock.AnyArg(),     // max_history
+			pgxmock.AnyArg(),     // detached_at
+			pgxmock.AnyArg(),     // expires_at
+			pgxmock.AnyArg(),     // created_at
 		).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
@@ -343,12 +343,12 @@ func TestPostgresSessionStore_FindByCharacter(t *testing.T) {
 	charID := info.CharacterID
 
 	tests := []struct {
-		name    string
-		charID  ulid.ULID
+		name      string
+		charID    ulid.ULID
 		setupMock func(mock pgxmock.PgxPoolIface)
-		wantErr bool
-		errCode string
-		check   func(t *testing.T, got *session.Info)
+		wantErr   bool
+		errCode   string
+		check     func(t *testing.T, got *session.Info)
 	}{
 		{
 			name:   "happy path",

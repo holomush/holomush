@@ -264,7 +264,8 @@ func (s *PostgresSessionStore) ListExpired(ctx context.Context) ([]*session.Info
 
 // UpdateStatus transitions a session's status.
 func (s *PostgresSessionStore) UpdateStatus(ctx context.Context, id string, status session.Status,
-	detachedAt *time.Time, expiresAt *time.Time) error {
+	detachedAt *time.Time, expiresAt *time.Time,
+) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET status = $1, detached_at = $2, expires_at = $3, updated_at = now() WHERE id = $4`,
 		string(status), detachedAt, expiresAt, id)
@@ -331,9 +332,9 @@ func (s *PostgresSessionStore) GetCommandHistory(ctx context.Context, id string)
 
 // validClientTypes is the set of allowed client_type values.
 var validClientTypes = map[string]bool{
-	"terminal":   true,
-	"comms_hub":  true,
-	"telnet":     true,
+	"terminal":  true,
+	"comms_hub": true,
+	"telnet":    true,
 }
 
 // AddConnection registers a new connection to a session.
