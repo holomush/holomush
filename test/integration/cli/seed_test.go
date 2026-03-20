@@ -20,7 +20,7 @@ var _ = Describe("Seed Command", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		cleanupDatabase(ctx, env.pool)
+		cleanupDatabase(ctx, env.connStr)
 	})
 
 	Describe("World seeding", func() {

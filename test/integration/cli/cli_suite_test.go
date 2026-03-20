@@ -7,6 +7,8 @@ package cli_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -16,6 +18,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/holomush/holomush/internal/store"
 )
 
 func TestCLI(t *testing.T) {
@@ -92,32 +96,18 @@ func (e *testEnv) cleanup() {
 	}
 }
 
-// cleanupDatabase removes all data from the test database.
-func cleanupDatabase(ctx context.Context, pool *pgxpool.Pool) {
-	// Drop all tables to start fresh (migrations will recreate them)
-	// Tables are listed in reverse dependency order for clean CASCADE drops
-	tables := []string{
-		"scene_participants",
-		"sessions",
-		"characters",
-		"exits",
-		"objects",
-		"scenes",
-		"locations",
-		"players",
-		"events",
-		"web_sessions",
-		"password_resets",
-		"system_aliases",
-		"player_aliases",
-		"access_audit_log",
-		"access_policy_versions",
-		"access_policies",
-		"entity_properties",
-		"holomush_system_info",
-		"schema_migrations",
+// cleanupDatabase rolls back all migrations to start fresh.
+// Uses Migrator.Down() instead of a hardcoded table list to stay in sync
+// with the migration files automatically.
+func cleanupDatabase(_ context.Context, connStr string) {
+	m, err := store.NewMigrator(connStr)
+	if err != nil {
+		// Best-effort cleanup — log but don't fail
+		fmt.Fprintf(os.Stderr, "cleanupDatabase: failed to create migrator: %v\n", err)
+		return
 	}
-	for _, table := range tables {
-		_, _ = pool.Exec(ctx, "DROP TABLE IF EXISTS "+table+" CASCADE")
+	defer m.Close()
+	if err := m.Down(); err != nil {
+		fmt.Fprintf(os.Stderr, "cleanupDatabase: failed to roll back migrations: %v\n", err)
 	}
 }
