@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/samber/oops"
@@ -54,7 +55,11 @@ var _ = Describe("ABAC Full Evaluation Path (Canary)", func() {
 
 		decision := evalAccess("character:"+charID.String(), "read", "character:"+charID.String())
 		Expect(decision.Effect()).To(Equal(types.EffectAllow))
-		Expect(env.auditWriter.Entries()).NotTo(BeEmpty())
+		// Allow entries are written asynchronously via a buffered channel;
+		// poll until the async consumer has flushed the entry to the writer.
+		Eventually(func() []audit.Entry {
+			return env.auditWriter.Entries()
+		}).WithTimeout(2 * time.Second).WithPolling(10 * time.Millisecond).ShouldNot(BeEmpty())
 
 		decision = evalAccess("character:"+charID.String(), "destroy", "location:"+locID.String())
 		Expect(decision.Effect()).To(Equal(types.EffectDefaultDeny))

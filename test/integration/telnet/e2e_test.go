@@ -116,12 +116,17 @@ func connectAsGuest(c *testTelnetClient) string {
 }
 
 // waitForPipeline sends a probe command and waits for the echo, proving the
-// full command→event subscription pipeline is ready. Peers drain the broadcast
-// so probe messages don't leak into subsequent assertions.
+// full command→event subscription pipeline is ready. Both the sender's own
+// broadcast (via the event stream) and peers' broadcasts are drained so probe
+// messages don't leak into subsequent assertions.
 func waitForPipeline(c *testTelnetClient, peers ...*testTelnetClient) {
 	probe := "__ready__:" + ulid.Make().String()
 	c.SendLine("say " + probe)
 	c.ReadUntil(fmt.Sprintf(`You say, "%s"`, probe), 5*time.Second)
+	// The sender also receives its own broadcast via the event stream as
+	// "<Name> says, "<probe>"". Drain it to prevent stale messages from
+	// interfering with subsequent ReadLine/ReadUntil assertions.
+	c.ReadUntil(probe, 5*time.Second)
 	for _, p := range peers {
 		p.ReadUntil(probe, 5*time.Second)
 	}
