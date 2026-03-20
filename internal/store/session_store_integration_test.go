@@ -291,12 +291,12 @@ var _ = Describe("PostgresSessionStore", func() {
 
 		It("counts connections by type", func() {
 			ctx := context.Background()
-			for _, ct := range []string{"telnet", "telnet", "web"} {
+			for _, ct := range []string{"telnet", "telnet", "comms_hub"} {
 				conn := &session.Connection{
 					ID:          ulid.Make(),
 					SessionID:   sessID,
 					ClientType:  ct,
-					Streams:     []string{"location:room1"},
+					Streams:     []string{"location:start"},
 					ConnectedAt: time.Now().UTC(),
 				}
 				err := sessionStore.AddConnection(ctx, conn)
@@ -307,9 +307,9 @@ var _ = Describe("PostgresSessionStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(telnetCount).To(Equal(2))
 
-			webCount, err := sessionStore.CountConnectionsByType(ctx, sessID, "web")
+			commsCount, err := sessionStore.CountConnectionsByType(ctx, sessID, "comms_hub")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(webCount).To(Equal(1))
+			Expect(commsCount).To(Equal(1))
 		})
 
 		It("cascades connection deletion when session is deleted", func() {
