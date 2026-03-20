@@ -8,16 +8,18 @@ test.describe('Terminal UI', () => {
     await page.goto('/terminal');
     await page.click('text=Connect as Guest');
     await expect(page.locator('.terminal-layout')).toBeVisible();
-    await expect(page.locator('.character')).toContainText(/Guest/);
+    // Guest characters get random names like "Beryl_Helium"
+    await expect(page.locator('.character')).toContainText(/\w+_\w+/);
   });
 
   test('sends commands and receives output', async ({ page }) => {
     await page.goto('/terminal');
     await page.click('text=Connect as Guest');
     const input = page.locator('textarea');
-    await input.fill('look');
+    // Use 'say' — it emits a say event to the stream (unlike 'look' which returns via RPC response)
+    await input.fill('say hello world');
     await input.press('Enter');
-    await expect(page.locator('.scrollback .event').first()).toBeVisible();
+    await expect(page.locator('[data-testid="event"]').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('sidebar toggles with Ctrl+B', async ({ page }) => {
