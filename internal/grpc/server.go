@@ -17,6 +17,7 @@ import (
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
@@ -882,6 +883,13 @@ func NewGRPCServer(tlsConfig *tls.Config) *grpc.Server {
 }
 
 // NewGRPCServerInsecure creates a new gRPC server without TLS (for testing).
+// Includes a permissive keepalive enforcement policy to prevent "too_many_pings"
+// rejections during long-running integration tests.
 func NewGRPCServerInsecure() *grpc.Server {
-	return grpc.NewServer()
+	return grpc.NewServer(
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 }
