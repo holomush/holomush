@@ -7,8 +7,8 @@ package holomush.control.v1;
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/control/v1;controlv1";
 
-// Control provides administrative operations for HoloMUSH processes.
-service Control {
+// ControlService provides administrative operations for HoloMUSH processes.
+service ControlService {
   // Shutdown initiates process shutdown.
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
 

@@ -10,17 +10,17 @@ import { ShutdownRequest, ShutdownResponse, StatusRequest, StatusResponse } from
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * Control provides administrative operations for HoloMUSH processes.
+ * ControlService provides administrative operations for HoloMUSH processes.
  *
- * @generated from service holomush.control.v1.Control
+ * @generated from service holomush.control.v1.ControlService
  */
-export const Control = {
-  typeName: "holomush.control.v1.Control",
+export const ControlService = {
+  typeName: "holomush.control.v1.ControlService",
   methods: {
     /**
      * Shutdown initiates process shutdown.
      *
-     * @generated from rpc holomush.control.v1.Control.Shutdown
+     * @generated from rpc holomush.control.v1.ControlService.Shutdown
      */
     shutdown: {
       name: "Shutdown",
@@ -31,7 +31,7 @@ export const Control = {
     /**
      * Status returns current process status.
      *
-     * @generated from rpc holomush.control.v1.Control.Status
+     * @generated from rpc holomush.control.v1.ControlService.Status
      */
     status: {
       name: "Status",

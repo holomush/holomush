@@ -22,147 +22,147 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Control_Shutdown_FullMethodName = "/holomush.control.v1.Control/Shutdown"
-	Control_Status_FullMethodName   = "/holomush.control.v1.Control/Status"
+	ControlService_Shutdown_FullMethodName = "/holomush.control.v1.ControlService/Shutdown"
+	ControlService_Status_FullMethodName   = "/holomush.control.v1.ControlService/Status"
 )
 
-// ControlClient is the client API for Control service.
+// ControlServiceClient is the client API for ControlService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Control provides administrative operations for HoloMUSH processes.
-type ControlClient interface {
+// ControlService provides administrative operations for HoloMUSH processes.
+type ControlServiceClient interface {
 	// Shutdown initiates process shutdown.
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
 	// Status returns current process status.
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 }
 
-type controlClient struct {
+type controlServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewControlClient(cc grpc.ClientConnInterface) ControlClient {
-	return &controlClient{cc}
+func NewControlServiceClient(cc grpc.ClientConnInterface) ControlServiceClient {
+	return &controlServiceClient{cc}
 }
 
-func (c *controlClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error) {
+func (c *controlServiceClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ShutdownResponse)
-	err := c.cc.Invoke(ctx, Control_Shutdown_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ControlService_Shutdown_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *controlClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+func (c *controlServiceClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StatusResponse)
-	err := c.cc.Invoke(ctx, Control_Status_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ControlService_Status_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ControlServer is the server API for Control service.
-// All implementations must embed UnimplementedControlServer
+// ControlServiceServer is the server API for ControlService service.
+// All implementations must embed UnimplementedControlServiceServer
 // for forward compatibility.
 //
-// Control provides administrative operations for HoloMUSH processes.
-type ControlServer interface {
+// ControlService provides administrative operations for HoloMUSH processes.
+type ControlServiceServer interface {
 	// Shutdown initiates process shutdown.
 	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)
 	// Status returns current process status.
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)
-	mustEmbedUnimplementedControlServer()
+	mustEmbedUnimplementedControlServiceServer()
 }
 
-// UnimplementedControlServer must be embedded to have
+// UnimplementedControlServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedControlServer struct{}
+type UnimplementedControlServiceServer struct{}
 
-func (UnimplementedControlServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
+func (UnimplementedControlServiceServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Shutdown not implemented")
 }
-func (UnimplementedControlServer) Status(context.Context, *StatusRequest) (*StatusResponse, error) {
+func (UnimplementedControlServiceServer) Status(context.Context, *StatusRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Status not implemented")
 }
-func (UnimplementedControlServer) mustEmbedUnimplementedControlServer() {}
-func (UnimplementedControlServer) testEmbeddedByValue()                 {}
+func (UnimplementedControlServiceServer) mustEmbedUnimplementedControlServiceServer() {}
+func (UnimplementedControlServiceServer) testEmbeddedByValue()                        {}
 
-// UnsafeControlServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ControlServer will
+// UnsafeControlServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ControlServiceServer will
 // result in compilation errors.
-type UnsafeControlServer interface {
-	mustEmbedUnimplementedControlServer()
+type UnsafeControlServiceServer interface {
+	mustEmbedUnimplementedControlServiceServer()
 }
 
-func RegisterControlServer(s grpc.ServiceRegistrar, srv ControlServer) {
-	// If the following call panics, it indicates UnimplementedControlServer was
+func RegisterControlServiceServer(s grpc.ServiceRegistrar, srv ControlServiceServer) {
+	// If the following call panics, it indicates UnimplementedControlServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Control_ServiceDesc, srv)
+	s.RegisterService(&ControlService_ServiceDesc, srv)
 }
 
-func _Control_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ControlService_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ShutdownRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ControlServer).Shutdown(ctx, in)
+		return srv.(ControlServiceServer).Shutdown(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Control_Shutdown_FullMethodName,
+		FullMethod: ControlService_Shutdown_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ControlServer).Shutdown(ctx, req.(*ShutdownRequest))
+		return srv.(ControlServiceServer).Shutdown(ctx, req.(*ShutdownRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Control_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ControlService_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StatusRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ControlServer).Status(ctx, in)
+		return srv.(ControlServiceServer).Status(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Control_Status_FullMethodName,
+		FullMethod: ControlService_Status_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ControlServer).Status(ctx, req.(*StatusRequest))
+		return srv.(ControlServiceServer).Status(ctx, req.(*StatusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Control_ServiceDesc is the grpc.ServiceDesc for Control service.
+// ControlService_ServiceDesc is the grpc.ServiceDesc for ControlService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Control_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "holomush.control.v1.Control",
-	HandlerType: (*ControlServer)(nil),
+var ControlService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "holomush.control.v1.ControlService",
+	HandlerType: (*ControlServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Shutdown",
-			Handler:    _Control_Shutdown_Handler,
+			Handler:    _ControlService_Shutdown_Handler,
 		},
 		{
 			MethodName: "Status",
-			Handler:    _Control_Status_Handler,
+			Handler:    _ControlService_Status_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

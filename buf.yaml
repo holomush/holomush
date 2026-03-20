@@ -2,6 +2,7 @@
 version: v2
 modules:
   - path: api/proto
+    name: buf.build/holomush/holomush
 deps:
   - buf.build/googleapis/googleapis
 lint:

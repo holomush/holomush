@@ -48,16 +48,16 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	GRPCAddr               string `koanf:"grpc_addr"`
-	ControlAddr            string `koanf:"control_addr"`
-	MetricsAddr            string `koanf:"metrics_addr"`
-	DataDir                string `koanf:"data_dir"`
-	GameID                 string `koanf:"game_id"`
-	LogFormat              string `koanf:"log_format"`
-	SkipSeedMigrations     bool   `koanf:"skip_seed_migrations"`
-	SessionTTL             string `koanf:"session_ttl"`
-	SessionMaxHistory      int    `koanf:"session_max_history"`
-	SessionReaperInterval  string `koanf:"session_reaper_interval"`
+	GRPCAddr              string `koanf:"grpc_addr"`
+	ControlAddr           string `koanf:"control_addr"`
+	MetricsAddr           string `koanf:"metrics_addr"`
+	DataDir               string `koanf:"data_dir"`
+	GameID                string `koanf:"game_id"`
+	LogFormat             string `koanf:"log_format"`
+	SkipSeedMigrations    bool   `koanf:"skip_seed_migrations"`
+	SessionTTL            string `koanf:"session_ttl"`
+	SessionMaxHistory     int    `koanf:"session_max_history"`
+	SessionReaperInterval string `koanf:"session_reaper_interval"`
 }
 
 // Validate checks that the configuration is valid.
@@ -250,6 +250,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
+	var worldService *world.Service // hoisted so it's available to CoreServer constructor
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
@@ -285,7 +286,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}()
 
 		// Build world.Service with ABAC engine
-		worldService := world.NewService(world.ServiceConfig{
+		worldService = world.NewService(world.ServiceConfig{
 			LocationRepo:  worldpostgres.NewLocationRepository(abacPool),
 			ExitRepo:      worldpostgres.NewExitRepository(abacPool),
 			ObjectRepo:    worldpostgres.NewObjectRepository(abacPool),
@@ -398,6 +399,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
+			holoGRPC.WithWorldQuerier(worldService),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,
@@ -408,7 +410,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				}
 			}),
 		)
-		corev1.RegisterCoreServer(grpcServer, coreServer)
+		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
 
 		// Start session reaper
 		sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{

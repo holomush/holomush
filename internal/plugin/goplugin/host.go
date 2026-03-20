@@ -79,7 +79,7 @@ type Host struct {
 type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
-	plugin   pluginv1.PluginClient
+	plugin   pluginv1.PluginServiceClient
 }
 
 // NewHost creates a new binary plugin host.
@@ -174,7 +174,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "dispense").Wrap(err)
 	}
 
-	pluginClient, ok := raw.(pluginv1.PluginClient)
+	pluginClient, ok := raw.(pluginv1.PluginServiceClient)
 	if !ok {
 		client.Kill()
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("plugin does not implement PluginClient")

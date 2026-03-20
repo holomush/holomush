@@ -112,15 +112,15 @@ func (m *mockGRPCClient) Close() error {
 	return nil
 }
 
-func (m *mockGRPCClient) Authenticate(_ context.Context, _ *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+func (m *mockGRPCClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
 	return nil, nil
 }
 
-func (m *mockGRPCClient) HandleCommand(_ context.Context, _ *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+func (m *mockGRPCClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	return nil, nil
 }
 
-func (m *mockGRPCClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error) {
+func (m *mockGRPCClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
 	return nil, nil
 }
 

@@ -4159,11 +4159,13 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.NoError(t, err)
 
-		// Verify event was emitted
-		require.Len(t, emitter.calls, 1)
-		call := emitter.calls[0]
-		assert.Equal(t, world.LocationStream(toLocID), call.Stream)
-		assert.Equal(t, "move", call.EventType)
+		// Character moves emit to both the destination location stream and
+		// the character's own stream (for location-following).
+		require.Len(t, emitter.calls, 2)
+		assert.Equal(t, world.LocationStream(toLocID), emitter.calls[0].Stream)
+		assert.Equal(t, "move", emitter.calls[0].EventType)
+		assert.Equal(t, world.CharacterStream(charID), emitter.calls[1].Stream)
+		assert.Equal(t, "move", emitter.calls[1].EventType)
 	})
 
 	t.Run("returns CHARACTER_NOT_FOUND when character does not exist", func(t *testing.T) {
@@ -4322,8 +4324,8 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		err := svc.MoveCharacter(ctx, subjectID, charID, toLocID)
 		require.NoError(t, err)
 
-		// Verify event was emitted with from_type "none"
-		require.Len(t, emitter.calls, 1)
+		// Character moves emit to both location and character stream
+		require.Len(t, emitter.calls, 2)
 		// Decode the payload to verify from_type
 		var payload world.MovePayload
 		err = json.Unmarshal(emitter.calls[0].Payload, &payload)

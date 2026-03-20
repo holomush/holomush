@@ -264,7 +264,8 @@ func (s *PostgresSessionStore) ListExpired(ctx context.Context) ([]*session.Info
 
 // UpdateStatus transitions a session's status.
 func (s *PostgresSessionStore) UpdateStatus(ctx context.Context, id string, status session.Status,
-	detachedAt *time.Time, expiresAt *time.Time) error {
+	detachedAt *time.Time, expiresAt *time.Time,
+) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET status = $1, detached_at = $2, expires_at = $3, updated_at = now() WHERE id = $4`,
 		string(status), detachedAt, expiresAt, id)
@@ -331,9 +332,9 @@ func (s *PostgresSessionStore) GetCommandHistory(ctx context.Context, id string)
 
 // validClientTypes is the set of allowed client_type values.
 var validClientTypes = map[string]bool{
-	"terminal":   true,
-	"comms_hub":  true,
-	"telnet":     true,
+	"terminal":  true,
+	"comms_hub": true,
+	"telnet":    true,
 }
 
 // AddConnection registers a new connection to a session.
@@ -402,4 +403,16 @@ func (s *PostgresSessionStore) UpdateGridPresent(ctx context.Context, id string,
 			With("session_id", id).Wrap(err)
 	}
 	return nil
+}
+
+// ListActiveByLocation returns active sessions whose location_id matches.
+func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locationID ulid.ULID) ([]*session.Info, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE location_id = $1 AND status = 'active'`,
+		locationID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list active by location").
+			With("location_id", locationID.String()).Wrap(err)
+	}
+	return scanSessions(rows)
 }

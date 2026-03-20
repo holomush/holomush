@@ -15,12 +15,12 @@ import (
 // TestPluginServiceInterface verifies the Plugin gRPC service interface exists.
 func TestPluginServiceInterface(_ *testing.T) {
 	// Verify the PluginServer interface has HandleEvent method
-	var _ pluginv1.PluginServer = (*mockPluginServer)(nil)
+	var _ pluginv1.PluginServiceServer = (*mockPluginServer)(nil)
 }
 
 // mockPluginServer implements PluginServer for compile-time verification.
 type mockPluginServer struct {
-	pluginv1.UnimplementedPluginServer
+	pluginv1.UnimplementedPluginServiceServer
 }
 
 func (m *mockPluginServer) HandleEvent(_ context.Context, req *pluginv1.HandleEventRequest) (*pluginv1.HandleEventResponse, error) {
@@ -48,12 +48,12 @@ func (m *mockPluginServer) HandleEvent(_ context.Context, req *pluginv1.HandleEv
 // TestHostFunctionsServiceInterface verifies the HostFunctions gRPC service interface exists.
 func TestHostFunctionsServiceInterface(_ *testing.T) {
 	// Verify the HostFunctionsServer interface has all expected methods
-	var _ pluginv1.HostFunctionsServer = (*mockHostFunctionsServer)(nil)
+	var _ pluginv1.HostFunctionsServiceServer = (*mockHostFunctionsServer)(nil)
 }
 
 // mockHostFunctionsServer implements HostFunctionsServer for compile-time verification.
 type mockHostFunctionsServer struct {
-	pluginv1.UnimplementedHostFunctionsServer
+	pluginv1.UnimplementedHostFunctionsServiceServer
 }
 
 func (m *mockHostFunctionsServer) EmitEvent(_ context.Context, _ *pluginv1.EmitEventRequest) (*pluginv1.EmitEventResponse, error) {
@@ -104,6 +104,6 @@ func (m *mockHostFunctionsServer) Log(_ context.Context, _ *pluginv1.LogRequest)
 // TestClientInterfaces verifies gRPC client interfaces exist.
 func TestClientInterfaces(t *testing.T) {
 	// These are type assertions that will fail at compile time if interfaces don't exist
-	assert.Nil(t, (pluginv1.PluginClient)(nil))
-	assert.Nil(t, (pluginv1.HostFunctionsClient)(nil))
+	assert.Nil(t, (pluginv1.PluginServiceClient)(nil))
+	assert.Nil(t, (pluginv1.HostFunctionsServiceClient)(nil))
 }

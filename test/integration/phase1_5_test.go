@@ -282,7 +282,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			// Create gRPC server with mTLS
 			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
-			corev1.RegisterCoreServer(env.grpcServer, coreServer)
+			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
 			// Start listening
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -317,7 +317,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			defer client.Close()
 
 			// Test connection by attempting to authenticate (will fail auth but confirms connection works)
-			resp, err := client.Authenticate(env.ctx, &corev1.AuthRequest{
+			resp, err := client.Authenticate(env.ctx, &corev1.AuthenticateRequest{
 				Username: "test",
 				Password: "test",
 			})
@@ -353,7 +353,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			// Create gRPC server with mTLS
 			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
-			corev1.RegisterCoreServer(env.grpcServer, coreServer)
+			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
 			// Start listening
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -393,7 +393,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			defer client.Close()
 
 			// Attempt RPC - should fail due to cert mismatch
-			_, err = client.Authenticate(env.ctx, &corev1.AuthRequest{
+			_, err = client.Authenticate(env.ctx, &corev1.AuthenticateRequest{
 				Username: "test",
 				Password: "test",
 			})
@@ -460,7 +460,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer conn.Close()
 
-			client := controlv1.NewControlClient(conn)
+			client := controlv1.NewControlServiceClient(conn)
 
 			// Test Status RPC
 			statusResp, err := client.Status(env.ctx, &controlv1.StatusRequest{})
@@ -516,7 +516,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 
 			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
-			corev1.RegisterCoreServer(env.grpcServer, coreServer)
+			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
 			Expect(err).NotTo(HaveOccurred())
@@ -548,7 +548,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			defer client.Close()
 
 			By("Step 6: Verify authentication works (RPC succeeds, auth fails as expected)")
-			resp, err := client.Authenticate(env.ctx, &corev1.AuthRequest{
+			resp, err := client.Authenticate(env.ctx, &corev1.AuthenticateRequest{
 				Username: "test",
 				Password: "test",
 			})
@@ -591,7 +591,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer controlConn.Close()
 
-			controlClient := controlv1.NewControlClient(controlConn)
+			controlClient := controlv1.NewControlServiceClient(controlConn)
 
 			statusResp, err := controlClient.Status(env.ctx, &controlv1.StatusRequest{})
 			Expect(err).NotTo(HaveOccurred())

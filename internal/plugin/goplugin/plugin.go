@@ -40,5 +40,5 @@ func (p *GRPCPlugin) GRPCServer(_ *goplugin.GRPCBroker, _ *grpc.Server) error {
 
 // GRPCClient returns a plugin client (called by host process).
 func (p *GRPCPlugin) GRPCClient(_ context.Context, _ *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return pluginv1.NewPluginClient(c), nil
+	return pluginv1.NewPluginServiceClient(c), nil
 }

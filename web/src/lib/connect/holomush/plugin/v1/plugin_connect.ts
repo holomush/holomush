@@ -12,18 +12,18 @@ import { HandleEventRequest, HandleEventResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * Plugin service is called by the go-plugin host to send events to binary plugins.
+ * PluginService is called by the go-plugin host to send events to binary plugins.
  * This service is implemented by the plugin (the gRPC server runs in the plugin process).
  *
- * @generated from service holomush.plugin.v1.Plugin
+ * @generated from service holomush.plugin.v1.PluginService
  */
-export const Plugin = {
-  typeName: "holomush.plugin.v1.Plugin",
+export const PluginService = {
+  typeName: "holomush.plugin.v1.PluginService",
   methods: {
     /**
      * HandleEvent delivers an event to the plugin and receives any response events.
      *
-     * @generated from rpc holomush.plugin.v1.Plugin.HandleEvent
+     * @generated from rpc holomush.plugin.v1.PluginService.HandleEvent
      */
     handleEvent: {
       name: "HandleEvent",

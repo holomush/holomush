@@ -131,7 +131,7 @@ func (x *ResponseMeta) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
-type AuthRequest struct {
+type AuthenticateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
@@ -141,20 +141,20 @@ type AuthRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AuthRequest) Reset() {
-	*x = AuthRequest{}
+func (x *AuthenticateRequest) Reset() {
+	*x = AuthenticateRequest{}
 	mi := &file_holomush_core_v1_core_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthRequest) String() string {
+func (x *AuthenticateRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthRequest) ProtoMessage() {}
+func (*AuthenticateRequest) ProtoMessage() {}
 
-func (x *AuthRequest) ProtoReflect() protoreflect.Message {
+func (x *AuthenticateRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_core_v1_core_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -166,40 +166,40 @@ func (x *AuthRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthRequest.ProtoReflect.Descriptor instead.
-func (*AuthRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AuthenticateRequest.ProtoReflect.Descriptor instead.
+func (*AuthenticateRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *AuthRequest) GetMeta() *RequestMeta {
+func (x *AuthenticateRequest) GetMeta() *RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
 	return nil
 }
 
-func (x *AuthRequest) GetUsername() string {
+func (x *AuthenticateRequest) GetUsername() string {
 	if x != nil {
 		return x.Username
 	}
 	return ""
 }
 
-func (x *AuthRequest) GetPassword() string {
+func (x *AuthenticateRequest) GetPassword() string {
 	if x != nil {
 		return x.Password
 	}
 	return ""
 }
 
-func (x *AuthRequest) GetClientType() string {
+func (x *AuthenticateRequest) GetClientType() string {
 	if x != nil {
 		return x.ClientType
 	}
 	return ""
 }
 
-type AuthResponse struct {
+type AuthenticateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
@@ -212,20 +212,20 @@ type AuthResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AuthResponse) Reset() {
-	*x = AuthResponse{}
+func (x *AuthenticateResponse) Reset() {
+	*x = AuthenticateResponse{}
 	mi := &file_holomush_core_v1_core_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthResponse) String() string {
+func (x *AuthenticateResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthResponse) ProtoMessage() {}
+func (*AuthenticateResponse) ProtoMessage() {}
 
-func (x *AuthResponse) ProtoReflect() protoreflect.Message {
+func (x *AuthenticateResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_core_v1_core_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -237,61 +237,61 @@ func (x *AuthResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthResponse.ProtoReflect.Descriptor instead.
-func (*AuthResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use AuthenticateResponse.ProtoReflect.Descriptor instead.
+func (*AuthenticateResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *AuthResponse) GetMeta() *ResponseMeta {
+func (x *AuthenticateResponse) GetMeta() *ResponseMeta {
 	if x != nil {
 		return x.Meta
 	}
 	return nil
 }
 
-func (x *AuthResponse) GetSuccess() bool {
+func (x *AuthenticateResponse) GetSuccess() bool {
 	if x != nil {
 		return x.Success
 	}
 	return false
 }
 
-func (x *AuthResponse) GetSessionId() string {
+func (x *AuthenticateResponse) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-func (x *AuthResponse) GetCharacterId() string {
+func (x *AuthenticateResponse) GetCharacterId() string {
 	if x != nil {
 		return x.CharacterId
 	}
 	return ""
 }
 
-func (x *AuthResponse) GetCharacterName() string {
+func (x *AuthenticateResponse) GetCharacterName() string {
 	if x != nil {
 		return x.CharacterName
 	}
 	return ""
 }
 
-func (x *AuthResponse) GetError() string {
+func (x *AuthenticateResponse) GetError() string {
 	if x != nil {
 		return x.Error
 	}
 	return ""
 }
 
-func (x *AuthResponse) GetConnectionId() string {
+func (x *AuthenticateResponse) GetConnectionId() string {
 	if x != nil {
 		return x.ConnectionId
 	}
 	return ""
 }
 
-type CommandRequest struct {
+type HandleCommandRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -300,20 +300,20 @@ type CommandRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CommandRequest) Reset() {
-	*x = CommandRequest{}
+func (x *HandleCommandRequest) Reset() {
+	*x = HandleCommandRequest{}
 	mi := &file_holomush_core_v1_core_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CommandRequest) String() string {
+func (x *HandleCommandRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CommandRequest) ProtoMessage() {}
+func (*HandleCommandRequest) ProtoMessage() {}
 
-func (x *CommandRequest) ProtoReflect() protoreflect.Message {
+func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_core_v1_core_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -325,33 +325,33 @@ func (x *CommandRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CommandRequest.ProtoReflect.Descriptor instead.
-func (*CommandRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use HandleCommandRequest.ProtoReflect.Descriptor instead.
+func (*HandleCommandRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *CommandRequest) GetMeta() *RequestMeta {
+func (x *HandleCommandRequest) GetMeta() *RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
 	return nil
 }
 
-func (x *CommandRequest) GetSessionId() string {
+func (x *HandleCommandRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-func (x *CommandRequest) GetCommand() string {
+func (x *HandleCommandRequest) GetCommand() string {
 	if x != nil {
 		return x.Command
 	}
 	return ""
 }
 
-type CommandResponse struct {
+type HandleCommandResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
@@ -361,20 +361,20 @@ type CommandResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CommandResponse) Reset() {
-	*x = CommandResponse{}
+func (x *HandleCommandResponse) Reset() {
+	*x = HandleCommandResponse{}
 	mi := &file_holomush_core_v1_core_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CommandResponse) String() string {
+func (x *HandleCommandResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CommandResponse) ProtoMessage() {}
+func (*HandleCommandResponse) ProtoMessage() {}
 
-func (x *CommandResponse) ProtoReflect() protoreflect.Message {
+func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_core_v1_core_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -386,33 +386,33 @@ func (x *CommandResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CommandResponse.ProtoReflect.Descriptor instead.
-func (*CommandResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use HandleCommandResponse.ProtoReflect.Descriptor instead.
+func (*HandleCommandResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *CommandResponse) GetMeta() *ResponseMeta {
+func (x *HandleCommandResponse) GetMeta() *ResponseMeta {
 	if x != nil {
 		return x.Meta
 	}
 	return nil
 }
 
-func (x *CommandResponse) GetSuccess() bool {
+func (x *HandleCommandResponse) GetSuccess() bool {
 	if x != nil {
 		return x.Success
 	}
 	return false
 }
 
-func (x *CommandResponse) GetOutput() string {
+func (x *HandleCommandResponse) GetOutput() string {
 	if x != nil {
 		return x.Output
 	}
 	return ""
 }
 
-func (x *CommandResponse) GetError() string {
+func (x *HandleCommandResponse) GetError() string {
 	if x != nil {
 		return x.Error
 	}
@@ -487,7 +487,7 @@ func (x *SubscribeRequest) GetReplayFromCursor() bool {
 	return false
 }
 
-type Event struct {
+type SubscribeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Stream        string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
@@ -500,20 +500,20 @@ type Event struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Event) Reset() {
-	*x = Event{}
+func (x *SubscribeResponse) Reset() {
+	*x = SubscribeResponse{}
 	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Event) String() string {
+func (x *SubscribeResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Event) ProtoMessage() {}
+func (*SubscribeResponse) ProtoMessage() {}
 
-func (x *Event) ProtoReflect() protoreflect.Message {
+func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -525,54 +525,54 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Event.ProtoReflect.Descriptor instead.
-func (*Event) Descriptor() ([]byte, []int) {
+// Deprecated: Use SubscribeResponse.ProtoReflect.Descriptor instead.
+func (*SubscribeResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *Event) GetId() string {
+func (x *SubscribeResponse) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Event) GetStream() string {
+func (x *SubscribeResponse) GetStream() string {
 	if x != nil {
 		return x.Stream
 	}
 	return ""
 }
 
-func (x *Event) GetType() string {
+func (x *SubscribeResponse) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *Event) GetTimestamp() *timestamppb.Timestamp {
+func (x *SubscribeResponse) GetTimestamp() *timestamppb.Timestamp {
 	if x != nil {
 		return x.Timestamp
 	}
 	return nil
 }
 
-func (x *Event) GetActorType() string {
+func (x *SubscribeResponse) GetActorType() string {
 	if x != nil {
 		return x.ActorType
 	}
 	return ""
 }
 
-func (x *Event) GetActorId() string {
+func (x *SubscribeResponse) GetActorId() string {
 	if x != nil {
 		return x.ActorId
 	}
 	return ""
 }
 
-func (x *Event) GetPayload() []byte {
+func (x *SubscribeResponse) GetPayload() []byte {
 	if x != nil {
 		return x.Payload
 	}
@@ -703,14 +703,14 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\fResponseMeta\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x128\n" +
-	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x99\x01\n" +
-	"\vAuthRequest\x121\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xa1\x01\n" +
+	"\x13AuthenticateRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x03 \x01(\tR\bpassword\x12\x1f\n" +
 	"\vclient_type\x18\x04 \x01(\tR\n" +
-	"clientType\"\x80\x02\n" +
-	"\fAuthResponse\x122\n" +
+	"clientType\"\x88\x02\n" +
+	"\x14AuthenticateResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1d\n" +
 	"\n" +
@@ -718,13 +718,13 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\fcharacter_id\x18\x04 \x01(\tR\vcharacterId\x12%\n" +
 	"\x0echaracter_name\x18\x05 \x01(\tR\rcharacterName\x12\x14\n" +
 	"\x05error\x18\x06 \x01(\tR\x05error\x12#\n" +
-	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"|\n" +
-	"\x0eCommandRequest\x121\n" +
+	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"\x82\x01\n" +
+	"\x14HandleCommandRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
-	"\acommand\x18\x03 \x01(\tR\acommand\"\x8d\x01\n" +
-	"\x0fCommandResponse\x122\n" +
+	"\acommand\x18\x03 \x01(\tR\acommand\"\x93\x01\n" +
+	"\x15HandleCommandResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06output\x18\x03 \x01(\tR\x06output\x12\x14\n" +
@@ -734,8 +734,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
 	"\astreams\x18\x03 \x03(\tR\astreams\x12,\n" +
-	"\x12replay_from_cursor\x18\x04 \x01(\bR\x10replayFromCursor\"\xd1\x01\n" +
-	"\x05Event\x12\x0e\n" +
+	"\x12replay_from_cursor\x18\x04 \x01(\bR\x10replayFromCursor\"\xdd\x01\n" +
+	"\x11SubscribeResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x128\n" +
@@ -751,11 +751,11 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"b\n" +
 	"\x12DisconnectResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess2\xd0\x02\n" +
-	"\x04Core\x12M\n" +
-	"\fAuthenticate\x12\x1d.holomush.core.v1.AuthRequest\x1a\x1e.holomush.core.v1.AuthResponse\x12T\n" +
-	"\rHandleCommand\x12 .holomush.core.v1.CommandRequest\x1a!.holomush.core.v1.CommandResponse\x12J\n" +
-	"\tSubscribe\x12\".holomush.core.v1.SubscribeRequest\x1a\x17.holomush.core.v1.Event0\x01\x12W\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess2\xff\x02\n" +
+	"\vCoreService\x12]\n" +
+	"\fAuthenticate\x12%.holomush.core.v1.AuthenticateRequest\x1a&.holomush.core.v1.AuthenticateResponse\x12`\n" +
+	"\rHandleCommand\x12&.holomush.core.v1.HandleCommandRequest\x1a'.holomush.core.v1.HandleCommandResponse\x12V\n" +
+	"\tSubscribe\x12\".holomush.core.v1.SubscribeRequest\x1a#.holomush.core.v1.SubscribeResponse0\x01\x12W\n" +
 	"\n" +
 	"Disconnect\x12#.holomush.core.v1.DisconnectRequest\x1a$.holomush.core.v1.DisconnectResponseB\xc3\x01\n" +
 	"\x14com.holomush.core.v1B\tCoreProtoP\x01Z>github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1\xa2\x02\x03HCX\xaa\x02\x10Holomush.Core.V1\xca\x02\x10Holomush\\Core\\V1\xe2\x02\x1cHolomush\\Core\\V1\\GPBMetadata\xea\x02\x12Holomush::Core::V1b\x06proto3"
@@ -776,12 +776,12 @@ var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 10
 var file_holomush_core_v1_core_proto_goTypes = []any{
 	(*RequestMeta)(nil),           // 0: holomush.core.v1.RequestMeta
 	(*ResponseMeta)(nil),          // 1: holomush.core.v1.ResponseMeta
-	(*AuthRequest)(nil),           // 2: holomush.core.v1.AuthRequest
-	(*AuthResponse)(nil),          // 3: holomush.core.v1.AuthResponse
-	(*CommandRequest)(nil),        // 4: holomush.core.v1.CommandRequest
-	(*CommandResponse)(nil),       // 5: holomush.core.v1.CommandResponse
+	(*AuthenticateRequest)(nil),   // 2: holomush.core.v1.AuthenticateRequest
+	(*AuthenticateResponse)(nil),  // 3: holomush.core.v1.AuthenticateResponse
+	(*HandleCommandRequest)(nil),  // 4: holomush.core.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil), // 5: holomush.core.v1.HandleCommandResponse
 	(*SubscribeRequest)(nil),      // 6: holomush.core.v1.SubscribeRequest
-	(*Event)(nil),                 // 7: holomush.core.v1.Event
+	(*SubscribeResponse)(nil),     // 7: holomush.core.v1.SubscribeResponse
 	(*DisconnectRequest)(nil),     // 8: holomush.core.v1.DisconnectRequest
 	(*DisconnectResponse)(nil),    // 9: holomush.core.v1.DisconnectResponse
 	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
@@ -789,22 +789,22 @@ var file_holomush_core_v1_core_proto_goTypes = []any{
 var file_holomush_core_v1_core_proto_depIdxs = []int32{
 	10, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
 	10, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
-	0,  // 2: holomush.core.v1.AuthRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	1,  // 3: holomush.core.v1.AuthResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	0,  // 4: holomush.core.v1.CommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	1,  // 5: holomush.core.v1.CommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	0,  // 2: holomush.core.v1.AuthenticateRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	1,  // 3: holomush.core.v1.AuthenticateResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	0,  // 4: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	1,  // 5: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
 	0,  // 6: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	10, // 7: holomush.core.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
+	10, // 7: holomush.core.v1.SubscribeResponse.timestamp:type_name -> google.protobuf.Timestamp
 	0,  // 8: holomush.core.v1.DisconnectRequest.meta:type_name -> holomush.core.v1.RequestMeta
 	1,  // 9: holomush.core.v1.DisconnectResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	2,  // 10: holomush.core.v1.Core.Authenticate:input_type -> holomush.core.v1.AuthRequest
-	4,  // 11: holomush.core.v1.Core.HandleCommand:input_type -> holomush.core.v1.CommandRequest
-	6,  // 12: holomush.core.v1.Core.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
-	8,  // 13: holomush.core.v1.Core.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
-	3,  // 14: holomush.core.v1.Core.Authenticate:output_type -> holomush.core.v1.AuthResponse
-	5,  // 15: holomush.core.v1.Core.HandleCommand:output_type -> holomush.core.v1.CommandResponse
-	7,  // 16: holomush.core.v1.Core.Subscribe:output_type -> holomush.core.v1.Event
-	9,  // 17: holomush.core.v1.Core.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
+	2,  // 10: holomush.core.v1.CoreService.Authenticate:input_type -> holomush.core.v1.AuthenticateRequest
+	4,  // 11: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
+	6,  // 12: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
+	8,  // 13: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
+	3,  // 14: holomush.core.v1.CoreService.Authenticate:output_type -> holomush.core.v1.AuthenticateResponse
+	5,  // 15: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
+	7,  // 16: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
+	9,  // 17: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
 	14, // [14:18] is the sub-list for method output_type
 	10, // [10:14] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name

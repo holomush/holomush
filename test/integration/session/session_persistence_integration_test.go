@@ -30,7 +30,7 @@ import (
 
 // authenticateGuest authenticates as a guest and returns the session ID and character name.
 func authenticateGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName string) {
-	resp, err := cli.Authenticate(ctx, &corev1.AuthRequest{
+	resp, err := cli.Authenticate(ctx, &corev1.AuthenticateRequest{
 		Username: "guest",
 		Password: "",
 	})
@@ -57,7 +57,7 @@ var _ = Describe("Session Persistence", func() {
 	)
 
 	BeforeEach(func() {
-		testCtx, testCancel = context.WithTimeout(context.Background(), 2*time.Minute)
+		testCtx, testCancel = context.WithTimeout(context.Background(), 5*time.Minute)
 
 		// 1. Start PostgreSQL container
 		var err error
@@ -119,7 +119,7 @@ var _ = Describe("Session Persistence", func() {
 
 		// 8. Start gRPC server (insecure for integration tests)
 		grpcServer = grpcpkg.NewGRPCServerInsecure()
-		corev1.RegisterCoreServer(grpcServer, coreServer)
+		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
 
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		Expect(err).NotTo(HaveOccurred())
@@ -192,7 +192,7 @@ var _ = Describe("Session Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Send a say command to generate an event and advance the cursor
-			_, err = grpcCli.HandleCommand(testCtx, &corev1.CommandRequest{
+			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
 				SessionId: sessionID,
 				Command:   "say hello",
 			})
@@ -242,7 +242,7 @@ var _ = Describe("Session Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should receive the 3 missed events
-			var replayed []*corev1.Event
+			var replayed []*corev1.SubscribeResponse
 			for i := 0; i < 3; i++ {
 				ev, err := replayStream.Recv()
 				Expect(err).NotTo(HaveOccurred())
@@ -263,13 +263,13 @@ var _ = Describe("Session Persistence", func() {
 			sessionID, _ := authenticateGuest(testCtx, grpcCli)
 
 			// Send commands
-			_, err := grpcCli.HandleCommand(testCtx, &corev1.CommandRequest{
+			_, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
 				SessionId: sessionID,
 				Command:   "say hello",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = grpcCli.HandleCommand(testCtx, &corev1.CommandRequest{
+			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
 				SessionId: sessionID,
 				Command:   "say world",
 			})
@@ -294,7 +294,7 @@ var _ = Describe("Session Persistence", func() {
 
 			// Send 5 commands
 			for i := 1; i <= 5; i++ {
-				_, err := grpcCli.HandleCommand(testCtx, &corev1.CommandRequest{
+				_, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
 					SessionId: sessionID,
 					Command:   "say msg" + string(rune('0'+i)),
 				})
@@ -373,7 +373,7 @@ var _ = Describe("Session Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Send quit command
-			resp, err := grpcCli.HandleCommand(testCtx, &corev1.CommandRequest{
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
 				SessionId: sessionID,
 				Command:   "quit",
 			})

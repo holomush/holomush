@@ -112,9 +112,9 @@ type ObservabilityServer interface {
 
 // GRPCClient interface wraps the methods used from holoGRPC.Client.
 type GRPCClient interface {
-	Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error)
-	HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error)
-	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error)
+	Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
+	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
+	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 	Close() error
 }

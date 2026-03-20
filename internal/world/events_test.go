@@ -136,6 +136,34 @@ func TestEmitMoveEvent(t *testing.T) {
 		assert.Equal(t, payload, decoded)
 	})
 
+	t.Run("character move emits to both location and character stream", func(t *testing.T) {
+		emitter := &mockEventEmitter{}
+		charID := ulid.Make()
+		payload := world.MovePayload{
+			EntityType: world.EntityTypeCharacter,
+			EntityID:   charID,
+			FromType:   world.ContainmentTypeLocation,
+			FromID:     &fromLocID,
+			ToType:     world.ContainmentTypeLocation,
+			ToID:       toLocID,
+		}
+
+		err := world.EmitMoveEvent(ctx, emitter, payload)
+		require.NoError(t, err)
+
+		require.Len(t, emitter.calls, 2)
+		assert.Equal(t, world.LocationStream(toLocID), emitter.calls[0].Stream)
+		assert.Equal(t, world.CharacterStream(charID), emitter.calls[1].Stream)
+
+		// Both emissions should have the same payload
+		for _, call := range emitter.calls {
+			assert.Equal(t, string(core.EventTypeMove), call.EventType)
+			var decoded world.MovePayload
+			require.NoError(t, json.Unmarshal(call.Payload, &decoded))
+			assert.Equal(t, payload, decoded)
+		}
+	})
+
 	t.Run("returns error when emitter fails after retries", func(t *testing.T) {
 		emitErr := errors.New("emit failed")
 		emitter := &mockEventEmitter{err: emitErr}

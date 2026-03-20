@@ -17,10 +17,12 @@ import (
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -47,9 +49,16 @@ type SessionDefaults struct {
 // defaultMaxReplay is used when MaxReplay is not configured.
 const defaultMaxReplay = 1000
 
+// WorldQuerier provides read-only access to world model data for building
+// location_state payloads during event streaming. Satisfied by *world.Service.
+type WorldQuerier interface {
+	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
+}
+
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
-	corev1.UnimplementedCoreServer
+	corev1.UnimplementedCoreServiceServer
 
 	engine          *core.Engine
 	sessions        *core.SessionManager
@@ -57,6 +66,7 @@ type CoreServer struct {
 	authenticator   Authenticator
 	sessionStore    session.Store
 	eventStore      core.EventStore
+	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
 
@@ -95,6 +105,14 @@ func WithEventStore(store core.EventStore) CoreServerOption {
 	}
 }
 
+// WithWorldQuerier sets the world querier for building location_state payloads
+// during event streaming (location-following).
+func WithWorldQuerier(wq WorldQuerier) CoreServerOption {
+	return func(s *CoreServer) {
+		s.worldQuerier = wq
+	}
+}
+
 // WithDisconnectHook registers a hook called after a session disconnects.
 func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 	return func(s *CoreServer) {
@@ -123,7 +141,7 @@ func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, broadcast
 // Connection registration is intentionally omitted here — the caller (telnet
 // gateway or web StreamEvents handler) registers the connection after auth so
 // it can supply the correct client type and stream list.
-func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
@@ -135,7 +153,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 	)
 
 	if s.authenticator == nil {
-		return &corev1.AuthResponse{
+		return &corev1.AuthenticateResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   "authentication not configured",
@@ -149,7 +167,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 			"username", req.Username,
 			"error", err,
 		)
-		return &corev1.AuthResponse{
+		return &corev1.AuthenticateResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   err.Error(),
@@ -198,7 +216,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 			"session_id", sessionID.String(),
 			"error", err,
 		)
-		return &corev1.AuthResponse{
+		return &corev1.AuthenticateResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   "session creation failed",
@@ -246,7 +264,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		"character_name", result.CharacterName,
 	)
 
-	return &corev1.AuthResponse{
+	return &corev1.AuthenticateResponse{
 		Meta:          responseMeta(requestID),
 		Success:       true,
 		SessionId:     sessionID.String(),
@@ -257,7 +275,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 }
 
 // HandleCommand processes a game command.
-func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
@@ -281,7 +299,7 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 				"error", err,
 			)
 		}
-		return &corev1.CommandResponse{
+		return &corev1.HandleCommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   errMsg,
@@ -305,14 +323,14 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 			"command", req.Command,
 			"error", err,
 		)
-		return &corev1.CommandResponse{
+		return &corev1.HandleCommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
-	return &corev1.CommandResponse{
+	return &corev1.HandleCommandResponse{
 		Meta:    responseMeta(requestID),
 		Success: true,
 		Output:  output,
@@ -394,8 +412,8 @@ func (s *CoreServer) persistCursorAsync(sessionID, streamName string, eventID ul
 }
 
 // eventToProto converts a core.Event to a proto Event.
-func eventToProto(ev core.Event) *corev1.Event {
-	return &corev1.Event{
+func eventToProto(ev core.Event) *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
 		Id:        ev.ID.String(),
 		Stream:    ev.Stream,
 		Type:      string(ev.Type),
@@ -407,7 +425,7 @@ func eventToProto(ev core.Event) *corev1.Event {
 }
 
 // Subscribe opens a stream of events for the session.
-func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.Event]) error {
+func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	ctx := stream.Context()
 	requestID := ""
 	if req.Meta != nil {
@@ -432,30 +450,105 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		streams = []string{"location:" + info.LocationID.String()}
 	}
 
-	// Subscribe to requested streams
-	// Note: defers in loop are intentional - all subscriptions should be cleaned up when
-	// the function exits, not at end of each iteration. The loop runs a fixed number of
-	// times (len(streams)) and all deferred Unsubscribes run on function return.
-	channels := make([]chan core.Event, 0, len(streams))
+	// Separate the location stream from other streams so the location
+	// subscription can be dynamically swapped when the character moves.
+	locStreamName := ""
+	var otherStreams []string
 	for _, streamName := range streams {
+		if strings.HasPrefix(streamName, world.StreamPrefixLocation) {
+			locStreamName = streamName
+		} else {
+			otherStreams = append(otherStreams, streamName)
+		}
+	}
+
+	// Subscribe to non-location streams (static for the session lifetime).
+	channels := make([]chan core.Event, 0, len(otherStreams)+1)
+	for _, streamName := range otherStreams {
 		ch := s.broadcaster.Subscribe(streamName)
 		channels = append(channels, ch)
 		//nolint:gocritic // deferInLoop: intentional; cleanup all subscriptions on function exit
 		defer s.broadcaster.Unsubscribe(streamName, ch)
 	}
 
-	// Merge all channels into one
+	// Subscribe to the character stream for location-following. Move events
+	// emitted to character:<id> let the subscriber detect when the character
+	// changes location and trigger a location_state update.
+	charStreamName := world.CharacterStream(info.CharacterID)
+	charCh := s.broadcaster.Subscribe(charStreamName)
+	channels = append(channels, charCh)
+	defer s.broadcaster.Unsubscribe(charStreamName, charCh)
+
+	// Subscribe to the initial location stream. The location subscription
+	// is managed dynamically by locationFollower (swapped on character move).
+	// A relay channel bridges location events into the merged fan-in so that
+	// all events flow through a single channel for replay draining and live
+	// forwarding.
+	var locCh chan core.Event
+	locRelay := make(chan core.Event, 100)
+	if locStreamName != "" {
+		locCh = s.broadcaster.Subscribe(locStreamName)
+		startLocRelay(ctx, locCh, locRelay)
+	}
+	channels = append(channels, locRelay)
+
+	// Merge all channels (non-location + character + location relay) into one
 	merged := mergeChannels(ctx, channels)
 
-	// Replay missed events if requested
+	// Inject synthetic location_state so the client always has location context
+	// on connect/reconnect, regardless of event replay cursor position.
+	if s.worldQuerier != nil && !info.LocationID.IsZero() {
+		syntheticLF := &locationFollower{
+			characterID:  info.CharacterID,
+			currentLocID: info.LocationID,
+			worldQuerier: s.worldQuerier,
+			sessionStore: s.sessionStore,
+		}
+		if locState, rsErr := syntheticLF.buildLocationState(ctx, info.LocationID); rsErr != nil {
+			slog.WarnContext(ctx, "failed to build synthetic location_state",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"location_id", info.LocationID.String(),
+				"error", rsErr,
+			)
+		} else {
+			if sendErr := stream.Send(locState); sendErr != nil {
+				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
+			}
+		}
+	}
+
+	// Replay missed events if requested. Include the character stream so
+	// character-scoped events persisted while disconnected are also replayed.
 	if req.ReplayFromCursor && s.eventStore != nil && len(info.EventCursors) > 0 {
-		if err := s.replayMissedEvents(ctx, info, streams, merged, stream, requestID); err != nil {
+		replayStreams := append(streams, charStreamName) //nolint:gocritic // appendAssign: intentional new slice
+		if err := s.replayMissedEvents(ctx, info, replayStreams, merged, stream, requestID); err != nil {
 			return err
 		}
 	}
 
+	// Build location-following state. When a move event is detected for this
+	// character, forwardLiveEvents builds and sends a location_state for the
+	// new location and switches the room subscription.
+	lf := &locationFollower{
+		characterID:   info.CharacterID,
+		currentLocID:  info.LocationID,
+		worldQuerier:  s.worldQuerier,
+		sessionStore:  s.sessionStore,
+		broadcaster:   s.broadcaster,
+		locStreamName: locStreamName,
+		locCh:         locCh,
+		locRelay:      locRelay,
+	}
+	// Clean up the dynamic location subscription on exit.
+	defer func() {
+		if lf.locStreamName != "" && lf.locCh != nil {
+			s.broadcaster.Unsubscribe(lf.locStreamName, lf.locCh)
+		}
+	}()
+
 	// Send live events until context is cancelled
-	return s.forwardLiveEvents(ctx, info, merged, stream, requestID, req.SessionId)
+	return s.forwardLiveEventsWithLocationFollow(ctx, info, merged, stream, requestID, req.SessionId, lf)
 }
 
 // replayMissedEvents replays historical events from the EventStore, then sends
@@ -466,7 +559,7 @@ func (s *CoreServer) replayMissedEvents(
 	info *session.Info,
 	streams []string,
 	merged <-chan core.Event,
-	stream grpc.ServerStreamingServer[corev1.Event],
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 	requestID string,
 ) error {
 	maxReplay := s.sessionDefaults.MaxReplay
@@ -583,50 +676,6 @@ drainLoop:
 	}
 
 	return nil
-}
-
-// forwardLiveEvents reads from merged and sends events to the client stream
-// until the context is cancelled or the channel is closed.
-func (s *CoreServer) forwardLiveEvents(
-	ctx context.Context,
-	info *session.Info,
-	merged <-chan core.Event,
-	stream grpc.ServerStreamingServer[corev1.Event],
-	requestID string,
-	sessionID string,
-) error {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.DebugContext(ctx, "subscription ended",
-				"request_id", requestID,
-				"session_id", sessionID,
-				"reason", ctx.Err(),
-			)
-			if ctx.Err() == context.Canceled {
-				return nil // normal client disconnect
-			}
-			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", sessionID).Wrap(ctx.Err())
-
-		case event, ok := <-merged:
-			if !ok {
-				return nil
-			}
-
-			if err := stream.Send(eventToProto(event)); err != nil {
-				slog.WarnContext(ctx, "failed to send event",
-					"request_id", requestID,
-					"session_id", sessionID,
-					"event_id", event.ID.String(),
-					"error", err,
-				)
-				return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(err)
-			}
-
-			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
-			s.persistCursorAsync(sessionID, event.Stream, event.ID)
-		}
-	}
 }
 
 // Disconnect removes a connection and handles session lifecycle.
@@ -834,6 +883,13 @@ func NewGRPCServer(tlsConfig *tls.Config) *grpc.Server {
 }
 
 // NewGRPCServerInsecure creates a new gRPC server without TLS (for testing).
+// Includes a permissive keepalive enforcement policy to prevent "too_many_pings"
+// rejections during long-running integration tests.
 func NewGRPCServerInsecure() *grpc.Server {
-	return grpc.NewServer()
+	return grpc.NewServer(
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 }

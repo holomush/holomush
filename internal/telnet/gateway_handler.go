@@ -31,9 +31,9 @@ const (
 // CoreClient is the gRPC interface used by GatewayHandler to communicate with
 // the core service.
 type CoreClient interface {
-	Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error)
-	HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error)
-	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error)
+	Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
+	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
+	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 }
 
@@ -48,7 +48,7 @@ type GatewayHandler struct {
 	charName     string
 	authed       bool
 	quitting     bool
-	eventCh      chan *corev1.Event
+	eventCh      chan *corev1.SubscribeResponse
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
@@ -113,7 +113,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	}()
 
 	// eventRecv is nil until subscription is established, blocking the select case.
-	var eventRecv <-chan *corev1.Event
+	var eventRecv <-chan *corev1.SubscribeResponse
 
 	for {
 		select {
@@ -146,7 +146,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	}
 }
 
-func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.Event {
+func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.SubscribeResponse {
 	cmd, arg := core.ParseCommand(line)
 
 	switch cmd {
@@ -166,7 +166,7 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 	return nil
 }
 
-func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *corev1.Event {
+func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *corev1.SubscribeResponse {
 	if h.authed {
 		h.send("Already connected.")
 		return nil
@@ -187,7 +187,7 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 	authCtx, authCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer authCancel()
 
-	resp, err := h.client.Authenticate(authCtx, &corev1.AuthRequest{
+	resp, err := h.client.Authenticate(authCtx, &corev1.AuthenticateRequest{
 		Username:   username,
 		Password:   password,
 		ClientType: "telnet",
@@ -223,7 +223,7 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 		return nil
 	}
 
-	h.eventCh = make(chan *corev1.Event, 16)
+	h.eventCh = make(chan *corev1.SubscribeResponse, 16)
 
 	go func() {
 		defer close(h.eventCh)
@@ -259,7 +259,7 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
 
-	if _, err := h.client.HandleCommand(cmdCtx, &corev1.CommandRequest{
+	if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId: h.sessionID,
 		Command:   "say " + message,
 	}); err != nil {
@@ -283,7 +283,7 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
 
-	if _, err := h.client.HandleCommand(cmdCtx, &corev1.CommandRequest{
+	if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId: h.sessionID,
 		Command:   "pose " + action,
 	}); err != nil {
@@ -305,7 +305,7 @@ func (h *GatewayHandler) send(msg string) {
 	}
 }
 
-func (h *GatewayHandler) sendProtoEvent(ev *corev1.Event) {
+func (h *GatewayHandler) sendProtoEvent(ev *corev1.SubscribeResponse) {
 	actorID := ev.GetActorId()
 	actorPrefix := actorID
 	if len(actorPrefix) > 8 {

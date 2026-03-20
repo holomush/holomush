@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/core/v1/core.proto.
  */
 export const file_holomush_core_v1_core: GenFile = /*@__PURE__*/
-  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicwoLQXV0aFJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEAoIdXNlcm5hbWUYAiABKAkSEAoIcGFzc3dvcmQYAyABKAkSEwoLY2xpZW50X3R5cGUYBCABKAkitQEKDEF1dGhSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBISCgpzZXNzaW9uX2lkGAMgASgJEhQKDGNoYXJhY3Rlcl9pZBgEIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgFIAEoCRINCgVlcnJvchgGIAEoCRIVCg1jb25uZWN0aW9uX2lkGAcgASgJImIKDkNvbW1hbmRSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHY29tbWFuZBgDIAEoCSJvCg9Db21tYW5kUmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSDgoGb3V0cHV0GAMgASgJEg0KBWVycm9yGAQgASgJIoABChBTdWJzY3JpYmVSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHc3RyZWFtcxgDIAMoCRIaChJyZXBsYXlfZnJvbV9jdXJzb3IYBCABKAgilwEKBUV2ZW50EgoKAmlkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKYWN0b3JfdHlwZRgFIAEoCRIQCghhY3Rvcl9pZBgGIAEoCRIPCgdwYXlsb2FkGAcgASgMImsKEURpc2Nvbm5lY3RSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCSJTChJEaXNjb25uZWN0UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgy0AIKBENvcmUSTQoMQXV0aGVudGljYXRlEh0uaG9sb211c2guY29yZS52MS5BdXRoUmVxdWVzdBoeLmhvbG9tdXNoLmNvcmUudjEuQXV0aFJlc3BvbnNlElQKDUhhbmRsZUNvbW1hbmQSIC5ob2xvbXVzaC5jb3JlLnYxLkNvbW1hbmRSZXF1ZXN0GiEuaG9sb211c2guY29yZS52MS5Db21tYW5kUmVzcG9uc2USSgoJU3Vic2NyaWJlEiIuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXF1ZXN0GhcuaG9sb211c2guY29yZS52MS5FdmVudDABElcKCkRpc2Nvbm5lY3QSIy5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiQuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVzcG9uc2VCQFo+Z2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY29yZS92MTtjb3JldjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiewoTQXV0aGVudGljYXRlUmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRIQCgh1c2VybmFtZRgCIAEoCRIQCghwYXNzd29yZBgDIAEoCRITCgtjbGllbnRfdHlwZRgEIAEoCSK9AQoUQXV0aGVudGljYXRlUmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSEgoKc2Vzc2lvbl9pZBgDIAEoCRIUCgxjaGFyYWN0ZXJfaWQYBCABKAkSFgoOY2hhcmFjdGVyX25hbWUYBSABKAkSDQoFZXJyb3IYBiABKAkSFQoNY29ubmVjdGlvbl9pZBgHIAEoCSJoChRIYW5kbGVDb21tYW5kUmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg8KB2NvbW1hbmQYAyABKAkidQoVSGFuZGxlQ29tbWFuZFJlc3BvbnNlEiwKBG1ldGEYASABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YRIPCgdzdWNjZXNzGAIgASgIEg4KBm91dHB1dBgDIAEoCRINCgVlcnJvchgEIAEoCSKAAQoQU3Vic2NyaWJlUmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg8KB3N0cmVhbXMYAyADKAkSGgoScmVwbGF5X2Zyb21fY3Vyc29yGAQgASgIIqMBChFTdWJzY3JpYmVSZXNwb25zZRIKCgJpZBgBIAEoCRIOCgZzdHJlYW0YAiABKAkSDAoEdHlwZRgDIAEoCRItCgl0aW1lc3RhbXAYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmFjdG9yX3R5cGUYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoDCJrChFEaXNjb25uZWN0UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkiUwoSRGlzY29ubmVjdFJlc3BvbnNlEiwKBG1ldGEYASABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YRIPCgdzdWNjZXNzGAIgASgIMv8CCgtDb3JlU2VydmljZRJdCgxBdXRoZW50aWNhdGUSJS5ob2xvbXVzaC5jb3JlLnYxLkF1dGhlbnRpY2F0ZVJlcXVlc3QaJi5ob2xvbXVzaC5jb3JlLnYxLkF1dGhlbnRpY2F0ZVJlc3BvbnNlEmAKDUhhbmRsZUNvbW1hbmQSJi5ob2xvbXVzaC5jb3JlLnYxLkhhbmRsZUNvbW1hbmRSZXF1ZXN0GicuaG9sb211c2guY29yZS52MS5IYW5kbGVDb21tYW5kUmVzcG9uc2USVgoJU3Vic2NyaWJlEiIuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXF1ZXN0GiMuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXNwb25zZTABElcKCkRpc2Nvbm5lY3QSIy5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiQuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVzcG9uc2VCQFo+Z2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY29yZS92MTtjb3JldjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * RequestMeta contains metadata for request correlation and debugging.
@@ -70,9 +70,9 @@ export const ResponseMetaSchema: GenMessage<ResponseMeta> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 1);
 
 /**
- * @generated from message holomush.core.v1.AuthRequest
+ * @generated from message holomush.core.v1.AuthenticateRequest
  */
-export type AuthRequest = Message<"holomush.core.v1.AuthRequest"> & {
+export type AuthenticateRequest = Message<"holomush.core.v1.AuthenticateRequest"> & {
   /**
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
@@ -97,16 +97,16 @@ export type AuthRequest = Message<"holomush.core.v1.AuthRequest"> & {
 };
 
 /**
- * Describes the message holomush.core.v1.AuthRequest.
- * Use `create(AuthRequestSchema)` to create a new message.
+ * Describes the message holomush.core.v1.AuthenticateRequest.
+ * Use `create(AuthenticateRequestSchema)` to create a new message.
  */
-export const AuthRequestSchema: GenMessage<AuthRequest> = /*@__PURE__*/
+export const AuthenticateRequestSchema: GenMessage<AuthenticateRequest> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 2);
 
 /**
- * @generated from message holomush.core.v1.AuthResponse
+ * @generated from message holomush.core.v1.AuthenticateResponse
  */
-export type AuthResponse = Message<"holomush.core.v1.AuthResponse"> & {
+export type AuthenticateResponse = Message<"holomush.core.v1.AuthenticateResponse"> & {
   /**
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
@@ -144,16 +144,16 @@ export type AuthResponse = Message<"holomush.core.v1.AuthResponse"> & {
 };
 
 /**
- * Describes the message holomush.core.v1.AuthResponse.
- * Use `create(AuthResponseSchema)` to create a new message.
+ * Describes the message holomush.core.v1.AuthenticateResponse.
+ * Use `create(AuthenticateResponseSchema)` to create a new message.
  */
-export const AuthResponseSchema: GenMessage<AuthResponse> = /*@__PURE__*/
+export const AuthenticateResponseSchema: GenMessage<AuthenticateResponse> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 3);
 
 /**
- * @generated from message holomush.core.v1.CommandRequest
+ * @generated from message holomush.core.v1.HandleCommandRequest
  */
-export type CommandRequest = Message<"holomush.core.v1.CommandRequest"> & {
+export type HandleCommandRequest = Message<"holomush.core.v1.HandleCommandRequest"> & {
   /**
    * @generated from field: holomush.core.v1.RequestMeta meta = 1;
    */
@@ -171,16 +171,16 @@ export type CommandRequest = Message<"holomush.core.v1.CommandRequest"> & {
 };
 
 /**
- * Describes the message holomush.core.v1.CommandRequest.
- * Use `create(CommandRequestSchema)` to create a new message.
+ * Describes the message holomush.core.v1.HandleCommandRequest.
+ * Use `create(HandleCommandRequestSchema)` to create a new message.
  */
-export const CommandRequestSchema: GenMessage<CommandRequest> = /*@__PURE__*/
+export const HandleCommandRequestSchema: GenMessage<HandleCommandRequest> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 4);
 
 /**
- * @generated from message holomush.core.v1.CommandResponse
+ * @generated from message holomush.core.v1.HandleCommandResponse
  */
-export type CommandResponse = Message<"holomush.core.v1.CommandResponse"> & {
+export type HandleCommandResponse = Message<"holomush.core.v1.HandleCommandResponse"> & {
   /**
    * @generated from field: holomush.core.v1.ResponseMeta meta = 1;
    */
@@ -203,10 +203,10 @@ export type CommandResponse = Message<"holomush.core.v1.CommandResponse"> & {
 };
 
 /**
- * Describes the message holomush.core.v1.CommandResponse.
- * Use `create(CommandResponseSchema)` to create a new message.
+ * Describes the message holomush.core.v1.HandleCommandResponse.
+ * Use `create(HandleCommandResponseSchema)` to create a new message.
  */
-export const CommandResponseSchema: GenMessage<CommandResponse> = /*@__PURE__*/
+export const HandleCommandResponseSchema: GenMessage<HandleCommandResponse> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 5);
 
 /**
@@ -242,9 +242,9 @@ export const SubscribeRequestSchema: GenMessage<SubscribeRequest> = /*@__PURE__*
   messageDesc(file_holomush_core_v1_core, 6);
 
 /**
- * @generated from message holomush.core.v1.Event
+ * @generated from message holomush.core.v1.SubscribeResponse
  */
-export type Event = Message<"holomush.core.v1.Event"> & {
+export type SubscribeResponse = Message<"holomush.core.v1.SubscribeResponse"> & {
   /**
    * @generated from field: string id = 1;
    */
@@ -282,10 +282,10 @@ export type Event = Message<"holomush.core.v1.Event"> & {
 };
 
 /**
- * Describes the message holomush.core.v1.Event.
- * Use `create(EventSchema)` to create a new message.
+ * Describes the message holomush.core.v1.SubscribeResponse.
+ * Use `create(SubscribeResponseSchema)` to create a new message.
  */
-export const EventSchema: GenMessage<Event> = /*@__PURE__*/
+export const SubscribeResponseSchema: GenMessage<SubscribeResponse> = /*@__PURE__*/
   messageDesc(file_holomush_core_v1_core, 7);
 
 /**
@@ -340,45 +340,45 @@ export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PUR
   messageDesc(file_holomush_core_v1_core, 9);
 
 /**
- * Core is the main game service.
+ * CoreService is the main game service.
  *
- * @generated from service holomush.core.v1.Core
+ * @generated from service holomush.core.v1.CoreService
  */
-export const Core: GenService<{
+export const CoreService: GenService<{
   /**
    * Authenticate validates credentials and creates a session.
    *
-   * @generated from rpc holomush.core.v1.Core.Authenticate
+   * @generated from rpc holomush.core.v1.CoreService.Authenticate
    */
   authenticate: {
     methodKind: "unary";
-    input: typeof AuthRequestSchema;
-    output: typeof AuthResponseSchema;
+    input: typeof AuthenticateRequestSchema;
+    output: typeof AuthenticateResponseSchema;
   },
   /**
    * HandleCommand processes a game command.
    *
-   * @generated from rpc holomush.core.v1.Core.HandleCommand
+   * @generated from rpc holomush.core.v1.CoreService.HandleCommand
    */
   handleCommand: {
     methodKind: "unary";
-    input: typeof CommandRequestSchema;
-    output: typeof CommandResponseSchema;
+    input: typeof HandleCommandRequestSchema;
+    output: typeof HandleCommandResponseSchema;
   },
   /**
    * Subscribe opens a stream of events for the session.
    *
-   * @generated from rpc holomush.core.v1.Core.Subscribe
+   * @generated from rpc holomush.core.v1.CoreService.Subscribe
    */
   subscribe: {
     methodKind: "server_streaming";
     input: typeof SubscribeRequestSchema;
-    output: typeof EventSchema;
+    output: typeof SubscribeResponseSchema;
   },
   /**
    * Disconnect ends a session.
    *
-   * @generated from rpc holomush.core.v1.Core.Disconnect
+   * @generated from rpc holomush.core.v1.CoreService.Disconnect
    */
   disconnect: {
     methodKind: "unary";

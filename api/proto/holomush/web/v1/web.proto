@@ -5,7 +5,16 @@ syntax = "proto3";
 
 package holomush.web.v1;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
+
+enum EventChannel {
+  EVENT_CHANNEL_UNSPECIFIED = 0;
+  EVENT_CHANNEL_TERMINAL = 1;
+  EVENT_CHANNEL_STATE = 2;
+  EVENT_CHANNEL_BOTH = 3;
+}
 
 service WebService {
   // Authenticate as guest or registered user.
@@ -70,6 +79,8 @@ message GameEvent {
   string character_name = 2;
   string text = 3;
   int64 timestamp = 4;
+  EventChannel channel = 5;
+  google.protobuf.Struct metadata = 6;
 }
 
 message StreamEventsResponse {

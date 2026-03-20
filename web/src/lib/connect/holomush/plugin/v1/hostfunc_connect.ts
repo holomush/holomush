@@ -12,19 +12,19 @@ import { EmitEventRequest, EmitEventResponse, GetCommandHelpRequest, GetCommandH
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * HostFunctions service provides host capabilities to plugins.
+ * HostFunctionsService provides host capabilities to plugins.
  * This service is implemented by the host (the gRPC server runs in the host process).
  * Plugins call these methods to interact with the game world.
  *
- * @generated from service holomush.plugin.v1.HostFunctions
+ * @generated from service holomush.plugin.v1.HostFunctionsService
  */
-export const HostFunctions = {
-  typeName: "holomush.plugin.v1.HostFunctions",
+export const HostFunctionsService = {
+  typeName: "holomush.plugin.v1.HostFunctionsService",
   methods: {
     /**
      * EmitEvent publishes an event to a stream.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.EmitEvent
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.EmitEvent
      */
     emitEvent: {
       name: "EmitEvent",
@@ -35,7 +35,7 @@ export const HostFunctions = {
     /**
      * QueryRoom retrieves information about a room.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.QueryRoom
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoom
      */
     queryRoom: {
       name: "QueryRoom",
@@ -46,7 +46,7 @@ export const HostFunctions = {
     /**
      * QueryCharacter retrieves information about a character.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.QueryCharacter
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryCharacter
      */
     queryCharacter: {
       name: "QueryCharacter",
@@ -57,7 +57,7 @@ export const HostFunctions = {
     /**
      * QueryRoomCharacters retrieves all characters in a room.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.QueryRoomCharacters
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters
      */
     queryRoomCharacters: {
       name: "QueryRoomCharacters",
@@ -68,7 +68,7 @@ export const HostFunctions = {
     /**
      * KVGet retrieves a value from the plugin's key-value store.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.KVGet
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVGet
      */
     kVGet: {
       name: "KVGet",
@@ -79,7 +79,7 @@ export const HostFunctions = {
     /**
      * KVSet stores a value in the plugin's key-value store.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.KVSet
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVSet
      */
     kVSet: {
       name: "KVSet",
@@ -90,7 +90,7 @@ export const HostFunctions = {
     /**
      * KVDelete removes a value from the plugin's key-value store.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.KVDelete
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVDelete
      */
     kVDelete: {
       name: "KVDelete",
@@ -101,7 +101,7 @@ export const HostFunctions = {
     /**
      * Log writes a log message through the host's logging system.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.Log
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.Log
      */
     log: {
       name: "Log",
@@ -113,7 +113,7 @@ export const HostFunctions = {
      * ListCommands returns all available commands.
      * Requires capability: command.list
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.ListCommands
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.ListCommands
      */
     listCommands: {
       name: "ListCommands",
@@ -125,7 +125,7 @@ export const HostFunctions = {
      * GetCommandHelp returns detailed help for a specific command.
      * Requires capability: command.help
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctions.GetCommandHelp
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.GetCommandHelp
      */
     getCommandHelp: {
       name: "GetCommandHelp",

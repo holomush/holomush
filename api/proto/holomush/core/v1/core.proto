@@ -5,45 +5,45 @@ syntax = "proto3";
 
 package holomush.core.v1;
 
-option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
-
 import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
 
 // RequestMeta contains metadata for request correlation and debugging.
 message RequestMeta {
-  string request_id = 1;                    // ULID for log correlation
+  string request_id = 1; // ULID for log correlation
   google.protobuf.Timestamp timestamp = 2;
 }
 
 // ResponseMeta contains metadata echoed back from requests.
 message ResponseMeta {
-  string request_id = 1;                    // Echoed from request
+  string request_id = 1; // Echoed from request
   google.protobuf.Timestamp timestamp = 2;
 }
 
-// Core is the main game service.
-service Core {
+// CoreService is the main game service.
+service CoreService {
   // Authenticate validates credentials and creates a session.
-  rpc Authenticate(AuthRequest) returns (AuthResponse);
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
 
   // HandleCommand processes a game command.
-  rpc HandleCommand(CommandRequest) returns (CommandResponse);
+  rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
 
   // Subscribe opens a stream of events for the session.
-  rpc Subscribe(SubscribeRequest) returns (stream Event);
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
 
   // Disconnect ends a session.
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
 }
 
-message AuthRequest {
+message AuthenticateRequest {
   RequestMeta meta = 1;
   string username = 2;
   string password = 3;
-  string client_type = 4;  // "terminal", "comms_hub", "telnet"
+  string client_type = 4; // "terminal", "comms_hub", "telnet"
 }
 
-message AuthResponse {
+message AuthenticateResponse {
   ResponseMeta meta = 1;
   bool success = 2;
   string session_id = 3;
@@ -53,13 +53,13 @@ message AuthResponse {
   string connection_id = 7;
 }
 
-message CommandRequest {
+message HandleCommandRequest {
   RequestMeta meta = 1;
   string session_id = 2;
   string command = 3;
 }
 
-message CommandResponse {
+message HandleCommandResponse {
   ResponseMeta meta = 1;
   bool success = 2;
   string output = 3;
@@ -73,7 +73,7 @@ message SubscribeRequest {
   bool replay_from_cursor = 4;
 }
 
-message Event {
+message SubscribeResponse {
   string id = 1;
   string stream = 2;
   string type = 3;
@@ -86,7 +86,7 @@ message Event {
 message DisconnectRequest {
   RequestMeta meta = 1;
   string session_id = 2;
-  string connection_id = 3;  // optional: remove specific connection
+  string connection_id = 3; // optional: remove specific connection
 }
 
 message DisconnectResponse {

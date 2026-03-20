@@ -34,13 +34,16 @@ var errUnimplemented = connect.NewError(connect.CodeUnimplemented, errors.New("t
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
-	Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error)
-	HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error)
-	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error)
+	Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
+	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
+	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
+// The gateway is a protocol translation layer only — it MUST NOT access
+// WorldService or other internal services directly. All game state flows
+// through core server RPCs.
 type Handler struct {
 	client       CoreClient
 	sessionStore session.Store
@@ -77,7 +80,7 @@ func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginReq
 	authCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	resp, err := h.client.Authenticate(authCtx, &corev1.AuthRequest{
+	resp, err := h.client.Authenticate(authCtx, &corev1.AuthenticateRequest{
 		Username:   req.Msg.GetUsername(),
 		Password:   req.Msg.GetPassword(),
 		ClientType: "terminal",
@@ -105,11 +108,14 @@ func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginReq
 }
 
 // SendCommand forwards a game command to the core service.
+// Command history persistence is handled server-side by HandleCommand
+// (see grpc/server.go AppendCommand call), so no additional work is
+// needed here.
 func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.SendCommandRequest]) (*connect.Response[webv1.SendCommandResponse], error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	resp, err := h.client.HandleCommand(cmdCtx, &corev1.CommandRequest{
+	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId: req.Msg.GetSessionId(),
 		Command:   req.Msg.GetText(),
 	})
@@ -163,6 +169,9 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			}()
 		}
 	}
+
+	// Synthetic location_state is injected by the core server's Subscribe handler
+	// (which has direct access to WorldService). The gateway just forwards it.
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:        sessionID,

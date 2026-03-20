@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/hostfunc.proto.
  */
 export const file_holomush_plugin_v1_hostfunc: GenFile = /*@__PURE__*/
-  fileDesc("CiFob2xvbXVzaC9wbHVnaW4vdjEvaG9zdGZ1bmMucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSJAChBFbWl0RXZlbnRSZXF1ZXN0EiwKBWV2ZW50GAEgASgLMh0uaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudCIzChFFbWl0RXZlbnRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIiMKEFF1ZXJ5Um9vbVJlcXVlc3QSDwoHcm9vbV9pZBgBIAEoCSJOChFRdWVyeVJvb21SZXNwb25zZRIqCgRyb29tGAEgASgLMhwuaG9sb211c2gucGx1Z2luLnYxLlJvb21JbmZvEg0KBWVycm9yGAIgASgJIjkKCFJvb21JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiLQoVUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJdChZRdWVyeUNoYXJhY3RlclJlc3BvbnNlEjQKCWNoYXJhY3RlchgBIAEoCzIhLmhvbG9tdXNoLnBsdWdpbi52MS5DaGFyYWN0ZXJJbmZvEg0KBWVycm9yGAIgASgJIikKDUNoYXJhY3RlckluZm8SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSItChpRdWVyeVJvb21DaGFyYWN0ZXJzUmVxdWVzdBIPCgdyb29tX2lkGAEgASgJImMKG1F1ZXJ5Um9vbUNoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gucGx1Z2luLnYxLkNoYXJhY3RlckluZm8SDQoFZXJyb3IYAiABKAkiGwoMS1ZHZXRSZXF1ZXN0EgsKA2tleRgBIAEoCSI8Cg1LVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgMEg0KBWZvdW5kGAIgASgIEg0KBWVycm9yGAMgASgJIioKDEtWU2V0UmVxdWVzdBILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAwiLwoNS1ZTZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIh4KD0tWRGVsZXRlUmVxdWVzdBILCgNrZXkYASABKAkiMgoQS1ZEZWxldGVSZXNwb25zZRIPCgdkZWxldGVkGAEgASgIEg0KBWVycm9yGAIgASgJIrUBCgpMb2dSZXF1ZXN0EisKBWxldmVsGAEgASgOMhwuaG9sb211c2gucGx1Z2luLnYxLkxvZ0xldmVsEg8KB21lc3NhZ2UYAiABKAkSOgoGZmllbGRzGAMgAygLMiouaG9sb211c2gucGx1Z2luLnYxLkxvZ1JlcXVlc3QuRmllbGRzRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASINCgtMb2dSZXNwb25zZSIrChNMaXN0Q29tbWFuZHNSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJYChRMaXN0Q29tbWFuZHNSZXNwb25zZRIxCghjb21tYW5kcxgBIAMoCzIfLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kSW5mbxINCgVlcnJvchgCIAEoCSJICgtDb21tYW5kSW5mbxIMCgRuYW1lGAEgASgJEgwKBGhlbHAYAiABKAkSDQoFdXNhZ2UYAyABKAkSDgoGc291cmNlGAQgASgJIi0KFUdldENvbW1hbmRIZWxwUmVxdWVzdBIUCgxjb21tYW5kX25hbWUYASABKAkiXQoWR2V0Q29tbWFuZEhlbHBSZXNwb25zZRI0Cgdjb21tYW5kGAEgASgLMiMuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRIZWxwSW5mbxINCgVlcnJvchgCIAEoCSJ1Cg9Db21tYW5kSGVscEluZm8SDAoEbmFtZRgBIAEoCRIMCgRoZWxwGAIgASgJEg0KBXVzYWdlGAMgASgJEhEKCWhlbHBfdGV4dBgEIAEoCRIUCgxjYXBhYmlsaXRpZXMYBSADKAkSDgoGc291cmNlGAYgASgJKncKCExvZ0xldmVsEhkKFUxPR19MRVZFTF9VTlNQRUNJRklFRBAAEhMKD0xPR19MRVZFTF9ERUJVRxABEhIKDkxPR19MRVZFTF9JTkZPEAISEgoOTE9HX0xFVkVMX1dBUk4QAxITCg9MT0dfTEVWRUxfRVJST1IQBDKrBwoNSG9zdEZ1bmN0aW9ucxJYCglFbWl0RXZlbnQSJC5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50UmVxdWVzdBolLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnRSZXNwb25zZRJYCglRdWVyeVJvb20SJC5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlSb29tUmVxdWVzdBolLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeVJvb21SZXNwb25zZRJnCg5RdWVyeUNoYXJhY3RlchIpLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUNoYXJhY3RlclJlcXVlc3QaKi5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlDaGFyYWN0ZXJSZXNwb25zZRJ2ChNRdWVyeVJvb21DaGFyYWN0ZXJzEi4uaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Um9vbUNoYXJhY3RlcnNSZXF1ZXN0Gi8uaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Um9vbUNoYXJhY3RlcnNSZXNwb25zZRJMCgVLVkdldBIgLmhvbG9tdXNoLnBsdWdpbi52MS5LVkdldFJlcXVlc3QaIS5ob2xvbXVzaC5wbHVnaW4udjEuS1ZHZXRSZXNwb25zZRJMCgVLVlNldBIgLmhvbG9tdXNoLnBsdWdpbi52MS5LVlNldFJlcXVlc3QaIS5ob2xvbXVzaC5wbHVnaW4udjEuS1ZTZXRSZXNwb25zZRJVCghLVkRlbGV0ZRIjLmhvbG9tdXNoLnBsdWdpbi52MS5LVkRlbGV0ZVJlcXVlc3QaJC5ob2xvbXVzaC5wbHVnaW4udjEuS1ZEZWxldGVSZXNwb25zZRJGCgNMb2cSHi5ob2xvbXVzaC5wbHVnaW4udjEuTG9nUmVxdWVzdBofLmhvbG9tdXNoLnBsdWdpbi52MS5Mb2dSZXNwb25zZRJhCgxMaXN0Q29tbWFuZHMSJy5ob2xvbXVzaC5wbHVnaW4udjEuTGlzdENvbW1hbmRzUmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5MaXN0Q29tbWFuZHNSZXNwb25zZRJnCg5HZXRDb21tYW5kSGVscBIpLmhvbG9tdXNoLnBsdWdpbi52MS5HZXRDb21tYW5kSGVscFJlcXVlc3QaKi5ob2xvbXVzaC5wbHVnaW4udjEuR2V0Q29tbWFuZEhlbHBSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw", [file_holomush_plugin_v1_plugin]);
+  fileDesc("CiFob2xvbXVzaC9wbHVnaW4vdjEvaG9zdGZ1bmMucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSJAChBFbWl0RXZlbnRSZXF1ZXN0EiwKBWV2ZW50GAEgASgLMh0uaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudCIzChFFbWl0RXZlbnRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIiMKEFF1ZXJ5Um9vbVJlcXVlc3QSDwoHcm9vbV9pZBgBIAEoCSJOChFRdWVyeVJvb21SZXNwb25zZRIqCgRyb29tGAEgASgLMhwuaG9sb211c2gucGx1Z2luLnYxLlJvb21JbmZvEg0KBWVycm9yGAIgASgJIjkKCFJvb21JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiLQoVUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJdChZRdWVyeUNoYXJhY3RlclJlc3BvbnNlEjQKCWNoYXJhY3RlchgBIAEoCzIhLmhvbG9tdXNoLnBsdWdpbi52MS5DaGFyYWN0ZXJJbmZvEg0KBWVycm9yGAIgASgJIikKDUNoYXJhY3RlckluZm8SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSItChpRdWVyeVJvb21DaGFyYWN0ZXJzUmVxdWVzdBIPCgdyb29tX2lkGAEgASgJImMKG1F1ZXJ5Um9vbUNoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gucGx1Z2luLnYxLkNoYXJhY3RlckluZm8SDQoFZXJyb3IYAiABKAkiGwoMS1ZHZXRSZXF1ZXN0EgsKA2tleRgBIAEoCSI8Cg1LVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgMEg0KBWZvdW5kGAIgASgIEg0KBWVycm9yGAMgASgJIioKDEtWU2V0UmVxdWVzdBILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAwiLwoNS1ZTZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIh4KD0tWRGVsZXRlUmVxdWVzdBILCgNrZXkYASABKAkiMgoQS1ZEZWxldGVSZXNwb25zZRIPCgdkZWxldGVkGAEgASgIEg0KBWVycm9yGAIgASgJIrUBCgpMb2dSZXF1ZXN0EisKBWxldmVsGAEgASgOMhwuaG9sb211c2gucGx1Z2luLnYxLkxvZ0xldmVsEg8KB21lc3NhZ2UYAiABKAkSOgoGZmllbGRzGAMgAygLMiouaG9sb211c2gucGx1Z2luLnYxLkxvZ1JlcXVlc3QuRmllbGRzRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASINCgtMb2dSZXNwb25zZSIrChNMaXN0Q29tbWFuZHNSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJYChRMaXN0Q29tbWFuZHNSZXNwb25zZRIxCghjb21tYW5kcxgBIAMoCzIfLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kSW5mbxINCgVlcnJvchgCIAEoCSJICgtDb21tYW5kSW5mbxIMCgRuYW1lGAEgASgJEgwKBGhlbHAYAiABKAkSDQoFdXNhZ2UYAyABKAkSDgoGc291cmNlGAQgASgJIi0KFUdldENvbW1hbmRIZWxwUmVxdWVzdBIUCgxjb21tYW5kX25hbWUYASABKAkiXQoWR2V0Q29tbWFuZEhlbHBSZXNwb25zZRI0Cgdjb21tYW5kGAEgASgLMiMuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRIZWxwSW5mbxINCgVlcnJvchgCIAEoCSJ1Cg9Db21tYW5kSGVscEluZm8SDAoEbmFtZRgBIAEoCRIMCgRoZWxwGAIgASgJEg0KBXVzYWdlGAMgASgJEhEKCWhlbHBfdGV4dBgEIAEoCRIUCgxjYXBhYmlsaXRpZXMYBSADKAkSDgoGc291cmNlGAYgASgJKncKCExvZ0xldmVsEhkKFUxPR19MRVZFTF9VTlNQRUNJRklFRBAAEhMKD0xPR19MRVZFTF9ERUJVRxABEhIKDkxPR19MRVZFTF9JTkZPEAISEgoOTE9HX0xFVkVMX1dBUk4QAxITCg9MT0dfTEVWRUxfRVJST1IQBDKyBwoUSG9zdEZ1bmN0aW9uc1NlcnZpY2USWAoJRW1pdEV2ZW50EiQuaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudFJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50UmVzcG9uc2USWAoJUXVlcnlSb29tEiQuaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Um9vbVJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlSb29tUmVzcG9uc2USZwoOUXVlcnlDaGFyYWN0ZXISKS5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0GiouaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Q2hhcmFjdGVyUmVzcG9uc2USdgoTUXVlcnlSb29tQ2hhcmFjdGVycxIuLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeVJvb21DaGFyYWN0ZXJzUmVxdWVzdBovLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeVJvb21DaGFyYWN0ZXJzUmVzcG9uc2USTAoFS1ZHZXQSIC5ob2xvbXVzaC5wbHVnaW4udjEuS1ZHZXRSZXF1ZXN0GiEuaG9sb211c2gucGx1Z2luLnYxLktWR2V0UmVzcG9uc2USTAoFS1ZTZXQSIC5ob2xvbXVzaC5wbHVnaW4udjEuS1ZTZXRSZXF1ZXN0GiEuaG9sb211c2gucGx1Z2luLnYxLktWU2V0UmVzcG9uc2USVQoIS1ZEZWxldGUSIy5ob2xvbXVzaC5wbHVnaW4udjEuS1ZEZWxldGVSZXF1ZXN0GiQuaG9sb211c2gucGx1Z2luLnYxLktWRGVsZXRlUmVzcG9uc2USRgoDTG9nEh4uaG9sb211c2gucGx1Z2luLnYxLkxvZ1JlcXVlc3QaHy5ob2xvbXVzaC5wbHVnaW4udjEuTG9nUmVzcG9uc2USYQoMTGlzdENvbW1hbmRzEicuaG9sb211c2gucGx1Z2luLnYxLkxpc3RDb21tYW5kc1JlcXVlc3QaKC5ob2xvbXVzaC5wbHVnaW4udjEuTGlzdENvbW1hbmRzUmVzcG9uc2USZwoOR2V0Q29tbWFuZEhlbHASKS5ob2xvbXVzaC5wbHVnaW4udjEuR2V0Q29tbWFuZEhlbHBSZXF1ZXN0GiouaG9sb211c2gucGx1Z2luLnYxLkdldENvbW1hbmRIZWxwUmVzcG9uc2VCRFpCZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvcGx1Z2luL3YxO3BsdWdpbnYxYgZwcm90bzM", [file_holomush_plugin_v1_plugin]);
 
 /**
  * EmitEventRequest wraps an event for emission by the host.
@@ -725,17 +725,17 @@ export const LogLevelSchema: GenEnum<LogLevel> = /*@__PURE__*/
   enumDesc(file_holomush_plugin_v1_hostfunc, 0);
 
 /**
- * HostFunctions service provides host capabilities to plugins.
+ * HostFunctionsService provides host capabilities to plugins.
  * This service is implemented by the host (the gRPC server runs in the host process).
  * Plugins call these methods to interact with the game world.
  *
- * @generated from service holomush.plugin.v1.HostFunctions
+ * @generated from service holomush.plugin.v1.HostFunctionsService
  */
-export const HostFunctions: GenService<{
+export const HostFunctionsService: GenService<{
   /**
    * EmitEvent publishes an event to a stream.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.EmitEvent
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.EmitEvent
    */
   emitEvent: {
     methodKind: "unary";
@@ -745,7 +745,7 @@ export const HostFunctions: GenService<{
   /**
    * QueryRoom retrieves information about a room.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.QueryRoom
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoom
    */
   queryRoom: {
     methodKind: "unary";
@@ -755,7 +755,7 @@ export const HostFunctions: GenService<{
   /**
    * QueryCharacter retrieves information about a character.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.QueryCharacter
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryCharacter
    */
   queryCharacter: {
     methodKind: "unary";
@@ -765,7 +765,7 @@ export const HostFunctions: GenService<{
   /**
    * QueryRoomCharacters retrieves all characters in a room.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.QueryRoomCharacters
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters
    */
   queryRoomCharacters: {
     methodKind: "unary";
@@ -775,7 +775,7 @@ export const HostFunctions: GenService<{
   /**
    * KVGet retrieves a value from the plugin's key-value store.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.KVGet
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVGet
    */
   kVGet: {
     methodKind: "unary";
@@ -785,7 +785,7 @@ export const HostFunctions: GenService<{
   /**
    * KVSet stores a value in the plugin's key-value store.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.KVSet
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVSet
    */
   kVSet: {
     methodKind: "unary";
@@ -795,7 +795,7 @@ export const HostFunctions: GenService<{
   /**
    * KVDelete removes a value from the plugin's key-value store.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.KVDelete
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.KVDelete
    */
   kVDelete: {
     methodKind: "unary";
@@ -805,7 +805,7 @@ export const HostFunctions: GenService<{
   /**
    * Log writes a log message through the host's logging system.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.Log
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.Log
    */
   log: {
     methodKind: "unary";
@@ -816,7 +816,7 @@ export const HostFunctions: GenService<{
    * ListCommands returns all available commands.
    * Requires capability: command.list
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.ListCommands
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.ListCommands
    */
   listCommands: {
     methodKind: "unary";
@@ -827,7 +827,7 @@ export const HostFunctions: GenService<{
    * GetCommandHelp returns detailed help for a specific command.
    * Requires capability: command.help
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctions.GetCommandHelp
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.GetCommandHelp
    */
   getCommandHelp: {
     methodKind: "unary";

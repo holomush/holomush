@@ -24,26 +24,26 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HostFunctions_EmitEvent_FullMethodName           = "/holomush.plugin.v1.HostFunctions/EmitEvent"
-	HostFunctions_QueryRoom_FullMethodName           = "/holomush.plugin.v1.HostFunctions/QueryRoom"
-	HostFunctions_QueryCharacter_FullMethodName      = "/holomush.plugin.v1.HostFunctions/QueryCharacter"
-	HostFunctions_QueryRoomCharacters_FullMethodName = "/holomush.plugin.v1.HostFunctions/QueryRoomCharacters"
-	HostFunctions_KVGet_FullMethodName               = "/holomush.plugin.v1.HostFunctions/KVGet"
-	HostFunctions_KVSet_FullMethodName               = "/holomush.plugin.v1.HostFunctions/KVSet"
-	HostFunctions_KVDelete_FullMethodName            = "/holomush.plugin.v1.HostFunctions/KVDelete"
-	HostFunctions_Log_FullMethodName                 = "/holomush.plugin.v1.HostFunctions/Log"
-	HostFunctions_ListCommands_FullMethodName        = "/holomush.plugin.v1.HostFunctions/ListCommands"
-	HostFunctions_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.HostFunctions/GetCommandHelp"
+	HostFunctionsService_EmitEvent_FullMethodName           = "/holomush.plugin.v1.HostFunctionsService/EmitEvent"
+	HostFunctionsService_QueryRoom_FullMethodName           = "/holomush.plugin.v1.HostFunctionsService/QueryRoom"
+	HostFunctionsService_QueryCharacter_FullMethodName      = "/holomush.plugin.v1.HostFunctionsService/QueryCharacter"
+	HostFunctionsService_QueryRoomCharacters_FullMethodName = "/holomush.plugin.v1.HostFunctionsService/QueryRoomCharacters"
+	HostFunctionsService_KVGet_FullMethodName               = "/holomush.plugin.v1.HostFunctionsService/KVGet"
+	HostFunctionsService_KVSet_FullMethodName               = "/holomush.plugin.v1.HostFunctionsService/KVSet"
+	HostFunctionsService_KVDelete_FullMethodName            = "/holomush.plugin.v1.HostFunctionsService/KVDelete"
+	HostFunctionsService_Log_FullMethodName                 = "/holomush.plugin.v1.HostFunctionsService/Log"
+	HostFunctionsService_ListCommands_FullMethodName        = "/holomush.plugin.v1.HostFunctionsService/ListCommands"
+	HostFunctionsService_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.HostFunctionsService/GetCommandHelp"
 )
 
-// HostFunctionsClient is the client API for HostFunctions service.
+// HostFunctionsServiceClient is the client API for HostFunctionsService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// HostFunctions service provides host capabilities to plugins.
+// HostFunctionsService provides host capabilities to plugins.
 // This service is implemented by the host (the gRPC server runs in the host process).
 // Plugins call these methods to interact with the game world.
-type HostFunctionsClient interface {
+type HostFunctionsServiceClient interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(ctx context.Context, in *EmitEventRequest, opts ...grpc.CallOption) (*EmitEventResponse, error)
 	// QueryRoom retrieves information about a room.
@@ -68,122 +68,122 @@ type HostFunctionsClient interface {
 	GetCommandHelp(ctx context.Context, in *GetCommandHelpRequest, opts ...grpc.CallOption) (*GetCommandHelpResponse, error)
 }
 
-type hostFunctionsClient struct {
+type hostFunctionsServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewHostFunctionsClient(cc grpc.ClientConnInterface) HostFunctionsClient {
-	return &hostFunctionsClient{cc}
+func NewHostFunctionsServiceClient(cc grpc.ClientConnInterface) HostFunctionsServiceClient {
+	return &hostFunctionsServiceClient{cc}
 }
 
-func (c *hostFunctionsClient) EmitEvent(ctx context.Context, in *EmitEventRequest, opts ...grpc.CallOption) (*EmitEventResponse, error) {
+func (c *hostFunctionsServiceClient) EmitEvent(ctx context.Context, in *EmitEventRequest, opts ...grpc.CallOption) (*EmitEventResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EmitEventResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_EmitEvent_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_EmitEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) QueryRoom(ctx context.Context, in *QueryRoomRequest, opts ...grpc.CallOption) (*QueryRoomResponse, error) {
+func (c *hostFunctionsServiceClient) QueryRoom(ctx context.Context, in *QueryRoomRequest, opts ...grpc.CallOption) (*QueryRoomResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryRoomResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_QueryRoom_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_QueryRoom_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) QueryCharacter(ctx context.Context, in *QueryCharacterRequest, opts ...grpc.CallOption) (*QueryCharacterResponse, error) {
+func (c *hostFunctionsServiceClient) QueryCharacter(ctx context.Context, in *QueryCharacterRequest, opts ...grpc.CallOption) (*QueryCharacterResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryCharacterResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_QueryCharacter_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_QueryCharacter_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) QueryRoomCharacters(ctx context.Context, in *QueryRoomCharactersRequest, opts ...grpc.CallOption) (*QueryRoomCharactersResponse, error) {
+func (c *hostFunctionsServiceClient) QueryRoomCharacters(ctx context.Context, in *QueryRoomCharactersRequest, opts ...grpc.CallOption) (*QueryRoomCharactersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryRoomCharactersResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_QueryRoomCharacters_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_QueryRoomCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) KVGet(ctx context.Context, in *KVGetRequest, opts ...grpc.CallOption) (*KVGetResponse, error) {
+func (c *hostFunctionsServiceClient) KVGet(ctx context.Context, in *KVGetRequest, opts ...grpc.CallOption) (*KVGetResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(KVGetResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_KVGet_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_KVGet_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) KVSet(ctx context.Context, in *KVSetRequest, opts ...grpc.CallOption) (*KVSetResponse, error) {
+func (c *hostFunctionsServiceClient) KVSet(ctx context.Context, in *KVSetRequest, opts ...grpc.CallOption) (*KVSetResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(KVSetResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_KVSet_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_KVSet_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) KVDelete(ctx context.Context, in *KVDeleteRequest, opts ...grpc.CallOption) (*KVDeleteResponse, error) {
+func (c *hostFunctionsServiceClient) KVDelete(ctx context.Context, in *KVDeleteRequest, opts ...grpc.CallOption) (*KVDeleteResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(KVDeleteResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_KVDelete_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_KVDelete_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) Log(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error) {
+func (c *hostFunctionsServiceClient) Log(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LogResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_Log_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_Log_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) ListCommands(ctx context.Context, in *ListCommandsRequest, opts ...grpc.CallOption) (*ListCommandsResponse, error) {
+func (c *hostFunctionsServiceClient) ListCommands(ctx context.Context, in *ListCommandsRequest, opts ...grpc.CallOption) (*ListCommandsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListCommandsResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_ListCommands_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_ListCommands_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *hostFunctionsClient) GetCommandHelp(ctx context.Context, in *GetCommandHelpRequest, opts ...grpc.CallOption) (*GetCommandHelpResponse, error) {
+func (c *hostFunctionsServiceClient) GetCommandHelp(ctx context.Context, in *GetCommandHelpRequest, opts ...grpc.CallOption) (*GetCommandHelpResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCommandHelpResponse)
-	err := c.cc.Invoke(ctx, HostFunctions_GetCommandHelp_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, HostFunctionsService_GetCommandHelp_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// HostFunctionsServer is the server API for HostFunctions service.
-// All implementations must embed UnimplementedHostFunctionsServer
+// HostFunctionsServiceServer is the server API for HostFunctionsService service.
+// All implementations must embed UnimplementedHostFunctionsServiceServer
 // for forward compatibility.
 //
-// HostFunctions service provides host capabilities to plugins.
+// HostFunctionsService provides host capabilities to plugins.
 // This service is implemented by the host (the gRPC server runs in the host process).
 // Plugins call these methods to interact with the game world.
-type HostFunctionsServer interface {
+type HostFunctionsServiceServer interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *EmitEventRequest) (*EmitEventResponse, error)
 	// QueryRoom retrieves information about a room.
@@ -206,293 +206,293 @@ type HostFunctionsServer interface {
 	// GetCommandHelp returns detailed help for a specific command.
 	// Requires capability: command.help
 	GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error)
-	mustEmbedUnimplementedHostFunctionsServer()
+	mustEmbedUnimplementedHostFunctionsServiceServer()
 }
 
-// UnimplementedHostFunctionsServer must be embedded to have
+// UnimplementedHostFunctionsServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedHostFunctionsServer struct{}
+type UnimplementedHostFunctionsServiceServer struct{}
 
-func (UnimplementedHostFunctionsServer) EmitEvent(context.Context, *EmitEventRequest) (*EmitEventResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) EmitEvent(context.Context, *EmitEventRequest) (*EmitEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
 }
-func (UnimplementedHostFunctionsServer) QueryRoom(context.Context, *QueryRoomRequest) (*QueryRoomResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) QueryRoom(context.Context, *QueryRoomRequest) (*QueryRoomResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryRoom not implemented")
 }
-func (UnimplementedHostFunctionsServer) QueryCharacter(context.Context, *QueryCharacterRequest) (*QueryCharacterResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) QueryCharacter(context.Context, *QueryCharacterRequest) (*QueryCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryCharacter not implemented")
 }
-func (UnimplementedHostFunctionsServer) QueryRoomCharacters(context.Context, *QueryRoomCharactersRequest) (*QueryRoomCharactersResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) QueryRoomCharacters(context.Context, *QueryRoomCharactersRequest) (*QueryRoomCharactersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryRoomCharacters not implemented")
 }
-func (UnimplementedHostFunctionsServer) KVGet(context.Context, *KVGetRequest) (*KVGetResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) KVGet(context.Context, *KVGetRequest) (*KVGetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVGet not implemented")
 }
-func (UnimplementedHostFunctionsServer) KVSet(context.Context, *KVSetRequest) (*KVSetResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) KVSet(context.Context, *KVSetRequest) (*KVSetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVSet not implemented")
 }
-func (UnimplementedHostFunctionsServer) KVDelete(context.Context, *KVDeleteRequest) (*KVDeleteResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) KVDelete(context.Context, *KVDeleteRequest) (*KVDeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVDelete not implemented")
 }
-func (UnimplementedHostFunctionsServer) Log(context.Context, *LogRequest) (*LogResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) Log(context.Context, *LogRequest) (*LogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Log not implemented")
 }
-func (UnimplementedHostFunctionsServer) ListCommands(context.Context, *ListCommandsRequest) (*ListCommandsResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) ListCommands(context.Context, *ListCommandsRequest) (*ListCommandsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCommands not implemented")
 }
-func (UnimplementedHostFunctionsServer) GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error) {
+func (UnimplementedHostFunctionsServiceServer) GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCommandHelp not implemented")
 }
-func (UnimplementedHostFunctionsServer) mustEmbedUnimplementedHostFunctionsServer() {}
-func (UnimplementedHostFunctionsServer) testEmbeddedByValue()                       {}
+func (UnimplementedHostFunctionsServiceServer) mustEmbedUnimplementedHostFunctionsServiceServer() {}
+func (UnimplementedHostFunctionsServiceServer) testEmbeddedByValue()                              {}
 
-// UnsafeHostFunctionsServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to HostFunctionsServer will
+// UnsafeHostFunctionsServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to HostFunctionsServiceServer will
 // result in compilation errors.
-type UnsafeHostFunctionsServer interface {
-	mustEmbedUnimplementedHostFunctionsServer()
+type UnsafeHostFunctionsServiceServer interface {
+	mustEmbedUnimplementedHostFunctionsServiceServer()
 }
 
-func RegisterHostFunctionsServer(s grpc.ServiceRegistrar, srv HostFunctionsServer) {
-	// If the following call panics, it indicates UnimplementedHostFunctionsServer was
+func RegisterHostFunctionsServiceServer(s grpc.ServiceRegistrar, srv HostFunctionsServiceServer) {
+	// If the following call panics, it indicates UnimplementedHostFunctionsServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&HostFunctions_ServiceDesc, srv)
+	s.RegisterService(&HostFunctionsService_ServiceDesc, srv)
 }
 
-func _HostFunctions_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EmitEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).EmitEvent(ctx, in)
+		return srv.(HostFunctionsServiceServer).EmitEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_EmitEvent_FullMethodName,
+		FullMethod: HostFunctionsService_EmitEvent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).EmitEvent(ctx, req.(*EmitEventRequest))
+		return srv.(HostFunctionsServiceServer).EmitEvent(ctx, req.(*EmitEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_QueryRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_QueryRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryRoomRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).QueryRoom(ctx, in)
+		return srv.(HostFunctionsServiceServer).QueryRoom(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_QueryRoom_FullMethodName,
+		FullMethod: HostFunctionsService_QueryRoom_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).QueryRoom(ctx, req.(*QueryRoomRequest))
+		return srv.(HostFunctionsServiceServer).QueryRoom(ctx, req.(*QueryRoomRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_QueryCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_QueryCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryCharacterRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).QueryCharacter(ctx, in)
+		return srv.(HostFunctionsServiceServer).QueryCharacter(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_QueryCharacter_FullMethodName,
+		FullMethod: HostFunctionsService_QueryCharacter_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).QueryCharacter(ctx, req.(*QueryCharacterRequest))
+		return srv.(HostFunctionsServiceServer).QueryCharacter(ctx, req.(*QueryCharacterRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_QueryRoomCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_QueryRoomCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryRoomCharactersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).QueryRoomCharacters(ctx, in)
+		return srv.(HostFunctionsServiceServer).QueryRoomCharacters(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_QueryRoomCharacters_FullMethodName,
+		FullMethod: HostFunctionsService_QueryRoomCharacters_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).QueryRoomCharacters(ctx, req.(*QueryRoomCharactersRequest))
+		return srv.(HostFunctionsServiceServer).QueryRoomCharacters(ctx, req.(*QueryRoomCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_KVGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_KVGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(KVGetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).KVGet(ctx, in)
+		return srv.(HostFunctionsServiceServer).KVGet(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_KVGet_FullMethodName,
+		FullMethod: HostFunctionsService_KVGet_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).KVGet(ctx, req.(*KVGetRequest))
+		return srv.(HostFunctionsServiceServer).KVGet(ctx, req.(*KVGetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_KVSet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_KVSet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(KVSetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).KVSet(ctx, in)
+		return srv.(HostFunctionsServiceServer).KVSet(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_KVSet_FullMethodName,
+		FullMethod: HostFunctionsService_KVSet_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).KVSet(ctx, req.(*KVSetRequest))
+		return srv.(HostFunctionsServiceServer).KVSet(ctx, req.(*KVSetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_KVDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_KVDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(KVDeleteRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).KVDelete(ctx, in)
+		return srv.(HostFunctionsServiceServer).KVDelete(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_KVDelete_FullMethodName,
+		FullMethod: HostFunctionsService_KVDelete_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).KVDelete(ctx, req.(*KVDeleteRequest))
+		return srv.(HostFunctionsServiceServer).KVDelete(ctx, req.(*KVDeleteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_Log_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_Log_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LogRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).Log(ctx, in)
+		return srv.(HostFunctionsServiceServer).Log(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_Log_FullMethodName,
+		FullMethod: HostFunctionsService_Log_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).Log(ctx, req.(*LogRequest))
+		return srv.(HostFunctionsServiceServer).Log(ctx, req.(*LogRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListCommandsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).ListCommands(ctx, in)
+		return srv.(HostFunctionsServiceServer).ListCommands(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_ListCommands_FullMethodName,
+		FullMethod: HostFunctionsService_ListCommands_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).ListCommands(ctx, req.(*ListCommandsRequest))
+		return srv.(HostFunctionsServiceServer).ListCommands(ctx, req.(*ListCommandsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctions_GetCommandHelp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _HostFunctionsService_GetCommandHelp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetCommandHelpRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServer).GetCommandHelp(ctx, in)
+		return srv.(HostFunctionsServiceServer).GetCommandHelp(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctions_GetCommandHelp_FullMethodName,
+		FullMethod: HostFunctionsService_GetCommandHelp_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServer).GetCommandHelp(ctx, req.(*GetCommandHelpRequest))
+		return srv.(HostFunctionsServiceServer).GetCommandHelp(ctx, req.(*GetCommandHelpRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// HostFunctions_ServiceDesc is the grpc.ServiceDesc for HostFunctions service.
+// HostFunctionsService_ServiceDesc is the grpc.ServiceDesc for HostFunctionsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var HostFunctions_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "holomush.plugin.v1.HostFunctions",
-	HandlerType: (*HostFunctionsServer)(nil),
+var HostFunctionsService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "holomush.plugin.v1.HostFunctionsService",
+	HandlerType: (*HostFunctionsServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "EmitEvent",
-			Handler:    _HostFunctions_EmitEvent_Handler,
+			Handler:    _HostFunctionsService_EmitEvent_Handler,
 		},
 		{
 			MethodName: "QueryRoom",
-			Handler:    _HostFunctions_QueryRoom_Handler,
+			Handler:    _HostFunctionsService_QueryRoom_Handler,
 		},
 		{
 			MethodName: "QueryCharacter",
-			Handler:    _HostFunctions_QueryCharacter_Handler,
+			Handler:    _HostFunctionsService_QueryCharacter_Handler,
 		},
 		{
 			MethodName: "QueryRoomCharacters",
-			Handler:    _HostFunctions_QueryRoomCharacters_Handler,
+			Handler:    _HostFunctionsService_QueryRoomCharacters_Handler,
 		},
 		{
 			MethodName: "KVGet",
-			Handler:    _HostFunctions_KVGet_Handler,
+			Handler:    _HostFunctionsService_KVGet_Handler,
 		},
 		{
 			MethodName: "KVSet",
-			Handler:    _HostFunctions_KVSet_Handler,
+			Handler:    _HostFunctionsService_KVSet_Handler,
 		},
 		{
 			MethodName: "KVDelete",
-			Handler:    _HostFunctions_KVDelete_Handler,
+			Handler:    _HostFunctionsService_KVDelete_Handler,
 		},
 		{
 			MethodName: "Log",
-			Handler:    _HostFunctions_Log_Handler,
+			Handler:    _HostFunctionsService_Log_Handler,
 		},
 		{
 			MethodName: "ListCommands",
-			Handler:    _HostFunctions_ListCommands_Handler,
+			Handler:    _HostFunctionsService_ListCommands_Handler,
 		},
 		{
 			MethodName: "GetCommandHelp",
-			Handler:    _HostFunctions_GetCommandHelp_Handler,
+			Handler:    _HostFunctionsService_GetCommandHelp_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

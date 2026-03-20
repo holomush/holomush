@@ -28,7 +28,45 @@ const (
 	EventTypeObjectUse     EventType = "object_use"
 	EventTypeObjectExamine EventType = "object_examine"
 	EventTypeObjectGive    EventType = "object_give"
+
+	// UI state event types
+	EventTypeLocationState EventType = "location_state"
+	EventTypeExitUpdate    EventType = "exit_update"
 )
+
+// LocationStatePayload is the JSON payload for location_state events, providing
+// a full snapshot of the character's current location.
+type LocationStatePayload struct {
+	Location LocationStateInfo   `json:"location"`
+	Exits    []LocationStateExit `json:"exits"`
+	Present  []LocationStateChar `json:"present"`
+}
+
+// LocationStateInfo describes the location in a location_state event.
+type LocationStateInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// LocationStateExit describes an exit visible from the current location.
+type LocationStateExit struct {
+	Direction string `json:"direction"`
+	Name      string `json:"name"`
+	Locked    bool   `json:"locked"`
+}
+
+// LocationStateChar describes a character present in the current location.
+type LocationStateChar struct {
+	Name string `json:"name"`
+	Idle bool   `json:"idle"`
+}
+
+// ExitUpdatePayload is the JSON payload for exit_update events, providing a
+// delta update to the exits in the current location.
+type ExitUpdatePayload struct {
+	Exits []LocationStateExit `json:"exits"`
+}
 
 // ActorKind identifies what type of entity caused an event.
 type ActorKind uint8

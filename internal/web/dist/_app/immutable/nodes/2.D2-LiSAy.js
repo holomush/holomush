@@ -1,0 +1,1 @@
+import{a as r,f as e}from"../chunks/B8b8dl6a.js";import"../chunks/BJh3iRj4.js";var t=e('<div class="landing svelte-1uha8ag"><h1>HoloMUSH</h1> <p>A modern MUSH platform</p> <a href="/terminal" class="svelte-1uha8ag">Enter Terminal</a></div>');function m(a){var o=t();r(a,o)}export{m as component};

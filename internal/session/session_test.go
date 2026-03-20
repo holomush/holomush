@@ -41,4 +41,3 @@ func TestInfo_IsDetachable(t *testing.T) {
 	info.Status = StatusDetached
 	assert.False(t, info.IsActive())
 }
-
