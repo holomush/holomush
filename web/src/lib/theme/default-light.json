@@ -1,0 +1,22 @@
+{
+  "name": "default-light",
+  "colors": {
+    "say.speaker": "#0277bd",
+    "say.speech": "#1a1a1a",
+    "pose.actor": "#2e7d32",
+    "pose.action": "#666666",
+    "system": "#e65100",
+    "arrive": "#999999",
+    "leave": "#999999",
+    "background": "#fafafa",
+    "surface": "#f0f0f0",
+    "border": "#e0e0e0",
+    "input.prompt": "#0277bd",
+    "input.text": "#1a1a1a",
+    "input.background": "#ffffff",
+    "status.text": "#999999",
+    "status.background": "#f0f0f0",
+    "sidebar.background": "#f5f5f5",
+    "scrollback.indicator": "#e65100"
+  }
+}
