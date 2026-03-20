@@ -105,6 +105,9 @@ func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginReq
 }
 
 // SendCommand forwards a game command to the core service.
+// Command history persistence is handled server-side by HandleCommand
+// (see grpc/server.go AppendCommand call), so no additional work is
+// needed here.
 func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.SendCommandRequest]) (*connect.Response[webv1.SendCommandResponse], error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
