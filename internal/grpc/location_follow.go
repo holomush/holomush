@@ -88,6 +88,7 @@ func (lf *locationFollower) handleEvent(
 			"location_id", newLocID.String(),
 			"error", err,
 		)
+		return false // Let caller detect broken stream
 	}
 
 	return true

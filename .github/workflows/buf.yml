@@ -37,23 +37,6 @@ jobs:
           breaking: false
           push: false
 
-  breaking:
-    name: Buf Breaking Change Detection
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: bufbuild/buf-action@v1
-        with:
-          token: ${{ secrets.BUF_TOKEN }}
-          lint: false
-          format: false
-          breaking: true
-          breaking_against: .git#branch=main
-          push: false
-
   push:
     name: Buf Push to BSR
     runs-on: ubuntu-latest

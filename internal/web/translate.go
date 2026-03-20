@@ -169,6 +169,10 @@ func translateEvent(ev *corev1.SubscribeResponse) *webv1.GameEvent {
 	case "location_state", "exit_update":
 		meta := payloadToMetadata(ev.GetPayload())
 		if meta == nil {
+			slog.Warn("translateEvent: failed to parse metadata for state event",
+				"type", ev.GetType(),
+				"event_id", ev.GetId(),
+			)
 			return nil
 		}
 		return &webv1.GameEvent{
