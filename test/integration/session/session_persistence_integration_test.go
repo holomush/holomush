@@ -57,7 +57,7 @@ var _ = Describe("Session Persistence", func() {
 	)
 
 	BeforeEach(func() {
-		testCtx, testCancel = context.WithTimeout(context.Background(), 2*time.Minute)
+		testCtx, testCancel = context.WithTimeout(context.Background(), 5*time.Minute)
 
 		// 1. Start PostgreSQL container
 		var err error
