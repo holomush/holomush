@@ -26,6 +26,8 @@ func TestEventType_String(t *testing.T) {
 		{"object_use event", EventTypeObjectUse, "object_use"},
 		{"object_examine event", EventTypeObjectExamine, "object_examine"},
 		{"object_give event", EventTypeObjectGive, "object_give"},
+		{"room_state event", EventTypeRoomState, "room_state"},
+		{"exit_update event", EventTypeExitUpdate, "exit_update"},
 	}
 
 	for _, tt := range tests {
@@ -33,6 +35,11 @@ func TestEventType_String(t *testing.T) {
 			assert.Equal(t, tt.expected, string(tt.input))
 		})
 	}
+}
+
+func TestEventType_RoomState(t *testing.T) {
+	assert.Equal(t, EventType("room_state"), EventTypeRoomState)
+	assert.Equal(t, EventType("exit_update"), EventTypeExitUpdate)
 }
 
 // TestDocumentedEventTypes validates that event types mentioned in plugin-authoring.md
@@ -58,6 +65,8 @@ func TestDocumentedEventTypes(t *testing.T) {
 		string(EventTypeObjectUse):     true,
 		string(EventTypeObjectExamine): true,
 		string(EventTypeObjectGive):    true,
+		string(EventTypeRoomState):     true,
+		string(EventTypeExitUpdate):    true,
 	}
 
 	for _, docType := range documentedTypes {
