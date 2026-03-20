@@ -250,6 +250,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
+	var worldService *world.Service // hoisted so it's available to CoreServer constructor
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
@@ -285,7 +286,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}()
 
 		// Build world.Service with ABAC engine
-		worldService := world.NewService(world.ServiceConfig{
+		worldService = world.NewService(world.ServiceConfig{
 			LocationRepo:  worldpostgres.NewLocationRepository(abacPool),
 			ExitRepo:      worldpostgres.NewExitRepository(abacPool),
 			ObjectRepo:    worldpostgres.NewObjectRepository(abacPool),
@@ -398,6 +399,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
+			holoGRPC.WithWorldQuerier(worldService),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,

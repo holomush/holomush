@@ -112,6 +112,9 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 }
 
 // EmitMoveEvent emits a move event for character or object movement.
+// For character moves, the event is emitted to both the destination location
+// stream and the character's own stream (character:<entityID>) so that the
+// character's event subscriber can detect the move for room-following.
 // Retries up to 3 times with exponential backoff (4 total attempts) before
 // returning EVENT_EMIT_FAILED.
 // Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
@@ -135,13 +138,24 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 		return oops.Code("EVENT_MARSHAL_FAILED").With("event_type", eventType).Wrap(err)
 	}
 
-	// Emit to destination stream with retry
+	// Emit to destination location stream with retry
 	stream := LocationStream(payload.ToID)
 	entityType := string(payload.EntityType)
 	entityID := payload.EntityID.String()
 	if err := emitWithRetry(ctx, emitter, stream, eventType, entityType, entityID, data); err != nil {
 		return oops.Code("EVENT_EMIT_FAILED").With("stream", stream).With("event_type", eventType).Wrap(err)
 	}
+
+	// For character moves, also emit to the character's own stream so that
+	// the character's event subscriber (room-following) can detect the move
+	// and re-subscribe to the new location stream.
+	if payload.EntityType == EntityTypeCharacter {
+		charStream := CharacterStream(payload.EntityID)
+		if err := emitWithRetry(ctx, emitter, charStream, eventType, entityType, entityID, data); err != nil {
+			return oops.Code("EVENT_EMIT_FAILED").With("stream", charStream).With("event_type", eventType).Wrap(err)
+		}
+	}
+
 	return nil
 }
 

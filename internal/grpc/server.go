@@ -21,6 +21,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -47,6 +48,14 @@ type SessionDefaults struct {
 // defaultMaxReplay is used when MaxReplay is not configured.
 const defaultMaxReplay = 1000
 
+// WorldQuerier provides read-only access to world model data for building
+// room_state payloads during event streaming. Satisfied by *world.Service.
+type WorldQuerier interface {
+	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
+	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
+	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
+}
+
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
 	corev1.UnimplementedCoreServer
@@ -57,6 +66,7 @@ type CoreServer struct {
 	authenticator   Authenticator
 	sessionStore    session.Store
 	eventStore      core.EventStore
+	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
 
@@ -92,6 +102,14 @@ func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 func WithEventStore(store core.EventStore) CoreServerOption {
 	return func(s *CoreServer) {
 		s.eventStore = store
+	}
+}
+
+// WithWorldQuerier sets the world querier for building room_state payloads
+// during event streaming (room-following).
+func WithWorldQuerier(wq WorldQuerier) CoreServerOption {
+	return func(s *CoreServer) {
+		s.worldQuerier = wq
 	}
 }
 
@@ -432,7 +450,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		streams = []string{"location:" + info.LocationID.String()}
 	}
 
-	// Subscribe to requested streams
+	// Subscribe to requested streams.
 	// Note: defers in loop are intentional - all subscriptions should be cleaned up when
 	// the function exits, not at end of each iteration. The loop runs a fixed number of
 	// times (len(streams)) and all deferred Unsubscribes run on function return.
@@ -444,6 +462,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		defer s.broadcaster.Unsubscribe(streamName, ch)
 	}
 
+	// Subscribe to the character stream for room-following. Move events
+	// emitted to character:<id> let the subscriber detect when the character
+	// changes location and trigger a room_state update.
+	charStreamName := world.CharacterStream(info.CharacterID)
+	charCh := s.broadcaster.Subscribe(charStreamName)
+	channels = append(channels, charCh)
+	defer s.broadcaster.Unsubscribe(charStreamName, charCh)
+
 	// Merge all channels into one
 	merged := mergeChannels(ctx, channels)
 
@@ -454,8 +480,18 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
+	// Build room-following state. When a move event is detected for this
+	// character, forwardLiveEvents builds and sends a room_state for the
+	// new location.
+	rf := &roomFollower{
+		characterID:    info.CharacterID,
+		currentLocID:   info.LocationID,
+		worldQuerier:   s.worldQuerier,
+		broadcaster:    s.broadcaster,
+	}
+
 	// Send live events until context is cancelled
-	return s.forwardLiveEvents(ctx, info, merged, stream, requestID, req.SessionId)
+	return s.forwardLiveEventsWithRoomFollow(ctx, info, merged, stream, requestID, req.SessionId, rf)
 }
 
 // replayMissedEvents replays historical events from the EventStore, then sends
@@ -585,49 +621,6 @@ drainLoop:
 	return nil
 }
 
-// forwardLiveEvents reads from merged and sends events to the client stream
-// until the context is cancelled or the channel is closed.
-func (s *CoreServer) forwardLiveEvents(
-	ctx context.Context,
-	info *session.Info,
-	merged <-chan core.Event,
-	stream grpc.ServerStreamingServer[corev1.Event],
-	requestID string,
-	sessionID string,
-) error {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.DebugContext(ctx, "subscription ended",
-				"request_id", requestID,
-				"session_id", sessionID,
-				"reason", ctx.Err(),
-			)
-			if ctx.Err() == context.Canceled {
-				return nil // normal client disconnect
-			}
-			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", sessionID).Wrap(ctx.Err())
-
-		case event, ok := <-merged:
-			if !ok {
-				return nil
-			}
-
-			if err := stream.Send(eventToProto(event)); err != nil {
-				slog.WarnContext(ctx, "failed to send event",
-					"request_id", requestID,
-					"session_id", sessionID,
-					"event_id", event.ID.String(),
-					"error", err,
-				)
-				return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(err)
-			}
-
-			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
-			s.persistCursorAsync(sessionID, event.Stream, event.ID)
-		}
-	}
-}
 
 // Disconnect removes a connection and handles session lifecycle.
 // When all terminal/telnet connections close but comms_hub remains, the

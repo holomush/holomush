@@ -54,9 +54,10 @@ func TestMoveHandler_SuccessfulMoveShowsNewRoom(t *testing.T) {
 	fixture.Mocks.CharacterRepo.EXPECT().
 		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
+	// Character moves emit to both location and character stream (room-following).
 	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
+		Return(nil).Times(2)
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.To.ID.String()}).
@@ -114,9 +115,10 @@ func TestMoveHandler_MatchesExitAlias(t *testing.T) {
 	fixture.Mocks.CharacterRepo.EXPECT().
 		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
+	// Character moves emit to both location and character stream (room-following).
 	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
+		Return(nil).Times(2)
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.To.ID.String()}).
@@ -251,9 +253,10 @@ func TestMoveHandler_CaseInsensitiveMatching(t *testing.T) {
 	fixture.Mocks.CharacterRepo.EXPECT().
 		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
+	// Character moves emit to both location and character stream (room-following).
 	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
+		Return(nil).Times(2)
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.To.ID.String()}).
@@ -418,9 +421,10 @@ func TestMoveHandler_GetLocationFailureAfterMove(t *testing.T) {
 	fixture.Mocks.CharacterRepo.EXPECT().
 		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil).Once()
+	// Character moves emit to both location and character stream (room-following).
 	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil).Once()
+		Return(nil).Times(2)
 
 	fixture.Mocks.Engine.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: subjectID, Action: "read", Resource: "location:" + path.To.ID.String()}).
@@ -549,9 +553,10 @@ func TestMoveHandler_AccessEvaluationFailureOnGetLocationAfterMove(t *testing.T)
 	fixture.Mocks.CharacterRepo.EXPECT().
 		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
+	// Character moves emit to both location and character stream (room-following).
 	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
+		Return(nil).Times(2)
 
 	// Engine fails when trying to read the new location
 	fixture.Mocks.Engine.EXPECT().
@@ -652,9 +657,10 @@ func TestMoveHandler_DestinationReadAccessDenied(t *testing.T) {
 	fixture.Mocks.CharacterRepo.EXPECT().
 		UpdateLocation(mock.Anything, player.CharacterID, &path.To.ID).
 		Return(nil)
+	// Character moves emit to both location and character stream (room-following).
 	fixture.Mocks.EventEmitter.EXPECT().
 		Emit(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
+		Return(nil).Times(2)
 
 	// Deny reading the destination location (GetLocation after move)
 	fixture.Mocks.Engine.EXPECT().
