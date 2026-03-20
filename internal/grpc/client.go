@@ -21,7 +21,7 @@ import (
 // Client wraps a gRPC connection to the Core service.
 type Client struct {
 	conn   *grpc.ClientConn
-	client corev1.CoreClient
+	client corev1.CoreServiceClient
 }
 
 // ClientConfig holds configuration for the gRPC client.
@@ -78,7 +78,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 
 	return &Client{
 		conn:   conn,
-		client: corev1.NewCoreClient(conn),
+		client: corev1.NewCoreServiceClient(conn),
 	}, nil
 }
 
@@ -93,7 +93,7 @@ func (c *Client) Close() error {
 }
 
 // Authenticate validates credentials and creates a session.
-func (c *Client) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+func (c *Client) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
 	resp, err := c.client.Authenticate(ctx, req)
 	if err != nil {
 		return nil, oops.Code("RPC_FAILED").With("method", "Authenticate").Wrap(err)
@@ -102,7 +102,7 @@ func (c *Client) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*co
 }
 
 // HandleCommand processes a game command.
-func (c *Client) HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+func (c *Client) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	resp, err := c.client.HandleCommand(ctx, req)
 	if err != nil {
 		return nil, oops.Code("RPC_FAILED").With("method", "HandleCommand").Wrap(err)
@@ -111,7 +111,7 @@ func (c *Client) HandleCommand(ctx context.Context, req *corev1.CommandRequest) 
 }
 
 // Subscribe opens a stream of events for the session.
-func (c *Client) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error) {
+func (c *Client) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
 	stream, err := c.client.Subscribe(ctx, req)
 	if err != nil {
 		return nil, oops.Code("RPC_FAILED").With("method", "Subscribe").Wrap(err)
@@ -129,6 +129,6 @@ func (c *Client) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) 
 }
 
 // CoreClient returns the underlying gRPC CoreClient interface for advanced usage.
-func (c *Client) CoreClient() corev1.CoreClient {
+func (c *Client) CoreClient() corev1.CoreServiceClient {
 	return c.client
 }

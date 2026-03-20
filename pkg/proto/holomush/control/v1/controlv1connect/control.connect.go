@@ -24,8 +24,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// ControlName is the fully-qualified name of the Control service.
-	ControlName = "holomush.control.v1.Control"
+	// ControlServiceName is the fully-qualified name of the ControlService service.
+	ControlServiceName = "holomush.control.v1.ControlService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -36,108 +36,108 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ControlShutdownProcedure is the fully-qualified name of the Control's Shutdown RPC.
-	ControlShutdownProcedure = "/holomush.control.v1.Control/Shutdown"
-	// ControlStatusProcedure is the fully-qualified name of the Control's Status RPC.
-	ControlStatusProcedure = "/holomush.control.v1.Control/Status"
+	// ControlServiceShutdownProcedure is the fully-qualified name of the ControlService's Shutdown RPC.
+	ControlServiceShutdownProcedure = "/holomush.control.v1.ControlService/Shutdown"
+	// ControlServiceStatusProcedure is the fully-qualified name of the ControlService's Status RPC.
+	ControlServiceStatusProcedure = "/holomush.control.v1.ControlService/Status"
 )
 
-// ControlClient is a client for the holomush.control.v1.Control service.
-type ControlClient interface {
+// ControlServiceClient is a client for the holomush.control.v1.ControlService service.
+type ControlServiceClient interface {
 	// Shutdown initiates process shutdown.
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
 	// Status returns current process status.
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
 }
 
-// NewControlClient constructs a client for the holomush.control.v1.Control service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
+// NewControlServiceClient constructs a client for the holomush.control.v1.ControlService service.
+// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
+// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewControlClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ControlClient {
+func NewControlServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ControlServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	controlMethods := v1.File_holomush_control_v1_control_proto.Services().ByName("Control").Methods()
-	return &controlClient{
+	controlServiceMethods := v1.File_holomush_control_v1_control_proto.Services().ByName("ControlService").Methods()
+	return &controlServiceClient{
 		shutdown: connect.NewClient[v1.ShutdownRequest, v1.ShutdownResponse](
 			httpClient,
-			baseURL+ControlShutdownProcedure,
-			connect.WithSchema(controlMethods.ByName("Shutdown")),
+			baseURL+ControlServiceShutdownProcedure,
+			connect.WithSchema(controlServiceMethods.ByName("Shutdown")),
 			connect.WithClientOptions(opts...),
 		),
 		status: connect.NewClient[v1.StatusRequest, v1.StatusResponse](
 			httpClient,
-			baseURL+ControlStatusProcedure,
-			connect.WithSchema(controlMethods.ByName("Status")),
+			baseURL+ControlServiceStatusProcedure,
+			connect.WithSchema(controlServiceMethods.ByName("Status")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// controlClient implements ControlClient.
-type controlClient struct {
+// controlServiceClient implements ControlServiceClient.
+type controlServiceClient struct {
 	shutdown *connect.Client[v1.ShutdownRequest, v1.ShutdownResponse]
 	status   *connect.Client[v1.StatusRequest, v1.StatusResponse]
 }
 
-// Shutdown calls holomush.control.v1.Control.Shutdown.
-func (c *controlClient) Shutdown(ctx context.Context, req *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
+// Shutdown calls holomush.control.v1.ControlService.Shutdown.
+func (c *controlServiceClient) Shutdown(ctx context.Context, req *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
 	return c.shutdown.CallUnary(ctx, req)
 }
 
-// Status calls holomush.control.v1.Control.Status.
-func (c *controlClient) Status(ctx context.Context, req *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
+// Status calls holomush.control.v1.ControlService.Status.
+func (c *controlServiceClient) Status(ctx context.Context, req *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
 	return c.status.CallUnary(ctx, req)
 }
 
-// ControlHandler is an implementation of the holomush.control.v1.Control service.
-type ControlHandler interface {
+// ControlServiceHandler is an implementation of the holomush.control.v1.ControlService service.
+type ControlServiceHandler interface {
 	// Shutdown initiates process shutdown.
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
 	// Status returns current process status.
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
 }
 
-// NewControlHandler builds an HTTP handler from the service implementation. It returns the path on
-// which to mount the handler and the handler itself.
+// NewControlServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewControlHandler(svc ControlHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	controlMethods := v1.File_holomush_control_v1_control_proto.Services().ByName("Control").Methods()
-	controlShutdownHandler := connect.NewUnaryHandler(
-		ControlShutdownProcedure,
+func NewControlServiceHandler(svc ControlServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	controlServiceMethods := v1.File_holomush_control_v1_control_proto.Services().ByName("ControlService").Methods()
+	controlServiceShutdownHandler := connect.NewUnaryHandler(
+		ControlServiceShutdownProcedure,
 		svc.Shutdown,
-		connect.WithSchema(controlMethods.ByName("Shutdown")),
+		connect.WithSchema(controlServiceMethods.ByName("Shutdown")),
 		connect.WithHandlerOptions(opts...),
 	)
-	controlStatusHandler := connect.NewUnaryHandler(
-		ControlStatusProcedure,
+	controlServiceStatusHandler := connect.NewUnaryHandler(
+		ControlServiceStatusProcedure,
 		svc.Status,
-		connect.WithSchema(controlMethods.ByName("Status")),
+		connect.WithSchema(controlServiceMethods.ByName("Status")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/holomush.control.v1.Control/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/holomush.control.v1.ControlService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case ControlShutdownProcedure:
-			controlShutdownHandler.ServeHTTP(w, r)
-		case ControlStatusProcedure:
-			controlStatusHandler.ServeHTTP(w, r)
+		case ControlServiceShutdownProcedure:
+			controlServiceShutdownHandler.ServeHTTP(w, r)
+		case ControlServiceStatusProcedure:
+			controlServiceStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedControlHandler returns CodeUnimplemented from all methods.
-type UnimplementedControlHandler struct{}
+// UnimplementedControlServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedControlServiceHandler struct{}
 
-func (UnimplementedControlHandler) Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.control.v1.Control.Shutdown is not implemented"))
+func (UnimplementedControlServiceHandler) Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.control.v1.ControlService.Shutdown is not implemented"))
 }
 
-func (UnimplementedControlHandler) Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.control.v1.Control.Status is not implemented"))
+func (UnimplementedControlServiceHandler) Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.control.v1.ControlService.Status is not implemented"))
 }

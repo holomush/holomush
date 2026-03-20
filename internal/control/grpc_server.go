@@ -29,7 +29,7 @@ type ShutdownFunc func()
 
 // GRPCServer runs a gRPC control server with mTLS.
 type GRPCServer struct {
-	controlv1.UnimplementedControlServer
+	controlv1.UnimplementedControlServiceServer
 
 	component    string
 	startTime    time.Time
@@ -79,7 +79,7 @@ func (s *GRPCServer) Start(addr string, tlsConfig *cryptotls.Config) (<-chan err
 
 	creds := credentials.NewTLS(tlsConfig)
 	s.grpcServer = grpc.NewServer(grpc.Creds(creds))
-	controlv1.RegisterControlServer(s.grpcServer, s)
+	controlv1.RegisterControlServiceServer(s.grpcServer, s)
 
 	errCh := make(chan error, 1)
 	go func() {

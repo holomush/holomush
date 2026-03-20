@@ -90,7 +90,7 @@ func (p *grpcPlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
 	if p.handler == nil {
 		return errors.New("plugin: handler is nil")
 	}
-	pluginv1.RegisterPluginServer(s, &pluginServerAdapter{handler: p.handler})
+	pluginv1.RegisterPluginServiceServer(s, &pluginServerAdapter{handler: p.handler})
 	return nil
 }
 
@@ -100,13 +100,13 @@ func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *g
 	return nil, errors.New("plugin: GRPCClient not implemented on plugin side")
 }
 
-// pluginServerAdapter adapts Handler to pluginv1.PluginServer.
+// pluginServerAdapter adapts Handler to pluginv1.PluginServiceServer.
 type pluginServerAdapter struct {
-	pluginv1.UnimplementedPluginServer
+	pluginv1.UnimplementedPluginServiceServer
 	handler Handler
 }
 
-// HandleEvent implements pluginv1.PluginServer.
+// HandleEvent implements pluginv1.PluginServiceServer.
 func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequest) (*pluginv1.HandleEventResponse, error) {
 	// protoEvent may be nil; proto getters return zero values for nil receivers,
 	// making this safe without explicit nil checks.

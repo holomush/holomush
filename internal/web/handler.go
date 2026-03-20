@@ -34,9 +34,9 @@ var errUnimplemented = connect.NewError(connect.CodeUnimplemented, errors.New("t
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
-	Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error)
-	HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error)
-	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error)
+	Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
+	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
+	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 }
 
@@ -81,7 +81,7 @@ func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginReq
 	authCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	resp, err := h.client.Authenticate(authCtx, &corev1.AuthRequest{
+	resp, err := h.client.Authenticate(authCtx, &corev1.AuthenticateRequest{
 		Username:   req.Msg.GetUsername(),
 		Password:   req.Msg.GetPassword(),
 		ClientType: "terminal",
@@ -116,7 +116,7 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	resp, err := h.client.HandleCommand(cmdCtx, &corev1.CommandRequest{
+	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId: req.Msg.GetSessionId(),
 		Command:   req.Msg.GetText(),
 	})

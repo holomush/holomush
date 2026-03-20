@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/plugin.proto.
  */
 export const file_holomush_plugin_v1_plugin: GenFile = /*@__PURE__*/
-  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiewoFRXZlbnQSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDEhIKCmFjdG9yX2tpbmQYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoCSI6CglFbWl0RXZlbnQSDgoGc3RyZWFtGAEgASgJEgwKBHR5cGUYAiABKAkSDwoHcGF5bG9hZBgDIAEoCSI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQyaAoGUGx1Z2luEl4KC0hhbmRsZUV2ZW50EiYuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVxdWVzdBonLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlc3BvbnNlQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z");
+  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiewoFRXZlbnQSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDEhIKCmFjdG9yX2tpbmQYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoCSI6CglFbWl0RXZlbnQSDgoGc3RyZWFtGAEgASgJEgwKBHR5cGUYAiABKAkSDwoHcGF5bG9hZBgDIAEoCSI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQybwoNUGx1Z2luU2VydmljZRJeCgtIYW5kbGVFdmVudBImLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlcXVlc3QaJy5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlRXZlbnRSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw");
 
 /**
  * Event represents a game event delivered to plugins.
@@ -161,16 +161,16 @@ export const HandleEventResponseSchema: GenMessage<HandleEventResponse> = /*@__P
   messageDesc(file_holomush_plugin_v1_plugin, 3);
 
 /**
- * Plugin service is called by the go-plugin host to send events to binary plugins.
+ * PluginService is called by the go-plugin host to send events to binary plugins.
  * This service is implemented by the plugin (the gRPC server runs in the plugin process).
  *
- * @generated from service holomush.plugin.v1.Plugin
+ * @generated from service holomush.plugin.v1.PluginService
  */
-export const Plugin: GenService<{
+export const PluginService: GenService<{
   /**
    * HandleEvent delivers an event to the plugin and receives any response events.
    *
-   * @generated from rpc holomush.plugin.v1.Plugin.HandleEvent
+   * @generated from rpc holomush.plugin.v1.PluginService.HandleEvent
    */
   handleEvent: {
     methodKind: "unary";

@@ -26,8 +26,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// PluginName is the fully-qualified name of the Plugin service.
-	PluginName = "holomush.plugin.v1.Plugin"
+	// PluginServiceName is the fully-qualified name of the PluginService service.
+	PluginServiceName = "holomush.plugin.v1.PluginService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -38,78 +38,79 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// PluginHandleEventProcedure is the fully-qualified name of the Plugin's HandleEvent RPC.
-	PluginHandleEventProcedure = "/holomush.plugin.v1.Plugin/HandleEvent"
+	// PluginServiceHandleEventProcedure is the fully-qualified name of the PluginService's HandleEvent
+	// RPC.
+	PluginServiceHandleEventProcedure = "/holomush.plugin.v1.PluginService/HandleEvent"
 )
 
-// PluginClient is a client for the holomush.plugin.v1.Plugin service.
-type PluginClient interface {
+// PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
+type PluginServiceClient interface {
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 }
 
-// NewPluginClient constructs a client for the holomush.plugin.v1.Plugin service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
+// NewPluginServiceClient constructs a client for the holomush.plugin.v1.PluginService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewPluginClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PluginClient {
+func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PluginServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	pluginMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("Plugin").Methods()
-	return &pluginClient{
+	pluginServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginService").Methods()
+	return &pluginServiceClient{
 		handleEvent: connect.NewClient[v1.HandleEventRequest, v1.HandleEventResponse](
 			httpClient,
-			baseURL+PluginHandleEventProcedure,
-			connect.WithSchema(pluginMethods.ByName("HandleEvent")),
+			baseURL+PluginServiceHandleEventProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("HandleEvent")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// pluginClient implements PluginClient.
-type pluginClient struct {
+// pluginServiceClient implements PluginServiceClient.
+type pluginServiceClient struct {
 	handleEvent *connect.Client[v1.HandleEventRequest, v1.HandleEventResponse]
 }
 
-// HandleEvent calls holomush.plugin.v1.Plugin.HandleEvent.
-func (c *pluginClient) HandleEvent(ctx context.Context, req *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error) {
+// HandleEvent calls holomush.plugin.v1.PluginService.HandleEvent.
+func (c *pluginServiceClient) HandleEvent(ctx context.Context, req *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error) {
 	return c.handleEvent.CallUnary(ctx, req)
 }
 
-// PluginHandler is an implementation of the holomush.plugin.v1.Plugin service.
-type PluginHandler interface {
+// PluginServiceHandler is an implementation of the holomush.plugin.v1.PluginService service.
+type PluginServiceHandler interface {
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 }
 
-// NewPluginHandler builds an HTTP handler from the service implementation. It returns the path on
-// which to mount the handler and the handler itself.
+// NewPluginServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewPluginHandler(svc PluginHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	pluginMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("Plugin").Methods()
-	pluginHandleEventHandler := connect.NewUnaryHandler(
-		PluginHandleEventProcedure,
+func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	pluginServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginService").Methods()
+	pluginServiceHandleEventHandler := connect.NewUnaryHandler(
+		PluginServiceHandleEventProcedure,
 		svc.HandleEvent,
-		connect.WithSchema(pluginMethods.ByName("HandleEvent")),
+		connect.WithSchema(pluginServiceMethods.ByName("HandleEvent")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/holomush.plugin.v1.Plugin/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/holomush.plugin.v1.PluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case PluginHandleEventProcedure:
-			pluginHandleEventHandler.ServeHTTP(w, r)
+		case PluginServiceHandleEventProcedure:
+			pluginServiceHandleEventHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedPluginHandler returns CodeUnimplemented from all methods.
-type UnimplementedPluginHandler struct{}
+// UnimplementedPluginServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedPluginServiceHandler struct{}
 
-func (UnimplementedPluginHandler) HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.Plugin.HandleEvent is not implemented"))
+func (UnimplementedPluginServiceHandler) HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.HandleEvent is not implemented"))
 }

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/control/v1/control.proto.
  */
 export const file_holomush_control_v1_control: GenFile = /*@__PURE__*/
-  fileDesc("CiFob2xvbXVzaC9jb250cm9sL3YxL2NvbnRyb2wucHJvdG8SE2hvbG9tdXNoLmNvbnRyb2wudjEiIwoPU2h1dGRvd25SZXF1ZXN0EhAKCGdyYWNlZnVsGAEgASgIIiMKEFNodXRkb3duUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSIPCg1TdGF0dXNSZXF1ZXN0IlkKDlN0YXR1c1Jlc3BvbnNlEg8KB3J1bm5pbmcYASABKAgSCwoDcGlkGAIgASgFEhYKDnVwdGltZV9zZWNvbmRzGAMgASgDEhEKCWNvbXBvbmVudBgEIAEoCTK1AQoHQ29udHJvbBJXCghTaHV0ZG93bhIkLmhvbG9tdXNoLmNvbnRyb2wudjEuU2h1dGRvd25SZXF1ZXN0GiUuaG9sb211c2guY29udHJvbC52MS5TaHV0ZG93blJlc3BvbnNlElEKBlN0YXR1cxIiLmhvbG9tdXNoLmNvbnRyb2wudjEuU3RhdHVzUmVxdWVzdBojLmhvbG9tdXNoLmNvbnRyb2wudjEuU3RhdHVzUmVzcG9uc2VCRlpEZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvY29udHJvbC92MTtjb250cm9sdjFiBnByb3RvMw");
+  fileDesc("CiFob2xvbXVzaC9jb250cm9sL3YxL2NvbnRyb2wucHJvdG8SE2hvbG9tdXNoLmNvbnRyb2wudjEiIwoPU2h1dGRvd25SZXF1ZXN0EhAKCGdyYWNlZnVsGAEgASgIIiMKEFNodXRkb3duUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSIPCg1TdGF0dXNSZXF1ZXN0IlkKDlN0YXR1c1Jlc3BvbnNlEg8KB3J1bm5pbmcYASABKAgSCwoDcGlkGAIgASgFEhYKDnVwdGltZV9zZWNvbmRzGAMgASgDEhEKCWNvbXBvbmVudBgEIAEoCTK8AQoOQ29udHJvbFNlcnZpY2USVwoIU2h1dGRvd24SJC5ob2xvbXVzaC5jb250cm9sLnYxLlNodXRkb3duUmVxdWVzdBolLmhvbG9tdXNoLmNvbnRyb2wudjEuU2h1dGRvd25SZXNwb25zZRJRCgZTdGF0dXMSIi5ob2xvbXVzaC5jb250cm9sLnYxLlN0YXR1c1JlcXVlc3QaIy5ob2xvbXVzaC5jb250cm9sLnYxLlN0YXR1c1Jlc3BvbnNlQkZaRGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NvbnRyb2wvdjE7Y29udHJvbHYxYgZwcm90bzM");
 
 /**
  * ShutdownRequest contains shutdown parameters.
@@ -115,15 +115,15 @@ export const StatusResponseSchema: GenMessage<StatusResponse> = /*@__PURE__*/
   messageDesc(file_holomush_control_v1_control, 3);
 
 /**
- * Control provides administrative operations for HoloMUSH processes.
+ * ControlService provides administrative operations for HoloMUSH processes.
  *
- * @generated from service holomush.control.v1.Control
+ * @generated from service holomush.control.v1.ControlService
  */
-export const Control: GenService<{
+export const ControlService: GenService<{
   /**
    * Shutdown initiates process shutdown.
    *
-   * @generated from rpc holomush.control.v1.Control.Shutdown
+   * @generated from rpc holomush.control.v1.ControlService.Shutdown
    */
   shutdown: {
     methodKind: "unary";
@@ -133,7 +133,7 @@ export const Control: GenService<{
   /**
    * Status returns current process status.
    *
-   * @generated from rpc holomush.control.v1.Control.Status
+   * @generated from rpc holomush.control.v1.ControlService.Status
    */
   status: {
     methodKind: "unary";

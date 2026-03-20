@@ -216,7 +216,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			}),
 		)
 		grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
-		corev1.RegisterCoreServer(grpcServer, coreServer)
+		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
 
 		// 10. Start gRPC server
 		grpcListener, err = net.Listen("tcp", "127.0.0.1:0")

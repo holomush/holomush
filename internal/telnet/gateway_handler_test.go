@@ -27,28 +27,28 @@ func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
 
 // mockCoreClient is a test double for CoreClient.
 type mockCoreClient struct {
-	authResp *corev1.AuthResponse
+	authResp *corev1.AuthenticateResponse
 	authErr  error
 
-	cmdResp *corev1.CommandResponse
+	cmdResp *corev1.HandleCommandResponse
 	cmdErr  error
 
-	subStream corev1.Core_SubscribeClient
+	subStream corev1.CoreService_SubscribeClient
 	subErr    error
 
 	discResp *corev1.DisconnectResponse
 	discErr  error
 }
 
-func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
 	return m.authResp, m.authErr
 }
 
-func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	return m.cmdResp, m.cmdErr
 }
 
-func (m *mockCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.Core_SubscribeClient, error) {
+func (m *mockCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
 	return m.subStream, m.subErr
 }
 
@@ -75,7 +75,7 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	defer clientConn.Close()
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthResponse{
+		authResp: &corev1.AuthenticateResponse{
 			Success:       true,
 			SessionId:     "sess-1",
 			CharacterId:   "char-1",
@@ -132,13 +132,13 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	defer clientConn.Close()
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthResponse{
+		authResp: &corev1.AuthenticateResponse{
 			Success:       true,
 			SessionId:     "sess-2",
 			CharacterId:   "char-2",
 			CharacterName: "Tester",
 		},
-		cmdResp: &corev1.CommandResponse{Success: true},
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
 		// Prevent Subscribe goroutine from launching.
 		subErr:   errors.New("no subscribe in this test"),
 		discResp: &corev1.DisconnectResponse{Success: true},

@@ -86,11 +86,11 @@ func (m *mockAuthenticator) Authenticate(ctx context.Context, username, password
 	return nil, errors.New("authentication not configured")
 }
 
-// mockSubscribeStream implements grpc.ServerStreamingServer[corev1.Event] for testing.
+// mockSubscribeStream implements grpc.ServerStreamingServer[corev1.SubscribeResponse] for testing.
 type mockSubscribeStream struct {
 	grpc.ServerStream
 	ctx    context.Context
-	events []*corev1.Event
+	events []*corev1.SubscribeResponse
 }
 
 func (m *mockSubscribeStream) Context() context.Context {
@@ -100,7 +100,7 @@ func (m *mockSubscribeStream) Context() context.Context {
 	return context.Background()
 }
 
-func (m *mockSubscribeStream) Send(event *corev1.Event) error {
+func (m *mockSubscribeStream) Send(event *corev1.SubscribeResponse) error {
 	m.events = append(m.events, event)
 	return nil
 }
@@ -131,7 +131,7 @@ func TestCoreServer_Authenticate_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "test-request-id",
 			Timestamp: timestamppb.Now(),
@@ -166,7 +166,7 @@ func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "test-request-id",
 			Timestamp: timestamppb.Now(),
@@ -213,7 +213,7 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "cmd-request-id",
 			Timestamp: timestamppb.Now(),
@@ -239,7 +239,7 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "cmd-request-id",
 			Timestamp: timestamppb.Now(),
@@ -424,7 +424,7 @@ func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "no-auth-test",
 			Timestamp: timestamppb.Now(),
@@ -463,7 +463,7 @@ func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta:     nil, // No meta
 		Username: "testuser",
 		Password: "testpass",
@@ -504,7 +504,7 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta:      nil, // No meta
 		SessionId: sessionID.String(),
 		Command:   "say Hello",
@@ -549,7 +549,7 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 	ctx := context.Background()
 
 	// Test pose command
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "pose-test",
 			Timestamp: timestamppb.Now(),
@@ -565,7 +565,7 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 	assert.Equal(t, core.EventTypePose, appendedEvent.Type)
 
 	// Test : shortcut for pose
-	req2 := &corev1.CommandRequest{
+	req2 := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "colon-pose-test",
 			Timestamp: timestamppb.Now(),
@@ -604,7 +604,7 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "unknown-cmd-test",
 			Timestamp: timestamppb.Now(),
@@ -649,7 +649,7 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "say-fail-test",
 			Timestamp: timestamppb.Now(),
@@ -694,7 +694,7 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "pose-fail-test",
 			Timestamp: timestamppb.Now(),
@@ -740,7 +740,7 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 		}),
 	)
 
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "quit-test",
 			Timestamp: timestamppb.Now(),
@@ -850,7 +850,7 @@ type mockSubscribeStreamWithError struct {
 	grpc.ServerStream
 	ctx      context.Context
 	sendErr  error
-	sendFunc func(*corev1.Event) error
+	sendFunc func(*corev1.SubscribeResponse) error
 }
 
 func (m *mockSubscribeStreamWithError) Context() context.Context {
@@ -860,7 +860,7 @@ func (m *mockSubscribeStreamWithError) Context() context.Context {
 	return context.Background()
 }
 
-func (m *mockSubscribeStreamWithError) Send(event *corev1.Event) error {
+func (m *mockSubscribeStreamWithError) Send(event *corev1.SubscribeResponse) error {
 	if m.sendFunc != nil {
 		return m.sendFunc(event)
 	}
@@ -1268,7 +1268,7 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 
 	// Execute multiple commands to simulate activity
 	for i := 0; i < 3; i++ {
-		req := &corev1.CommandRequest{
+		req := &corev1.HandleCommandRequest{
 			Meta: &corev1.RequestMeta{
 				RequestId: fmt.Sprintf("activity-test-%d", i),
 				Timestamp: timestamppb.Now(),
@@ -1390,7 +1390,7 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "timeout-cmd-test",
 			Timestamp: timestamppb.Now(),
@@ -1443,7 +1443,7 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "cancel-cmd-test",
 			Timestamp: timestamppb.Now(),
@@ -1453,7 +1453,7 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 	}
 
 	// Start command in goroutine
-	done := make(chan *corev1.CommandResponse)
+	done := make(chan *corev1.HandleCommandResponse)
 	go func() {
 		resp, _ := server.HandleCommand(ctx, req)
 		done <- resp
@@ -1606,7 +1606,7 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
 
-			req := &corev1.CommandRequest{
+			req := &corev1.HandleCommandRequest{
 				Meta: &corev1.RequestMeta{
 					RequestId: "timeout-error-test",
 					Timestamp: timestamppb.Now(),
@@ -1660,7 +1660,7 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	blockingSendCalled := make(chan struct{})
 	stream := &mockSubscribeStreamWithError{
 		ctx: ctx,
-		sendFunc: func(_ *corev1.Event) error {
+		sendFunc: func(_ *corev1.SubscribeResponse) error {
 			close(blockingSendCalled)
 			// Block until context is cancelled
 			<-ctx.Done()
@@ -1741,7 +1741,7 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "empty-cmd-test",
 			Timestamp: timestamppb.Now(),
@@ -1781,7 +1781,7 @@ func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
 	}()
 
 	// This tests the server's behavior with an empty AuthRequest
-	req := &corev1.AuthRequest{}
+	req := &corev1.AuthenticateRequest{}
 	resp, err := server.Authenticate(ctx, req)
 	// Should return an error response, not panic
 	if err != nil {
@@ -1809,7 +1809,7 @@ func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "empty-username",
 			Timestamp: timestamppb.Now(),
@@ -1850,7 +1850,7 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &corev1.CommandRequest{
+			req := &corev1.HandleCommandRequest{
 				Meta: &corev1.RequestMeta{
 					RequestId: "invalid-session-test",
 					Timestamp: timestamppb.Now(),
@@ -1916,7 +1916,7 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &corev1.CommandRequest{
+			req := &corev1.HandleCommandRequest{
 				Meta: &corev1.RequestMeta{
 					RequestId: "malformed-cmd-test",
 					Timestamp: timestamppb.Now(),
@@ -2051,7 +2051,7 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 
 	// All requests with nil Meta should not panic
 	t.Run("CommandRequest with nil Meta", func(t *testing.T) {
-		req := &corev1.CommandRequest{
+		req := &corev1.HandleCommandRequest{
 			Meta:      nil,
 			SessionId: sessionID.String(),
 			Command:   "say hello",
@@ -2116,7 +2116,7 @@ func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
 	ctx := context.Background()
 
 	// Normal request should work
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "unknown-fields-test",
 			Timestamp: timestamppb.Now(),
@@ -2176,11 +2176,11 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 				}
 			}()
 
-			var req *corev1.CommandRequest
+			var req *corev1.HandleCommandRequest
 			switch idx % 3 {
 			case 0:
 				// Valid request
-				req = &corev1.CommandRequest{
+				req = &corev1.HandleCommandRequest{
 					Meta: &corev1.RequestMeta{
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
@@ -2190,7 +2190,7 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 				}
 			case 1:
 				// Invalid session
-				req = &corev1.CommandRequest{
+				req = &corev1.HandleCommandRequest{
 					Meta: &corev1.RequestMeta{
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
@@ -2200,7 +2200,7 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 				}
 			default:
 				// Empty command
-				req = &corev1.CommandRequest{
+				req = &corev1.HandleCommandRequest{
 					Meta: &corev1.RequestMeta{
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
@@ -2250,7 +2250,7 @@ func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
 	// Create request with very large command
 	largeCommand := "say " + strings.Repeat("x", 1*1024*1024) // 1MB message
 
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "large-payload-test",
 			Timestamp: timestamppb.Now(),
@@ -2321,7 +2321,7 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &corev1.CommandRequest{
+			req := &corev1.HandleCommandRequest{
 				Meta: &corev1.RequestMeta{
 					RequestId: "special-chars-test",
 					Timestamp: timestamppb.Now(),
@@ -2426,7 +2426,7 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	authResp, err := server.Authenticate(ctx, &corev1.AuthRequest{
+	authResp, err := server.Authenticate(ctx, &corev1.AuthenticateRequest{
 		Username: "guest",
 		Meta:     &corev1.RequestMeta{RequestId: "test"},
 	})
@@ -2522,7 +2522,7 @@ func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
 
 	commands := []string{"say hello", "pose waves", "say goodbye"}
 	for _, cmd := range commands {
-		req := &corev1.CommandRequest{
+		req := &corev1.HandleCommandRequest{
 			Meta:      &corev1.RequestMeta{RequestId: "history-test", Timestamp: timestamppb.Now()},
 			SessionId: sessionID.String(),
 			Command:   cmd,
@@ -2569,7 +2569,7 @@ func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
 
 	// Send more commands than maxHistory
 	for i := 0; i < 5; i++ {
-		req := &corev1.CommandRequest{
+		req := &corev1.HandleCommandRequest{
 			Meta:      &corev1.RequestMeta{RequestId: fmt.Sprintf("cap-test-%d", i), Timestamp: timestamppb.Now()},
 			SessionId: sessionID.String(),
 			Command:   fmt.Sprintf("say message %d", i),
@@ -2616,7 +2616,7 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 		sessionStore: realStore,
 	}
 
-	req := &corev1.CommandRequest{
+	req := &corev1.HandleCommandRequest{
 		Meta:      &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},
 		SessionId: sessionID.String(),
 		Command:   "say hello",
@@ -2653,7 +2653,7 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 	server.newSessionID = func() ulid.ULID { return sessionID }
 
 	ctx := context.Background()
-	req := &corev1.AuthRequest{
+	req := &corev1.AuthenticateRequest{
 		Meta:     &corev1.RequestMeta{RequestId: "arrive-test", Timestamp: timestamppb.Now()},
 		Username: "user",
 		Password: "pass",
@@ -3199,7 +3199,7 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("default client_type is terminal", func(t *testing.T) {
-		resp, err := server.Authenticate(ctx, &corev1.AuthRequest{
+		resp, err := server.Authenticate(ctx, &corev1.AuthenticateRequest{
 			Meta:     &corev1.RequestMeta{RequestId: "conn-test", Timestamp: timestamppb.Now()},
 			Username: "user",
 			Password: "pass",
@@ -3221,7 +3221,7 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 		telSessionID := core.NewULID()
 		server.newSessionID = func() ulid.ULID { return telSessionID }
 
-		resp, err := server.Authenticate(ctx, &corev1.AuthRequest{
+		resp, err := server.Authenticate(ctx, &corev1.AuthenticateRequest{
 			Meta:       &corev1.RequestMeta{RequestId: "tel-conn-test", Timestamp: timestamppb.Now()},
 			Username:   "user",
 			Password:   "pass",

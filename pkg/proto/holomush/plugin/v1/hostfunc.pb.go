@@ -1481,8 +1481,8 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x042\xab\a\n" +
-	"\rHostFunctions\x12X\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x042\xb2\a\n" +
+	"\x14HostFunctionsService\x12X\n" +
 	"\tEmitEvent\x12$.holomush.plugin.v1.EmitEventRequest\x1a%.holomush.plugin.v1.EmitEventResponse\x12X\n" +
 	"\tQueryRoom\x12$.holomush.plugin.v1.QueryRoomRequest\x1a%.holomush.plugin.v1.QueryRoomResponse\x12g\n" +
 	"\x0eQueryCharacter\x12).holomush.plugin.v1.QueryCharacterRequest\x1a*.holomush.plugin.v1.QueryCharacterResponse\x12v\n" +
@@ -1547,26 +1547,26 @@ var file_holomush_plugin_v1_hostfunc_proto_depIdxs = []int32{
 	25, // 5: holomush.plugin.v1.LogRequest.fields:type_name -> holomush.plugin.v1.LogRequest.FieldsEntry
 	21, // 6: holomush.plugin.v1.ListCommandsResponse.commands:type_name -> holomush.plugin.v1.CommandInfo
 	24, // 7: holomush.plugin.v1.GetCommandHelpResponse.command:type_name -> holomush.plugin.v1.CommandHelpInfo
-	1,  // 8: holomush.plugin.v1.HostFunctions.EmitEvent:input_type -> holomush.plugin.v1.EmitEventRequest
-	3,  // 9: holomush.plugin.v1.HostFunctions.QueryRoom:input_type -> holomush.plugin.v1.QueryRoomRequest
-	6,  // 10: holomush.plugin.v1.HostFunctions.QueryCharacter:input_type -> holomush.plugin.v1.QueryCharacterRequest
-	9,  // 11: holomush.plugin.v1.HostFunctions.QueryRoomCharacters:input_type -> holomush.plugin.v1.QueryRoomCharactersRequest
-	11, // 12: holomush.plugin.v1.HostFunctions.KVGet:input_type -> holomush.plugin.v1.KVGetRequest
-	13, // 13: holomush.plugin.v1.HostFunctions.KVSet:input_type -> holomush.plugin.v1.KVSetRequest
-	15, // 14: holomush.plugin.v1.HostFunctions.KVDelete:input_type -> holomush.plugin.v1.KVDeleteRequest
-	17, // 15: holomush.plugin.v1.HostFunctions.Log:input_type -> holomush.plugin.v1.LogRequest
-	19, // 16: holomush.plugin.v1.HostFunctions.ListCommands:input_type -> holomush.plugin.v1.ListCommandsRequest
-	22, // 17: holomush.plugin.v1.HostFunctions.GetCommandHelp:input_type -> holomush.plugin.v1.GetCommandHelpRequest
-	2,  // 18: holomush.plugin.v1.HostFunctions.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
-	4,  // 19: holomush.plugin.v1.HostFunctions.QueryRoom:output_type -> holomush.plugin.v1.QueryRoomResponse
-	7,  // 20: holomush.plugin.v1.HostFunctions.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
-	10, // 21: holomush.plugin.v1.HostFunctions.QueryRoomCharacters:output_type -> holomush.plugin.v1.QueryRoomCharactersResponse
-	12, // 22: holomush.plugin.v1.HostFunctions.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
-	14, // 23: holomush.plugin.v1.HostFunctions.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
-	16, // 24: holomush.plugin.v1.HostFunctions.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse
-	18, // 25: holomush.plugin.v1.HostFunctions.Log:output_type -> holomush.plugin.v1.LogResponse
-	20, // 26: holomush.plugin.v1.HostFunctions.ListCommands:output_type -> holomush.plugin.v1.ListCommandsResponse
-	23, // 27: holomush.plugin.v1.HostFunctions.GetCommandHelp:output_type -> holomush.plugin.v1.GetCommandHelpResponse
+	1,  // 8: holomush.plugin.v1.HostFunctionsService.EmitEvent:input_type -> holomush.plugin.v1.EmitEventRequest
+	3,  // 9: holomush.plugin.v1.HostFunctionsService.QueryRoom:input_type -> holomush.plugin.v1.QueryRoomRequest
+	6,  // 10: holomush.plugin.v1.HostFunctionsService.QueryCharacter:input_type -> holomush.plugin.v1.QueryCharacterRequest
+	9,  // 11: holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters:input_type -> holomush.plugin.v1.QueryRoomCharactersRequest
+	11, // 12: holomush.plugin.v1.HostFunctionsService.KVGet:input_type -> holomush.plugin.v1.KVGetRequest
+	13, // 13: holomush.plugin.v1.HostFunctionsService.KVSet:input_type -> holomush.plugin.v1.KVSetRequest
+	15, // 14: holomush.plugin.v1.HostFunctionsService.KVDelete:input_type -> holomush.plugin.v1.KVDeleteRequest
+	17, // 15: holomush.plugin.v1.HostFunctionsService.Log:input_type -> holomush.plugin.v1.LogRequest
+	19, // 16: holomush.plugin.v1.HostFunctionsService.ListCommands:input_type -> holomush.plugin.v1.ListCommandsRequest
+	22, // 17: holomush.plugin.v1.HostFunctionsService.GetCommandHelp:input_type -> holomush.plugin.v1.GetCommandHelpRequest
+	2,  // 18: holomush.plugin.v1.HostFunctionsService.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
+	4,  // 19: holomush.plugin.v1.HostFunctionsService.QueryRoom:output_type -> holomush.plugin.v1.QueryRoomResponse
+	7,  // 20: holomush.plugin.v1.HostFunctionsService.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
+	10, // 21: holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters:output_type -> holomush.plugin.v1.QueryRoomCharactersResponse
+	12, // 22: holomush.plugin.v1.HostFunctionsService.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
+	14, // 23: holomush.plugin.v1.HostFunctionsService.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
+	16, // 24: holomush.plugin.v1.HostFunctionsService.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse
+	18, // 25: holomush.plugin.v1.HostFunctionsService.Log:output_type -> holomush.plugin.v1.LogResponse
+	20, // 26: holomush.plugin.v1.HostFunctionsService.ListCommands:output_type -> holomush.plugin.v1.ListCommandsResponse
+	23, // 27: holomush.plugin.v1.HostFunctionsService.GetCommandHelp:output_type -> holomush.plugin.v1.GetCommandHelpResponse
 	18, // [18:28] is the sub-list for method output_type
 	8,  // [8:18] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name

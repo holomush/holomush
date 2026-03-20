@@ -6,54 +6,54 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthRequest, AuthResponse, CommandRequest, CommandResponse, DisconnectRequest, DisconnectResponse, Event, SubscribeRequest } from "./core_pb.js";
+import { AuthenticateRequest, AuthenticateResponse, DisconnectRequest, DisconnectResponse, HandleCommandRequest, HandleCommandResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * Core is the main game service.
+ * CoreService is the main game service.
  *
- * @generated from service holomush.core.v1.Core
+ * @generated from service holomush.core.v1.CoreService
  */
-export const Core = {
-  typeName: "holomush.core.v1.Core",
+export const CoreService = {
+  typeName: "holomush.core.v1.CoreService",
   methods: {
     /**
      * Authenticate validates credentials and creates a session.
      *
-     * @generated from rpc holomush.core.v1.Core.Authenticate
+     * @generated from rpc holomush.core.v1.CoreService.Authenticate
      */
     authenticate: {
       name: "Authenticate",
-      I: AuthRequest,
-      O: AuthResponse,
+      I: AuthenticateRequest,
+      O: AuthenticateResponse,
       kind: MethodKind.Unary,
     },
     /**
      * HandleCommand processes a game command.
      *
-     * @generated from rpc holomush.core.v1.Core.HandleCommand
+     * @generated from rpc holomush.core.v1.CoreService.HandleCommand
      */
     handleCommand: {
       name: "HandleCommand",
-      I: CommandRequest,
-      O: CommandResponse,
+      I: HandleCommandRequest,
+      O: HandleCommandResponse,
       kind: MethodKind.Unary,
     },
     /**
      * Subscribe opens a stream of events for the session.
      *
-     * @generated from rpc holomush.core.v1.Core.Subscribe
+     * @generated from rpc holomush.core.v1.CoreService.Subscribe
      */
     subscribe: {
       name: "Subscribe",
       I: SubscribeRequest,
-      O: Event,
+      O: SubscribeResponse,
       kind: MethodKind.ServerStreaming,
     },
     /**
      * Disconnect ends a session.
      *
-     * @generated from rpc holomush.core.v1.Core.Disconnect
+     * @generated from rpc holomush.core.v1.CoreService.Disconnect
      */
     disconnect: {
       name: "Disconnect",

@@ -58,7 +58,7 @@ type WorldQuerier interface {
 
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
-	corev1.UnimplementedCoreServer
+	corev1.UnimplementedCoreServiceServer
 
 	engine          *core.Engine
 	sessions        *core.SessionManager
@@ -141,7 +141,7 @@ func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, broadcast
 // Connection registration is intentionally omitted here — the caller (telnet
 // gateway or web StreamEvents handler) registers the connection after auth so
 // it can supply the correct client type and stream list.
-func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) (*corev1.AuthResponse, error) {
+func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
@@ -153,7 +153,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 	)
 
 	if s.authenticator == nil {
-		return &corev1.AuthResponse{
+		return &corev1.AuthenticateResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   "authentication not configured",
@@ -167,7 +167,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 			"username", req.Username,
 			"error", err,
 		)
-		return &corev1.AuthResponse{
+		return &corev1.AuthenticateResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   err.Error(),
@@ -216,7 +216,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 			"session_id", sessionID.String(),
 			"error", err,
 		)
-		return &corev1.AuthResponse{
+		return &corev1.AuthenticateResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   "session creation failed",
@@ -264,7 +264,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 		"character_name", result.CharacterName,
 	)
 
-	return &corev1.AuthResponse{
+	return &corev1.AuthenticateResponse{
 		Meta:          responseMeta(requestID),
 		Success:       true,
 		SessionId:     sessionID.String(),
@@ -275,7 +275,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthRequest) 
 }
 
 // HandleCommand processes a game command.
-func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandRequest) (*corev1.CommandResponse, error) {
+func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
@@ -299,7 +299,7 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 				"error", err,
 			)
 		}
-		return &corev1.CommandResponse{
+		return &corev1.HandleCommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   errMsg,
@@ -323,14 +323,14 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.CommandReque
 			"command", req.Command,
 			"error", err,
 		)
-		return &corev1.CommandResponse{
+		return &corev1.HandleCommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
 			Error:   err.Error(),
 		}, nil
 	}
 
-	return &corev1.CommandResponse{
+	return &corev1.HandleCommandResponse{
 		Meta:    responseMeta(requestID),
 		Success: true,
 		Output:  output,
@@ -412,8 +412,8 @@ func (s *CoreServer) persistCursorAsync(sessionID, streamName string, eventID ul
 }
 
 // eventToProto converts a core.Event to a proto Event.
-func eventToProto(ev core.Event) *corev1.Event {
-	return &corev1.Event{
+func eventToProto(ev core.Event) *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
 		Id:        ev.ID.String(),
 		Stream:    ev.Stream,
 		Type:      string(ev.Type),
@@ -425,7 +425,7 @@ func eventToProto(ev core.Event) *corev1.Event {
 }
 
 // Subscribe opens a stream of events for the session.
-func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.Event]) error {
+func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	ctx := stream.Context()
 	requestID := ""
 	if req.Meta != nil {
@@ -527,7 +527,7 @@ func (s *CoreServer) replayMissedEvents(
 	info *session.Info,
 	streams []string,
 	merged <-chan core.Event,
-	stream grpc.ServerStreamingServer[corev1.Event],
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 	requestID string,
 ) error {
 	maxReplay := s.sessionDefaults.MaxReplay

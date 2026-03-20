@@ -410,7 +410,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				}
 			}),
 		)
-		corev1.RegisterCoreServer(grpcServer, coreServer)
+		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
 
 		// Start session reaper
 		sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{

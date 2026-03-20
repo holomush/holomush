@@ -307,8 +307,8 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x19.holomush.plugin.v1.EventR\x05event\"U\n" +
 	"\x13HandleEventResponse\x12>\n" +
 	"\vemit_events\x18\x01 \x03(\v2\x1d.holomush.plugin.v1.EmitEventR\n" +
-	"emitEvents2h\n" +
-	"\x06Plugin\x12^\n" +
+	"emitEvents2o\n" +
+	"\rPluginService\x12^\n" +
 	"\vHandleEvent\x12&.holomush.plugin.v1.HandleEventRequest\x1a'.holomush.plugin.v1.HandleEventResponseB\xd3\x01\n" +
 	"\x16com.holomush.plugin.v1B\vPluginProtoP\x01ZBgithub.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1\xa2\x02\x03HPX\xaa\x02\x12Holomush.Plugin.V1\xca\x02\x12Holomush\\Plugin\\V1\xe2\x02\x1eHolomush\\Plugin\\V1\\GPBMetadata\xea\x02\x14Holomush::Plugin::V1b\x06proto3"
 
@@ -334,8 +334,8 @@ var file_holomush_plugin_v1_plugin_proto_goTypes = []any{
 var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
 	0, // 0: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
 	1, // 1: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
-	2, // 2: holomush.plugin.v1.Plugin.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
-	3, // 3: holomush.plugin.v1.Plugin.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
+	2, // 2: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
+	3, // 3: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
 	3, // [3:4] is the sub-list for method output_type
 	2, // [2:3] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

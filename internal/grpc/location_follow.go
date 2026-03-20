@@ -42,7 +42,7 @@ type locationFollower struct {
 func (lf *locationFollower) handleEvent(
 	ctx context.Context,
 	event core.Event,
-	stream grpc.ServerStreamingServer[corev1.Event],
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 ) bool {
 	if lf.worldQuerier == nil {
 		return false
@@ -95,7 +95,7 @@ func (lf *locationFollower) handleEvent(
 
 // buildLocationState queries the world service for location data and builds
 // a location_state proto event.
-func (lf *locationFollower) buildLocationState(ctx context.Context, locationID ulid.ULID) (*corev1.Event, error) {
+func (lf *locationFollower) buildLocationState(ctx context.Context, locationID ulid.ULID) (*corev1.SubscribeResponse, error) {
 	// Use system context for ABAC bypass — these are server-internal queries
 	// not on behalf of a specific character.
 	sysCtx := access.WithSystemSubject(ctx)
@@ -151,7 +151,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 		return nil, oops.Errorf("marshal location_state: %w", err)
 	}
 
-	return &corev1.Event{
+	return &corev1.SubscribeResponse{
 		Id:        core.NewULID().String(),
 		Stream:    world.LocationStream(locationID),
 		Type:      string(core.EventTypeLocationState),
@@ -194,7 +194,7 @@ func (s *CoreServer) forwardLiveEventsWithLocationFollow(
 	ctx context.Context,
 	info *session.Info,
 	merged <-chan core.Event,
-	stream grpc.ServerStreamingServer[corev1.Event],
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 	requestID string,
 	sessionID string,
 	lf *locationFollower,

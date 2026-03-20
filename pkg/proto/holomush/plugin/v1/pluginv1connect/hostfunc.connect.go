@@ -26,8 +26,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// HostFunctionsName is the fully-qualified name of the HostFunctions service.
-	HostFunctionsName = "holomush.plugin.v1.HostFunctions"
+	// HostFunctionsServiceName is the fully-qualified name of the HostFunctionsService service.
+	HostFunctionsServiceName = "holomush.plugin.v1.HostFunctionsService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -38,34 +38,40 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// HostFunctionsEmitEventProcedure is the fully-qualified name of the HostFunctions's EmitEvent RPC.
-	HostFunctionsEmitEventProcedure = "/holomush.plugin.v1.HostFunctions/EmitEvent"
-	// HostFunctionsQueryRoomProcedure is the fully-qualified name of the HostFunctions's QueryRoom RPC.
-	HostFunctionsQueryRoomProcedure = "/holomush.plugin.v1.HostFunctions/QueryRoom"
-	// HostFunctionsQueryCharacterProcedure is the fully-qualified name of the HostFunctions's
-	// QueryCharacter RPC.
-	HostFunctionsQueryCharacterProcedure = "/holomush.plugin.v1.HostFunctions/QueryCharacter"
-	// HostFunctionsQueryRoomCharactersProcedure is the fully-qualified name of the HostFunctions's
-	// QueryRoomCharacters RPC.
-	HostFunctionsQueryRoomCharactersProcedure = "/holomush.plugin.v1.HostFunctions/QueryRoomCharacters"
-	// HostFunctionsKVGetProcedure is the fully-qualified name of the HostFunctions's KVGet RPC.
-	HostFunctionsKVGetProcedure = "/holomush.plugin.v1.HostFunctions/KVGet"
-	// HostFunctionsKVSetProcedure is the fully-qualified name of the HostFunctions's KVSet RPC.
-	HostFunctionsKVSetProcedure = "/holomush.plugin.v1.HostFunctions/KVSet"
-	// HostFunctionsKVDeleteProcedure is the fully-qualified name of the HostFunctions's KVDelete RPC.
-	HostFunctionsKVDeleteProcedure = "/holomush.plugin.v1.HostFunctions/KVDelete"
-	// HostFunctionsLogProcedure is the fully-qualified name of the HostFunctions's Log RPC.
-	HostFunctionsLogProcedure = "/holomush.plugin.v1.HostFunctions/Log"
-	// HostFunctionsListCommandsProcedure is the fully-qualified name of the HostFunctions's
-	// ListCommands RPC.
-	HostFunctionsListCommandsProcedure = "/holomush.plugin.v1.HostFunctions/ListCommands"
-	// HostFunctionsGetCommandHelpProcedure is the fully-qualified name of the HostFunctions's
-	// GetCommandHelp RPC.
-	HostFunctionsGetCommandHelpProcedure = "/holomush.plugin.v1.HostFunctions/GetCommandHelp"
+	// HostFunctionsServiceEmitEventProcedure is the fully-qualified name of the HostFunctionsService's
+	// EmitEvent RPC.
+	HostFunctionsServiceEmitEventProcedure = "/holomush.plugin.v1.HostFunctionsService/EmitEvent"
+	// HostFunctionsServiceQueryRoomProcedure is the fully-qualified name of the HostFunctionsService's
+	// QueryRoom RPC.
+	HostFunctionsServiceQueryRoomProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryRoom"
+	// HostFunctionsServiceQueryCharacterProcedure is the fully-qualified name of the
+	// HostFunctionsService's QueryCharacter RPC.
+	HostFunctionsServiceQueryCharacterProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryCharacter"
+	// HostFunctionsServiceQueryRoomCharactersProcedure is the fully-qualified name of the
+	// HostFunctionsService's QueryRoomCharacters RPC.
+	HostFunctionsServiceQueryRoomCharactersProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryRoomCharacters"
+	// HostFunctionsServiceKVGetProcedure is the fully-qualified name of the HostFunctionsService's
+	// KVGet RPC.
+	HostFunctionsServiceKVGetProcedure = "/holomush.plugin.v1.HostFunctionsService/KVGet"
+	// HostFunctionsServiceKVSetProcedure is the fully-qualified name of the HostFunctionsService's
+	// KVSet RPC.
+	HostFunctionsServiceKVSetProcedure = "/holomush.plugin.v1.HostFunctionsService/KVSet"
+	// HostFunctionsServiceKVDeleteProcedure is the fully-qualified name of the HostFunctionsService's
+	// KVDelete RPC.
+	HostFunctionsServiceKVDeleteProcedure = "/holomush.plugin.v1.HostFunctionsService/KVDelete"
+	// HostFunctionsServiceLogProcedure is the fully-qualified name of the HostFunctionsService's Log
+	// RPC.
+	HostFunctionsServiceLogProcedure = "/holomush.plugin.v1.HostFunctionsService/Log"
+	// HostFunctionsServiceListCommandsProcedure is the fully-qualified name of the
+	// HostFunctionsService's ListCommands RPC.
+	HostFunctionsServiceListCommandsProcedure = "/holomush.plugin.v1.HostFunctionsService/ListCommands"
+	// HostFunctionsServiceGetCommandHelpProcedure is the fully-qualified name of the
+	// HostFunctionsService's GetCommandHelp RPC.
+	HostFunctionsServiceGetCommandHelpProcedure = "/holomush.plugin.v1.HostFunctionsService/GetCommandHelp"
 )
 
-// HostFunctionsClient is a client for the holomush.plugin.v1.HostFunctions service.
-type HostFunctionsClient interface {
+// HostFunctionsServiceClient is a client for the holomush.plugin.v1.HostFunctionsService service.
+type HostFunctionsServiceClient interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error)
 	// QueryRoom retrieves information about a room.
@@ -90,82 +96,82 @@ type HostFunctionsClient interface {
 	GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error)
 }
 
-// NewHostFunctionsClient constructs a client for the holomush.plugin.v1.HostFunctions service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
+// NewHostFunctionsServiceClient constructs a client for the holomush.plugin.v1.HostFunctionsService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewHostFunctionsClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) HostFunctionsClient {
+func NewHostFunctionsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) HostFunctionsServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	hostFunctionsMethods := v1.File_holomush_plugin_v1_hostfunc_proto.Services().ByName("HostFunctions").Methods()
-	return &hostFunctionsClient{
+	hostFunctionsServiceMethods := v1.File_holomush_plugin_v1_hostfunc_proto.Services().ByName("HostFunctionsService").Methods()
+	return &hostFunctionsServiceClient{
 		emitEvent: connect.NewClient[v1.EmitEventRequest, v1.EmitEventResponse](
 			httpClient,
-			baseURL+HostFunctionsEmitEventProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("EmitEvent")),
+			baseURL+HostFunctionsServiceEmitEventProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("EmitEvent")),
 			connect.WithClientOptions(opts...),
 		),
 		queryRoom: connect.NewClient[v1.QueryRoomRequest, v1.QueryRoomResponse](
 			httpClient,
-			baseURL+HostFunctionsQueryRoomProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("QueryRoom")),
+			baseURL+HostFunctionsServiceQueryRoomProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoom")),
 			connect.WithClientOptions(opts...),
 		),
 		queryCharacter: connect.NewClient[v1.QueryCharacterRequest, v1.QueryCharacterResponse](
 			httpClient,
-			baseURL+HostFunctionsQueryCharacterProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("QueryCharacter")),
+			baseURL+HostFunctionsServiceQueryCharacterProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryCharacter")),
 			connect.WithClientOptions(opts...),
 		),
 		queryRoomCharacters: connect.NewClient[v1.QueryRoomCharactersRequest, v1.QueryRoomCharactersResponse](
 			httpClient,
-			baseURL+HostFunctionsQueryRoomCharactersProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("QueryRoomCharacters")),
+			baseURL+HostFunctionsServiceQueryRoomCharactersProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoomCharacters")),
 			connect.WithClientOptions(opts...),
 		),
 		kVGet: connect.NewClient[v1.KVGetRequest, v1.KVGetResponse](
 			httpClient,
-			baseURL+HostFunctionsKVGetProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("KVGet")),
+			baseURL+HostFunctionsServiceKVGetProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("KVGet")),
 			connect.WithClientOptions(opts...),
 		),
 		kVSet: connect.NewClient[v1.KVSetRequest, v1.KVSetResponse](
 			httpClient,
-			baseURL+HostFunctionsKVSetProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("KVSet")),
+			baseURL+HostFunctionsServiceKVSetProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("KVSet")),
 			connect.WithClientOptions(opts...),
 		),
 		kVDelete: connect.NewClient[v1.KVDeleteRequest, v1.KVDeleteResponse](
 			httpClient,
-			baseURL+HostFunctionsKVDeleteProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("KVDelete")),
+			baseURL+HostFunctionsServiceKVDeleteProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("KVDelete")),
 			connect.WithClientOptions(opts...),
 		),
 		log: connect.NewClient[v1.LogRequest, v1.LogResponse](
 			httpClient,
-			baseURL+HostFunctionsLogProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("Log")),
+			baseURL+HostFunctionsServiceLogProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("Log")),
 			connect.WithClientOptions(opts...),
 		),
 		listCommands: connect.NewClient[v1.ListCommandsRequest, v1.ListCommandsResponse](
 			httpClient,
-			baseURL+HostFunctionsListCommandsProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("ListCommands")),
+			baseURL+HostFunctionsServiceListCommandsProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("ListCommands")),
 			connect.WithClientOptions(opts...),
 		),
 		getCommandHelp: connect.NewClient[v1.GetCommandHelpRequest, v1.GetCommandHelpResponse](
 			httpClient,
-			baseURL+HostFunctionsGetCommandHelpProcedure,
-			connect.WithSchema(hostFunctionsMethods.ByName("GetCommandHelp")),
+			baseURL+HostFunctionsServiceGetCommandHelpProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("GetCommandHelp")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// hostFunctionsClient implements HostFunctionsClient.
-type hostFunctionsClient struct {
+// hostFunctionsServiceClient implements HostFunctionsServiceClient.
+type hostFunctionsServiceClient struct {
 	emitEvent           *connect.Client[v1.EmitEventRequest, v1.EmitEventResponse]
 	queryRoom           *connect.Client[v1.QueryRoomRequest, v1.QueryRoomResponse]
 	queryCharacter      *connect.Client[v1.QueryCharacterRequest, v1.QueryCharacterResponse]
@@ -178,58 +184,59 @@ type hostFunctionsClient struct {
 	getCommandHelp      *connect.Client[v1.GetCommandHelpRequest, v1.GetCommandHelpResponse]
 }
 
-// EmitEvent calls holomush.plugin.v1.HostFunctions.EmitEvent.
-func (c *hostFunctionsClient) EmitEvent(ctx context.Context, req *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error) {
+// EmitEvent calls holomush.plugin.v1.HostFunctionsService.EmitEvent.
+func (c *hostFunctionsServiceClient) EmitEvent(ctx context.Context, req *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error) {
 	return c.emitEvent.CallUnary(ctx, req)
 }
 
-// QueryRoom calls holomush.plugin.v1.HostFunctions.QueryRoom.
-func (c *hostFunctionsClient) QueryRoom(ctx context.Context, req *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error) {
+// QueryRoom calls holomush.plugin.v1.HostFunctionsService.QueryRoom.
+func (c *hostFunctionsServiceClient) QueryRoom(ctx context.Context, req *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error) {
 	return c.queryRoom.CallUnary(ctx, req)
 }
 
-// QueryCharacter calls holomush.plugin.v1.HostFunctions.QueryCharacter.
-func (c *hostFunctionsClient) QueryCharacter(ctx context.Context, req *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error) {
+// QueryCharacter calls holomush.plugin.v1.HostFunctionsService.QueryCharacter.
+func (c *hostFunctionsServiceClient) QueryCharacter(ctx context.Context, req *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error) {
 	return c.queryCharacter.CallUnary(ctx, req)
 }
 
-// QueryRoomCharacters calls holomush.plugin.v1.HostFunctions.QueryRoomCharacters.
-func (c *hostFunctionsClient) QueryRoomCharacters(ctx context.Context, req *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error) {
+// QueryRoomCharacters calls holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters.
+func (c *hostFunctionsServiceClient) QueryRoomCharacters(ctx context.Context, req *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error) {
 	return c.queryRoomCharacters.CallUnary(ctx, req)
 }
 
-// KVGet calls holomush.plugin.v1.HostFunctions.KVGet.
-func (c *hostFunctionsClient) KVGet(ctx context.Context, req *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error) {
+// KVGet calls holomush.plugin.v1.HostFunctionsService.KVGet.
+func (c *hostFunctionsServiceClient) KVGet(ctx context.Context, req *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error) {
 	return c.kVGet.CallUnary(ctx, req)
 }
 
-// KVSet calls holomush.plugin.v1.HostFunctions.KVSet.
-func (c *hostFunctionsClient) KVSet(ctx context.Context, req *connect.Request[v1.KVSetRequest]) (*connect.Response[v1.KVSetResponse], error) {
+// KVSet calls holomush.plugin.v1.HostFunctionsService.KVSet.
+func (c *hostFunctionsServiceClient) KVSet(ctx context.Context, req *connect.Request[v1.KVSetRequest]) (*connect.Response[v1.KVSetResponse], error) {
 	return c.kVSet.CallUnary(ctx, req)
 }
 
-// KVDelete calls holomush.plugin.v1.HostFunctions.KVDelete.
-func (c *hostFunctionsClient) KVDelete(ctx context.Context, req *connect.Request[v1.KVDeleteRequest]) (*connect.Response[v1.KVDeleteResponse], error) {
+// KVDelete calls holomush.plugin.v1.HostFunctionsService.KVDelete.
+func (c *hostFunctionsServiceClient) KVDelete(ctx context.Context, req *connect.Request[v1.KVDeleteRequest]) (*connect.Response[v1.KVDeleteResponse], error) {
 	return c.kVDelete.CallUnary(ctx, req)
 }
 
-// Log calls holomush.plugin.v1.HostFunctions.Log.
-func (c *hostFunctionsClient) Log(ctx context.Context, req *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
+// Log calls holomush.plugin.v1.HostFunctionsService.Log.
+func (c *hostFunctionsServiceClient) Log(ctx context.Context, req *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
 	return c.log.CallUnary(ctx, req)
 }
 
-// ListCommands calls holomush.plugin.v1.HostFunctions.ListCommands.
-func (c *hostFunctionsClient) ListCommands(ctx context.Context, req *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error) {
+// ListCommands calls holomush.plugin.v1.HostFunctionsService.ListCommands.
+func (c *hostFunctionsServiceClient) ListCommands(ctx context.Context, req *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error) {
 	return c.listCommands.CallUnary(ctx, req)
 }
 
-// GetCommandHelp calls holomush.plugin.v1.HostFunctions.GetCommandHelp.
-func (c *hostFunctionsClient) GetCommandHelp(ctx context.Context, req *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error) {
+// GetCommandHelp calls holomush.plugin.v1.HostFunctionsService.GetCommandHelp.
+func (c *hostFunctionsServiceClient) GetCommandHelp(ctx context.Context, req *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error) {
 	return c.getCommandHelp.CallUnary(ctx, req)
 }
 
-// HostFunctionsHandler is an implementation of the holomush.plugin.v1.HostFunctions service.
-type HostFunctionsHandler interface {
+// HostFunctionsServiceHandler is an implementation of the holomush.plugin.v1.HostFunctionsService
+// service.
+type HostFunctionsServiceHandler interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error)
 	// QueryRoom retrieves information about a room.
@@ -254,140 +261,140 @@ type HostFunctionsHandler interface {
 	GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error)
 }
 
-// NewHostFunctionsHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
+// NewHostFunctionsServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewHostFunctionsHandler(svc HostFunctionsHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	hostFunctionsMethods := v1.File_holomush_plugin_v1_hostfunc_proto.Services().ByName("HostFunctions").Methods()
-	hostFunctionsEmitEventHandler := connect.NewUnaryHandler(
-		HostFunctionsEmitEventProcedure,
+func NewHostFunctionsServiceHandler(svc HostFunctionsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	hostFunctionsServiceMethods := v1.File_holomush_plugin_v1_hostfunc_proto.Services().ByName("HostFunctionsService").Methods()
+	hostFunctionsServiceEmitEventHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceEmitEventProcedure,
 		svc.EmitEvent,
-		connect.WithSchema(hostFunctionsMethods.ByName("EmitEvent")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("EmitEvent")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsQueryRoomHandler := connect.NewUnaryHandler(
-		HostFunctionsQueryRoomProcedure,
+	hostFunctionsServiceQueryRoomHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceQueryRoomProcedure,
 		svc.QueryRoom,
-		connect.WithSchema(hostFunctionsMethods.ByName("QueryRoom")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoom")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsQueryCharacterHandler := connect.NewUnaryHandler(
-		HostFunctionsQueryCharacterProcedure,
+	hostFunctionsServiceQueryCharacterHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceQueryCharacterProcedure,
 		svc.QueryCharacter,
-		connect.WithSchema(hostFunctionsMethods.ByName("QueryCharacter")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryCharacter")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsQueryRoomCharactersHandler := connect.NewUnaryHandler(
-		HostFunctionsQueryRoomCharactersProcedure,
+	hostFunctionsServiceQueryRoomCharactersHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceQueryRoomCharactersProcedure,
 		svc.QueryRoomCharacters,
-		connect.WithSchema(hostFunctionsMethods.ByName("QueryRoomCharacters")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoomCharacters")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsKVGetHandler := connect.NewUnaryHandler(
-		HostFunctionsKVGetProcedure,
+	hostFunctionsServiceKVGetHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceKVGetProcedure,
 		svc.KVGet,
-		connect.WithSchema(hostFunctionsMethods.ByName("KVGet")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("KVGet")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsKVSetHandler := connect.NewUnaryHandler(
-		HostFunctionsKVSetProcedure,
+	hostFunctionsServiceKVSetHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceKVSetProcedure,
 		svc.KVSet,
-		connect.WithSchema(hostFunctionsMethods.ByName("KVSet")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("KVSet")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsKVDeleteHandler := connect.NewUnaryHandler(
-		HostFunctionsKVDeleteProcedure,
+	hostFunctionsServiceKVDeleteHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceKVDeleteProcedure,
 		svc.KVDelete,
-		connect.WithSchema(hostFunctionsMethods.ByName("KVDelete")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("KVDelete")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsLogHandler := connect.NewUnaryHandler(
-		HostFunctionsLogProcedure,
+	hostFunctionsServiceLogHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceLogProcedure,
 		svc.Log,
-		connect.WithSchema(hostFunctionsMethods.ByName("Log")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("Log")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsListCommandsHandler := connect.NewUnaryHandler(
-		HostFunctionsListCommandsProcedure,
+	hostFunctionsServiceListCommandsHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceListCommandsProcedure,
 		svc.ListCommands,
-		connect.WithSchema(hostFunctionsMethods.ByName("ListCommands")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("ListCommands")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsGetCommandHelpHandler := connect.NewUnaryHandler(
-		HostFunctionsGetCommandHelpProcedure,
+	hostFunctionsServiceGetCommandHelpHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceGetCommandHelpProcedure,
 		svc.GetCommandHelp,
-		connect.WithSchema(hostFunctionsMethods.ByName("GetCommandHelp")),
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("GetCommandHelp")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/holomush.plugin.v1.HostFunctions/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/holomush.plugin.v1.HostFunctionsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case HostFunctionsEmitEventProcedure:
-			hostFunctionsEmitEventHandler.ServeHTTP(w, r)
-		case HostFunctionsQueryRoomProcedure:
-			hostFunctionsQueryRoomHandler.ServeHTTP(w, r)
-		case HostFunctionsQueryCharacterProcedure:
-			hostFunctionsQueryCharacterHandler.ServeHTTP(w, r)
-		case HostFunctionsQueryRoomCharactersProcedure:
-			hostFunctionsQueryRoomCharactersHandler.ServeHTTP(w, r)
-		case HostFunctionsKVGetProcedure:
-			hostFunctionsKVGetHandler.ServeHTTP(w, r)
-		case HostFunctionsKVSetProcedure:
-			hostFunctionsKVSetHandler.ServeHTTP(w, r)
-		case HostFunctionsKVDeleteProcedure:
-			hostFunctionsKVDeleteHandler.ServeHTTP(w, r)
-		case HostFunctionsLogProcedure:
-			hostFunctionsLogHandler.ServeHTTP(w, r)
-		case HostFunctionsListCommandsProcedure:
-			hostFunctionsListCommandsHandler.ServeHTTP(w, r)
-		case HostFunctionsGetCommandHelpProcedure:
-			hostFunctionsGetCommandHelpHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceEmitEventProcedure:
+			hostFunctionsServiceEmitEventHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceQueryRoomProcedure:
+			hostFunctionsServiceQueryRoomHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceQueryCharacterProcedure:
+			hostFunctionsServiceQueryCharacterHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceQueryRoomCharactersProcedure:
+			hostFunctionsServiceQueryRoomCharactersHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceKVGetProcedure:
+			hostFunctionsServiceKVGetHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceKVSetProcedure:
+			hostFunctionsServiceKVSetHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceKVDeleteProcedure:
+			hostFunctionsServiceKVDeleteHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceLogProcedure:
+			hostFunctionsServiceLogHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceListCommandsProcedure:
+			hostFunctionsServiceListCommandsHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceGetCommandHelpProcedure:
+			hostFunctionsServiceGetCommandHelpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedHostFunctionsHandler returns CodeUnimplemented from all methods.
-type UnimplementedHostFunctionsHandler struct{}
+// UnimplementedHostFunctionsServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedHostFunctionsServiceHandler struct{}
 
-func (UnimplementedHostFunctionsHandler) EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.EmitEvent is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.EmitEvent is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) QueryRoom(context.Context, *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.QueryRoom is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) QueryRoom(context.Context, *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryRoom is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.QueryCharacter is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryCharacter is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) QueryRoomCharacters(context.Context, *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.QueryRoomCharacters is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) QueryRoomCharacters(context.Context, *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.KVGet is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.KVGet is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) KVSet(context.Context, *connect.Request[v1.KVSetRequest]) (*connect.Response[v1.KVSetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.KVSet is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) KVSet(context.Context, *connect.Request[v1.KVSetRequest]) (*connect.Response[v1.KVSetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.KVSet is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) KVDelete(context.Context, *connect.Request[v1.KVDeleteRequest]) (*connect.Response[v1.KVDeleteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.KVDelete is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) KVDelete(context.Context, *connect.Request[v1.KVDeleteRequest]) (*connect.Response[v1.KVDeleteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.KVDelete is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.Log is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) Log(context.Context, *connect.Request[v1.LogRequest]) (*connect.Response[v1.LogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.Log is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.ListCommands is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) ListCommands(context.Context, *connect.Request[v1.ListCommandsRequest]) (*connect.Response[v1.ListCommandsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.ListCommands is not implemented"))
 }
 
-func (UnimplementedHostFunctionsHandler) GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctions.GetCommandHelp is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.GetCommandHelp is not implemented"))
 }

@@ -121,7 +121,7 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 
 	s.listener = serverListener
 	s.grpcServer = grpc.NewServer()
-	controlv1.RegisterControlServer(s.grpcServer, s)
+	controlv1.RegisterControlServiceServer(s.grpcServer, s)
 
 	go func() {
 		_ = s.grpcServer.Serve(serverListener)
@@ -141,7 +141,7 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
-	client := controlv1.NewControlClient(conn)
+	client := controlv1.NewControlServiceClient(conn)
 
 	t.Run("Status", func(t *testing.T) {
 		resp, err := client.Status(context.Background(), &controlv1.StatusRequest{})
@@ -191,7 +191,7 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 
 	s.listener = serverListener
 	s.grpcServer = grpc.NewServer()
-	controlv1.RegisterControlServer(s.grpcServer, s)
+	controlv1.RegisterControlServiceServer(s.grpcServer, s)
 
 	go func() {
 		_ = s.grpcServer.Serve(serverListener)
@@ -211,7 +211,7 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
-	client := controlv1.NewControlClient(conn)
+	client := controlv1.NewControlServiceClient(conn)
 
 	const numRequests = 50
 	results := make(chan error, numRequests)
@@ -662,7 +662,7 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
-	client := controlv1.NewControlClient(conn)
+	client := controlv1.NewControlServiceClient(conn)
 
 	t.Run("Status_via_mTLS", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -756,7 +756,7 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
-	client := controlv1.NewControlClient(conn)
+	client := controlv1.NewControlServiceClient(conn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

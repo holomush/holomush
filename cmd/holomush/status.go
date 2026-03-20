@@ -188,7 +188,7 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 		}
 	}()
 
-	client := controlv1.NewControlClient(conn)
+	client := controlv1.NewControlServiceClient(conn)
 
 	// Query status
 	resp, err := client.Status(ctx, &controlv1.StatusRequest{})

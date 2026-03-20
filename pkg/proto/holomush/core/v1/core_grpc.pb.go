@@ -22,63 +22,63 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Core_Authenticate_FullMethodName  = "/holomush.core.v1.Core/Authenticate"
-	Core_HandleCommand_FullMethodName = "/holomush.core.v1.Core/HandleCommand"
-	Core_Subscribe_FullMethodName     = "/holomush.core.v1.Core/Subscribe"
-	Core_Disconnect_FullMethodName    = "/holomush.core.v1.Core/Disconnect"
+	CoreService_Authenticate_FullMethodName  = "/holomush.core.v1.CoreService/Authenticate"
+	CoreService_HandleCommand_FullMethodName = "/holomush.core.v1.CoreService/HandleCommand"
+	CoreService_Subscribe_FullMethodName     = "/holomush.core.v1.CoreService/Subscribe"
+	CoreService_Disconnect_FullMethodName    = "/holomush.core.v1.CoreService/Disconnect"
 )
 
-// CoreClient is the client API for Core service.
+// CoreServiceClient is the client API for CoreService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Core is the main game service.
-type CoreClient interface {
+// CoreService is the main game service.
+type CoreServiceClient interface {
 	// Authenticate validates credentials and creates a session.
-	Authenticate(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResponse, error)
+	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
 	// HandleCommand processes a game command.
-	HandleCommand(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error)
+	HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error)
 	// Subscribe opens a stream of events for the session.
-	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
+	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error)
 	// Disconnect ends a session.
 	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error)
 }
 
-type coreClient struct {
+type coreServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewCoreClient(cc grpc.ClientConnInterface) CoreClient {
-	return &coreClient{cc}
+func NewCoreServiceClient(cc grpc.ClientConnInterface) CoreServiceClient {
+	return &coreServiceClient{cc}
 }
 
-func (c *coreClient) Authenticate(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResponse, error) {
+func (c *coreServiceClient) Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AuthResponse)
-	err := c.cc.Invoke(ctx, Core_Authenticate_FullMethodName, in, out, cOpts...)
+	out := new(AuthenticateResponse)
+	err := c.cc.Invoke(ctx, CoreService_Authenticate_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *coreClient) HandleCommand(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*CommandResponse, error) {
+func (c *coreServiceClient) HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CommandResponse)
-	err := c.cc.Invoke(ctx, Core_HandleCommand_FullMethodName, in, out, cOpts...)
+	out := new(HandleCommandResponse)
+	err := c.cc.Invoke(ctx, CoreService_HandleCommand_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *coreClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
+func (c *coreServiceClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Core_ServiceDesc.Streams[0], Core_Subscribe_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &CoreService_ServiceDesc.Streams[0], CoreService_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[SubscribeRequest, Event]{ClientStream: stream}
+	x := &grpc.GenericClientStream[SubscribeRequest, SubscribeResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -89,164 +89,164 @@ func (c *coreClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts .
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Core_SubscribeClient = grpc.ServerStreamingClient[Event]
+type CoreService_SubscribeClient = grpc.ServerStreamingClient[SubscribeResponse]
 
-func (c *coreClient) Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error) {
+func (c *coreServiceClient) Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DisconnectResponse)
-	err := c.cc.Invoke(ctx, Core_Disconnect_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, CoreService_Disconnect_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// CoreServer is the server API for Core service.
-// All implementations must embed UnimplementedCoreServer
+// CoreServiceServer is the server API for CoreService service.
+// All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
 //
-// Core is the main game service.
-type CoreServer interface {
+// CoreService is the main game service.
+type CoreServiceServer interface {
 	// Authenticate validates credentials and creates a session.
-	Authenticate(context.Context, *AuthRequest) (*AuthResponse, error)
+	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
 	// HandleCommand processes a game command.
-	HandleCommand(context.Context, *CommandRequest) (*CommandResponse, error)
+	HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error)
 	// Subscribe opens a stream of events for the session.
-	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
+	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[SubscribeResponse]) error
 	// Disconnect ends a session.
 	Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error)
-	mustEmbedUnimplementedCoreServer()
+	mustEmbedUnimplementedCoreServiceServer()
 }
 
-// UnimplementedCoreServer must be embedded to have
+// UnimplementedCoreServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedCoreServer struct{}
+type UnimplementedCoreServiceServer struct{}
 
-func (UnimplementedCoreServer) Authenticate(context.Context, *AuthRequest) (*AuthResponse, error) {
+func (UnimplementedCoreServiceServer) Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Authenticate not implemented")
 }
-func (UnimplementedCoreServer) HandleCommand(context.Context, *CommandRequest) (*CommandResponse, error) {
+func (UnimplementedCoreServiceServer) HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleCommand not implemented")
 }
-func (UnimplementedCoreServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
+func (UnimplementedCoreServiceServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[SubscribeResponse]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
 }
-func (UnimplementedCoreServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error) {
+func (UnimplementedCoreServiceServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Disconnect not implemented")
 }
-func (UnimplementedCoreServer) mustEmbedUnimplementedCoreServer() {}
-func (UnimplementedCoreServer) testEmbeddedByValue()              {}
+func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
+func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
 
-// UnsafeCoreServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to CoreServer will
+// UnsafeCoreServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CoreServiceServer will
 // result in compilation errors.
-type UnsafeCoreServer interface {
-	mustEmbedUnimplementedCoreServer()
+type UnsafeCoreServiceServer interface {
+	mustEmbedUnimplementedCoreServiceServer()
 }
 
-func RegisterCoreServer(s grpc.ServiceRegistrar, srv CoreServer) {
-	// If the following call panics, it indicates UnimplementedCoreServer was
+func RegisterCoreServiceServer(s grpc.ServiceRegistrar, srv CoreServiceServer) {
+	// If the following call panics, it indicates UnimplementedCoreServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Core_ServiceDesc, srv)
+	s.RegisterService(&CoreService_ServiceDesc, srv)
 }
 
-func _Core_Authenticate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AuthRequest)
+func _CoreService_Authenticate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthenticateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CoreServer).Authenticate(ctx, in)
+		return srv.(CoreServiceServer).Authenticate(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Core_Authenticate_FullMethodName,
+		FullMethod: CoreService_Authenticate_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoreServer).Authenticate(ctx, req.(*AuthRequest))
+		return srv.(CoreServiceServer).Authenticate(ctx, req.(*AuthenticateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Core_HandleCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CommandRequest)
+func _CoreService_HandleCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandleCommandRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CoreServer).HandleCommand(ctx, in)
+		return srv.(CoreServiceServer).HandleCommand(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Core_HandleCommand_FullMethodName,
+		FullMethod: CoreService_HandleCommand_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoreServer).HandleCommand(ctx, req.(*CommandRequest))
+		return srv.(CoreServiceServer).HandleCommand(ctx, req.(*HandleCommandRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Core_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
+func _CoreService_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(CoreServer).Subscribe(m, &grpc.GenericServerStream[SubscribeRequest, Event]{ServerStream: stream})
+	return srv.(CoreServiceServer).Subscribe(m, &grpc.GenericServerStream[SubscribeRequest, SubscribeResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Core_SubscribeServer = grpc.ServerStreamingServer[Event]
+type CoreService_SubscribeServer = grpc.ServerStreamingServer[SubscribeResponse]
 
-func _Core_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _CoreService_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DisconnectRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CoreServer).Disconnect(ctx, in)
+		return srv.(CoreServiceServer).Disconnect(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Core_Disconnect_FullMethodName,
+		FullMethod: CoreService_Disconnect_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoreServer).Disconnect(ctx, req.(*DisconnectRequest))
+		return srv.(CoreServiceServer).Disconnect(ctx, req.(*DisconnectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Core_ServiceDesc is the grpc.ServiceDesc for Core service.
+// CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Core_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "holomush.core.v1.Core",
-	HandlerType: (*CoreServer)(nil),
+var CoreService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "holomush.core.v1.CoreService",
+	HandlerType: (*CoreServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Authenticate",
-			Handler:    _Core_Authenticate_Handler,
+			Handler:    _CoreService_Authenticate_Handler,
 		},
 		{
 			MethodName: "HandleCommand",
-			Handler:    _Core_HandleCommand_Handler,
+			Handler:    _CoreService_HandleCommand_Handler,
 		},
 		{
 			MethodName: "Disconnect",
-			Handler:    _Core_Disconnect_Handler,
+			Handler:    _CoreService_Disconnect_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Subscribe",
-			Handler:       _Core_Subscribe_Handler,
+			Handler:       _CoreService_Subscribe_Handler,
 			ServerStreams: true,
 		},
 	},

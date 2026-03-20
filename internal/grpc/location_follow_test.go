@@ -49,11 +49,11 @@ func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ string, 
 // capturingStream captures sent events for assertion.
 type capturingStream struct {
 	grpc.ServerStream
-	sent []*corev1.Event
+	sent []*corev1.SubscribeResponse
 	ctx  context.Context
 }
 
-func (s *capturingStream) Send(ev *corev1.Event) error {
+func (s *capturingStream) Send(ev *corev1.SubscribeResponse) error {
 	s.sent = append(s.sent, ev)
 	return nil
 }

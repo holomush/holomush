@@ -28,7 +28,7 @@ func createTempExecutable(path string) error {
 
 // mockClientProtocol implements hashiplug.ClientProtocol for testing.
 type mockClientProtocol struct {
-	pluginClient pluginv1.PluginClient
+	pluginClient pluginv1.PluginServiceClient
 	dispenseErr  error
 	rawDispense  interface{} // If set, return this instead of pluginClient
 }
@@ -63,7 +63,7 @@ func (m *mockPluginClient) Kill() {
 	m.killed = true
 }
 
-// mockGRPCPluginClient implements pluginv1.PluginClient for testing.
+// mockGRPCPluginClient implements pluginv1.PluginServiceClient for testing.
 type mockGRPCPluginClient struct {
 	response  *pluginv1.HandleEventResponse
 	err       error

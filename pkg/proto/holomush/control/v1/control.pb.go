@@ -240,8 +240,8 @@ const file_holomush_control_v1_control_proto_rawDesc = "" +
 	"\arunning\x18\x01 \x01(\bR\arunning\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\x05R\x03pid\x12%\n" +
 	"\x0euptime_seconds\x18\x03 \x01(\x03R\ruptimeSeconds\x12\x1c\n" +
-	"\tcomponent\x18\x04 \x01(\tR\tcomponent2\xb5\x01\n" +
-	"\aControl\x12W\n" +
+	"\tcomponent\x18\x04 \x01(\tR\tcomponent2\xbc\x01\n" +
+	"\x0eControlService\x12W\n" +
 	"\bShutdown\x12$.holomush.control.v1.ShutdownRequest\x1a%.holomush.control.v1.ShutdownResponse\x12Q\n" +
 	"\x06Status\x12\".holomush.control.v1.StatusRequest\x1a#.holomush.control.v1.StatusResponseB\xdb\x01\n" +
 	"\x17com.holomush.control.v1B\fControlProtoP\x01ZDgithub.com/holomush/holomush/pkg/proto/holomush/control/v1;controlv1\xa2\x02\x03HCX\xaa\x02\x13Holomush.Control.V1\xca\x02\x13Holomush\\Control\\V1\xe2\x02\x1fHolomush\\Control\\V1\\GPBMetadata\xea\x02\x15Holomush::Control::V1b\x06proto3"
@@ -266,10 +266,10 @@ var file_holomush_control_v1_control_proto_goTypes = []any{
 	(*StatusResponse)(nil),   // 3: holomush.control.v1.StatusResponse
 }
 var file_holomush_control_v1_control_proto_depIdxs = []int32{
-	0, // 0: holomush.control.v1.Control.Shutdown:input_type -> holomush.control.v1.ShutdownRequest
-	2, // 1: holomush.control.v1.Control.Status:input_type -> holomush.control.v1.StatusRequest
-	1, // 2: holomush.control.v1.Control.Shutdown:output_type -> holomush.control.v1.ShutdownResponse
-	3, // 3: holomush.control.v1.Control.Status:output_type -> holomush.control.v1.StatusResponse
+	0, // 0: holomush.control.v1.ControlService.Shutdown:input_type -> holomush.control.v1.ShutdownRequest
+	2, // 1: holomush.control.v1.ControlService.Status:input_type -> holomush.control.v1.StatusRequest
+	1, // 2: holomush.control.v1.ControlService.Shutdown:output_type -> holomush.control.v1.ShutdownResponse
+	3, // 3: holomush.control.v1.ControlService.Status:output_type -> holomush.control.v1.StatusResponse
 	2, // [2:4] is the sub-list for method output_type
 	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

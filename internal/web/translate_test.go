@@ -24,7 +24,7 @@ func mustMarshal(t *testing.T, v any) []byte {
 }
 
 func TestTranslateEvent_Say(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:      "say",
 		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
 		Payload:   mustMarshal(t, sayPayload{CharacterName: "Alice", Message: "Hello!"}),
@@ -38,7 +38,7 @@ func TestTranslateEvent_Say(t *testing.T) {
 }
 
 func TestTranslateEvent_Pose(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "pose",
 		Payload: mustMarshal(t, posePayload{CharacterName: "Bob", Action: "waves hello."}),
 	}
@@ -51,7 +51,7 @@ func TestTranslateEvent_Pose(t *testing.T) {
 }
 
 func TestTranslateEvent_Arrive(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "arrive",
 		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Carol"}),
 	}
@@ -64,7 +64,7 @@ func TestTranslateEvent_Arrive(t *testing.T) {
 }
 
 func TestTranslateEvent_Leave(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "leave",
 		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Dave"}),
 	}
@@ -77,7 +77,7 @@ func TestTranslateEvent_Leave(t *testing.T) {
 }
 
 func TestTranslateEvent_SayChannel(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "say",
 		Payload: mustMarshal(t, sayPayload{CharacterName: "Alice", Message: "Hello!"}),
 	}
@@ -88,7 +88,7 @@ func TestTranslateEvent_SayChannel(t *testing.T) {
 }
 
 func TestTranslateEvent_PoseChannel(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "pose",
 		Payload: mustMarshal(t, posePayload{CharacterName: "Bob", Action: "waves."}),
 	}
@@ -99,7 +99,7 @@ func TestTranslateEvent_PoseChannel(t *testing.T) {
 }
 
 func TestTranslateEvent_ArriveChannel(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "arrive",
 		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Carol"}),
 	}
@@ -110,7 +110,7 @@ func TestTranslateEvent_ArriveChannel(t *testing.T) {
 }
 
 func TestTranslateEvent_LeaveChannel(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "leave",
 		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Dave"}),
 	}
@@ -121,7 +121,7 @@ func TestTranslateEvent_LeaveChannel(t *testing.T) {
 }
 
 func TestTranslateEvent_System(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "system",
 		Payload: mustMarshal(t, map[string]string{"message": "Server restarting."}),
 	}
@@ -134,7 +134,7 @@ func TestTranslateEvent_System(t *testing.T) {
 }
 
 func TestTranslateEvent_Move(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "move",
 		Payload: mustMarshal(t, map[string]string{"character_name": "Eve", "message": "Eve goes north."}),
 	}
@@ -163,7 +163,7 @@ func TestTranslateEvent_LocationState(t *testing.T) {
 		},
 	}
 
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "location_state",
 		Payload: mustMarshal(t, payload),
 	}
@@ -196,7 +196,7 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 		},
 	}
 
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "exit_update",
 		Payload: mustMarshal(t, payload),
 	}
@@ -214,7 +214,7 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 }
 
 func TestTranslateEvent_Unknown(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "teleport",
 		Payload: []byte(`{}`),
 	}
@@ -224,7 +224,7 @@ func TestTranslateEvent_Unknown(t *testing.T) {
 }
 
 func TestTranslateEvent_CorruptPayload(t *testing.T) {
-	ev := &corev1.Event{
+	ev := &corev1.SubscribeResponse{
 		Type:    "say",
 		Payload: []byte(`not-valid-json`),
 	}

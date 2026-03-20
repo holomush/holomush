@@ -24,109 +24,109 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Plugin_HandleEvent_FullMethodName = "/holomush.plugin.v1.Plugin/HandleEvent"
+	PluginService_HandleEvent_FullMethodName = "/holomush.plugin.v1.PluginService/HandleEvent"
 )
 
-// PluginClient is the client API for Plugin service.
+// PluginServiceClient is the client API for PluginService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Plugin service is called by the go-plugin host to send events to binary plugins.
+// PluginService is called by the go-plugin host to send events to binary plugins.
 // This service is implemented by the plugin (the gRPC server runs in the plugin process).
-type PluginClient interface {
+type PluginServiceClient interface {
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error)
 }
 
-type pluginClient struct {
+type pluginServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewPluginClient(cc grpc.ClientConnInterface) PluginClient {
-	return &pluginClient{cc}
+func NewPluginServiceClient(cc grpc.ClientConnInterface) PluginServiceClient {
+	return &pluginServiceClient{cc}
 }
 
-func (c *pluginClient) HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error) {
+func (c *pluginServiceClient) HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HandleEventResponse)
-	err := c.cc.Invoke(ctx, Plugin_HandleEvent_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PluginService_HandleEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// PluginServer is the server API for Plugin service.
-// All implementations must embed UnimplementedPluginServer
+// PluginServiceServer is the server API for PluginService service.
+// All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
 //
-// Plugin service is called by the go-plugin host to send events to binary plugins.
+// PluginService is called by the go-plugin host to send events to binary plugins.
 // This service is implemented by the plugin (the gRPC server runs in the plugin process).
-type PluginServer interface {
+type PluginServiceServer interface {
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error)
-	mustEmbedUnimplementedPluginServer()
+	mustEmbedUnimplementedPluginServiceServer()
 }
 
-// UnimplementedPluginServer must be embedded to have
+// UnimplementedPluginServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedPluginServer struct{}
+type UnimplementedPluginServiceServer struct{}
 
-func (UnimplementedPluginServer) HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error) {
+func (UnimplementedPluginServiceServer) HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleEvent not implemented")
 }
-func (UnimplementedPluginServer) mustEmbedUnimplementedPluginServer() {}
-func (UnimplementedPluginServer) testEmbeddedByValue()                {}
+func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
+func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
 
-// UnsafePluginServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to PluginServer will
+// UnsafePluginServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PluginServiceServer will
 // result in compilation errors.
-type UnsafePluginServer interface {
-	mustEmbedUnimplementedPluginServer()
+type UnsafePluginServiceServer interface {
+	mustEmbedUnimplementedPluginServiceServer()
 }
 
-func RegisterPluginServer(s grpc.ServiceRegistrar, srv PluginServer) {
-	// If the following call panics, it indicates UnimplementedPluginServer was
+func RegisterPluginServiceServer(s grpc.ServiceRegistrar, srv PluginServiceServer) {
+	// If the following call panics, it indicates UnimplementedPluginServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Plugin_ServiceDesc, srv)
+	s.RegisterService(&PluginService_ServiceDesc, srv)
 }
 
-func _Plugin_HandleEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginService_HandleEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HandleEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginServer).HandleEvent(ctx, in)
+		return srv.(PluginServiceServer).HandleEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Plugin_HandleEvent_FullMethodName,
+		FullMethod: PluginService_HandleEvent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginServer).HandleEvent(ctx, req.(*HandleEventRequest))
+		return srv.(PluginServiceServer).HandleEvent(ctx, req.(*HandleEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Plugin_ServiceDesc is the grpc.ServiceDesc for Plugin service.
+// PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Plugin_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "holomush.plugin.v1.Plugin",
-	HandlerType: (*PluginServer)(nil),
+var PluginService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "holomush.plugin.v1.PluginService",
+	HandlerType: (*PluginServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "HandleEvent",
-			Handler:    _Plugin_HandleEvent_Handler,
+			Handler:    _PluginService_HandleEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

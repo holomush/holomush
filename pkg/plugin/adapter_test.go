@@ -37,7 +37,7 @@ func TestGRPCPlugin_GRPCServer_RegistersService(t *testing.T) {
 
 	// Verify service was registered by checking GetServiceInfo
 	info := s.GetServiceInfo()
-	assert.Contains(t, info, "holomush.plugin.v1.Plugin", "expected Plugin service to be registered")
+	assert.Contains(t, info, "holomush.plugin.v1.PluginService", "expected PluginService to be registered")
 }
 
 func TestGRPCPlugin_GRPCClient_ReturnsError(t *testing.T) {
