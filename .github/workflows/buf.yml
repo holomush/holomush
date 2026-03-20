@@ -42,13 +42,15 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: bufbuild/buf-action@v1
         with:
           token: ${{ secrets.BUF_TOKEN }}
           lint: false
           format: false
           breaking: true
-          breaking_against: "buf.build/holomush/holomush"
+          breaking_against: .git#branch=main
           push: false
 
   push:

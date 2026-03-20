@@ -6,9 +6,9 @@ syntax = "proto3";
 
 package holomush.plugin.v1;
 
-option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
-
 import "holomush/plugin/v1/plugin.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
 // HostFunctionsService provides host capabilities to plugins.
 // This service is implemented by the host (the gRPC server runs in the host process).

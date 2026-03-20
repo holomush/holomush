@@ -5,19 +5,19 @@ syntax = "proto3";
 
 package holomush.core.v1;
 
-option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
-
 import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
 
 // RequestMeta contains metadata for request correlation and debugging.
 message RequestMeta {
-  string request_id = 1;                    // ULID for log correlation
+  string request_id = 1; // ULID for log correlation
   google.protobuf.Timestamp timestamp = 2;
 }
 
 // ResponseMeta contains metadata echoed back from requests.
 message ResponseMeta {
-  string request_id = 1;                    // Echoed from request
+  string request_id = 1; // Echoed from request
   google.protobuf.Timestamp timestamp = 2;
 }
 
@@ -40,7 +40,7 @@ message AuthenticateRequest {
   RequestMeta meta = 1;
   string username = 2;
   string password = 3;
-  string client_type = 4;  // "terminal", "comms_hub", "telnet"
+  string client_type = 4; // "terminal", "comms_hub", "telnet"
 }
 
 message AuthenticateResponse {
@@ -86,7 +86,7 @@ message SubscribeResponse {
 message DisconnectRequest {
   RequestMeta meta = 1;
   string session_id = 2;
-  string connection_id = 3;  // optional: remove specific connection
+  string connection_id = 3; // optional: remove specific connection
 }
 
 message DisconnectResponse {
