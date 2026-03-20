@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Buf Proto CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "api/proto/**"
+      - "buf.yaml"
+      - "buf.gen.yaml"
+      - "buf.lock"
+  push:
+    branches: [main]
+    paths:
+      - "api/proto/**"
+      - "buf.yaml"
+      - "buf.gen.yaml"
+      - "buf.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Buf Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-action@v1
+        with:
+          token: ${{ secrets.BUF_TOKEN }}
+          lint: true
+          format: true
+          breaking: false
+          push: false
+
+  breaking:
+    name: Buf Breaking Change Detection
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-action@v1
+        with:
+          token: ${{ secrets.BUF_TOKEN }}
+          lint: false
+          format: false
+          breaking: true
+          breaking_against: "buf.build/holomush/holomush"
+          push: false
+
+  push:
+    name: Buf Push to BSR
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-action@v1
+        with:
+          token: ${{ secrets.BUF_TOKEN }}
+          lint: false
+          format: false
+          breaking: false
+          push: true
