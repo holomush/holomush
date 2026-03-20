@@ -79,6 +79,7 @@
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
         connected = false;
+        error = 'Connection lost. Refresh to reconnect.';
       }
     }
   }

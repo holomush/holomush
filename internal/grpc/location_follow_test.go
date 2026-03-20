@@ -26,12 +26,10 @@ var _ WorldQuerier = (*world.Service)(nil)
 
 // mockWorldQuerier implements WorldQuerier for tests.
 type mockWorldQuerier struct {
-	location   *world.Location
-	locErr     error
-	exits      []*world.Exit
-	exitsErr   error
-	characters []*world.Character
-	charsErr   error
+	location *world.Location
+	locErr   error
+	exits    []*world.Exit
+	exitsErr error
 }
 
 func (m *mockWorldQuerier) GetLocation(_ context.Context, _ string, _ ulid.ULID) (*world.Location, error) {
@@ -40,10 +38,6 @@ func (m *mockWorldQuerier) GetLocation(_ context.Context, _ string, _ ulid.ULID)
 
 func (m *mockWorldQuerier) GetExitsByLocation(_ context.Context, _ string, _ ulid.ULID) ([]*world.Exit, error) {
 	return m.exits, m.exitsErr
-}
-
-func (m *mockWorldQuerier) GetCharactersByLocation(_ context.Context, _ string, _ ulid.ULID, _ world.ListOptions) ([]*world.Character, error) {
-	return m.characters, m.charsErr
 }
 
 // capturingStream captures sent events for assertion.
@@ -79,8 +73,7 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 			Name:        "New Location",
 			Description: "A shiny new location.",
 		},
-		exits:      []*world.Exit{},
-		characters: []*world.Character{},
+		exits: []*world.Exit{},
 	}
 
 	lf := &locationFollower{
@@ -241,9 +234,6 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 		exits: []*world.Exit{
 			{Name: "north", Locked: false},
 		},
-		characters: []*world.Character{
-			{ID: charID, Name: "Alice"},
-		},
 	}
 
 	// Presence comes from active sessions at the location, not character repo.
@@ -286,13 +276,3 @@ func TestConvertExits_GRPCPackage(t *testing.T) {
 	assert.True(t, result[1].Locked)
 }
 
-func TestConvertCharacters_GRPCPackage(t *testing.T) {
-	chars := []*world.Character{
-		{Name: "Alice"},
-		{Name: "Bob"},
-	}
-	result := convertCharacters(chars)
-	require.Len(t, result, 2)
-	assert.Equal(t, "Alice", result[0].Name)
-	assert.Equal(t, "Bob", result[1].Name)
-}

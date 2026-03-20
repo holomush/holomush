@@ -33,7 +33,6 @@ type locationFollower struct {
 	currentLocID ulid.ULID
 	worldQuerier WorldQuerier
 	sessionStore session.Store
-	broadcaster  *core.Broadcaster
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
@@ -98,7 +97,8 @@ func (lf *locationFollower) handleEvent(
 // a location_state proto event.
 func (lf *locationFollower) buildLocationState(ctx context.Context, locationID ulid.ULID) (*corev1.SubscribeResponse, error) {
 	// Use system context for ABAC bypass — these are server-internal queries
-	// not on behalf of a specific character.
+	// not on behalf of a specific character. locationID comes from session.Info
+	// (trusted server-side state), not from client input.
 	sysCtx := access.WithSystemSubject(ctx)
 
 	// Location and exits are best-effort — the location may not exist in the
@@ -149,7 +149,7 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return nil, oops.Errorf("marshal location_state: %w", err)
+		return nil, oops.Wrapf(err, "marshal location_state")
 	}
 
 	return &corev1.SubscribeResponse{
@@ -171,18 +171,6 @@ func convertExits(exits []*world.Exit) []core.LocationStateExit {
 			Direction: e.Name,
 			Name:      e.Name,
 			Locked:    e.Locked,
-		})
-	}
-	return result
-}
-
-// convertCharacters maps world.Character slices to core.LocationStateChar slices.
-func convertCharacters(chars []*world.Character) []core.LocationStateChar {
-	result := make([]core.LocationStateChar, 0, len(chars))
-	for _, c := range chars {
-		result = append(result, core.LocationStateChar{
-			Name: c.Name,
-			Idle: false,
 		})
 	}
 	return result

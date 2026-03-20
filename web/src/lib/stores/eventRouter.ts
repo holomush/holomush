@@ -53,7 +53,11 @@ function routeToSidebar(event: { type: string; characterName: string; metadata?:
 
   switch (event.type) {
     case 'location_state':
-      if (data) applyLocationState(data);
+      if (data) {
+        applyLocationState(data);
+      } else {
+        console.warn('[eventRouter] location_state event received with unparseable metadata');
+      }
       break;
     case 'exit_update':
       if (data?.exits) {

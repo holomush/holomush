@@ -53,7 +53,6 @@ const defaultMaxReplay = 1000
 type WorldQuerier interface {
 	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
 	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
-	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
 }
 
 // CoreServer implements the gRPC Core service.
@@ -481,7 +480,6 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			currentLocID: info.LocationID,
 			worldQuerier: s.worldQuerier,
 			sessionStore: s.sessionStore,
-			broadcaster:  s.broadcaster,
 		}
 		if locState, rsErr := syntheticLF.buildLocationState(ctx, info.LocationID); rsErr != nil {
 			slog.WarnContext(ctx, "failed to build synthetic location_state",
@@ -512,7 +510,6 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		currentLocID: info.LocationID,
 		worldQuerier: s.worldQuerier,
 		sessionStore: s.sessionStore,
-		broadcaster:  s.broadcaster,
 	}
 
 	// Send live events until context is cancelled
