@@ -114,7 +114,7 @@ func emitWithRetry(ctx context.Context, emitter EventEmitter, stream, eventType,
 // EmitMoveEvent emits a move event for character or object movement.
 // For character moves, the event is emitted to both the destination location
 // stream and the character's own stream (character:<entityID>) so that the
-// character's event subscriber can detect the move for room-following.
+// character's event subscriber can detect the move for location-following.
 // Retries up to 3 times with exponential backoff (4 total attempts) before
 // returning EVENT_EMIT_FAILED.
 // Returns ErrNoEventEmitter if emitter is nil (indicates misconfiguration).
@@ -147,7 +147,7 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 	}
 
 	// For character moves, also emit to the character's own stream so that
-	// the character's event subscriber (room-following) can detect the move
+	// the character's event subscriber (location-following) can detect the move
 	// and re-subscribe to the new location stream.
 	if payload.EntityType == EntityTypeCharacter {
 		charStream := CharacterStream(payload.EntityID)

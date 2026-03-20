@@ -39,6 +39,51 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('button[title="Toggle sidebar"]')).toBeVisible();
   });
 
+  test('presence list shows self and other connections', async ({ browser }) => {
+    // Two independent browser contexts (separate sessions)
+    const context1 = await browser.newContext();
+    const context2 = await browser.newContext();
+    const page1 = await context1.newPage();
+    const page2 = await context2.newPage();
+
+    // Both connect as guests
+    await page1.goto('/terminal');
+    await page1.click('text=Connect as Guest');
+    await expect(page1.locator('.terminal-layout')).toBeVisible();
+
+    // Get first character's name
+    const name1 = await page1.locator('.character').textContent();
+
+    await page2.goto('/terminal');
+    await page2.click('text=Connect as Guest');
+    await expect(page2.locator('.terminal-layout')).toBeVisible();
+
+    // Get second character's name
+    const name2 = await page2.locator('.character').textContent();
+
+    // Wait for arrive event to propagate
+    await page1.waitForTimeout(1000);
+
+    // Expand sidebars on both pages
+    await page1.keyboard.press('Control+b');
+    await page2.keyboard.press('Control+b');
+    await expect(page1.locator('.sidebar.expanded')).toBeVisible();
+    await expect(page2.locator('.sidebar.expanded')).toBeVisible();
+
+    // Page 1 should see BOTH characters in presence list (self + other)
+    const presence1 = page1.locator('.presence-list');
+    await expect(presence1).toContainText(name1!, { timeout: 5000 });
+    await expect(presence1).toContainText(name2!, { timeout: 5000 });
+
+    // Page 2 should also see BOTH characters
+    const presence2 = page2.locator('.presence-list');
+    await expect(presence2).toContainText(name1!, { timeout: 5000 });
+    await expect(presence2).toContainText(name2!, { timeout: 5000 });
+
+    await context1.close();
+    await context2.close();
+  });
+
   test('command history with up/down arrows', async ({ page }) => {
     await page.goto('/terminal');
     await page.click('text=Connect as Guest');

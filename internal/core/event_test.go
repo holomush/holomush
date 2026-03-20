@@ -26,7 +26,7 @@ func TestEventType_String(t *testing.T) {
 		{"object_use event", EventTypeObjectUse, "object_use"},
 		{"object_examine event", EventTypeObjectExamine, "object_examine"},
 		{"object_give event", EventTypeObjectGive, "object_give"},
-		{"room_state event", EventTypeRoomState, "room_state"},
+		{"location_state event", EventTypeLocationState, "location_state"},
 		{"exit_update event", EventTypeExitUpdate, "exit_update"},
 	}
 
@@ -37,8 +37,8 @@ func TestEventType_String(t *testing.T) {
 	}
 }
 
-func TestEventType_RoomState(t *testing.T) {
-	assert.Equal(t, EventType("room_state"), EventTypeRoomState)
+func TestEventType_LocationState(t *testing.T) {
+	assert.Equal(t, EventType("location_state"), EventTypeLocationState)
 	assert.Equal(t, EventType("exit_update"), EventTypeExitUpdate)
 }
 
@@ -65,7 +65,7 @@ func TestDocumentedEventTypes(t *testing.T) {
 		string(EventTypeObjectUse):     true,
 		string(EventTypeObjectExamine): true,
 		string(EventTypeObjectGive):    true,
-		string(EventTypeRoomState):     true,
+		string(EventTypeLocationState):     true,
 		string(EventTypeExitUpdate):    true,
 	}
 

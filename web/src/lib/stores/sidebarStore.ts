@@ -22,7 +22,7 @@ export const exits = writable<RoomExit[]>([]);
 export const presence = writable<RoomCharacter[]>([]);
 export const sidebarExpanded = writable<boolean>(false);
 
-export function applyRoomState(metadata: Record<string, unknown>) {
+export function applyLocationState(metadata: Record<string, unknown>) {
   const loc = metadata.location as RoomLocation | undefined;
   if (loc) location.set(loc);
   const ex = metadata.exits as RoomExit[] | undefined;

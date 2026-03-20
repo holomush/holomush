@@ -1,7 +1,7 @@
 import { exits } from './sidebarStore';
 import type { RoomExit } from './sidebarStore';
 import { appendLine, replayActive, markReplayComplete } from './terminalStore';
-import { applyRoomState, addPresence, removePresence } from './sidebarStore';
+import { applyLocationState, addPresence, removePresence } from './sidebarStore';
 
 // EventChannel values from the generated proto
 const CHANNEL_UNSPECIFIED = 0;
@@ -51,8 +51,8 @@ function routeToSidebar(event: { type: string; characterName: string; metadata?:
   const data = metadataToPlain(event.metadata);
 
   switch (event.type) {
-    case 'room_state':
-      if (data) applyRoomState(data);
+    case 'location_state':
+      if (data) applyLocationState(data);
       break;
     case 'exit_update':
       if (data?.exits) {

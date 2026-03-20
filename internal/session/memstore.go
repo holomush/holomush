@@ -290,6 +290,20 @@ func (m *MemStore) UpdateGridPresent(_ context.Context, id string, present bool)
 	return nil
 }
 
+// ListActiveByLocation returns active sessions whose LocationID matches.
+func (m *MemStore) ListActiveByLocation(_ context.Context, locationID ulid.ULID) ([]*Info, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*Info
+	for _, info := range m.sessions {
+		if info.Status == StatusActive && info.LocationID == locationID {
+			result = append(result, copyInfo(info))
+		}
+	}
+	return result, nil
+}
+
 // copyInfo returns a defensive copy of an Info to prevent external modification.
 func copyInfo(info *Info) *Info {
 	cursors := make(map[string]ulid.ULID, len(info.EventCursors))

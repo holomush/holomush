@@ -21,13 +21,13 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// systemSubjectID is used as the ABAC subject for synthetic room_state
-// queries during room-following.
+// systemSubjectID is used as the ABAC subject for synthetic location_state
+// queries during location-following.
 const systemSubjectID = "system"
 
-// roomFollower tracks the character's current location and handles
-// room-following when move events are detected.
-type roomFollower struct {
+// locationFollower tracks the character's current location and handles
+// location-following when move events are detected.
+type locationFollower struct {
 	characterID  ulid.ULID
 	currentLocID ulid.ULID
 	worldQuerier WorldQuerier
@@ -35,14 +35,14 @@ type roomFollower struct {
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
-// If so, it builds and sends a synthetic room_state event for the new location.
-// Returns true if a room_state was sent (caller may skip duplicate forwarding).
-func (rf *roomFollower) handleEvent(
+// If so, it builds and sends a synthetic location_state event for the new location.
+// Returns true if a location_state was sent (caller may skip duplicate forwarding).
+func (lf *locationFollower) handleEvent(
 	ctx context.Context,
 	event core.Event,
 	stream grpc.ServerStreamingServer[corev1.Event],
 ) bool {
-	if rf.worldQuerier == nil {
+	if lf.worldQuerier == nil {
 		return false
 	}
 	if event.Type != core.EventTypeMove {
@@ -54,35 +54,35 @@ func (rf *roomFollower) handleEvent(
 		return false
 	}
 
-	if payload.EntityType != world.EntityTypeCharacter || payload.EntityID != rf.characterID {
+	if payload.EntityType != world.EntityTypeCharacter || payload.EntityID != lf.characterID {
 		return false
 	}
 
 	newLocID := payload.ToID
-	if newLocID == rf.currentLocID {
+	if newLocID == lf.currentLocID {
 		return false
 	}
 
-	slog.DebugContext(ctx, "room-following: character moved",
-		"character_id", rf.characterID.String(),
-		"from_location", rf.currentLocID.String(),
+	slog.DebugContext(ctx, "location-following: character moved",
+		"character_id", lf.characterID.String(),
+		"from_location", lf.currentLocID.String(),
 		"to_location", newLocID.String(),
 	)
 
-	rf.currentLocID = newLocID
+	lf.currentLocID = newLocID
 
-	// Build and send synthetic room_state for the new location.
-	roomState, err := rf.buildRoomState(ctx, newLocID)
+	// Build and send synthetic location_state for the new location.
+	locState, err := lf.buildLocationState(ctx, newLocID)
 	if err != nil {
-		slog.WarnContext(ctx, "room-following: failed to build room_state",
+		slog.WarnContext(ctx, "location-following: failed to build location_state",
 			"location_id", newLocID.String(),
 			"error", err,
 		)
 		return false
 	}
 
-	if err := stream.Send(roomState); err != nil {
-		slog.WarnContext(ctx, "room-following: failed to send room_state",
+	if err := stream.Send(locState); err != nil {
+		slog.WarnContext(ctx, "location-following: failed to send location_state",
 			"location_id", newLocID.String(),
 			"error", err,
 		)
@@ -91,26 +91,26 @@ func (rf *roomFollower) handleEvent(
 	return true
 }
 
-// buildRoomState queries the world service for location data and builds
-// a room_state proto event.
-func (rf *roomFollower) buildRoomState(ctx context.Context, locationID ulid.ULID) (*corev1.Event, error) {
-	loc, err := rf.worldQuerier.GetLocation(ctx, systemSubjectID, locationID)
+// buildLocationState queries the world service for location data and builds
+// a location_state proto event.
+func (lf *locationFollower) buildLocationState(ctx context.Context, locationID ulid.ULID) (*corev1.Event, error) {
+	loc, err := lf.worldQuerier.GetLocation(ctx, systemSubjectID, locationID)
 	if err != nil {
 		return nil, oops.With("location_id", locationID.String()).Wrap(err)
 	}
 
-	exits, err := rf.worldQuerier.GetExitsByLocation(ctx, systemSubjectID, locationID)
+	exits, err := lf.worldQuerier.GetExitsByLocation(ctx, systemSubjectID, locationID)
 	if err != nil {
 		return nil, oops.With("location_id", locationID.String()).Wrap(err)
 	}
 
-	chars, err := rf.worldQuerier.GetCharactersByLocation(ctx, systemSubjectID, locationID, world.ListOptions{})
+	chars, err := lf.worldQuerier.GetCharactersByLocation(ctx, systemSubjectID, locationID, world.ListOptions{})
 	if err != nil {
 		return nil, oops.With("location_id", locationID.String()).Wrap(err)
 	}
 
-	payload := core.RoomStatePayload{
-		Location: core.RoomStateLocation{
+	payload := core.LocationStatePayload{
+		Location: core.LocationStateInfo{
 			ID:          loc.ID.String(),
 			Name:        loc.Name,
 			Description: loc.Description,
@@ -121,13 +121,13 @@ func (rf *roomFollower) buildRoomState(ctx context.Context, locationID ulid.ULID
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return nil, oops.Errorf("marshal room_state: %w", err)
+		return nil, oops.Errorf("marshal location_state: %w", err)
 	}
 
 	return &corev1.Event{
 		Id:        core.NewULID().String(),
 		Stream:    world.LocationStream(locationID),
-		Type:      string(core.EventTypeRoomState),
+		Type:      string(core.EventTypeLocationState),
 		Timestamp: timestamppb.New(time.Now()),
 		ActorType: core.ActorSystem.String(),
 		ActorId:   "system",
@@ -135,11 +135,11 @@ func (rf *roomFollower) buildRoomState(ctx context.Context, locationID ulid.ULID
 	}, nil
 }
 
-// convertExits maps world.Exit slices to core.RoomStateExit slices.
-func convertExits(exits []*world.Exit) []core.RoomStateExit {
-	result := make([]core.RoomStateExit, 0, len(exits))
+// convertExits maps world.Exit slices to core.LocationStateExit slices.
+func convertExits(exits []*world.Exit) []core.LocationStateExit {
+	result := make([]core.LocationStateExit, 0, len(exits))
 	for _, e := range exits {
-		result = append(result, core.RoomStateExit{
+		result = append(result, core.LocationStateExit{
 			Direction: e.Name,
 			Name:      e.Name,
 			Locked:    e.Locked,
@@ -148,11 +148,11 @@ func convertExits(exits []*world.Exit) []core.RoomStateExit {
 	return result
 }
 
-// convertCharacters maps world.Character slices to core.RoomStateChar slices.
-func convertCharacters(chars []*world.Character) []core.RoomStateChar {
-	result := make([]core.RoomStateChar, 0, len(chars))
+// convertCharacters maps world.Character slices to core.LocationStateChar slices.
+func convertCharacters(chars []*world.Character) []core.LocationStateChar {
+	result := make([]core.LocationStateChar, 0, len(chars))
 	for _, c := range chars {
-		result = append(result, core.RoomStateChar{
+		result = append(result, core.LocationStateChar{
 			Name: c.Name,
 			Idle: false,
 		})
@@ -160,17 +160,17 @@ func convertCharacters(chars []*world.Character) []core.RoomStateChar {
 	return result
 }
 
-// forwardLiveEventsWithRoomFollow reads from merged and sends events to the
+// forwardLiveEventsWithLocationFollow reads from merged and sends events to the
 // client stream. When a move event is detected for the session's character,
-// it sends a synthetic room_state for the new location.
-func (s *CoreServer) forwardLiveEventsWithRoomFollow(
+// it sends a synthetic location_state for the new location.
+func (s *CoreServer) forwardLiveEventsWithLocationFollow(
 	ctx context.Context,
 	info *session.Info,
 	merged <-chan core.Event,
 	stream grpc.ServerStreamingServer[corev1.Event],
 	requestID string,
 	sessionID string,
-	rf *roomFollower,
+	lf *locationFollower,
 ) error {
 	for {
 		select {
@@ -195,8 +195,8 @@ func (s *CoreServer) forwardLiveEventsWithRoomFollow(
 			// destination location stream and the character stream. Only
 			// forward the one from the location stream to avoid duplicates.
 			if event.Type == core.EventTypeMove && strings.HasPrefix(event.Stream, world.StreamPrefixCharacter) {
-				// Handle room-following on the character stream copy.
-				rf.handleEvent(ctx, event, stream)
+				// Handle location-following on the character stream copy.
+				lf.handleEvent(ctx, event, stream)
 				// Don't forward this copy to the client.
 				continue
 			}

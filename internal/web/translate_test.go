@@ -146,31 +146,31 @@ func TestTranslateEvent_Move(t *testing.T) {
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetChannel())
 }
 
-func TestTranslateEvent_RoomState(t *testing.T) {
-	payload := core.RoomStatePayload{
-		Location: core.RoomStateLocation{
+func TestTranslateEvent_LocationState(t *testing.T) {
+	payload := core.LocationStatePayload{
+		Location: core.LocationStateInfo{
 			ID:          "loc-123",
 			Name:        "Town Square",
 			Description: "A bustling town square.",
 		},
-		Exits: []core.RoomStateExit{
+		Exits: []core.LocationStateExit{
 			{Direction: "north", Name: "Market", Locked: false},
 			{Direction: "east", Name: "Library", Locked: true},
 		},
-		Present: []core.RoomStateChar{
+		Present: []core.LocationStateChar{
 			{Name: "Alice", Idle: false},
 			{Name: "Bob", Idle: true},
 		},
 	}
 
 	ev := &corev1.Event{
-		Type:    "room_state",
+		Type:    "location_state",
 		Payload: mustMarshal(t, payload),
 	}
 
 	got := translateEvent(ev)
 	require.NotNil(t, got)
-	assert.Equal(t, "room_state", got.GetType())
+	assert.Equal(t, "location_state", got.GetType())
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_STATE, got.GetChannel())
 	require.NotNil(t, got.GetMetadata())
 
@@ -191,7 +191,7 @@ func TestTranslateEvent_RoomState(t *testing.T) {
 
 func TestTranslateEvent_ExitUpdate(t *testing.T) {
 	payload := core.ExitUpdatePayload{
-		Exits: []core.RoomStateExit{
+		Exits: []core.LocationStateExit{
 			{Direction: "south", Name: "Garden", Locked: false},
 		},
 	}

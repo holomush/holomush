@@ -30,34 +30,34 @@ const (
 	EventTypeObjectGive    EventType = "object_give"
 
 	// UI state event types
-	EventTypeRoomState  EventType = "room_state"
-	EventTypeExitUpdate EventType = "exit_update"
+	EventTypeLocationState EventType = "location_state"
+	EventTypeExitUpdate    EventType = "exit_update"
 )
 
-// RoomStatePayload is the JSON payload for room_state events, providing a
-// full snapshot of the character's current location.
-type RoomStatePayload struct {
-	Location RoomStateLocation `json:"location"`
-	Exits    []RoomStateExit   `json:"exits"`
-	Present  []RoomStateChar   `json:"present"`
+// LocationStatePayload is the JSON payload for location_state events, providing
+// a full snapshot of the character's current location.
+type LocationStatePayload struct {
+	Location LocationStateInfo `json:"location"`
+	Exits    []LocationStateExit `json:"exits"`
+	Present  []LocationStateChar `json:"present"`
 }
 
-// RoomStateLocation describes the location in a room_state event.
-type RoomStateLocation struct {
+// LocationStateInfo describes the location in a location_state event.
+type LocationStateInfo struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-// RoomStateExit describes an exit visible from the current location.
-type RoomStateExit struct {
+// LocationStateExit describes an exit visible from the current location.
+type LocationStateExit struct {
 	Direction string `json:"direction"`
 	Name      string `json:"name"`
 	Locked    bool   `json:"locked"`
 }
 
-// RoomStateChar describes a character present in the current location.
-type RoomStateChar struct {
+// LocationStateChar describes a character present in the current location.
+type LocationStateChar struct {
 	Name string `json:"name"`
 	Idle bool   `json:"idle"`
 }
@@ -65,7 +65,7 @@ type RoomStateChar struct {
 // ExitUpdatePayload is the JSON payload for exit_update events, providing a
 // delta update to the exits in the current location.
 type ExitUpdatePayload struct {
-	Exits []RoomStateExit `json:"exits"`
+	Exits []LocationStateExit `json:"exits"`
 }
 
 // ActorKind identifies what type of entity caused an event.

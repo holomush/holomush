@@ -311,3 +311,7 @@ func (m *mockSessionStore) CountConnectionsByType(_ context.Context, id string, 
 func (m *mockSessionStore) UpdateGridPresent(_ context.Context, id string, _ bool) error {
 	return fmt.Errorf("mockSessionStore.UpdateGridPresent(%q): not implemented", id)
 }
+
+func (m *mockSessionStore) ListActiveByLocation(_ context.Context, _ ulid.ULID) ([]*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.ListActiveByLocation: not implemented")
+}

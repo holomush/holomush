@@ -403,3 +403,15 @@ func (s *PostgresSessionStore) UpdateGridPresent(ctx context.Context, id string,
 	}
 	return nil
 }
+
+// ListActiveByLocation returns active sessions whose location_id matches.
+func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locationID ulid.ULID) ([]*session.Info, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE location_id = $1 AND status = 'active'`,
+		locationID.String())
+	if err != nil {
+		return nil, oops.With("operation", "list active by location").
+			With("location_id", locationID.String()).Wrap(err)
+	}
+	return scanSessions(rows)
+}

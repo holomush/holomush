@@ -133,4 +133,8 @@ type Store interface {
 
 	// UpdateGridPresent sets the grid_present flag on a session.
 	UpdateGridPresent(ctx context.Context, id string, present bool) error
+
+	// ListActiveByLocation returns active sessions whose LocationID matches.
+	// Used for presence lists — "who is connected at this location?"
+	ListActiveByLocation(ctx context.Context, locationID ulid.ULID) ([]*Info, error)
 }

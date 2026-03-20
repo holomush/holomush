@@ -13,13 +13,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
-	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -42,20 +40,14 @@ type CoreClient interface {
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 }
 
-// WorldQuerier provides read-only access to world model data for building
-// room_state payloads. Satisfied by *world.Service.
-type WorldQuerier interface {
-	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
-	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
-	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
-}
-
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
+// The gateway is a protocol translation layer only — it MUST NOT access
+// WorldService or other internal services directly. All game state flows
+// through core server RPCs.
 type Handler struct {
 	client       CoreClient
 	sessionStore session.Store
 	tokenRepo    auth.PlayerTokenRepository
-	worldService WorldQuerier
 }
 
 // compile-time check that Handler satisfies the generated interface.
@@ -74,11 +66,6 @@ func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) HandlerOption {
 	return func(h *Handler) { h.tokenRepo = repo }
 }
 
-// WithWorldService sets the world service for building room_state payloads.
-// Accepts *world.Service or any WorldQuerier implementation.
-func WithWorldService(ws WorldQuerier) HandlerOption {
-	return func(h *Handler) { h.worldService = ws }
-}
 
 // NewHandler creates a new Handler with the given core client and options.
 func NewHandler(client CoreClient, opts ...HandlerOption) *Handler {
@@ -184,25 +171,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 		}
 	}
 
-	// Inject synthetic room_state before subscribing to live events so the
-	// client receives location context immediately on connect/reconnect.
-	if h.sessionStore != nil && h.worldService != nil {
-		sess, sessErr := h.sessionStore.Get(ctx, sessionID)
-		if sessErr == nil && !sess.LocationID.IsZero() {
-			roomState, rsErr := h.buildRoomState(ctx, sess.LocationID)
-			if rsErr != nil {
-				slog.Warn("web: failed to build synthetic room_state", "session_id", sessionID, "error", rsErr)
-			} else {
-				if sendErr := stream.Send(&webv1.StreamEventsResponse{
-					Event:    roomState,
-					Replayed: true,
-				}); sendErr != nil {
-					return connect.NewError(connect.CodeUnavailable,
-						oops.With("session_id", sessionID).Wrap(sendErr))
-				}
-			}
-		}
-	}
+	// Synthetic location_state is injected by the core server's Subscribe handler
+	// (which has direct access to WorldService). The gateway just forwards it.
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:        sessionID,

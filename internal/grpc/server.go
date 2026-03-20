@@ -49,7 +49,7 @@ type SessionDefaults struct {
 const defaultMaxReplay = 1000
 
 // WorldQuerier provides read-only access to world model data for building
-// room_state payloads during event streaming. Satisfied by *world.Service.
+// location_state payloads during event streaming. Satisfied by *world.Service.
 type WorldQuerier interface {
 	GetLocation(ctx context.Context, subjectID string, id ulid.ULID) (*world.Location, error)
 	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
@@ -105,8 +105,8 @@ func WithEventStore(store core.EventStore) CoreServerOption {
 	}
 }
 
-// WithWorldQuerier sets the world querier for building room_state payloads
-// during event streaming (room-following).
+// WithWorldQuerier sets the world querier for building location_state payloads
+// during event streaming (location-following).
 func WithWorldQuerier(wq WorldQuerier) CoreServerOption {
 	return func(s *CoreServer) {
 		s.worldQuerier = wq
@@ -462,9 +462,9 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		defer s.broadcaster.Unsubscribe(streamName, ch)
 	}
 
-	// Subscribe to the character stream for room-following. Move events
+	// Subscribe to the character stream for location-following. Move events
 	// emitted to character:<id> let the subscriber detect when the character
-	// changes location and trigger a room_state update.
+	// changes location and trigger a location_state update.
 	charStreamName := world.CharacterStream(info.CharacterID)
 	charCh := s.broadcaster.Subscribe(charStreamName)
 	channels = append(channels, charCh)
@@ -473,6 +473,29 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// Merge all channels into one
 	merged := mergeChannels(ctx, channels)
 
+	// Inject synthetic location_state so the client always has location context
+	// on connect/reconnect, regardless of event replay cursor position.
+	if s.worldQuerier != nil && !info.LocationID.IsZero() {
+		syntheticLF := &locationFollower{
+			characterID:  info.CharacterID,
+			currentLocID: info.LocationID,
+			worldQuerier: s.worldQuerier,
+			broadcaster:  s.broadcaster,
+		}
+		if locState, rsErr := syntheticLF.buildLocationState(ctx, info.LocationID); rsErr != nil {
+			slog.WarnContext(ctx, "failed to build synthetic location_state",
+				"request_id", requestID,
+				"session_id", req.SessionId,
+				"location_id", info.LocationID.String(),
+				"error", rsErr,
+			)
+		} else {
+			if sendErr := stream.Send(locState); sendErr != nil {
+				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
+			}
+		}
+	}
+
 	// Replay missed events if requested
 	if req.ReplayFromCursor && s.eventStore != nil && len(info.EventCursors) > 0 {
 		if err := s.replayMissedEvents(ctx, info, streams, merged, stream, requestID); err != nil {
@@ -480,18 +503,18 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
-	// Build room-following state. When a move event is detected for this
-	// character, forwardLiveEvents builds and sends a room_state for the
+	// Build location-following state. When a move event is detected for this
+	// character, forwardLiveEvents builds and sends a location_state for the
 	// new location.
-	rf := &roomFollower{
-		characterID:    info.CharacterID,
-		currentLocID:   info.LocationID,
-		worldQuerier:   s.worldQuerier,
-		broadcaster:    s.broadcaster,
+	lf := &locationFollower{
+		characterID:  info.CharacterID,
+		currentLocID: info.LocationID,
+		worldQuerier: s.worldQuerier,
+		broadcaster:  s.broadcaster,
 	}
 
 	// Send live events until context is cancelled
-	return s.forwardLiveEventsWithRoomFollow(ctx, info, merged, stream, requestID, req.SessionId, rf)
+	return s.forwardLiveEventsWithLocationFollow(ctx, info, merged, stream, requestID, req.SessionId, lf)
 }
 
 // replayMissedEvents replays historical events from the EventStore, then sends

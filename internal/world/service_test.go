@@ -4160,7 +4160,7 @@ func TestWorldService_MoveCharacter(t *testing.T) {
 		require.NoError(t, err)
 
 		// Character moves emit to both the destination location stream and
-		// the character's own stream (for room-following).
+		// the character's own stream (for location-following).
 		require.Len(t, emitter.calls, 2)
 		assert.Equal(t, world.LocationStream(toLocID), emitter.calls[0].Stream)
 		assert.Equal(t, "move", emitter.calls[0].EventType)

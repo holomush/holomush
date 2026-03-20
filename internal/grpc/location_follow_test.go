@@ -66,7 +66,7 @@ func (s *capturingStream) SetTrailer(_ metadata.MD)       {}
 func (s *capturingStream) SendMsg(_ interface{}) error     { return nil }
 func (s *capturingStream) RecvMsg(_ interface{}) error     { return nil }
 
-func TestRoomFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
+func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	charID := ulid.Make()
 	oldLocID := ulid.Make()
 	newLocID := ulid.Make()
@@ -74,14 +74,14 @@ func TestRoomFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	wq := &mockWorldQuerier{
 		location: &world.Location{
 			ID:          newLocID,
-			Name:        "New Room",
-			Description: "A shiny new room.",
+			Name:        "New Location",
+			Description: "A shiny new location.",
 		},
 		exits:      []*world.Exit{},
 		characters: []*world.Character{},
 	}
 
-	rf := &roomFollower{
+	lf := &locationFollower{
 		characterID:  charID,
 		currentLocID: oldLocID,
 		worldQuerier: wq,
@@ -105,21 +105,21 @@ func TestRoomFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	}
 
 	stream := &capturingStream{ctx: context.Background()}
-	handled := rf.handleEvent(context.Background(), event, stream)
+	handled := lf.handleEvent(context.Background(), event, stream)
 
 	assert.True(t, handled)
-	assert.Equal(t, newLocID, rf.currentLocID)
+	assert.Equal(t, newLocID, lf.currentLocID)
 	require.Len(t, stream.sent, 1)
-	assert.Equal(t, string(core.EventTypeRoomState), stream.sent[0].GetType())
+	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetType())
 
-	// Verify room_state payload
-	var roomState core.RoomStatePayload
-	require.NoError(t, json.Unmarshal(stream.sent[0].GetPayload(), &roomState))
-	assert.Equal(t, "New Room", roomState.Location.Name)
+	// Verify location_state payload
+	var locState core.LocationStatePayload
+	require.NoError(t, json.Unmarshal(stream.sent[0].GetPayload(), &locState))
+	assert.Equal(t, "New Location", locState.Location.Name)
 }
 
-func TestRoomFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
-	rf := &roomFollower{
+func TestLocationFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
+	lf := &locationFollower{
 		characterID:  ulid.Make(),
 		currentLocID: ulid.Make(),
 		worldQuerier: &mockWorldQuerier{},
@@ -131,19 +131,19 @@ func TestRoomFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
 	}
 
 	stream := &capturingStream{ctx: context.Background()}
-	handled := rf.handleEvent(context.Background(), event, stream)
+	handled := lf.handleEvent(context.Background(), event, stream)
 
 	assert.False(t, handled)
 	assert.Empty(t, stream.sent)
 }
 
-func TestRoomFollower_HandleEvent_IgnoresOtherCharacterMoves(t *testing.T) {
+func TestLocationFollower_HandleEvent_IgnoresOtherCharacterMoves(t *testing.T) {
 	charID := ulid.Make()
 	otherCharID := ulid.Make()
 	locID := ulid.Make()
 	newLocID := ulid.Make()
 
-	rf := &roomFollower{
+	lf := &locationFollower{
 		characterID:  charID,
 		currentLocID: locID,
 		worldQuerier: &mockWorldQuerier{},
@@ -166,20 +166,20 @@ func TestRoomFollower_HandleEvent_IgnoresOtherCharacterMoves(t *testing.T) {
 	}
 
 	stream := &capturingStream{ctx: context.Background()}
-	handled := rf.handleEvent(context.Background(), event, stream)
+	handled := lf.handleEvent(context.Background(), event, stream)
 
 	assert.False(t, handled)
 	assert.Empty(t, stream.sent)
-	assert.Equal(t, locID, rf.currentLocID, "location should not change")
+	assert.Equal(t, locID, lf.currentLocID, "location should not change")
 }
 
-func TestRoomFollower_HandleEvent_IgnoresObjectMoves(t *testing.T) {
+func TestLocationFollower_HandleEvent_IgnoresObjectMoves(t *testing.T) {
 	charID := ulid.Make()
 	locID := ulid.Make()
 	newLocID := ulid.Make()
 	objID := ulid.Make()
 
-	rf := &roomFollower{
+	lf := &locationFollower{
 		characterID:  charID,
 		currentLocID: locID,
 		worldQuerier: &mockWorldQuerier{},
@@ -202,14 +202,14 @@ func TestRoomFollower_HandleEvent_IgnoresObjectMoves(t *testing.T) {
 	}
 
 	stream := &capturingStream{ctx: context.Background()}
-	handled := rf.handleEvent(context.Background(), event, stream)
+	handled := lf.handleEvent(context.Background(), event, stream)
 
 	assert.False(t, handled)
 	assert.Empty(t, stream.sent)
 }
 
-func TestRoomFollower_HandleEvent_NilWorldQuerier(t *testing.T) {
-	rf := &roomFollower{
+func TestLocationFollower_HandleEvent_NilWorldQuerier(t *testing.T) {
+	lf := &locationFollower{
 		characterID:  ulid.Make(),
 		currentLocID: ulid.Make(),
 		worldQuerier: nil,
@@ -221,12 +221,12 @@ func TestRoomFollower_HandleEvent_NilWorldQuerier(t *testing.T) {
 	}
 
 	stream := &capturingStream{ctx: context.Background()}
-	handled := rf.handleEvent(context.Background(), event, stream)
+	handled := lf.handleEvent(context.Background(), event, stream)
 
 	assert.False(t, handled)
 }
 
-func TestRoomFollower_BuildRoomState(t *testing.T) {
+func TestLocationFollower_BuildLocationState(t *testing.T) {
 	locID := ulid.Make()
 	charID := ulid.Make()
 
@@ -244,16 +244,16 @@ func TestRoomFollower_BuildRoomState(t *testing.T) {
 		},
 	}
 
-	rf := &roomFollower{worldQuerier: wq}
-	ev, err := rf.buildRoomState(context.Background(), locID)
+	lf := &locationFollower{worldQuerier: wq}
+	ev, err := lf.buildLocationState(context.Background(), locID)
 	require.NoError(t, err)
 	require.NotNil(t, ev)
 
-	assert.Equal(t, string(core.EventTypeRoomState), ev.GetType())
+	assert.Equal(t, string(core.EventTypeLocationState), ev.GetType())
 	assert.Equal(t, "system", ev.GetActorType())
 	assert.Equal(t, world.LocationStream(locID), ev.GetStream())
 
-	var payload core.RoomStatePayload
+	var payload core.LocationStatePayload
 	require.NoError(t, json.Unmarshal(ev.GetPayload(), &payload))
 	assert.Equal(t, "Hall", payload.Location.Name)
 	assert.Len(t, payload.Exits, 1)

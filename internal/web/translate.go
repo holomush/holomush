@@ -46,7 +46,7 @@ func channelForType(eventType string) webv1.EventChannel {
 	switch eventType {
 	case "say", "pose", "system":
 		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
-	case "room_state", "exit_update":
+	case "location_state", "exit_update":
 		return webv1.EventChannel_EVENT_CHANNEL_STATE
 	case "arrive", "leave", "move":
 		return webv1.EventChannel_EVENT_CHANNEL_BOTH
@@ -166,7 +166,7 @@ func translateEvent(ev *corev1.Event) *webv1.GameEvent {
 			Channel:       ch,
 		}
 
-	case "room_state", "exit_update":
+	case "location_state", "exit_update":
 		meta := payloadToMetadata(ev.GetPayload())
 		if meta == nil {
 			return nil
