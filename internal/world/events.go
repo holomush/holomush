@@ -149,10 +149,17 @@ func EmitMoveEvent(ctx context.Context, emitter EventEmitter, payload MovePayloa
 	// For character moves, also emit to the character's own stream so that
 	// the character's event subscriber (location-following) can detect the move
 	// and re-subscribe to the new location stream.
+	// This is best-effort: the primary location stream emit already succeeded,
+	// so a failure here should not cause the caller to treat the move as failed.
 	if payload.EntityType == EntityTypeCharacter {
 		charStream := CharacterStream(payload.EntityID)
 		if err := emitWithRetry(ctx, emitter, charStream, eventType, entityType, entityID, data); err != nil {
-			return oops.Code("EVENT_EMIT_FAILED").With("stream", charStream).With("event_type", eventType).Wrap(err)
+			slog.WarnContext(ctx, "best-effort character stream emit failed",
+				"stream", charStream,
+				"event_type", eventType,
+				"entity_id", entityID,
+				"error", err,
+			)
 		}
 	}
 

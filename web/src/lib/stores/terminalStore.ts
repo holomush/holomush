@@ -35,6 +35,8 @@ export function appendLine(event: TerminalLine['event'], replayed: boolean) {
 
 export function clearLines() {
   lines.set([]);
+  replayActive.set(false);
+  isAtBottom.set(true);
   newMessageCount.set(0);
 }
 

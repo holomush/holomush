@@ -22,11 +22,17 @@
   const client = createClient(WebService, transport);
 
   $effect(() => {
-    if (sessionId) {
-      client.getCommandHistory({ sessionId }).then((resp) => {
-        history = resp.commands ?? [];
-      }).catch(() => { /* best-effort */ });
+    if (!sessionId) {
+      history = [];
+      historyIndex = -1;
+      return;
     }
+
+    const captured = sessionId;
+    client.getCommandHistory({ sessionId }).then((resp) => {
+      if (captured !== sessionId) return; // stale response
+      history = resp.commands ?? [];
+    }).catch(() => { /* best-effort */ });
   });
 
   function handleKeydown(e: KeyboardEvent) {
@@ -40,15 +46,18 @@
       if (historyIndex < history.length - 1) {
         historyIndex++;
         text = history[history.length - 1 - historyIndex];
+        requestAnimationFrame(autoGrow);
       }
       e.preventDefault();
     } else if (e.key === 'ArrowDown' && !e.shiftKey) {
       if (historyIndex > 0) {
         historyIndex--;
         text = history[history.length - 1 - historyIndex];
+        requestAnimationFrame(autoGrow);
       } else if (historyIndex === 0) {
         historyIndex = -1;
         text = '';
+        requestAnimationFrame(autoGrow);
       }
       e.preventDefault();
     }

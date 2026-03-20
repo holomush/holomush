@@ -22,18 +22,16 @@ interface EventResponse {
 }
 
 export function routeEvent(response: EventResponse) {
-  const event = response.event;
-  if (!event) return;
-
-
+  // Handle replay control frames before checking for event payload,
+  // since replayComplete frames may not carry an event.
   if (response.replayComplete) {
     markReplayComplete();
-    return;
-  }
-
-  if (response.replayed) {
+  } else if (response.replayed) {
     replayActive.set(true);
   }
+
+  const event = response.event;
+  if (!event) return;
 
   const channel = event.channel ?? CHANNEL_UNSPECIFIED;
 
@@ -42,8 +40,9 @@ export function routeEvent(response: EventResponse) {
     appendLine(event, response.replayed);
   }
 
-  // Route to sidebar stores
-  if (channel === CHANNEL_STATE || channel === CHANNEL_BOTH) {
+  // Route to sidebar stores — skip replayed events to avoid applying stale
+  // arrive/leave/exit_update history to the live sidebar snapshot.
+  if (!response.replayed && (channel === CHANNEL_STATE || channel === CHANNEL_BOTH)) {
     routeToSidebar(event);
   }
 }

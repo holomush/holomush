@@ -21,7 +21,7 @@
     <span class="brand">HoloMUSH</span>
     <span class="divider">|</span>
     <span class="character">{characterName}</span>
-    {#if $location}
+    {#if $location?.name}
       <span class="loc">@ {$location.name}</span>
     {/if}
   </div>

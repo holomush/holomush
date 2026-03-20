@@ -13,7 +13,7 @@
 </script>
 
 {#if overlay && $sidebarExpanded}
-  <button class="overlay-backdrop" onclick={toggleSidebar}></button>
+  <button class="overlay-backdrop" onclick={toggleSidebar} aria-label="Close sidebar"></button>
 {/if}
 
 <aside class="sidebar" class:expanded={$sidebarExpanded} class:overlay>

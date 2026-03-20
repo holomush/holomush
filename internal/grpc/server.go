@@ -449,12 +449,21 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		streams = []string{"location:" + info.LocationID.String()}
 	}
 
-	// Subscribe to requested streams.
-	// Note: defers in loop are intentional - all subscriptions should be cleaned up when
-	// the function exits, not at end of each iteration. The loop runs a fixed number of
-	// times (len(streams)) and all deferred Unsubscribes run on function return.
-	channels := make([]chan core.Event, 0, len(streams))
+	// Separate the location stream from other streams so the location
+	// subscription can be dynamically swapped when the character moves.
+	locStreamName := ""
+	var otherStreams []string
 	for _, streamName := range streams {
+		if strings.HasPrefix(streamName, world.StreamPrefixLocation) {
+			locStreamName = streamName
+		} else {
+			otherStreams = append(otherStreams, streamName)
+		}
+	}
+
+	// Subscribe to non-location streams (static for the session lifetime).
+	channels := make([]chan core.Event, 0, len(otherStreams)+1)
+	for _, streamName := range otherStreams {
 		ch := s.broadcaster.Subscribe(streamName)
 		channels = append(channels, ch)
 		//nolint:gocritic // deferInLoop: intentional; cleanup all subscriptions on function exit
@@ -469,7 +478,20 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	channels = append(channels, charCh)
 	defer s.broadcaster.Unsubscribe(charStreamName, charCh)
 
-	// Merge all channels into one
+	// Subscribe to the initial location stream. The location subscription
+	// is managed dynamically by locationFollower (swapped on character move).
+	// A relay channel bridges location events into the merged fan-in so that
+	// all events flow through a single channel for replay draining and live
+	// forwarding.
+	var locCh chan core.Event
+	locRelay := make(chan core.Event, 100)
+	if locStreamName != "" {
+		locCh = s.broadcaster.Subscribe(locStreamName)
+		startLocRelay(ctx, locCh, locRelay)
+	}
+	channels = append(channels, locRelay)
+
+	// Merge all channels (non-location + character + location relay) into one
 	merged := mergeChannels(ctx, channels)
 
 	// Inject synthetic location_state so the client always has location context
@@ -495,22 +517,34 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
-	// Replay missed events if requested
+	// Replay missed events if requested. Include the character stream so
+	// character-scoped events persisted while disconnected are also replayed.
 	if req.ReplayFromCursor && s.eventStore != nil && len(info.EventCursors) > 0 {
-		if err := s.replayMissedEvents(ctx, info, streams, merged, stream, requestID); err != nil {
+		replayStreams := append(streams, charStreamName) //nolint:gocritic // appendAssign: intentional new slice
+		if err := s.replayMissedEvents(ctx, info, replayStreams, merged, stream, requestID); err != nil {
 			return err
 		}
 	}
 
 	// Build location-following state. When a move event is detected for this
 	// character, forwardLiveEvents builds and sends a location_state for the
-	// new location.
+	// new location and switches the room subscription.
 	lf := &locationFollower{
-		characterID:  info.CharacterID,
-		currentLocID: info.LocationID,
-		worldQuerier: s.worldQuerier,
-		sessionStore: s.sessionStore,
+		characterID:   info.CharacterID,
+		currentLocID:  info.LocationID,
+		worldQuerier:  s.worldQuerier,
+		sessionStore:  s.sessionStore,
+		broadcaster:   s.broadcaster,
+		locStreamName: locStreamName,
+		locCh:         locCh,
+		locRelay:      locRelay,
 	}
+	// Clean up the dynamic location subscription on exit.
+	defer func() {
+		if lf.locStreamName != "" && lf.locCh != nil {
+			s.broadcaster.Unsubscribe(lf.locStreamName, lf.locCh)
+		}
+	}()
 
 	// Send live events until context is cancelled
 	return s.forwardLiveEventsWithLocationFollow(ctx, info, merged, stream, requestID, req.SessionId, lf)

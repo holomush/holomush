@@ -27,12 +27,22 @@ import (
 const systemSubjectID = "system"
 
 // locationFollower tracks the character's current location and handles
-// location-following when move events are detected.
+// location-following when move events are detected. It also manages
+// dynamic broadcaster subscriptions so the client receives events
+// from the new location after a move.
 type locationFollower struct {
 	characterID  ulid.ULID
 	currentLocID ulid.ULID
 	worldQuerier WorldQuerier
 	sessionStore session.Store
+
+	// broadcaster, locCh, and locRelay enable dynamic subscription switching.
+	// When the character moves, the old location stream is unsubscribed
+	// and a new one is subscribed. Events flow: locCh -> locRelay -> merged.
+	broadcaster   *core.Broadcaster
+	locStreamName string
+	locCh         chan core.Event
+	locRelay      chan core.Event
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
@@ -59,6 +69,10 @@ func (lf *locationFollower) handleEvent(
 		return false
 	}
 
+	if payload.ToType != world.ContainmentTypeLocation {
+		return false
+	}
+
 	newLocID := payload.ToID
 	if newLocID == lf.currentLocID {
 		return false
@@ -69,8 +83,6 @@ func (lf *locationFollower) handleEvent(
 		"from_location", lf.currentLocID.String(),
 		"to_location", newLocID.String(),
 	)
-
-	lf.currentLocID = newLocID
 
 	// Build and send synthetic location_state for the new location.
 	locState, err := lf.buildLocationState(ctx, newLocID)
@@ -87,10 +99,71 @@ func (lf *locationFollower) handleEvent(
 			"location_id", newLocID.String(),
 			"error", err,
 		)
-		return false // Let caller detect broken stream
+		return false
 	}
 
+	// Commit the new location only after successful send.
+	lf.currentLocID = newLocID
+
+	// Switch the live broadcaster subscription to the new location stream
+	// so the client receives events from the destination room.
+	lf.switchLocationSubscription(ctx, newLocID)
+
 	return true
+}
+
+// switchLocationSubscription unsubscribes from the old location stream and
+// subscribes to the new one. A new relay goroutine is started to forward
+// events from the new broadcaster channel into the shared locRelay channel,
+// which feeds into the merged fan-in.
+func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newLocID ulid.ULID) {
+	if lf.broadcaster == nil || lf.locRelay == nil {
+		return
+	}
+
+	newStreamName := world.LocationStream(newLocID)
+
+	// Unsubscribe from old location stream (closes old channel, which
+	// causes the old relay goroutine to exit).
+	if lf.locStreamName != "" && lf.locCh != nil {
+		slog.DebugContext(ctx, "location-following: unsubscribing from old location stream",
+			"old_stream", lf.locStreamName,
+			"new_stream", newStreamName,
+		)
+		lf.broadcaster.Unsubscribe(lf.locStreamName, lf.locCh)
+	}
+
+	// Subscribe to new location stream and start relay goroutine.
+	lf.locStreamName = newStreamName
+	lf.locCh = lf.broadcaster.Subscribe(newStreamName)
+	startLocRelay(ctx, lf.locCh, lf.locRelay)
+
+	slog.DebugContext(ctx, "location-following: subscribed to new location stream",
+		"stream", newStreamName,
+	)
+}
+
+// startLocRelay starts a goroutine that copies events from a broadcaster
+// channel (locCh) into the relay channel that feeds the merged fan-in.
+// The goroutine exits when locCh is closed (by Unsubscribe) or ctx is done.
+func startLocRelay(ctx context.Context, locCh <-chan core.Event, relay chan<- core.Event) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-locCh:
+				if !ok {
+					return
+				}
+				select {
+				case relay <- ev:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
 }
 
 // buildLocationState queries the world service for location data and builds
@@ -176,9 +249,11 @@ func convertExits(exits []*world.Exit) []core.LocationStateExit {
 	return result
 }
 
-// forwardLiveEventsWithLocationFollow reads from merged and sends events to the
-// client stream. When a move event is detected for the session's character,
-// it sends a synthetic location_state for the new location.
+// forwardLiveEventsWithLocationFollow reads from the merged channel and sends
+// events to the client stream. Location events arrive via the locRelay channel
+// which is part of merged. When a move event is detected for the session's
+// character, it sends a synthetic location_state and switches the room
+// subscription so subsequent events come from the new location.
 func (s *CoreServer) forwardLiveEventsWithLocationFollow(
 	ctx context.Context,
 	info *session.Info,
@@ -212,9 +287,10 @@ func (s *CoreServer) forwardLiveEventsWithLocationFollow(
 			// forward the one from the location stream to avoid duplicates.
 			if event.Type == core.EventTypeMove && strings.HasPrefix(event.Stream, world.StreamPrefixCharacter) {
 				// Handle location-following on the character stream copy.
-				lf.handleEvent(ctx, event, stream)
-				// Don't forward this copy to the client.
-				continue
+				// Only skip forwarding if the location_state was sent successfully.
+				if lf.handleEvent(ctx, event, stream) {
+					continue
+				}
 			}
 
 			if err := stream.Send(eventToProto(event)); err != nil {
