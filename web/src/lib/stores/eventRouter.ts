@@ -25,6 +25,7 @@ export function routeEvent(response: EventResponse) {
   const event = response.event;
   if (!event) return;
 
+
   if (response.replayComplete) {
     markReplayComplete();
     return;

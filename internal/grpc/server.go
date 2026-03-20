@@ -480,6 +480,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			characterID:  info.CharacterID,
 			currentLocID: info.LocationID,
 			worldQuerier: s.worldQuerier,
+			sessionStore: s.sessionStore,
 			broadcaster:  s.broadcaster,
 		}
 		if locState, rsErr := syntheticLF.buildLocationState(ctx, info.LocationID); rsErr != nil {
@@ -510,6 +511,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		characterID:  info.CharacterID,
 		currentLocID: info.LocationID,
 		worldQuerier: s.worldQuerier,
+		sessionStore: s.sessionStore,
 		broadcaster:  s.broadcaster,
 	}
 

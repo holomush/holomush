@@ -46,6 +46,7 @@ test.describe('Terminal UI', () => {
     const page1 = await context1.newPage();
     const page2 = await context2.newPage();
 
+
     // Both connect as guests
     await page1.goto('/terminal');
     await page1.click('text=Connect as Guest');

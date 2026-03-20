@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -95,17 +96,32 @@ func (lf *locationFollower) handleEvent(
 // buildLocationState queries the world service for location data and builds
 // a location_state proto event.
 func (lf *locationFollower) buildLocationState(ctx context.Context, locationID ulid.ULID) (*corev1.Event, error) {
-	loc, err := lf.worldQuerier.GetLocation(ctx, systemSubjectID, locationID)
-	if err != nil {
-		return nil, oops.With("location_id", locationID.String()).Wrap(err)
+	// Use system context for ABAC bypass — these are server-internal queries
+	// not on behalf of a specific character.
+	sysCtx := access.WithSystemSubject(ctx)
+
+	// Location and exits are best-effort — the location may not exist in the
+	// world model yet (e.g., guest start locations that are only referenced by
+	// ID). We still build the event with whatever data we have.
+	var locInfo core.LocationStateInfo
+	if loc, err := lf.worldQuerier.GetLocation(sysCtx, systemSubjectID, locationID); err != nil {
+		slog.DebugContext(ctx, "location_state: location not found, using ID only",
+			"location_id", locationID.String())
+		locInfo = core.LocationStateInfo{ID: locationID.String()}
+	} else {
+		locInfo = core.LocationStateInfo{
+			ID:          loc.ID.String(),
+			Name:        loc.Name,
+			Description: loc.Description,
+		}
 	}
 
-	exits, err := lf.worldQuerier.GetExitsByLocation(ctx, systemSubjectID, locationID)
-	if err != nil {
-		return nil, oops.With("location_id", locationID.String()).Wrap(err)
+	var exitList []core.LocationStateExit
+	if exits, err := lf.worldQuerier.GetExitsByLocation(sysCtx, systemSubjectID, locationID); err == nil {
+		exitList = convertExits(exits)
 	}
 
-	// Presence = active sessions at this location, not character repo entries.
+	// Presence = active sessions at this location.
 	// Guest characters exist only in sessions, not the character repository.
 	var present []core.LocationStateChar
 	if lf.sessionStore != nil {
@@ -125,13 +141,9 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 	}
 
 	payload := core.LocationStatePayload{
-		Location: core.LocationStateInfo{
-			ID:          loc.ID.String(),
-			Name:        loc.Name,
-			Description: loc.Description,
-		},
-		Exits:   convertExits(exits),
-		Present: present,
+		Location: locInfo,
+		Exits:    exitList,
+		Present:  present,
 	}
 
 	payloadJSON, err := json.Marshal(payload)
