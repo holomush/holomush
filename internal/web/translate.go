@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -39,12 +40,6 @@ type systemPayload struct {
 type movePayload struct {
 	CharacterName string `json:"character_name"`
 	Message       string `json:"message"`
-}
-
-// commandResponsePayload is the JSON payload for command_response events.
-type commandResponsePayload struct {
-	Text    string `json:"text"`
-	IsError bool   `json:"is_error,omitempty"`
 }
 
 // channelForType returns the EventChannel for the given event type string.
@@ -173,7 +168,7 @@ func translateEvent(ev *corev1.SubscribeResponse) *webv1.GameEvent {
 		}
 
 	case "command_response":
-		var p commandResponsePayload
+		var p core.CommandResponsePayload
 		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
 			slog.Error("web: failed to unmarshal command_response payload", "error", err)
 			return nil

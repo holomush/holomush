@@ -31,9 +31,9 @@
   {:else if event.type === 'move'}
     <span class="move-text">{@html linkUrls(event.text)}</span>
   {:else if event.type === 'command_response'}
-    <span class="command-output">{@html linkUrls(event.text)}</span>
+    <span class="command-output">{event.text}</span>
   {:else if event.type === 'command_error'}
-    <span class="command-error">{@html linkUrls(event.text)}</span>
+    <span class="command-error">{event.text}</span>
   {:else if hasAnsiCodes(event.text)}
     <AnsiRenderer text={event.text} />
   {:else}

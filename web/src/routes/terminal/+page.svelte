@@ -86,8 +86,10 @@
 
   async function sendCommand(command: string) {
     try {
-      await client.sendCommand({ sessionId, text: command });
-      // Output is delivered via command_response events on the event stream.
+      const resp = await client.sendCommand({ sessionId, text: command });
+      if (!resp.success) {
+        error = resp.errorMessage || 'Command failed';
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Command failed';
     }

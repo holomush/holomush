@@ -7,6 +7,7 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"log/slog"
 	"runtime/debug"
 	"strings"
@@ -18,8 +19,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"encoding/json"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
@@ -448,15 +447,17 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 		Payload:   payload,
 	}
 
-	if s.eventStore != nil {
-		if err := s.eventStore.Append(ctx, event); err != nil {
-			slog.WarnContext(ctx, "failed to append command_response event",
-				"character_id", char.ID.String(),
-				"error", err,
-			)
-		}
+	if s.eventStore == nil {
+		slog.Debug("emitCommandResponse: eventStore not configured, event not emitted")
+		return
 	}
 
+	if err := s.eventStore.Append(ctx, event); err != nil {
+		slog.WarnContext(ctx, "failed to append command_response event",
+			"character_id", char.ID.String(),
+			"error", err,
+		)
+	}
 }
 
 // runDisconnectHooks runs all registered disconnect hooks with panic recovery.
