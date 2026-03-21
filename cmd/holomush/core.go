@@ -379,7 +379,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Only create gRPC server if we have a real event store
 	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
 		sessions := core.NewSessionManager()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(realStore, sessions)
 
 		// Create gRPC server
@@ -396,7 +395,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 		// Create and register Core service with guest authentication + cleanup hook
 		sessionStore := store.NewPostgresSessionStore(realStore.Pool())
-		coreServer := holoGRPC.NewCoreServer(engine, sessions, broadcaster, sessionStore,
+		coreServer := holoGRPC.NewCoreServer(engine, sessions, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
 			holoGRPC.WithWorldQuerier(worldService),

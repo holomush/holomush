@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -97,10 +96,9 @@ type WorldQuerier interface {
 type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
-	engine          *core.Engine
-	sessions        *core.SessionManager
-	broadcaster     *core.Broadcaster
-	authenticator   Authenticator
+	engine        *core.Engine
+	sessions      *core.SessionManager
+	authenticator Authenticator
 	sessionStore    session.Store
 	eventStore      core.EventStore
 	worldQuerier    WorldQuerier
@@ -158,11 +156,10 @@ func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 }
 
 // NewCoreServer creates a new Core gRPC server.
-func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, broadcaster *core.Broadcaster, sessionStore session.Store, opts ...CoreServerOption) *CoreServer {
+func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, sessionStore session.Store, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
 		engine:       engine,
 		sessions:     sessions,
-		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
 		newSessionID: core.NewULID,
 	}
@@ -507,38 +504,52 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
-	// Subscribe to non-location streams (static for the session lifetime).
-	channels := make([]chan core.Event, 0, len(otherStreams)+1)
-	for _, streamName := range otherStreams {
-		ch := s.broadcaster.Subscribe(streamName)
-		channels = append(channels, ch)
-		//nolint:gocritic // deferInLoop: intentional; cleanup all subscriptions on function exit
-		defer s.broadcaster.Unsubscribe(streamName, ch)
+	// Build allStreams: other streams + location stream (avoid append aliasing).
+	allStreams := make([]string, 0, len(otherStreams)+1)
+	allStreams = append(allStreams, otherStreams...)
+	if locStreamName != "" {
+		allStreams = append(allStreams, locStreamName)
 	}
 
-	// Subscribe to the character stream for location-following. Move events
+	// Always include the character stream for location-following. Move events
 	// emitted to character:<id> let the subscriber detect when the character
 	// changes location and trigger a location_state update.
 	charStreamName := world.CharacterStream(info.CharacterID)
-	charCh := s.broadcaster.Subscribe(charStreamName)
-	channels = append(channels, charCh)
-	defer s.broadcaster.Unsubscribe(charStreamName, charCh)
+	allStreams = append(allStreams, charStreamName)
 
-	// Subscribe to the initial location stream. The location subscription
-	// is managed dynamically by locationFollower (swapped on character move).
-	// A relay channel bridges location events into the merged fan-in so that
-	// all events flow through a single channel for replay draining and live
-	// forwarding.
-	var locCh chan core.Event
-	locRelay := make(chan core.Event, 100)
-	if locStreamName != "" {
-		locCh = s.broadcaster.Subscribe(locStreamName)
-		startLocRelay(ctx, locCh, locRelay)
+	// Shared channels for notification-driven live events.
+	notifyCh := make(chan streamNotification, 100)
+	errCh := make(chan error, len(allStreams))
+
+	// Subscribe to each stream via eventStore and start relay goroutines.
+	// IMPORTANT: subscriptions are set up BEFORE replay to guarantee no
+	// events are missed. Spurious notifications for already-replayed events
+	// result in empty Replay responses (harmless).
+	for _, streamName := range allStreams {
+		eventCh, subErrCh, subErr := s.eventStore.Subscribe(ctx, streamName)
+		if subErr != nil {
+			return oops.Code("SUBSCRIBE_FAILED").
+				With("session_id", req.SessionId).
+				With("stream", streamName).
+				Wrap(subErr)
+		}
+
+		startNotificationRelay(ctx, streamName, eventCh, notifyCh)
+
+		// Forward subscription errors.
+		go func(sCh <-chan error) {
+			select {
+			case e, ok := <-sCh:
+				if ok && e != nil {
+					select {
+					case errCh <- e:
+					default:
+					}
+				}
+			case <-ctx.Done():
+			}
+		}(subErrCh)
 	}
-	channels = append(channels, locRelay)
-
-	// Merge all channels (non-location + character + location relay) into one
-	merged := mergeChannels(ctx, channels)
 
 	// Inject synthetic location_state so the client always has location context
 	// on connect/reconnect, regardless of event replay cursor position.
@@ -563,164 +574,147 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
-	// Replay missed events if requested. Include the character stream so
-	// character-scoped events persisted while disconnected are also replayed.
+	// Replay missed events from session cursors.
+	lastSentID := make(map[string]ulid.ULID)
 	if req.ReplayFromCursor && s.eventStore != nil && len(info.EventCursors) > 0 {
-		replayStreams := append(streams, charStreamName) //nolint:gocritic // appendAssign: intentional new slice
-		if err := s.replayMissedEvents(ctx, info, replayStreams, merged, stream, requestID); err != nil {
-			return err
+		replayStreams := make([]string, 0, len(streams)+1)
+		replayStreams = append(replayStreams, streams...)
+		replayStreams = append(replayStreams, charStreamName)
+
+		for _, streamName := range replayStreams {
+			cursor, hasCursor := info.EventCursors[streamName]
+			if !hasCursor {
+				continue
+			}
+
+			events, replayErr := s.eventStore.Replay(ctx, streamName, cursor, s.maxReplay())
+			if replayErr != nil {
+				slog.WarnContext(ctx, "replay failed for stream",
+					"request_id", requestID,
+					"stream", streamName,
+					"cursor", cursor.String(),
+					"error", replayErr,
+				)
+				continue
+			}
+
+			for _, ev := range events {
+				if sendErr := stream.Send(eventToProto(ev)); sendErr != nil {
+					return oops.Code("SEND_FAILED").
+						With("session_id", info.ID).
+						With("event_id", ev.ID.String()).
+						Wrap(sendErr)
+				}
+				s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
+				lastSentID[ev.Stream] = ev.ID
+			}
+
+			if len(events) > 0 {
+				last := events[len(events)-1]
+				s.persistCursorAsync(info.ID, streamName, last.ID)
+			}
+
+			slog.DebugContext(ctx, "replayed events",
+				"request_id", requestID,
+				"stream", streamName,
+				"count", len(events),
+			)
 		}
 	}
 
 	// Build location-following state. When a move event is detected for this
 	// character, forwardLiveEvents builds and sends a location_state for the
-	// new location and switches the room subscription.
+	// new location and switches the location subscription.
 	lf := &locationFollower{
 		characterID:   info.CharacterID,
 		currentLocID:  info.LocationID,
 		worldQuerier:  s.worldQuerier,
 		sessionStore:  s.sessionStore,
-		broadcaster:   s.broadcaster,
+		eventStore:    s.eventStore,
 		locStreamName: locStreamName,
-		locCh:         locCh,
-		locRelay:      locRelay,
+		notifyCh:      notifyCh,
+		errCh:         errCh,
 	}
-	// Clean up the dynamic location subscription on exit.
 	defer func() {
-		if lf.locStreamName != "" && lf.locCh != nil {
-			s.broadcaster.Unsubscribe(lf.locStreamName, lf.locCh)
+		if lf.locCancel != nil {
+			lf.locCancel()
 		}
 	}()
 
 	// Send live events until context is cancelled
-	return s.forwardLiveEventsWithLocationFollow(ctx, info, merged, stream, requestID, req.SessionId, lf)
+	return s.forwardLiveEvents(ctx, info, notifyCh, errCh, stream, requestID, req.SessionId, lf, lastSentID)
 }
 
-// replayMissedEvents replays historical events from the EventStore, then sends
-// any live events that arrived during replay (with deduplication). After this
-// method returns, the caller owns `merged` exclusively for live forwarding.
-func (s *CoreServer) replayMissedEvents(
+// forwardLiveEvents reads from the notification channel and replays events
+// from the event store. The notification-driven approach means we only fetch
+// events when the store tells us something new arrived.
+func (s *CoreServer) forwardLiveEvents(
 	ctx context.Context,
 	info *session.Info,
-	streams []string,
-	merged <-chan core.Event,
+	notifyCh <-chan streamNotification,
+	errCh <-chan error,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 	requestID string,
+	sessionID string,
+	lf *locationFollower,
+	lastSentID map[string]ulid.ULID,
 ) error {
-	maxReplay := s.sessionDefaults.MaxReplay
-	if maxReplay <= 0 {
-		maxReplay = defaultMaxReplay
-	}
-
-	// Start drainer goroutine to capture live events while we replay.
-	// Without this, the broadcaster's buffered channel (size 100) can fill
-	// and block, causing event loss.
-	var bufMu sync.Mutex
-	var liveBuf []core.Event
-	stopDrain := make(chan struct{})
-	drainDone := make(chan struct{})
-
-	go func() {
-		defer close(drainDone)
-		for {
-			select {
-			case <-stopDrain:
-				return
-			case <-ctx.Done():
-				return
-			case ev, ok := <-merged:
-				if !ok {
-					return
-				}
-				bufMu.Lock()
-				liveBuf = append(liveBuf, ev)
-				bufMu.Unlock()
-			}
-		}
-	}()
-
-	// Replay historical events from each stream
-	replayedIDs := make(map[ulid.ULID]struct{})
-
-	for _, streamName := range streams {
-		cursor, hasCursor := info.EventCursors[streamName]
-		if !hasCursor {
-			continue
-		}
-
-		events, err := s.eventStore.Replay(ctx, streamName, cursor, maxReplay)
-		if err != nil {
-			slog.WarnContext(ctx, "replay failed for stream",
-				"request_id", requestID,
-				"stream", streamName,
-				"cursor", cursor.String(),
-				"error", err,
-			)
-			continue
-		}
-
-		for _, ev := range events {
-			replayedIDs[ev.ID] = struct{}{}
-
-			if err := stream.Send(eventToProto(ev)); err != nil {
-				close(stopDrain)
-				<-drainDone
-				return oops.Code("SEND_FAILED").
-					With("session_id", info.ID).
-					With("event_id", ev.ID.String()).
-					Wrap(err)
-			}
-			s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
-		}
-
-		// Persist only the final cursor per stream after all replay events are sent
-		// (batch update rather than per-event goroutines).
-		if len(events) > 0 {
-			last := events[len(events)-1]
-			s.persistCursorAsync(info.ID, streamName, last.ID)
-		}
-
-		slog.DebugContext(ctx, "replayed events",
-			"request_id", requestID,
-			"stream", streamName,
-			"count", len(events),
-		)
-	}
-
-	// Stop the drainer and wait for it to exit
-	close(stopDrain)
-	<-drainDone
-
-	// Drain any remaining events from merged (non-blocking)
-drainLoop:
 	for {
 		select {
-		case ev, ok := <-merged:
-			if !ok {
-				break drainLoop
+		case <-ctx.Done():
+			slog.DebugContext(ctx, "subscription ended",
+				"request_id", requestID,
+				"session_id", sessionID,
+				"reason", ctx.Err(),
+			)
+			if ctx.Err() == context.Canceled {
+				return nil // normal client disconnect
 			}
-			liveBuf = append(liveBuf, ev)
-		default:
-			break drainLoop
+			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", sessionID).Wrap(ctx.Err())
+
+		case subErr := <-errCh:
+			return oops.Code("SUBSCRIPTION_ERROR").With("session_id", sessionID).Wrap(subErr)
+
+		case notif := <-notifyCh:
+			afterID := lastSentID[notif.stream]
+			events, replayErr := s.eventStore.Replay(ctx, notif.stream, afterID, s.maxReplay())
+			if replayErr != nil {
+				slog.WarnContext(ctx, "live replay failed",
+					"request_id", requestID,
+					"stream", notif.stream,
+					"after_id", afterID.String(),
+					"error", replayErr,
+				)
+				continue
+			}
+
+			for _, event := range events {
+				// Character-stream move events: handle location-following
+				// but don't forward (the location-stream copy is forwarded).
+				if event.Type == core.EventTypeMove && strings.HasPrefix(event.Stream, world.StreamPrefixCharacter) {
+					lf.handleEvent(ctx, event, stream)
+					s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
+					s.persistCursorAsync(sessionID, event.Stream, event.ID)
+					lastSentID[event.Stream] = event.ID
+					continue
+				}
+
+				if sendErr := stream.Send(eventToProto(event)); sendErr != nil {
+					slog.WarnContext(ctx, "failed to send event",
+						"request_id", requestID,
+						"session_id", sessionID,
+						"event_id", event.ID.String(),
+						"error", sendErr,
+					)
+					return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(sendErr)
+				}
+
+				s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
+				s.persistCursorAsync(sessionID, event.Stream, event.ID)
+				lastSentID[event.Stream] = event.ID
+			}
 		}
 	}
-
-	// Send buffered live events with deduplication
-	for _, ev := range liveBuf {
-		if _, seen := replayedIDs[ev.ID]; seen {
-			continue
-		}
-		if err := stream.Send(eventToProto(ev)); err != nil {
-			return oops.Code("SEND_FAILED").
-				With("session_id", info.ID).
-				With("event_id", ev.ID.String()).
-				Wrap(err)
-		}
-		s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
-		s.persistCursorAsync(info.ID, ev.Stream, ev.ID)
-	}
-
-	return nil
 }
 
 // Disconnect removes a connection and handles session lifecycle.
@@ -886,40 +880,6 @@ func responseMeta(requestID string) *corev1.ResponseMeta {
 	}
 }
 
-// mergeChannels merges multiple event channels into one.
-func mergeChannels(ctx context.Context, channels []chan core.Event) <-chan core.Event {
-	merged := make(chan core.Event, 100)
-
-	var wg sync.WaitGroup
-	for _, ch := range channels {
-		wg.Add(1)
-		go func(c <-chan core.Event) {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case event, ok := <-c:
-					if !ok {
-						return
-					}
-					select {
-					case merged <- event:
-					case <-ctx.Done():
-						return
-					}
-				}
-			}
-		}(ch)
-	}
-
-	go func() {
-		wg.Wait()
-		close(merged)
-	}()
-
-	return merged
-}
 
 // NewGRPCServer creates a new gRPC server with mTLS credentials.
 func NewGRPCServer(tlsConfig *tls.Config) *grpc.Server {

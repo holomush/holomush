@@ -212,7 +212,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 9. Create gRPC server
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore(),
+		coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {

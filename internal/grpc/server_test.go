@@ -261,12 +261,12 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		broadcaster: broadcaster,
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -298,7 +298,7 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	// Give the subscription time to set up
 	time.Sleep(50 * time.Millisecond)
 
-	// Send an event through the broadcaster
+	// Send an event through the event store (triggers Subscribe notification)
 	testEvent := core.Event{
 		ID:        core.NewULID(),
 		Stream:    "location:" + locationID.String(),
@@ -307,7 +307,7 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
 		Payload:   []byte(`{"message":"test"}`),
 	}
-	broadcaster.Broadcast(testEvent)
+	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	// Give time for event to be sent
 	time.Sleep(50 * time.Millisecond)
@@ -376,13 +376,11 @@ func TestCoreServer_Disconnect(t *testing.T) {
 func TestNewCoreServer(t *testing.T) {
 	store := &mockEventStore{}
 	sessions := core.NewSessionManager()
-	broadcaster := core.NewBroadcaster()
 	sessStore := session.NewMemStore()
 
 	server := NewCoreServer(
 		core.NewEngine(store, sessions),
 		sessions,
-		broadcaster,
 		sessStore,
 	)
 
@@ -393,7 +391,6 @@ func TestNewCoreServer(t *testing.T) {
 func TestNewCoreServer_WithOptions(t *testing.T) {
 	store := &mockEventStore{}
 	sessions := core.NewSessionManager()
-	broadcaster := core.NewBroadcaster()
 
 	customAuth := &mockAuthenticator{}
 	customStore := session.NewMemStore()
@@ -401,7 +398,6 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	server := NewCoreServer(
 		core.NewEngine(store, sessions),
 		sessions,
-		broadcaster,
 		session.NewMemStore(),
 		WithAuthenticator(customAuth),
 		WithSessionStore(customStore),
@@ -712,7 +708,6 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 	sessions.Connect(charID, core.NewULID())
 
 	store := core.NewMemoryEventStore()
-	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions)
 
 	sessStore := session.NewMemStore()
@@ -728,7 +723,7 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 	}))
 
 	var hookCalled bool
-	server := NewCoreServer(engine, sessions, broadcaster, sessStore,
+	server := NewCoreServer(engine, sessions, sessStore,
 		WithDisconnectHook(func(_ session.Info) {
 			hookCalled = true
 		}),
@@ -764,12 +759,12 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 
 func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
-		broadcaster:  broadcaster,
+		eventStore:   eventStore,
 		sessionStore: session.NewMemStore(),
 	}
 
@@ -796,12 +791,12 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
-		broadcaster: broadcaster,
+		eventStore:  eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -868,12 +863,12 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
-		broadcaster: broadcaster,
+		eventStore:  eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -915,7 +910,7 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
 		Payload:   []byte(`{"message":"test"}`),
 	}
-	broadcaster.Broadcast(testEvent)
+	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	select {
 	case err := <-done:
@@ -992,72 +987,6 @@ func TestNewGRPCServerInsecure(t *testing.T) {
 	server.Stop()
 }
 
-func TestMergeChannels_ClosedChannel(t *testing.T) {
-	ctx := context.Background()
-
-	// Create and immediately close a channel
-	ch := make(chan core.Event)
-	close(ch)
-
-	merged := mergeChannels(ctx, []chan core.Event{ch})
-
-	// Should receive closed channel (no events)
-	select {
-	case _, ok := <-merged:
-		assert.False(t, ok, "expected channel to be closed")
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Timed out waiting for closed channel signal")
-	}
-}
-
-func TestMergeChannels_MultipleChannels(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ch1 := make(chan core.Event, 1)
-	ch2 := make(chan core.Event, 1)
-
-	event1 := core.Event{ID: core.NewULID(), Stream: "stream1", Type: core.EventTypeSay}
-	event2 := core.Event{ID: core.NewULID(), Stream: "stream2", Type: core.EventTypePose}
-
-	ch1 <- event1
-	ch2 <- event2
-
-	merged := mergeChannels(ctx, []chan core.Event{ch1, ch2})
-
-	// Should receive both events
-	received := make(map[string]bool)
-	for i := 0; i < 2; i++ {
-		select {
-		case e := <-merged:
-			received[e.ID.String()] = true
-		case <-time.After(100 * time.Millisecond):
-			t.Fatal("Timed out waiting for events")
-		}
-	}
-
-	assert.True(t, received[event1.ID.String()], "did not receive event1")
-	assert.True(t, received[event2.ID.String()], "did not receive event2")
-}
-
-func TestMergeChannels_ContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	ch := make(chan core.Event)
-	merged := mergeChannels(ctx, []chan core.Event{ch})
-
-	// Cancel context before sending any events
-	cancel()
-
-	// merged channel should eventually close
-	select {
-	case _, ok := <-merged:
-		assert.False(t, ok, "expected channel to be closed after context cancel")
-	case <-time.After(500 * time.Millisecond):
-		t.Error("Timed out waiting for channel to close")
-	}
-}
-
 func TestNewGRPCServer(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game-grpc"
@@ -1093,7 +1022,7 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	sessionStore := newTestSessionStore(t, map[string]*session.Info{
 		sessionID.String(): {
@@ -1106,7 +1035,7 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
-		broadcaster:  broadcaster,
+		eventStore:   eventStore,
 		sessionStore: sessionStore,
 	}
 
@@ -1282,7 +1211,7 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 
 func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	sessions := core.NewSessionManager()
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 	ctx := context.Background()
 	sessionStore := session.NewMemStore()
 
@@ -1312,7 +1241,7 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	server := &CoreServer{
 		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
-		broadcaster:  broadcaster,
+		eventStore:   eventStore,
 		sessionStore: sessionStore,
 	}
 
@@ -1471,12 +1400,12 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
-		broadcaster: broadcaster,
+		eventStore:  eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -1516,7 +1445,7 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
 		Payload:   []byte(`{"message":"test"}`),
 	}
-	broadcaster.Broadcast(testEvent)
+	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	// Give time for event to be received
 	time.Sleep(50 * time.Millisecond)
@@ -1627,12 +1556,12 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
-		broadcaster: broadcaster,
+		eventStore:  eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -1685,7 +1614,7 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
 		Payload:   []byte(`{"message":"test"}`),
 	}
-	broadcaster.Broadcast(testEvent)
+	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	// Wait for send to be called
 	select {
@@ -1935,12 +1864,12 @@ func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
 		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
-		broadcaster: broadcaster,
+		eventStore:  eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -2342,13 +2271,12 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 	sessions.Connect(charID, core.NewULID())
 
 	store := core.NewMemoryEventStore()
-	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions)
 
 	var hookCalled bool
 	var hookInfo session.Info
 	sessStore := session.NewMemStore()
-	server := NewCoreServer(engine, sessions, broadcaster, sessStore,
+	server := NewCoreServer(engine, sessions, sessStore,
 		WithDisconnectHook(func(info session.Info) {
 			hookCalled = true
 			hookInfo = info
@@ -2390,7 +2318,7 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 	server := &CoreServer{
 		engine:      engine,
 		sessions:    sessions,
-		broadcaster: core.NewBroadcaster(),
+		eventStore:  core.NewMemoryEventStore(),
 		authenticator: &mockAuthenticator{
 			authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
 				return &AuthResult{
@@ -2439,11 +2367,10 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	sessions.Connect(charID, connID)
 
 	store := core.NewMemoryEventStore()
-	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions)
 
 	sessStore := session.NewMemStore()
-	server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+	server := NewCoreServer(engine, sessions, sessStore)
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 		CharacterID:   charID,
@@ -2615,7 +2542,6 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	store := core.NewMemoryEventStore()
-	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions)
 
 	auth := &mockAuthenticator{
@@ -2628,7 +2554,7 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 		},
 	}
 
-	server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore(),
+	server := NewCoreServer(engine, sessions, session.NewMemStore(),
 		WithAuthenticator(auth),
 	)
 	server.newSessionID = func() ulid.ULID { return sessionID }
@@ -2660,10 +2586,9 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		sessions.Connect(charID, connID)
 
 		store := core.NewMemoryEventStore()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(store, sessions)
 
-		server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+		server := NewCoreServer(engine, sessions, session.NewMemStore())
 		ctx := context.Background()
 		require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 			CharacterID:   charID,
@@ -2697,10 +2622,9 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		sessions.Connect(charID, connID)
 
 		store := core.NewMemoryEventStore()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(store, sessions)
 
-		server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+		server := NewCoreServer(engine, sessions, session.NewMemStore())
 		ctx := context.Background()
 		require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 			CharacterID:   charID,
@@ -2786,61 +2710,51 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
+	ctx := context.Background()
 
-	// Historical events that were missed while disconnected
+	// Prepopulate store: cursor event + 2 historical events
+	cursorEvent := core.Event{
+		ID:     core.NewULID(),
+		Stream: streamName, Type: core.EventTypeSay,
+		Timestamp: time.Now().Add(-3 * time.Second),
+		Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
+		Payload: []byte(`{"message":"cursor"}`),
+	}
+	require.NoError(t, eventStore.Append(ctx, cursorEvent))
+
 	historicalID1 := core.NewULID()
 	historicalID2 := core.NewULID()
-	cursorID := core.NewULID() // last event seen before disconnect
-
-	historicalEvents := []core.Event{
-		{
-			ID:        historicalID1,
-			Stream:    streamName,
-			Type:      core.EventTypeSay,
+	for _, ev := range []core.Event{
+		{ID: historicalID1, Stream: streamName, Type: core.EventTypeSay,
 			Timestamp: time.Now().Add(-2 * time.Second),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-			Payload:   []byte(`{"message":"missed-1"}`),
-		},
-		{
-			ID:        historicalID2,
-			Stream:    streamName,
-			Type:      core.EventTypeSay,
+			Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+			Payload: []byte(`{"message":"missed-1"}`)},
+		{ID: historicalID2, Stream: streamName, Type: core.EventTypeSay,
 			Timestamp: time.Now().Add(-1 * time.Second),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor2"},
-			Payload:   []byte(`{"message":"missed-2"}`),
-		},
-	}
-
-	replayDone := make(chan struct{})
-	eventStore := &mockEventStore{
-		replayFunc: func(_ context.Context, stream string, afterID ulid.ULID, _ int) ([]core.Event, error) {
-			defer close(replayDone)
-			if stream == streamName && afterID == cursorID {
-				return historicalEvents, nil
-			}
-			return nil, nil
-		},
+			Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor2"},
+			Payload: []byte(`{"message":"missed-2"}`)},
+	} {
+		require.NoError(t, eventStore.Append(ctx, ev))
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		broadcaster: broadcaster,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:  charID,
 				LocationID:   locationID,
 				Status:       session.StatusActive,
-				EventCursors: map[string]ulid.ULID{streamName: cursorID},
+				EventCursors: map[string]ulid.ULID{streamName: cursorEvent.ID},
 			},
 		}),
 		sessionDefaults: SessionDefaults{MaxReplay: 1000},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	stream := &mockSubscribeStream{ctx: ctx}
+	subCtx, cancel := context.WithCancel(ctx)
+	stream := &mockSubscribeStream{ctx: subCtx}
 
 	req := &corev1.SubscribeRequest{
 		Meta: &corev1.RequestMeta{
@@ -2857,12 +2771,8 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		done <- server.Subscribe(req, stream)
 	}()
 
-	// Wait for replay to complete before broadcasting the live event.
-	select {
-	case <-replayDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("replay was never called")
-	}
+	// Give time for replay and subscription setup
+	time.Sleep(100 * time.Millisecond)
 
 	// Send a live event after replay
 	liveID := core.NewULID()
@@ -2874,8 +2784,10 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor3"},
 		Payload:   []byte(`{"message":"live"}`),
 	}
-	broadcaster.Broadcast(liveEvent)
+	require.NoError(t, eventStore.Append(subCtx, liveEvent))
 
+	// Give time for live event delivery
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 
 	select {
@@ -2884,20 +2796,28 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 
-	// Verify: historical events come first, then live event
-	require.GreaterOrEqual(t, len(stream.events), 2, "expected at least 2 replayed events")
+	// Verify: historical events come first, then live event.
+	// First event is the synthetic location_state, then 2 replayed, then live.
+	// Filter to say events only for verification.
+	var sayEvents []*corev1.SubscribeResponse
+	for _, ev := range stream.events {
+		if ev.Type == string(core.EventTypeSay) {
+			sayEvents = append(sayEvents, ev)
+		}
+	}
+	require.GreaterOrEqual(t, len(sayEvents), 2, "expected at least 2 replayed say events")
+	assert.Equal(t, historicalID1.String(), sayEvents[0].Id, "first say event should be historical")
+	assert.Equal(t, historicalID2.String(), sayEvents[1].Id, "second say event should be historical")
 
-	// First two events should be the historical ones
-	assert.Equal(t, historicalID1.String(), stream.events[0].Id, "first event should be historical")
-	assert.Equal(t, historicalID2.String(), stream.events[1].Id, "second event should be historical")
-
-	// If the live event arrived, it should be third
-	if len(stream.events) >= 3 {
-		assert.Equal(t, liveID.String(), stream.events[2].Id, "third event should be the live one")
+	if len(sayEvents) >= 3 {
+		assert.Equal(t, liveID.String(), sayEvents[2].Id, "third say event should be the live one")
 	}
 }
 
 func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
+	// With notification-driven delivery, dedup is inherent: replay advances
+	// lastSentID, so a notification for an already-replayed event produces
+	// an empty Replay response (no duplicates sent).
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
@@ -2906,50 +2826,44 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
+	eventStore := core.NewMemoryEventStore()
+	ctx := context.Background()
 
-	// The event that appears in both replay and live stream
-	duplicateID := core.NewULID()
-	duplicateEvent := core.Event{
-		ID:        duplicateID,
-		Stream:    streamName,
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-		Payload:   []byte(`{"message":"duplicate"}`),
+	// Prepopulate: cursor + one historical event
+	cursorEvent := core.Event{
+		ID: core.NewULID(), Stream: streamName, Type: core.EventTypeSay,
+		Timestamp: time.Now().Add(-2 * time.Second),
+		Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
+		Payload: []byte(`{"message":"cursor"}`),
 	}
+	require.NoError(t, eventStore.Append(ctx, cursorEvent))
 
-	cursorID := core.NewULID()
-
-	// Replay returns the event, AND it will be broadcast live during replay
-	replayCalled := make(chan struct{})
-	eventStore := &mockEventStore{
-		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-			close(replayCalled)
-			// Simulate slow replay to let the live event arrive
-			time.Sleep(50 * time.Millisecond)
-			return []core.Event{duplicateEvent}, nil
-		},
+	historicalID := core.NewULID()
+	historicalEvent := core.Event{
+		ID: historicalID, Stream: streamName, Type: core.EventTypeSay,
+		Timestamp: time.Now().Add(-1 * time.Second),
+		Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+		Payload: []byte(`{"message":"historical"}`),
 	}
+	require.NoError(t, eventStore.Append(ctx, historicalEvent))
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		broadcaster: broadcaster,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:  charID,
 				LocationID:   locationID,
 				Status:       session.StatusActive,
-				EventCursors: map[string]ulid.ULID{streamName: cursorID},
+				EventCursors: map[string]ulid.ULID{streamName: cursorEvent.ID},
 			},
 		}),
 		sessionDefaults: SessionDefaults{MaxReplay: 1000},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	stream := &mockSubscribeStream{ctx: ctx}
+	subCtx, cancel := context.WithCancel(ctx)
+	stream := &mockSubscribeStream{ctx: subCtx}
 
 	req := &corev1.SubscribeRequest{
 		Meta: &corev1.RequestMeta{
@@ -2966,18 +2880,8 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 		done <- server.Subscribe(req, stream)
 	}()
 
-	// Wait for replay to start, then broadcast the same event as a live event
-	select {
-	case <-replayCalled:
-	case <-time.After(2 * time.Second):
-		t.Fatal("replay was never called")
-	}
-
-	broadcaster.Broadcast(duplicateEvent)
-
-	// Give time for processing
+	// Give time for replay and subscription setup
 	time.Sleep(200 * time.Millisecond)
-
 	cancel()
 
 	select {
@@ -2986,14 +2890,14 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 
-	// Count how many times the duplicate event appears
+	// Count how many times the historical event appears (should be exactly once)
 	count := 0
 	for _, ev := range stream.events {
-		if ev.Id == duplicateID.String() {
+		if ev.Id == historicalID.String() {
 			count++
 		}
 	}
-	assert.Equal(t, 1, count, "duplicate event should appear exactly once (dedup)")
+	assert.Equal(t, 1, count, "historical event should appear exactly once (no duplication)")
 }
 
 func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
@@ -3005,8 +2909,6 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
-
 	replayCalled := false
 	eventStore := &mockEventStore{
 		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
@@ -3016,10 +2918,9 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		broadcaster: broadcaster,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:  charID,
@@ -3069,8 +2970,6 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	broadcaster := core.NewBroadcaster()
-
 	replayCalled := false
 	eventStore := &mockEventStore{
 		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
@@ -3080,10 +2979,9 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		broadcaster: broadcaster,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID:  charID,
@@ -3158,7 +3056,6 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	store := core.NewMemoryEventStore()
-	broadcaster := core.NewBroadcaster()
 	engine := core.NewEngine(store, sessions)
 
 	auth := &mockAuthenticator{
@@ -3172,7 +3069,7 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 	}
 
 	sessStore := session.NewMemStore()
-	server := NewCoreServer(engine, sessions, broadcaster, sessStore,
+	server := NewCoreServer(engine, sessions, sessStore,
 		WithAuthenticator(auth),
 	)
 	server.newSessionID = func() ulid.ULID { return sessionID }
@@ -3228,11 +3125,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		sessions.Connect(charID, core.NewULID())
 
 		eventStore := core.NewMemoryEventStore()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(eventStore, sessions)
 
 		sessStore := session.NewMemStore()
-		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+		server := NewCoreServer(engine, sessions, sessStore)
 		ctx := context.Background()
 
 		// Create session
@@ -3288,11 +3184,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		sessions.Connect(charID, core.NewULID())
 
 		eventStore := core.NewMemoryEventStore()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(eventStore, sessions)
 
 		sessStore := session.NewMemStore()
-		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+		server := NewCoreServer(engine, sessions, sessStore)
 		ctx := context.Background()
 
 		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
@@ -3343,11 +3238,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		sessions.Connect(charID, core.NewULID())
 
 		eventStore := core.NewMemoryEventStore()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(eventStore, sessions)
 
 		sessStore := session.NewMemStore()
-		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
+		server := NewCoreServer(engine, sessions, sessStore)
 		ctx := context.Background()
 
 		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{

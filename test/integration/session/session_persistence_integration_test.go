@@ -102,7 +102,7 @@ var _ = Describe("Session Persistence", func() {
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 7. Create CoreServer with PostgresSessionStore and session defaults
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, sessionStore,
+		coreServer := grpcpkg.NewCoreServer(engine, sessions, sessionStore,
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
 			grpcpkg.WithSessionDefaults(grpcpkg.SessionDefaults{
