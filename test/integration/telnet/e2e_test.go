@@ -205,7 +205,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		// 7. Create core components
 		sessions := core.NewSessionManager()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		// 8. Create GuestAuthenticator
 		startLocation = ulid.Make()

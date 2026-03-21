@@ -380,7 +380,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
 		sessions := core.NewSessionManager()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(realStore, sessions, broadcaster)
+		engine := core.NewEngine(realStore, sessions)
 
 		// Create gRPC server
 		creds := credentials.NewTLS(tlsConfig)

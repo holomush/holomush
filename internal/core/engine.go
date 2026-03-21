@@ -37,17 +37,15 @@ type LeavePayload struct {
 
 // Engine is the core game engine.
 type Engine struct {
-	store       EventStore
-	sessions    *SessionManager
-	broadcaster *Broadcaster
+	store    EventStore
+	sessions *SessionManager
 }
 
 // NewEngine creates a new game engine.
-func NewEngine(store EventStore, sessions *SessionManager, broadcaster *Broadcaster) *Engine {
+func NewEngine(store EventStore, sessions *SessionManager) *Engine {
 	return &Engine{
-		store:       store,
-		sessions:    sessions,
-		broadcaster: broadcaster,
+		store:    store,
+		sessions: sessions,
 	}
 }
 
@@ -69,11 +67,6 @@ func (e *Engine) HandleSay(ctx context.Context, char CharacterRef, message strin
 
 	if err := e.store.Append(ctx, event); err != nil {
 		return oops.With("operation", "append_say_event").Wrap(err)
-	}
-
-	// Broadcast to subscribers (nil-safe)
-	if e.broadcaster != nil {
-		e.broadcaster.Broadcast(event)
 	}
 
 	return nil
@@ -99,11 +92,6 @@ func (e *Engine) HandlePose(ctx context.Context, char CharacterRef, action strin
 		return oops.With("operation", "append_pose_event").Wrap(err)
 	}
 
-	// Broadcast to subscribers (nil-safe)
-	if e.broadcaster != nil {
-		e.broadcaster.Broadcast(event)
-	}
-
 	return nil
 }
 
@@ -127,11 +115,6 @@ func (e *Engine) HandleConnect(ctx context.Context, char CharacterRef) error {
 		return oops.With("operation", "append_arrive_event").Wrap(err)
 	}
 
-	// Broadcast to subscribers (nil-safe)
-	if e.broadcaster != nil {
-		e.broadcaster.Broadcast(event)
-	}
-
 	return nil
 }
 
@@ -153,11 +136,6 @@ func (e *Engine) HandleDisconnect(ctx context.Context, char CharacterRef, reason
 
 	if err := e.store.Append(ctx, event); err != nil {
 		return oops.With("operation", "append_leave_event").Wrap(err)
-	}
-
-	// Broadcast to subscribers (nil-safe)
-	if e.broadcaster != nil {
-		e.broadcaster.Broadcast(event)
 	}
 
 	return nil

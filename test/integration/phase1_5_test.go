@@ -277,7 +277,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			eventStore := core.NewMemoryEventStore()
 			broadcaster := core.NewBroadcaster()
 			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions, broadcaster)
+			engine := core.NewEngine(eventStore, sessions)
 
 			// Create gRPC server with mTLS
 			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
@@ -348,7 +348,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			eventStore := core.NewMemoryEventStore()
 			broadcaster := core.NewBroadcaster()
 			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions, broadcaster)
+			engine := core.NewEngine(eventStore, sessions)
 
 			// Create gRPC server with mTLS
 			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
@@ -512,7 +512,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			eventStore := core.NewMemoryEventStore()
 			broadcaster := core.NewBroadcaster()
 			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions, broadcaster)
+			engine := core.NewEngine(eventStore, sessions)
 
 			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))

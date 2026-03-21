@@ -123,7 +123,7 @@ func TestCoreServer_Authenticate_Success(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  session.NewMemStore(),
@@ -159,7 +159,7 @@ func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager(), core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
 		sessions:      core.NewSessionManager(),
 		authenticator: auth,
 		sessionStore:  session.NewMemStore(),
@@ -197,8 +197,7 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -233,7 +232,7 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		sessionStore: session.NewMemStore(),
 	}
@@ -265,7 +264,7 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -346,7 +345,7 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	}))
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		sessionStore: sessStore,
 	}
@@ -381,7 +380,7 @@ func TestNewCoreServer(t *testing.T) {
 	sessStore := session.NewMemStore()
 
 	server := NewCoreServer(
-		core.NewEngine(store, sessions, broadcaster),
+		core.NewEngine(store, sessions),
 		sessions,
 		broadcaster,
 		sessStore,
@@ -400,7 +399,7 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	customStore := session.NewMemStore()
 
 	server := NewCoreServer(
-		core.NewEngine(store, sessions, broadcaster),
+		core.NewEngine(store, sessions),
 		sessions,
 		broadcaster,
 		session.NewMemStore(),
@@ -417,7 +416,7 @@ func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:      sessions,
 		sessionStore:  session.NewMemStore(),
 		authenticator: nil, // No authenticator configured
@@ -455,7 +454,7 @@ func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  session.NewMemStore(),
@@ -488,8 +487,7 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -531,8 +529,7 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -588,8 +585,7 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	sessions.Connect(charID, core.NewULID())
 
 	store := &mockEventStore{}
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -633,8 +629,7 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -678,8 +673,7 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -719,7 +713,7 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	sessStore := session.NewMemStore()
 	ctx := context.Background()
@@ -773,7 +767,7 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: session.NewMemStore(),
@@ -805,7 +799,7 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -877,7 +871,7 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -946,7 +940,7 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	}))
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		sessionStore: sessStore,
 	}
@@ -971,7 +965,7 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		sessionStore: session.NewMemStore(),
 	}
@@ -1110,7 +1104,7 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 	})
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
@@ -1165,7 +1159,7 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 		}))
 
 		server := &CoreServer{
-			engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+			engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 			sessions:     sessions,
 			sessionStore: sessionStore,
 		}
@@ -1206,7 +1200,7 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 		}))
 
 		server := &CoreServer{
-			engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+			engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 			sessions:     sessions,
 			sessionStore: sessionStore,
 		}
@@ -1247,8 +1241,7 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	sessionStore := newTestSessionStore(t, map[string]*session.Info{
 		sessionID.String(): {
@@ -1317,7 +1310,7 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	}))
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		broadcaster:  broadcaster,
 		sessionStore: sessionStore,
@@ -1371,8 +1364,7 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -1426,8 +1418,7 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -1483,7 +1474,7 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -1588,8 +1579,7 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 				},
 			}
 
-			broadcaster := core.NewBroadcaster()
-			engine := core.NewEngine(store, sessions, broadcaster)
+			engine := core.NewEngine(store, sessions)
 
 			server := &CoreServer{
 				engine:   engine,
@@ -1640,7 +1630,7 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -1722,8 +1712,7 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 	sessions.Connect(charID, core.NewULID())
 
 	store := &mockEventStore{}
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -1765,7 +1754,7 @@ func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:      sessions,
 		sessionStore:  session.NewMemStore(),
 		authenticator: nil,
@@ -1802,7 +1791,7 @@ func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager(), core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
 		sessions:      core.NewSessionManager(),
 		authenticator: auth,
 		sessionStore:  session.NewMemStore(),
@@ -1829,7 +1818,7 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		sessionStore: session.NewMemStore(),
 	}
@@ -1885,8 +1874,7 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 	sessions.Connect(charID, core.NewULID())
 
 	store := &mockEventStore{}
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -1950,7 +1938,7 @@ func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
 	broadcaster := core.NewBroadcaster()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -2032,8 +2020,7 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -2106,7 +2093,7 @@ func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  session.NewMemStore(),
@@ -2144,8 +2131,7 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -2230,8 +2216,7 @@ func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -2284,8 +2269,7 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 		},
 	}
 
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
 		engine:   engine,
@@ -2359,7 +2343,7 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	var hookCalled bool
 	var hookInfo session.Info
@@ -2400,7 +2384,7 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	sessions := core.NewSessionManager()
-	engine := core.NewEngine(store, sessions, core.NewBroadcaster())
+	engine := core.NewEngine(store, sessions)
 
 	hookCallCount := 0
 	server := &CoreServer{
@@ -2456,7 +2440,7 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	sessStore := session.NewMemStore()
 	server := NewCoreServer(engine, sessions, broadcaster, sessStore)
@@ -2501,8 +2485,7 @@ func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
 	}
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	sessStore := session.NewMemStore()
 	ctx := context.Background()
@@ -2547,8 +2530,7 @@ func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
 	}
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	const maxHistory = 3
 	sessStore := session.NewMemStore()
@@ -2597,8 +2579,7 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
 	}
-	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	ctx := context.Background()
 	realStore := session.NewMemStore()
@@ -2635,7 +2616,7 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	auth := &mockAuthenticator{
 		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
@@ -2680,7 +2661,7 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 
 		store := core.NewMemoryEventStore()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(store, sessions, broadcaster)
+		engine := core.NewEngine(store, sessions)
 
 		server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 		ctx := context.Background()
@@ -2717,7 +2698,7 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 
 		store := core.NewMemoryEventStore()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(store, sessions, broadcaster)
+		engine := core.NewEngine(store, sessions)
 
 		server := NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
 		ctx := context.Background()
@@ -2749,7 +2730,7 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 	sessions := core.NewSessionManager()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:     sessions,
 		sessionStore: session.NewMemStore(),
 	}
@@ -2843,7 +2824,7 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		eventStore:  eventStore,
@@ -2952,7 +2933,7 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		eventStore:  eventStore,
@@ -3035,7 +3016,7 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		eventStore:  eventStore,
@@ -3099,7 +3080,7 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions, core.NewBroadcaster()),
+		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
 		sessions:    sessions,
 		broadcaster: broadcaster,
 		eventStore:  eventStore,
@@ -3178,7 +3159,7 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 
 	store := core.NewMemoryEventStore()
 	broadcaster := core.NewBroadcaster()
-	engine := core.NewEngine(store, sessions, broadcaster)
+	engine := core.NewEngine(store, sessions)
 
 	auth := &mockAuthenticator{
 		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
@@ -3248,7 +3229,7 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		eventStore := core.NewMemoryEventStore()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		sessStore := session.NewMemStore()
 		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
@@ -3308,7 +3289,7 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		eventStore := core.NewMemoryEventStore()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		sessStore := session.NewMemStore()
 		server := NewCoreServer(engine, sessions, broadcaster, sessStore)
@@ -3363,7 +3344,7 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		eventStore := core.NewMemoryEventStore()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		sessStore := session.NewMemStore()
 		server := NewCoreServer(engine, sessions, broadcaster, sessStore)

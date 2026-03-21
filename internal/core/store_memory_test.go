@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+//go:build !integration
+
 package core
 
 import (
@@ -146,4 +148,90 @@ func TestMemoryEventStore_Replay_LimitExceedsEvents(t *testing.T) {
 	events, err := store.Replay(ctx, "location:test", ulid.ULID{}, 100)
 	require.NoError(t, err)
 	assert.Len(t, events, 2)
+}
+
+func TestMemoryEventStore_Subscribe_NotifiesOnAppend(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	eventCh, errCh, err := store.Subscribe(ctx, "location:test")
+	require.NoError(t, err)
+	require.NotNil(t, eventCh)
+	require.NotNil(t, errCh)
+
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:test",
+		Type:      EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{"message":"hello"}`),
+	}
+	err = store.Append(ctx, event)
+	require.NoError(t, err)
+
+	select {
+	case id, ok := <-eventCh:
+		require.True(t, ok, "channel should be open")
+		assert.Equal(t, event.ID, id)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for event notification")
+	}
+}
+
+func TestMemoryEventStore_Subscribe_IgnoresOtherStreams(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	eventCh, _, err := store.Subscribe(ctx, "location:stream-a")
+	require.NoError(t, err)
+
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:stream-b",
+		Type:      EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{}`),
+	}
+	err = store.Append(ctx, event)
+	require.NoError(t, err)
+
+	select {
+	case id := <-eventCh:
+		t.Fatalf("unexpected notification for stream-b event: %s", id)
+	case <-time.After(100 * time.Millisecond):
+		// Expected: no notification for other streams
+	}
+}
+
+func TestMemoryEventStore_Subscribe_CleansUpOnCancel(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	eventCh, _, err := store.Subscribe(ctx, "location:test")
+	require.NoError(t, err)
+
+	cancel()
+
+	// Channel should close after cancel
+	select {
+	case _, ok := <-eventCh:
+		assert.False(t, ok, "channel should be closed after context cancel")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for channel to close")
+	}
+
+	// Subsequent Append should not panic
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:test",
+		Type:      EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{}`),
+	}
+	require.NotPanics(t, func() {
+		_ = store.Append(context.Background(), event)
+	})
 }

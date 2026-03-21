@@ -96,7 +96,7 @@ var _ = Describe("Session Persistence", func() {
 		startLocation = ulid.Make()
 		sessions := core.NewSessionManager()
 		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		// 6. Create GuestAuthenticator
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
