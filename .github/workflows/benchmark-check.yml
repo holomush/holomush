@@ -13,7 +13,7 @@ permissions:
 jobs:
   benchmark:
     name: Benchmark Regression Check
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-4x8
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +21,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: go
 
       - name: Install Task
         uses: arduino/setup-task@v2
