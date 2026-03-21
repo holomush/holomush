@@ -17,11 +17,8 @@ Thank you for your interest in contributing to HoloMUSH!
 git clone https://github.com/holomush/holomush.git
 cd holomush
 
-# Install development tools
-task tools
-
-# Install git hooks
-task hooks:install
+# Install tools and git hooks
+task setup
 
 # Run tests
 task test

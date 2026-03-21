@@ -149,7 +149,7 @@ task license:add
 Verify coverage before completing work:
 
 ```bash
-task test:coverage
+task test:cover
 ```
 
 ### Test Organization

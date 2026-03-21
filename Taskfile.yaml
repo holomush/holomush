@@ -5,8 +5,8 @@ version: "3"
 vars:
   BINARY_NAME: holomush
   MAIN_PKG: ./cmd/holomush
-  MIGRATE_CLI: migrate
   MIGRATIONS_DIR: internal/store/migrations
+  LICENSE_DIRS: api cmd internal pkg plugins scripts
 
 tasks:
   default:
@@ -14,38 +14,98 @@ tasks:
     cmds:
       - task --list
 
-  # Development
-  dev:
-    desc: Run server in development mode
-    cmds:
-      - go run {{.MAIN_PKG}}
+  # ──────────────────────────────────────────
+  # Daily dev loop
+  # ──────────────────────────────────────────
 
-  # Building
+  dev:
+    desc: Start full stack (Postgres + core + gateway) — rebuilds on each run
+    cmds:
+      - task: docker:build
+      - docker compose up --force-recreate --remove-orphans
+
+  dev:down:
+    desc: Stop the dev stack
+    cmds:
+      - docker compose down
+
+  dev:clean:
+    desc: Stop the dev stack and wipe the database
+    cmds:
+      - docker compose down -v
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test -race -v ./...
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: lint:go
+      - task: lint:markdown
+      - task: lint:yaml
+      - task: lint:actions
+      - task: lint:access-migration
+      - task: lint:test-helpers
+
+  fmt:
+    desc: Format all files
+    cmds:
+      - task: fmt:go
+      - task: fmt:yaml
+      - task: fmt:markdown
+      - task: fmt:dprint
+
+  # ──────────────────────────────────────────
+  # Extended testing
+  # ──────────────────────────────────────────
+
+  test:cover:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  test:int:
+    desc: Run integration tests (needs Docker for testcontainers)
+    cmds:
+      - go test -race -v -tags=integration -count=1 ./internal/store/ ./test/integration/...
+
+  test:e2e:
+    desc: Run Playwright E2E tests in Docker
+    deps: ['docker:build']
+    cmds:
+      - docker compose -f compose.yaml -f compose.e2e.yaml run --rm playwright npx playwright test --reporter=line {{.CLI_ARGS}}
+      - defer: docker compose -f compose.yaml -f compose.e2e.yaml down
+
+  test:bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem -count={{.BENCH_COUNT}} -benchtime={{.BENCH_TIME}} -run='^$' {{.BENCH_PACKAGE}}
+    vars:
+      BENCH_COUNT: '{{default "3" .BENCH_COUNT}}'
+      BENCH_TIME: '{{default "1s" .BENCH_TIME}}'
+      BENCH_PACKAGE: '{{default "./internal/access/policy/" .BENCH_PACKAGE}}'
+
+  test:fuzz:
+    desc: Run fuzz tests
+    cmds:
+      - go test -fuzz=FuzzParse -fuzztime={{.FUZZ_TIME}} {{.FUZZ_PACKAGE}}
+    vars:
+      FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
+      FUZZ_PACKAGE: '{{default "./internal/access/policy/dsl/" .FUZZ_PACKAGE}}'
+
+  # ──────────────────────────────────────────
+  # Build
+  # ──────────────────────────────────────────
+
   build:
     desc: Build the server binary
     deps: ['web:embed']
     cmds:
       - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
-  build:all:
-    desc: Build for all platforms
-    cmds:
-      - task: build:linux
-      - task: build:darwin
-
-  build:linux:
-    desc: Build for Linux
-    cmds:
-      - GOOS=linux GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-linux-amd64 {{.MAIN_PKG}}
-      - GOOS=linux GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-linux-arm64 {{.MAIN_PKG}}
-
-  build:darwin:
-    desc: Build for macOS
-    cmds:
-      - GOOS=darwin GOARCH=amd64 go build -o dist/{{.BINARY_NAME}}-darwin-amd64 {{.MAIN_PKG}}
-      - GOOS=darwin GOARCH=arm64 go build -o dist/{{.BINARY_NAME}}-darwin-arm64 {{.MAIN_PKG}}
-
-  # Docker
   docker:build:
     desc: Build Docker image from locally-compiled Linux binary
     deps: ['web:embed']
@@ -53,23 +113,10 @@ tasks:
       - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
 
-  docker:up:
-    desc: Run full stack locally via docker compose
-    deps: ['docker:build']
-    cmds:
-      - docker compose up
+  # ──────────────────────────────────────────
+  # Code generation
+  # ──────────────────────────────────────────
 
-  docker:down:
-    desc: Stop and remove containers
-    cmds:
-      - docker compose down
-
-  docker:clean:
-    desc: Stop containers and remove volumes (fresh database)
-    cmds:
-      - docker compose down -v
-
-  # Proto generation
   proto:
     desc: Generate Go code from protobuf definitions
     cmds:
@@ -81,7 +128,6 @@ tasks:
     generates:
       - internal/proto/**/*.go
 
-  # Schema generation
   generate:schema:
     desc: Generate plugin JSON Schema from Go types
     cmds:
@@ -93,7 +139,6 @@ tasks:
     generates:
       - schemas/plugin.schema.json
 
-  # DSL grammar reference generation
   generate:ebnf:
     desc: Generate EBNF grammar and railroad diagram from DSL parser
     cmds:
@@ -105,7 +150,15 @@ tasks:
       - site/docs/developers/policy-dsl.ebnf
       - site/docs/developers/policy-dsl-railroad.html
 
+  mocks:generate:
+    desc: Generate mocks with mockery
+    cmds:
+      - mockery
+
+  # ──────────────────────────────────────────
   # Web client
+  # ──────────────────────────────────────────
+
   web:install:
     desc: Install web client dependencies
     dir: web
@@ -147,141 +200,15 @@ tasks:
       - cp -r web/build internal/web/dist
 
   web:dev:
-    desc: Run SvelteKit dev server
+    desc: Run SvelteKit dev server (frontend only)
     dir: web
     deps: ['web:install', 'web:generate']
     cmds:
       - pnpm dev
 
-  web:test:
-    desc: Run Playwright E2E tests (requires running gateway+core stack)
-    dir: web
-    # No deps on web:build — test hits a running server, not the local build
-    cmds:
-      - pnpm exec playwright test
-
-  # Testing
-  test:
-    desc: Run all tests
-    cmds:
-      - go test -race -v ./...
-
-  test:coverage:
-    desc: Run tests with coverage
-    cmds:
-      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
-      - go tool cover -html=coverage.out -o coverage.html
-
-  test:integration:
-    desc: Run integration tests (requires Docker for testcontainers)
-    cmds:
-      - go test -race -v -tags=integration -count=1 ./internal/store/ ./test/integration/...
-
-  test:short:
-    desc: Run short tests only
-    cmds:
-      - go test -short -v ./...
-
-  test:ginkgo:
-    desc: Run ginkgo integration tests with parallelism
-    cmds:
-      - ginkgo -r -p --randomize-all ./test/integration/...
-
-  test:fuzz:
-    desc: Run fuzz tests
-    cmds:
-      - go test -fuzz=FuzzParse -fuzztime={{.FUZZ_TIME}} {{.FUZZ_PACKAGE}}
-    vars:
-      FUZZ_TIME: '{{default "30s" .FUZZ_TIME}}'
-      FUZZ_PACKAGE: '{{default "./internal/access/policy/dsl/" .FUZZ_PACKAGE}}'
-
-  test:bench:
-    desc: Run benchmarks
-    cmds:
-      - go test -bench=. -benchmem -count={{.BENCH_COUNT}} -benchtime={{.BENCH_TIME}} -run='^$' {{.BENCH_PACKAGE}}
-    vars:
-      BENCH_COUNT: '{{default "3" .BENCH_COUNT}}'
-      BENCH_TIME: '{{default "1s" .BENCH_TIME}}'
-      BENCH_PACKAGE: '{{default "./internal/access/policy/" .BENCH_PACKAGE}}'
-
-  mocks:generate:
-    desc: Generate mocks with mockery
-    cmds:
-      - mockery
-
-  # Linting
-  # License headers
-  license:check:
-    desc: Check SPDX license headers
-    cmds:
-      - |
-        set -euo pipefail
-
-        # Directories to check
-        DIRS="api cmd internal pkg plugins scripts"
-
-        # Verify directories exist
-        EXISTING_DIRS=""
-        for dir in $DIRS; do
-          if [[ -d "$dir" ]]; then
-            EXISTING_DIRS="$EXISTING_DIRS $dir"
-          else
-            echo "WARNING: Directory '$dir' does not exist, skipping"
-          fi
-        done
-
-        if [[ -z "$EXISTING_DIRS" ]]; then
-          echo "ERROR: No directories found to check"
-          exit 1
-        fi
-
-        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
-        addlicense -check -f LICENSE_HEADER \
-          -ignore '**/*.pb.go' \
-          -ignore 'vendor/**' \
-          -ignore 'internal/web/dist/**' \
-          $EXISTING_DIRS
-
-  license:add:
-    desc: Add missing SPDX license headers
-    cmds:
-      - |
-        set -euo pipefail
-
-        # Directories to add headers to
-        DIRS="api cmd internal pkg plugins scripts"
-
-        # Verify directories exist
-        EXISTING_DIRS=""
-        for dir in $DIRS; do
-          if [[ -d "$dir" ]]; then
-            EXISTING_DIRS="$EXISTING_DIRS $dir"
-          else
-            echo "WARNING: Directory '$dir' does not exist, skipping"
-          fi
-        done
-
-        if [[ -z "$EXISTING_DIRS" ]]; then
-          echo "ERROR: No directories found to process"
-          exit 1
-        fi
-
-        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
-        addlicense -f LICENSE_HEADER \
-          -ignore '**/*.pb.go' \
-          -ignore 'vendor/**' \
-          -ignore 'internal/web/dist/**' \
-          $EXISTING_DIRS
-
-  lint:
-    desc: Run all linters
-    cmds:
-      - task: lint:go
-      - task: lint:markdown
-      - task: lint:yaml
-      - task: lint:actions
-      - task: lint:access-migration
-      - task: lint:test-helpers
+  # ──────────────────────────────────────────
+  # Linters (called by `task lint`)
+  # ──────────────────────────────────────────
 
   lint:go:
     desc: Lint Go code
@@ -309,84 +236,42 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-
-        # Search for legacy AccessControl.Check(ctx, ...) calls in production code.
-        # Pattern: AccessControl\.Check\(ctx, — specifically targets AccessControl.Check(ctx, subject, action, resource)
-        # This avoids false positives from other Check() methods (e.g., capability.Enforcer.Check).
-        # Exclude test files (_test.go), generated files (*.pb.go), and comments.
-        LEGACY_CALLS=$(grep -rn \
-          --include="*.go" \
-          --exclude="*_test.go" \
-          --exclude="*.pb.go" \
-          -E 'AccessControl\.Check\(ctx,' \
-          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' || true)
-
+        LEGACY_CALLS=$(grep -rn --include="*.go" --exclude="*_test.go" --exclude="*.pb.go" \
+          -E 'AccessControl\.Check\(ctx,' internal/ pkg/ 2>/dev/null | grep -v '^\s*//' || true)
         if [ -n "$LEGACY_CALLS" ]; then
-          echo "ERROR: Found legacy AccessControl.Check() calls in production code:"
+          echo "ERROR: Found legacy AccessControl.Check() calls:"
           echo "$LEGACY_CALLS"
-          echo ""
-          echo "All access checks must use AccessPolicyEngine.Evaluate() instead."
-          echo "See docs/plans/2026-02-06-full-abac-phase-7.6.md or internal/world/service.go checkAccess() helper"
           exit 1
         fi
-
-        echo "✓ No legacy AccessControl.Check() calls found"
-
-        # Check for legacy "char:" prefix usage (must be "character:").
-        CHAR_PREFIX=$(grep -rn \
-          --include="*.go" \
-          --exclude="*_test.go" \
-          --exclude="*.pb.go" \
-          -E '"char:' \
-          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '"character:' || true)
-
+        CHAR_PREFIX=$(grep -rn --include="*.go" --exclude="*_test.go" --exclude="*.pb.go" \
+          -E '"char:' internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '"character:' || true)
         if [ -n "$CHAR_PREFIX" ]; then
-          echo "ERROR: Found legacy \"char:\" prefix in production code:"
+          echo "ERROR: Found legacy \"char:\" prefix:"
           echo "$CHAR_PREFIX"
-          echo ""
-          echo "Migrate all occurrences to the \"character:\" prefix."
           exit 1
         fi
-
-        echo "✓ No legacy char: prefix found"
 
   lint:test-helpers:
     desc: Verify no test helper imports in production code
     cmds:
       - |
         set -euo pipefail
-
-        # Search for imports of test helper packages in production code.
-        # Blocked packages: policytest (access policy test helpers)
-        # These should only be imported in *_test.go files or testutil packages for testing purposes.
-        # Pattern: "holomush/internal/access/policy/policytest" or just "policytest"
-        # Excludes: *_test.go files, testutil/* packages, *.pb.go files
-        TEST_HELPER_IMPORTS=$(grep -rn \
-          --include="*.go" \
-          --exclude="*_test.go" \
-          --exclude="*.pb.go" \
-          -E '(import|").*policytest' \
-          internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '/testutil/' || true)
-
-        if [ -n "$TEST_HELPER_IMPORTS" ]; then
-          echo "ERROR: Found test helper package imports in production code:"
-          echo "$TEST_HELPER_IMPORTS"
-          echo ""
-          echo "Test helper packages (policytest) must only be imported in *_test.go files or testutil packages."
-          echo "These packages contain test engines and mock implementations that should not be used in production."
+        IMPORTS=$(grep -rn --include="*.go" --exclude="*_test.go" --exclude="*.pb.go" \
+          -E '(import|").*policytest' internal/ pkg/ 2>/dev/null | grep -v '^\s*//' | grep -v '/testutil/' || true)
+        if [ -n "$IMPORTS" ]; then
+          echo "ERROR: Found test helper imports in production code:"
+          echo "$IMPORTS"
           exit 1
         fi
 
-        echo "✓ No test helper package imports found in production code"
+  # ──────────────────────────────────────────
+  # Formatters (called by `task fmt`)
+  # ──────────────────────────────────────────
 
-  # Formatting
-  fmt:
-    desc: Format all files
+  fmt:go:
+    desc: Format Go code
     cmds:
-      - task: fmt:go
-      - task: fmt:yaml
-      - task: fmt:markdown
-      - task: fmt:dprint
+      - gofumpt -w .
 
   fmt:markdown:
     desc: Format Markdown files
@@ -394,20 +279,15 @@ tasks:
       - rumdl fmt --exclude 'site,.git,.beads,.serena' .
       - rumdl fmt --config site/.rumdl.toml site/
 
-  fmt:go:
-    desc: Format Go code
+  fmt:yaml:
+    desc: Format YAML files
     cmds:
-      - gofumpt -w .
+      - yamlfmt .
 
   fmt:dprint:
     desc: Format with dprint
     cmds:
       - dprint fmt
-
-  fmt:yaml:
-    desc: Format YAML files
-    cmds:
-      - yamlfmt .
 
   fmt:check:
     desc: Check formatting without modifying
@@ -416,137 +296,58 @@ tasks:
       - rumdl fmt --check --exclude 'site,.git,.beads,.serena' .
       - rumdl fmt --check --config site/.rumdl.toml site/
 
-  # Dependencies
+  # ──────────────────────────────────────────
+  # License headers
+  # ──────────────────────────────────────────
+
+  license:check:
+    desc: Check SPDX license headers
+    cmds:
+      - task: license:run
+        vars: {MODE: -check}
+
+  license:add:
+    desc: Add missing SPDX license headers
+    cmds:
+      - task: license:run
+
+  license:run:
+    internal: true
+    cmds:
+      - |
+        set -euo pipefail
+        EXISTING_DIRS=""
+        for dir in {{.LICENSE_DIRS}}; do
+          [ -d "$dir" ] && EXISTING_DIRS="$EXISTING_DIRS $dir"
+        done
+        [ -z "$EXISTING_DIRS" ] && { echo "ERROR: No directories found"; exit 1; }
+        command -v addlicense >/dev/null 2>&1 || go install github.com/google/addlicense@latest
+        addlicense {{.MODE}} -f LICENSE_HEADER \
+          -ignore '**/*.pb.go' -ignore 'vendor/**' -ignore 'internal/web/dist/**' \
+          $EXISTING_DIRS
+
+  # ──────────────────────────────────────────
+  # Setup (run once)
+  # ──────────────────────────────────────────
+
+  setup:
+    desc: Install all dev tools and git hooks
+    cmds:
+      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen
+      - brew install steveyegge/beads/bd
+      - lefthook install
+      - bd hooks install --chain
+      - echo "✓ Dev environment ready. Run 'task dev' to start."
+
   deps:
-    desc: Download and tidy dependencies
+    desc: Download and tidy Go dependencies
     cmds:
       - go mod download
       - go mod tidy
 
-  deps:upgrade:
-    desc: Upgrade all dependencies
-    cmds:
-      - go get -u ./...
-      - go mod tidy
-
-  # Plugins (WASM plugin build tasks removed - see holomush-1hq.21)
-
-  # Documentation
-  spec:
-    desc: Create a new spec document
-    cmds:
-      - |
-        DATE=$(date +%Y-%m-%d)
-        read -p "Spec name (e.g., event-system): " NAME
-        FILE="docs/specs/${DATE}-${NAME}.md"
-        cat > "$FILE" << 'EOF'
-        # {{.NAME}} Specification
-
-        **Status:** Draft
-        **Date:** {{.DATE}}
-        **Version:** 0.1.0
-
-        ## Overview
-
-        ## Requirements
-
-        ## Non-Goals
-
-        ## Design
-
-        ## Open Questions
-        EOF
-        echo "Created: $FILE"
-
-  plan:
-    desc: Create a new plan document
-    cmds:
-      - |
-        DATE=$(date +%Y-%m-%d)
-        read -p "Plan name (e.g., phase-1-implementation): " NAME
-        FILE="docs/plans/${DATE}-${NAME}.md"
-        cat > "$FILE" << 'EOF'
-        # {{.NAME}} Plan
-
-        **Status:** Draft
-        **Date:** {{.DATE}}
-
-        ## Overview
-
-        ## Tasks
-
-        ## Dependencies
-
-        ## Risks
-        EOF
-        echo "Created: $FILE"
-
-  # Cleanup
-  clean:
-    desc: Clean build artifacts
-    cmds:
-      - rm -rf dist/
-      - rm -f {{.BINARY_NAME}}
-      - rm -f coverage.out coverage.html
-
-  # Install tools (prefer brew, use uvx for Python)
-  tools:
-    desc: Install development tools
-    cmds:
-      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen
-      - brew install steveyegge/beads/bd
-      - curl -Ls https://raw.githubusercontent.com/extism/python-pdk/main/install.sh | bash
-      - 'echo "Tools installed. Run lefthook install to set up git hooks."'
-      - 'echo "Note: yamlfmt handles both formatting and linting of YAML files"'
-
-  # Git hooks
-  hooks:install:
-    desc: Install git hooks
-    cmds:
-      - lefthook install
-      - bd hooks install --chain
-
-  hooks:uninstall:
-    desc: Uninstall git hooks
-    cmds:
-      - bd hooks uninstall
-      - lefthook uninstall
-
-  # Release
-  release:check:
-    desc: Validate goreleaser config
-    cmds:
-      - goreleaser check
-
-  release:snapshot:
-    desc: Build snapshot locally (no publish, local arch only)
-    cmds:
-      - goreleaser build --snapshot --clean --single-target
-
-  # Documentation
-  docs:setup:
-    desc: Set up documentation development environment
-    dir: site
-    cmds:
-      - uv sync
-
-  docs:build:
-    desc: Build documentation site
-    dir: site
-    cmds:
-      - uv run zensical build
-
-  docs:serve:
-    desc: Start documentation dev server
-    dir: site
-    cmds:
-      - uv run zensical serve
-
-  # Migration tasks
-  migrate:
-    desc: Apply all pending migrations
-    cmds:
-      - go run {{.MAIN_PKG}} migrate up
+  # ──────────────────────────────────────────
+  # Database migrations
+  # ──────────────────────────────────────────
 
   migrate:up:
     desc: Apply all pending migrations
@@ -563,22 +364,62 @@ tasks:
     cmds:
       - go run {{.MAIN_PKG}} migrate status
 
-  migrate:version:
-    desc: Print current schema version
-    cmds:
-      - go run {{.MAIN_PKG}} migrate version
-
   migrate:create:
-    desc: 'Create a new migration (usage: task migrate:create -- migration_name)'
+    desc: 'Create a new migration (usage: task migrate:create -- name)'
     cmds:
-      - "{{.MIGRATE_CLI}} create -ext sql -dir {{.MIGRATIONS_DIR}} -seq {{.CLI_ARGS}}"
+      - migrate create -ext sql -dir {{.MIGRATIONS_DIR}} -seq {{.CLI_ARGS}}
     preconditions:
-      - sh: command -v {{.MIGRATE_CLI}}
-        msg: |
-          migrate CLI not found. Install with:
-          go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+      - sh: command -v migrate
+        msg: "migrate CLI not found. Install with: go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
 
   migrate:force:
     desc: 'Force set migration version (usage: task migrate:force -- VERSION)'
     cmds:
       - go run {{.MAIN_PKG}} migrate force {{.CLI_ARGS}}
+
+  # ──────────────────────────────────────────
+  # Release
+  # ──────────────────────────────────────────
+
+  release:check:
+    desc: Validate goreleaser config
+    cmds:
+      - goreleaser check
+
+  release:snapshot:
+    desc: Build snapshot locally (no publish)
+    cmds:
+      - goreleaser build --snapshot --clean --single-target
+
+  # ──────────────────────────────────────────
+  # Documentation site
+  # ──────────────────────────────────────────
+
+  docs:setup:
+    desc: Set up documentation dev environment
+    dir: site
+    cmds:
+      - uv sync
+
+  docs:build:
+    desc: Build documentation site
+    dir: site
+    cmds:
+      - uv run zensical build
+
+  docs:serve:
+    desc: Start documentation dev server
+    dir: site
+    cmds:
+      - uv run zensical serve
+
+  # ──────────────────────────────────────────
+  # Cleanup
+  # ──────────────────────────────────────────
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf dist/
+      - rm -f {{.BINARY_NAME}}
+      - rm -f coverage.out coverage.html
