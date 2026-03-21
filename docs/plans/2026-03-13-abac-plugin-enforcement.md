@@ -55,6 +55,7 @@
 **Files:**
 
 - Modify: `internal/access/prefix.go:56-63` (after `CharacterSubject`)
+
 - Modify: `internal/access/prefix_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -110,6 +111,7 @@ feat(access): add PluginSubject() helper with panic guard
 **Files:**
 
 - Modify: `internal/access/prefix.go` (constants block + after last helper)
+
 - Modify: `internal/access/prefix_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -182,7 +184,9 @@ feat(access): add ResourceKV constant and KVResource() helper
 **Files:**
 
 - Modify: `internal/plugin/hostfunc/adapter.go:66-68`
+
 - Modify: `internal/plugin/hostfunc/helpers.go:115`
+
 - Modify: `internal/plugin/hostfunc/world_write.go:206`
 
 - [ ] **Step 1: Run existing tests as baseline**
@@ -267,6 +271,7 @@ with "principal is plugin" conditions.
 **Files:**
 
 - Modify: `internal/plugin/manifest.go:30-35`
+
 - Modify: `internal/plugin/manifest_test.go`
 
 - [ ] **Step 1: Write the failing test for policy parsing**
@@ -423,6 +428,7 @@ character-level command filtering.
 **Files:**
 
 - Modify: `internal/access/policy/store/store.go:61-87`
+
 - Check: `internal/access/policy/store/store_test.go` (if exists)
 
 - [ ] **Step 1: Write the failing test**
@@ -486,6 +492,7 @@ feat(policy/store): extend ValidateSourceNaming for plugin: prefix
 **Files:**
 
 - Modify: `internal/access/policy/store/store.go` (interface)
+
 - Modify: `internal/access/policy/store/postgres.go` (implementation)
 
 - [ ] **Step 1: Add to interface**
@@ -563,6 +570,7 @@ feat(policy/store): add DeleteBySource for bulk plugin policy cleanup
 **Files:**
 
 - Create: `internal/access/policy/attribute/plugin_provider.go`
+
 - Create: `internal/access/policy/attribute/plugin_provider_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -732,6 +740,7 @@ feat(access/attribute): add PluginAttributeProvider for plugin subjects
 **Files:**
 
 - Create: `internal/plugin/policy_installer.go`
+
 - Create: `internal/plugin/policy_installer_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -976,8 +985,11 @@ func (pi *PolicyInstaller) ReplacePluginPolicies(ctx context.Context, pluginName
 Key points:
 
 - `Compile()` returns 3 values `(compiled, warnings, err)` — warnings are non-fatal
+
 - `policyStoreWriter` is a narrow interface matching only `Create` + `DeleteBySource`
+
 - `ReplacePluginPolicies` combines remove + install (spec §3 atomicity requirement)
+
 - `CompiledTarget.PrincipalType` is `*string` — nil check + value check
 
 - [ ] **Step 4: Adjust test doubles to match real interfaces**
@@ -1073,6 +1085,7 @@ rolls back the plugin load.
 **Files:**
 
 - Modify: `internal/plugin/hostfunc/functions.go:207-309`
+
 - Modify: `internal/plugin/hostfunc/functions_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1285,6 +1298,7 @@ resources.
 **Files:**
 
 - Modify: `internal/plugin/hostfunc/commands.go:221-261`
+
 - Modify: `internal/plugin/hostfunc/commands_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -1453,8 +1467,11 @@ the check. Breaking Lua API change — only the help plugin is affected.
 **Files:**
 
 - Modify: `plugins/building/plugin.yaml`
+
 - Modify: `plugins/communication/plugin.yaml`
+
 - Modify: `plugins/echo-bot/plugin.yaml`
+
 - Modify: `plugins/help/plugin.yaml`
 
 - [ ] **Step 1: Update building plugin**
@@ -1462,6 +1479,7 @@ the check. Breaking Lua API change — only the help plugin is affected.
 Replace `capabilities:` with policies. The building plugin needs:
 
 - World write permissions (create location, create exit)
+
 - World read permissions (find location)
 
 ```yaml
@@ -1710,6 +1728,7 @@ plugin subjects receive default-deny (no seed policies target plugins).
 **Files:**
 
 - Modify: `.golangci.yml` (if `forbidigo` is available)
+
 - Or create: `internal/access/policy/legacy_check_test.go`
 
 - [ ] **Step 1: Check if forbidigo is available**

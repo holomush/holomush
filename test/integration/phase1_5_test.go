@@ -41,11 +41,20 @@ func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return 
 func (n *noopEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
 	return nil, nil
 }
+
 func (n *noopEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
 	return ulid.ULID{}, nil
 }
-func (n *noopEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, nil
+
+func (n *noopEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	events := make(chan ulid.ULID)
+	errs := make(chan error)
+	go func() {
+		<-ctx.Done()
+		close(events)
+		close(errs)
+	}()
+	return events, errs, nil
 }
 
 // testEnv holds all the resources needed for integration tests.
@@ -294,7 +303,8 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore, sessions)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore())
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -364,7 +374,8 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore, sessions)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore())
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -526,7 +537,8 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			sessions := core.NewSessionManager()
 			engine := core.NewEngine(eventStore, sessions)
 
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore())
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 

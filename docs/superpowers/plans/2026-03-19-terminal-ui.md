@@ -228,6 +228,7 @@ character data.
 **Files:**
 
 - Modify: `internal/web/translate.go`
+
 - Modify: `internal/web/translate_test.go`
 
 - [ ] **Step 1: Write failing tests for channel assignment**
@@ -370,6 +371,7 @@ docs(web): clarify command history persistence path
 **Files:**
 
 - Modify: `internal/web/handler.go` (StreamEvents method)
+
 - Reference: `internal/world/service.go` (WorldService for room data)
 
 - [ ] **Step 1: Add WorldService to Handler**
@@ -686,7 +688,9 @@ feat(web): add ansi_up dependency for ANSI rendering
 **Files:**
 
 - Create: `web/src/lib/theme/types.ts`
+
 - Create: `web/src/lib/theme/default-dark.json`
+
 - Create: `web/src/lib/theme/default-light.json`
 
 - [ ] **Step 1: Define theme TypeScript types**
@@ -787,8 +791,11 @@ properties will be mapped from these at runtime.
 **Files:**
 
 - Create: `web/src/lib/stores/themeStore.ts`
+
 - Create: `web/src/lib/stores/sidebarStore.ts`
+
 - Create: `web/src/lib/stores/terminalStore.ts`
+
 - Create: `web/src/lib/stores/eventRouter.ts`
 
 - [ ] **Step 1: Create themeStore**
@@ -1092,7 +1099,9 @@ events by channel field.
 **Files:**
 
 - Create: `web/src/lib/components/terminal/EventRenderer.svelte`
+
 - Create: `web/src/lib/util/ansi.ts`
+
 - Create: `web/src/lib/util/urlLinker.ts`
 
 - [ ] **Step 1: Create ANSI detection helper**
@@ -1562,7 +1571,9 @@ feat(web): add StatusBar component
 **Files:**
 
 - Create: `web/src/lib/components/sidebar/RoomInfo.svelte`
+
 - Create: `web/src/lib/components/sidebar/ExitList.svelte`
+
 - Create: `web/src/lib/components/sidebar/PresenceList.svelte`
 
 - [ ] **Step 1: Create RoomInfo**
@@ -1791,7 +1802,9 @@ CSS transition, overlay mode for mobile.
 **Files:**
 
 - Create: `web/src/routes/terminal/+page.ts`
+
 - Create: `web/src/routes/terminal/+page.svelte`
+
 - Modify: `web/src/routes/+page.svelte` (add link to terminal)
 
 - [ ] **Step 1: Create page options**

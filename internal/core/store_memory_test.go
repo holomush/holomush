@@ -117,13 +117,13 @@ func TestMemoryEventStore_Replay_AfterIDNotFound(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Replay with an afterID that doesn't exist in the stream
-	// Should return all events from start (afterID not found = startIdx stays 0)
+	// Replay with an afterID that doesn't exist in the stream.
+	// A missing cursor means the client's position is unknown — returning
+	// nothing is safer than replaying the entire stream from the beginning.
 	nonExistentID := NewULID()
 	events, err := store.Replay(ctx, "location:test", nonExistentID, 10)
 	require.NoError(t, err)
-	// When afterID is not found, startIdx stays at 0, so all events are returned
-	assert.Len(t, events, 3, "Expected 3 events when afterID not found")
+	assert.Empty(t, events, "missing afterID should return empty slice")
 }
 
 func TestMemoryEventStore_Replay_LimitExceedsEvents(t *testing.T) {

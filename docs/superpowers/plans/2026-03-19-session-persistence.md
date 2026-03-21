@@ -85,6 +85,7 @@ This chunk creates the `internal/session` package with core types and the `Store
 **Files:**
 
 - Create: `internal/session/session.go`
+
 - Create: `internal/session/session_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -301,6 +302,7 @@ persistence with cache-aside readiness."
 **Files:**
 
 - Create: `internal/session/memstore.go`
+
 - Create: `internal/session/memstore_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -776,6 +778,7 @@ connection tracking, and command history with cap enforcement."
 **Files:**
 
 - Create: `internal/store/migrations/000018_sessions.up.sql`
+
 - Create: `internal/store/migrations/000018_sessions.down.sql`
 
 - [ ] **Step 1: Create up migration**
@@ -862,6 +865,7 @@ Partial unique index enforces one active/detached session per character."
 **Files:**
 
 - Create: `internal/store/session_store.go`
+
 - Create: `internal/store/session_store_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -869,16 +873,27 @@ Partial unique index enforces one active/detached session per character."
 Create `internal/store/session_store_test.go` with unit tests using a mock pool. Follow the pattern in `internal/store/postgres_test.go`. Cover:
 
 - `Get` — happy path, not found
+
 - `Set` — insert and upsert
+
 - `Delete` — happy path
+
 - `FindByCharacter` — happy path, not found, skips expired
+
 - `UpdateStatus` — transitions status fields
+
 - `ReattachCAS` — returns true on success, false on race
+
 - `UpdateCursors` — partial update via `jsonb_set`
+
 - `AppendCommand` — cap enforcement
+
 - `GetCommandHistory` — returns history array
+
 - `AddConnection` / `RemoveConnection` / `CountConnections` — CRUD
+
 - `CountConnectionsByType` — filters by client type
+
 - `ListExpired` — returns sessions past expiry
 
 - [ ] **Step 2: Run to verify they fail**
@@ -965,10 +980,15 @@ Uses same pgxpool.Pool as PostgresEventStore."
 Create `internal/store/session_store_integration_test.go` with `//go:build integration` tag. Follow the pattern in `internal/store/postgres_integration_test.go`. Tests should:
 
 - Start a testcontainers PostgreSQL instance
+
 - Run migrations (including 000018)
+
 - Exercise full CRUD lifecycle
+
 - Test `ReattachCAS` concurrency (two goroutines race)
+
 - Test `ListExpired` with time-based filtering
+
 - Test `AppendCommand` cap enforcement with real Postgres array slicing
 
 - [ ] **Step 2: Run integration tests**
@@ -997,7 +1017,9 @@ This chunk migrates the `CoreServer` from the informal `grpc.SessionStore` / `gr
 **Files:**
 
 - Modify: `internal/grpc/server.go:38-102` (delete old types)
+
 - Modify: `internal/grpc/server.go:89-102` (change field type)
+
 - Modify: `internal/grpc/server.go:129-143` (update constructor)
 
 - [ ] **Step 1: Delete old types from server.go**
@@ -1355,6 +1377,7 @@ immediately. Leave events deferred to reaper on TTL expiration."
 **Files:**
 
 - Create: `internal/session/reaper.go`
+
 - Create: `internal/session/reaper_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1604,6 +1627,7 @@ on context cancellation during graceful shutdown."
 **Files:**
 
 - Modify: `cmd/holomush/core.go:48-56` (add config fields)
+
 - Modify: `internal/grpc/server.go:145-220` (use config values)
 
 - [ ] **Step 1: Add session config fields to coreConfig**
@@ -1712,7 +1736,9 @@ live-only behavior."
 **Files:**
 
 - Modify: `internal/grpc/server.go:301-382`
+
 - Reference: `internal/core/broadcaster.go` (buffer size 100)
+
 - Reference: `internal/core/store.go` (EventStore.Replay)
 
 - [ ] **Step 1: Write failing test for replay**
@@ -1964,6 +1990,7 @@ Persistence is best-effort and non-blocking."
 **Files:**
 
 - Create: `internal/auth/player_token.go`
+
 - Create: `internal/auth/player_token_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -2081,6 +2108,7 @@ expiry."
 **Files:**
 
 - Create: `internal/store/player_token_store.go`
+
 - Create: `internal/store/player_token_store_test.go`
 
 - [ ] **Step 1: Write the failing tests**
@@ -2136,6 +2164,7 @@ TTL-based expiry enforcement. Shares pgxpool with other stores."
 **Files:**
 
 - Modify: `api/proto/holomush/web/v1/web.proto`
+
 - Modify: `api/proto/holomush/core/v1/core.proto`
 
 - [ ] **Step 1: Add new RPCs and messages to web proto**
@@ -2165,7 +2194,9 @@ GetCommandHistory. Existing Login RPC kept for guest access."
 **Files:**
 
 - Modify: `internal/web/handler.go`
+
 - Modify: `internal/auth/auth_service.go`
+
 - Modify: `internal/auth/player.go:69-73`
 
 - [ ] **Step 1: Add AutoConnectMode to PlayerPreferences**
@@ -2259,6 +2290,7 @@ setting. Cross-protocol: telnet commands recorded in same session."
 **Files:**
 
 - Modify: `internal/grpc/server.go`
+
 - Modify: `internal/web/handler.go`
 
 - [ ] **Step 1: Add GetCommandHistory to CoreServer**
@@ -2344,6 +2376,7 @@ for grid presence phasing decisions."
 **Files:**
 
 - Modify: `internal/grpc/server.go` (Authenticate, Disconnect)
+
 - Modify: `internal/core/session.go` (add GridPresent field)
 
 - [ ] **Step 1: Add grid presence transitions**
@@ -2504,6 +2537,7 @@ jj commit -m "test(config): verify session config fields load correctly from YAM
 **Files:**
 
 - Create: `test/integration/session/session_persistence_suite_test.go`
+
 - Create: `test/integration/session/session_persistence_integration_test.go`
 
 - [ ] **Step 1: Create Ginkgo bootstrap**

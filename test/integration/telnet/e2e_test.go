@@ -89,7 +89,7 @@ func (c *testTelnetClient) ReadUntil(pattern string, timeout time.Duration) stri
 			return line
 		}
 	}
-	Fail(fmt.Sprintf("timed out waiting for pattern %q; lines read: %v", pattern, lines))
+	Fail(fmt.Sprintf("timed out waiting for pattern %q; lines read: %v; scanner err: %v", pattern, lines, c.scanner.Err()))
 	return ""
 }
 
@@ -213,6 +213,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		// 9. Create gRPC server
 		coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
 			grpcpkg.WithAuthenticator(guestAuth),
+			grpcpkg.WithEventStore(eventStore),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)

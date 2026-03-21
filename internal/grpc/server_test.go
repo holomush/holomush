@@ -158,9 +158,10 @@ func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
 		},
 	}
 
+	sessions := core.NewSessionManager()
 	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
-		sessions:      core.NewSessionManager(),
+		engine:        core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:      sessions,
 		authenticator: auth,
 		sessionStore:  session.NewMemStore(),
 	}
@@ -762,7 +763,7 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
+		engine:       core.NewEngine(eventStore, sessions),
 		sessions:     sessions,
 		eventStore:   eventStore,
 		sessionStore: session.NewMemStore(),
@@ -784,6 +785,33 @@ func TestCoreServer_Subscribe_InvalidSession(t *testing.T) {
 	assert.Error(t, err, "Subscribe() should return error for invalid session")
 }
 
+func TestCoreServer_Subscribe_NilEventStore(t *testing.T) {
+	sessions := core.NewSessionManager()
+
+	server := &CoreServer{
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:     sessions,
+		sessionStore: session.NewMemStore(),
+		// eventStore intentionally nil
+	}
+
+	ctx := context.Background()
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "nil-event-store",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: "any-session",
+		Streams:   []string{"location:test"},
+	}
+
+	err := server.Subscribe(req, stream)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "event store not configured")
+}
+
 func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
@@ -794,9 +822,9 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -866,9 +894,9 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -1403,9 +1431,9 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -1559,9 +1587,9 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -1867,9 +1895,9 @@ func TestCoreServer_MalformedRequest_InvalidSubscribeStreams(t *testing.T) {
 	eventStore := core.NewMemoryEventStore()
 
 	server := &CoreServer{
-		engine:      core.NewEngine(core.NewMemoryEventStore(), sessions),
-		sessions:    sessions,
-		eventStore:  eventStore,
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
 				CharacterID: charID,
@@ -2316,9 +2344,9 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	hookCallCount := 0
 	server := &CoreServer{
-		engine:      engine,
-		sessions:    sessions,
-		eventStore:  core.NewMemoryEventStore(),
+		engine:     engine,
+		sessions:   sessions,
+		eventStore: core.NewMemoryEventStore(),
 		authenticator: &mockAuthenticator{
 			authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
 				return &AuthResult{
@@ -2718,28 +2746,32 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		ID:     core.NewULID(),
 		Stream: streamName, Type: core.EventTypeSay,
 		Timestamp: time.Now().Add(-3 * time.Second),
-		Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
-		Payload: []byte(`{"message":"cursor"}`),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
+		Payload:   []byte(`{"message":"cursor"}`),
 	}
 	require.NoError(t, eventStore.Append(ctx, cursorEvent))
 
 	historicalID1 := core.NewULID()
 	historicalID2 := core.NewULID()
 	for _, ev := range []core.Event{
-		{ID: historicalID1, Stream: streamName, Type: core.EventTypeSay,
+		{
+			ID: historicalID1, Stream: streamName, Type: core.EventTypeSay,
 			Timestamp: time.Now().Add(-2 * time.Second),
-			Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-			Payload: []byte(`{"message":"missed-1"}`)},
-		{ID: historicalID2, Stream: streamName, Type: core.EventTypeSay,
+			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+			Payload:   []byte(`{"message":"missed-1"}`),
+		},
+		{
+			ID: historicalID2, Stream: streamName, Type: core.EventTypeSay,
 			Timestamp: time.Now().Add(-1 * time.Second),
-			Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor2"},
-			Payload: []byte(`{"message":"missed-2"}`)},
+			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor2"},
+			Payload:   []byte(`{"message":"missed-2"}`),
+		},
 	} {
 		require.NoError(t, eventStore.Append(ctx, ev))
 	}
 
 	server := &CoreServer{
-		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		engine:     core.NewEngine(eventStore, sessions),
 		sessions:   sessions,
 		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -2833,8 +2865,8 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	cursorEvent := core.Event{
 		ID: core.NewULID(), Stream: streamName, Type: core.EventTypeSay,
 		Timestamp: time.Now().Add(-2 * time.Second),
-		Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
-		Payload: []byte(`{"message":"cursor"}`),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
+		Payload:   []byte(`{"message":"cursor"}`),
 	}
 	require.NoError(t, eventStore.Append(ctx, cursorEvent))
 
@@ -2842,13 +2874,13 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	historicalEvent := core.Event{
 		ID: historicalID, Stream: streamName, Type: core.EventTypeSay,
 		Timestamp: time.Now().Add(-1 * time.Second),
-		Actor: core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-		Payload: []byte(`{"message":"historical"}`),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+		Payload:   []byte(`{"message":"historical"}`),
 	}
 	require.NoError(t, eventStore.Append(ctx, historicalEvent))
 
 	server := &CoreServer{
-		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		engine:     core.NewEngine(eventStore, sessions),
 		sessions:   sessions,
 		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -2909,16 +2941,14 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	replayCalled := false
 	eventStore := &mockEventStore{
 		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-			replayCalled = true
 			return nil, nil
 		},
 	}
 
 	server := &CoreServer{
-		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		engine:     core.NewEngine(eventStore, sessions),
 		sessions:   sessions,
 		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -2958,7 +2988,9 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 
-	assert.False(t, replayCalled, "replay should not be called when no cursors exist")
+	// Catch-up replay always runs (to close the LISTEN race window), but with
+	// no events in the store, nothing is sent to the client.
+	assert.Empty(t, stream.events, "no events should be sent when store is empty")
 }
 
 func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
@@ -2970,16 +3002,14 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	replayCalled := false
 	eventStore := &mockEventStore{
 		replayFunc: func(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-			replayCalled = true
 			return nil, nil
 		},
 	}
 
 	server := &CoreServer{
-		engine:     core.NewEngine(core.NewMemoryEventStore(), sessions),
+		engine:     core.NewEngine(eventStore, sessions),
 		sessions:   sessions,
 		eventStore: eventStore,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
@@ -3019,7 +3049,10 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 
-	assert.False(t, replayCalled, "replay should not be called when ReplayFromCursor is false")
+	// Catch-up replay always runs, but with ReplayFromCursor=false the cursor
+	// is zero ULID — effectively replaying from the beginning. With no events
+	// in the store, nothing is sent.
+	assert.Empty(t, stream.events, "no events should be sent when store is empty")
 }
 
 func TestEventToProto(t *testing.T) {

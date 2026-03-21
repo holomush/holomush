@@ -54,11 +54,16 @@ func (s *MemoryEventStore) Replay(_ context.Context, stream string, afterID ulid
 	// Find start index
 	startIdx := 0
 	if afterID.Compare(ulid.ULID{}) != 0 {
+		found := false
 		for i, e := range events {
 			if e.ID == afterID {
 				startIdx = i + 1
+				found = true
 				break
 			}
+		}
+		if !found {
+			return nil, nil
 		}
 	}
 

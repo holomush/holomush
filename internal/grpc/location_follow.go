@@ -102,15 +102,25 @@ func (lf *locationFollower) handleEvent(
 	lf.currentLocID = newLocID
 
 	// Switch the live broadcaster subscription to the new location stream
-	// so the client receives events from the destination room.
+	// so the client receives events from the destination location.
+	//
+	// Catch-up replay for the new stream is handled automatically: when the
+	// first notification arrives on the new stream, the live loop in
+	// Subscribe calls replayAndSend with lastSentID[newStream] == zero ULID,
+	// which replays all events from the beginning of the stream.
 	lf.switchLocationSubscription(ctx, newLocID)
 
 	return true
 }
 
-// switchLocationSubscription cancels the old location subscription and
-// subscribes to the new location stream via the event store. A relay
-// goroutine forwards notifications to the shared notifyCh.
+// switchLocationSubscription subscribes to the new location stream, then
+// cancels the old one. Subscribing first ensures the stream always has an
+// active location feed — if the new subscribe fails, the old stays alive
+// and the error terminates the stream via errCh.
+//
+// Catch-up replay for the new location is handled by the caller: the first
+// LISTEN notification triggers replayAndSend with lastSentID[newStream]=zero,
+// replaying from the beginning of the destination stream.
 func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newLocID ulid.ULID) {
 	if lf.eventStore == nil || lf.notifyCh == nil {
 		return
@@ -118,27 +128,29 @@ func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newL
 
 	newStreamName := world.LocationStream(newLocID)
 
-	// Cancel old subscription.
-	if lf.locCancel != nil {
-		lf.locCancel()
-	}
-
-	// Subscribe to new location stream.
+	// Subscribe to the new stream BEFORE cancelling the old one.
 	locCtx, locCancel := context.WithCancel(ctx)
-	lf.locCancel = locCancel
-	lf.locStreamName = newStreamName
-
 	eventCh, subErrCh, err := lf.eventStore.Subscribe(locCtx, newStreamName)
 	if err != nil {
+		locCancel()
 		slog.WarnContext(ctx, "location-following: subscribe failed",
 			"stream", newStreamName, "error", err)
-		locCancel()
+		select {
+		case lf.errCh <- oops.With("stream", newStreamName).Wrap(err):
+		default:
+		}
 		return
 	}
 
+	// New subscription succeeded — tear down the old one.
+	if lf.locCancel != nil {
+		lf.locCancel()
+	}
+	lf.locCancel = locCancel
+	lf.locStreamName = newStreamName
+
 	startNotificationRelay(locCtx, newStreamName, eventCh, lf.notifyCh)
 
-	// Forward errors.
 	go func() {
 		select {
 		case e, ok := <-subErrCh:
@@ -151,10 +163,6 @@ func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newL
 		case <-locCtx.Done():
 		}
 	}()
-
-	slog.DebugContext(ctx, "location-following: subscribed to new location stream",
-		"stream", newStreamName,
-	)
 }
 
 // buildLocationState queries the world service for location data and builds
@@ -239,4 +247,3 @@ func convertExits(exits []*world.Exit) []core.LocationStateExit {
 	}
 	return result
 }
-
