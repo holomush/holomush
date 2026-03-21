@@ -48,7 +48,7 @@ cd holomush
 ### Install Development Tools
 
 ```bash
-task tools
+task setup
 ```
 
 This installs linters, formatters, and other development dependencies.
@@ -172,10 +172,10 @@ After connecting with `connect testuser password`:
 task test
 
 # Tests with coverage report
-task test:coverage
+task test:cover
 
 # Integration tests (requires Docker)
-task test:integration
+task test:int
 ```
 
 ## Development Workflow

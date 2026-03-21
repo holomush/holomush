@@ -39,17 +39,16 @@ A modern MUSH platform combining classic text-based multiplayer gameplay with co
 ### Build and Run
 
 ```bash
-# Install development tools
-task tools
+# Install tools and git hooks
+task setup
 
-# Build the server
-task build
-
-# Run in development mode (in-memory store)
+# Start full stack (Postgres + core + gateway in Docker)
 task dev
 
 # Connect via telnet
-telnet localhost 4000
+telnet localhost 4201
+
+# Or visit the web client at http://localhost:8080/terminal
 ```
 
 ### Test Credentials
@@ -78,7 +77,7 @@ telnet localhost 4000
 - **Lua plugins** (gopher-lua) with go-plugin for complex extensions (planned)
 - **PostgreSQL** for production data (in-memory store available for development)
 - **ABAC engine** with Cedar-inspired DSL, in-memory policy cache, pg_notify invalidation
-- **SvelteKit PWA** for web client (planned)
+- **SvelteKit web client** with terminal UI, ANSI rendering, and session persistence
 
 See [Architecture](site/docs/contributors/architecture.md) for details.
 
@@ -91,7 +90,7 @@ This project uses [beads](https://github.com/steveyegge/beads) for task tracking
 task test
 
 # Run tests with coverage
-task test:coverage
+task test:cover
 
 # Lint code
 task lint

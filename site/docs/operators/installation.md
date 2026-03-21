@@ -231,7 +231,7 @@ The binary is created at `./holomush`.
 For development, install additional tooling:
 
 ```bash
-task tools
+task setup
 ```
 
 ## Systemd Service

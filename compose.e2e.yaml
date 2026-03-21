@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# E2E test overlay. Adds a Playwright container that runs tests against
+# the gateway over the internal Docker network — no host port mapping needed.
+#
+# Usage: task test:e2e
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: holomush_test
+
+  core:
+    environment:
+      DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush_test?sslmode=disable
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9100/healthz/readiness || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  gateway:
+    ports: !reset []
+    depends_on:
+      core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/ || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.58.2-noble
+    working_dir: /work
+    volumes:
+      - ./web:/work
+    environment:
+      PLAYWRIGHT_BASE_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    profiles: ["test"]

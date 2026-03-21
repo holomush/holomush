@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Local development stack. Build with: task docker:build
+# Run with: task docker:up
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: holomush
+      POSTGRES_PASSWORD: holomush
+      POSTGRES_DB: holomush
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holomush"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  core:
+    image: holomush
+    command: ["core", "--log-format", "text"]
+    environment:
+      DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
+    volumes:
+      - certs:/home/holomush/.config/holomush/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9100/healthz/readiness || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  gateway:
+    image: holomush
+    command: ["gateway", "--log-format", "text", "--core-addr", "core:9000"]
+    volumes:
+      - certs:/home/holomush/.config/holomush/certs:ro
+    ports:
+      - "8080:8080"
+      - "4201:4201"
+    depends_on:
+      core:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  certs:

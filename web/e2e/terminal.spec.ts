@@ -85,6 +85,47 @@ test.describe('Terminal UI', () => {
     await context2.close();
   });
 
+  test('session survives page reload', async ({ page }) => {
+    await page.goto('/terminal');
+    await page.click('text=Connect as Guest');
+    await expect(page.locator('.terminal-layout')).toBeVisible();
+
+    // Capture the character name before reload
+    const nameBefore = await page.locator('.character').textContent();
+
+    // Reload the page
+    await page.reload();
+
+    // Should reconnect automatically (no login screen)
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // Same character name
+    const nameAfter = await page.locator('.character').textContent();
+    expect(nameAfter).toBe(nameBefore);
+  });
+
+  test('disconnect clears session so reload shows login', async ({ page }) => {
+    await page.goto('/terminal');
+    await page.click('text=Connect as Guest');
+    await expect(page.locator('.terminal-layout')).toBeVisible();
+
+    // Send quit command to disconnect
+    const input = page.locator('textarea');
+    await input.fill('quit');
+    await input.press('Enter');
+
+    // Should return to login screen
+    await expect(page.locator('text=Connect as Guest')).toBeVisible({ timeout: 5000 });
+
+    // Verify sessionStorage was actually cleared
+    const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
+    expect(session).toBeNull();
+
+    // Reload — should still show login (session was cleared)
+    await page.reload();
+    await expect(page.locator('text=Connect as Guest')).toBeVisible();
+  });
+
   test('command history with up/down arrows', async ({ page }) => {
     await page.goto('/terminal');
     await page.click('text=Connect as Guest');

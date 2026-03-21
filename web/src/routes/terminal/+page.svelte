@@ -17,6 +17,7 @@
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
 
   const client = createClient(WebService, transport);
+  const SESSION_KEY = 'holomush-session';
 
   let sessionId = $state('');
   let characterName = $state('');
@@ -24,6 +25,14 @@
   let error = $state('');
   let abortController: AbortController | null = null;
   let isMobile = $state(false);
+
+  function saveSession() {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, characterName }));
+  }
+
+  function clearSession() {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
 
   function onKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.key === 'b') {
@@ -40,6 +49,21 @@
     checkMobile();
     window.addEventListener('resize', checkMobile);
     window.addEventListener('keydown', onKeydown);
+
+    const saved = sessionStorage.getItem(SESSION_KEY);
+    if (saved) {
+      try {
+        const { sessionId: sid, characterName: name } = JSON.parse(saved);
+        if (sid) {
+          sessionId = sid;
+          characterName = name;
+          connected = true;
+          startStreaming();
+        }
+      } catch {
+        clearSession();
+      }
+    }
   });
 
   onDestroy(() => {
@@ -58,6 +82,7 @@
       sessionId = resp.sessionId;
       characterName = resp.characterName;
       connected = true;
+      saveSession();
       startStreaming();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Login failed';
@@ -79,7 +104,7 @@
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
         connected = false;
-        error = 'Connection lost. Refresh to reconnect.';
+        error = 'Connection lost. Click "Reconnect" or refresh the page.';
       }
     }
   }
@@ -104,8 +129,15 @@
     try {
       await client.disconnect({ sessionId });
     } catch { /* best effort */ }
+    clearSession();
     connected = false;
     sessionId = '';
+  }
+
+  async function reconnect() {
+    error = '';
+    connected = true;
+    startStreaming();
   }
 </script>
 
@@ -113,7 +145,12 @@
   <div class="login-screen">
     <h1>HoloMUSH</h1>
     {#if error}<p class="error">{error}</p>{/if}
-    <button onclick={login}>Connect as Guest</button>
+    {#if sessionId}
+      <button onclick={reconnect}>Reconnect</button>
+      <button class="secondary" onclick={() => { clearSession(); sessionId = ''; error = ''; }}>New Session</button>
+    {:else}
+      <button onclick={login}>Connect as Guest</button>
+    {/if}
   </div>
 {:else}
   <div class="terminal-layout" style={themeToCssVars($activeTheme.colors)}>
@@ -160,6 +197,11 @@
     font-size: 14px;
   }
   .error { color: #e57373; }
+  .login-screen .secondary {
+    background: transparent;
+    color: #888;
+    border: 1px solid #444;
+  }
   .terminal-layout {
     display: flex;
     flex-direction: column;

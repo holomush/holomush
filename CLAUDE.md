@@ -252,11 +252,11 @@ task license:add     # Add missing headers
 
 ### Coverage Requirements
 
-| Requirement                       | Description                                           |
-| --------------------------------- | ----------------------------------------------------- |
-| **MUST** maintain >80% coverage   | Per-package coverage must exceed 80%                  |
-| **MUST** run `task test:coverage` | To verify coverage before completing work             |
-| **SHOULD** target 90%+ coverage   | For core packages (`internal/core`, `internal/world`) |
+| Requirement                      | Description                                           |
+| -------------------------------- | ----------------------------------------------------- |
+| **MUST** maintain >80% coverage  | Per-package coverage must exceed 80%                  |
+| **MUST** run `task test:cover`   | To verify coverage before completing work             |
+| **SHOULD** target 90%+ coverage  | For core packages (`internal/core`, `internal/world`) |
 
 ### Test Files
 
