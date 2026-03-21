@@ -43,6 +43,7 @@
 **Files:**
 
 - Modify: `internal/access/policy/attribute/plugin_provider.go`
+
 - Modify: `internal/access/policy/attribute/plugin_provider_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -172,6 +173,7 @@ feat(plugin): Manager implements attribute.PluginRegistry
 **Files:**
 
 - Create: `internal/access/policy/pglistener.go`
+
 - Create: `internal/access/policy/pglistener_test.go`
 
 - [ ] **Step 1: Write the test**
@@ -354,6 +356,7 @@ feat(policy): add PgListener for LISTEN/NOTIFY cache invalidation
 **Files:**
 
 - Create: `internal/access/setup.go`
+
 - Create: `internal/access/setup_test.go`
 
 - [ ] **Step 1: Write the test**

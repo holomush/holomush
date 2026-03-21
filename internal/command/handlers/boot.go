@@ -59,7 +59,7 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Notify the target before disconnecting them
 	message := formatBootMessage(exec.CharacterName(), reason, isSelfBoot)
 	stream := "session:" + targetCharID.String()
-	exec.Services().BroadcastSystemMessage(stream, message)
+	exec.Services().BroadcastSystemMessage(ctx, stream, message)
 
 	// End the target's session
 	if err := exec.Services().Session().EndSession(targetCharID); err != nil {

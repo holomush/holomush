@@ -32,11 +32,10 @@ import (
 // allowing the dispatcher to proceed with command execution.
 func stubServices() *Services {
 	svc, _ := NewServices(ServicesConfig{
-		World:       &world.Service{},
-		Session:     &stubSessionService{},
-		Engine:      policytest.AllowAllEngine(),
-		Events:      &stubEventStore{},
-		Broadcaster: &core.Broadcaster{},
+		World:   &world.Service{},
+		Session: &stubSessionService{},
+		Engine:  policytest.AllowAllEngine(),
+		Events:  &stubEventStore{},
 	})
 	return svc
 }

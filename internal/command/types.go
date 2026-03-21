@@ -55,14 +55,6 @@ type WorldService interface {
 	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
 }
 
-// EventBroadcaster defines the broadcast operations required by command handlers.
-// This interface allows handlers to send events without depending on the concrete
-// Broadcaster implementation.
-type EventBroadcaster interface {
-	// Broadcast sends an event to all subscribers of its stream.
-	Broadcast(event core.Event)
-}
-
 // AliasWriter defines write-only persistence operations for alias management.
 // This is a narrow interface containing only the Set/Delete operations needed
 // by command handlers. For the full read+write interface, see store.AliasRepository.
@@ -84,8 +76,7 @@ type AliasWriter interface {
 
 // Compile-time interface checks to ensure concrete types implement the interfaces.
 var (
-	_ WorldService     = (*world.Service)(nil)
-	_ EventBroadcaster = (*core.Broadcaster)(nil)
+	_ WorldService = (*world.Service)(nil)
 )
 
 // CommandHandler is the function signature for command handlers.
@@ -301,7 +292,6 @@ type ServicesConfig struct {
 	Session          core.SessionService      // session management
 	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	Events           core.EventStore          // event persistence
-	Broadcaster      EventBroadcaster         // event broadcasting
 	AliasCache       *AliasCache              // alias management (optional)
 	AliasRepo        AliasWriter              // alias persistence (optional, for alias handlers)
 	Registry         *Registry                // command registry (optional)
@@ -321,7 +311,6 @@ type Services struct {
 	session          core.SessionService      // session management
 	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	events           core.EventStore          // event persistence
-	broadcaster      EventBroadcaster         // event broadcasting
 	aliasCache       *AliasCache              // alias management (optional, for alias commands)
 	aliasRepo        AliasWriter              // alias persistence (optional, for alias handlers)
 	registry         *Registry                // command registry (optional, for alias shadow detection)
@@ -339,9 +328,6 @@ func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }
 
 // Events returns the event store for event persistence.
 func (s *Services) Events() core.EventStore { return s.events }
-
-// Broadcaster returns the event broadcaster for broadcasting events.
-func (s *Services) Broadcaster() EventBroadcaster { return s.broadcaster }
 
 // AliasCache returns the alias cache for alias management (may be nil).
 func (s *Services) AliasCache() *AliasCache { return s.aliasCache }
@@ -378,11 +364,6 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 			With("service", "Events").
 			Errorf("Events service is required")
 	}
-	if cfg.Broadcaster == nil {
-		return nil, oops.Code(CodeNilService).
-			With("service", "Broadcaster").
-			Errorf("Broadcaster service is required")
-	}
 	if cfg.PropertyRegistry == nil {
 		cfg.PropertyRegistry = property.SharedRegistry()
 	}
@@ -392,7 +373,6 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 		session:          cfg.Session,
 		engine:           cfg.Engine,
 		events:           cfg.Events,
-		broadcaster:      cfg.Broadcaster,
 		aliasCache:       cfg.AliasCache,
 		aliasRepo:        cfg.AliasRepo,
 		registry:         cfg.Registry,
@@ -400,14 +380,12 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 	}, nil
 }
 
-// BroadcastSystemMessage creates and broadcasts a system event with the given message.
+// BroadcastSystemMessage creates and appends a system event with the given message.
 // This is a convenience method for handlers that need to send system messages.
-// If the Broadcaster is nil, this method logs a debug message and returns.
-func (s *Services) BroadcastSystemMessage(stream, message string) {
-	if s.broadcaster == nil {
-		slog.Debug("BroadcastSystemMessage: broadcaster not configured, message not delivered",
-			"stream", stream,
-			"message_length", len(message))
+// If the event store is nil, this method logs a debug message and returns.
+func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message string) {
+	if s.events == nil {
+		slog.Debug("BroadcastSystemMessage: event store not configured")
 		return
 	}
 
@@ -428,7 +406,10 @@ func (s *Services) BroadcastSystemMessage(stream, message string) {
 		Payload: payload,
 	}
 
-	s.broadcaster.Broadcast(event)
+	if err := s.events.Append(ctx, event); err != nil {
+		slog.WarnContext(ctx, "BroadcastSystemMessage: failed to append event",
+			"stream", stream, "error", err)
+	}
 }
 
 // NewTestServices creates a Services instance for testing purposes.
@@ -444,7 +425,6 @@ func NewTestServices(cfg ServicesConfig) *Services {
 		session:          cfg.Session,
 		engine:           cfg.Engine,
 		events:           cfg.Events,
-		broadcaster:      cfg.Broadcaster,
 		aliasCache:       cfg.AliasCache,
 		aliasRepo:        cfg.AliasRepo,
 		registry:         cfg.Registry,

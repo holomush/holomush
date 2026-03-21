@@ -334,6 +334,13 @@ store := mocks.NewMockEventStore(t)
 store.EXPECT().Append(mock.Anything, mock.Anything).Return(nil)
 ```
 
+### MemoryEventStore
+
+MemoryEventStore is for **unit tests only**. It MUST NOT be used in integration
+tests, E2E tests, or production code. Integration and E2E tests MUST use
+PostgresEventStore via testcontainers. The `//go:build !integration` tag on
+`store_memory.go` enforces this at compile time.
+
 ### Integration Tests with Ginkgo/Gomega (BDD)
 
 | Requirement                           | Description                                |
@@ -448,7 +455,7 @@ test/                # Integration tests
 ```go
 type EventStore interface {
     Append(ctx context.Context, event Event) error
-    Subscribe(ctx context.Context, stream string, afterID ulid.ULID) (<-chan Event, error)
+    Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
     Replay(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error)
     LastEventID(ctx context.Context, stream string) (ulid.ULID, error)
 }

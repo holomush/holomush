@@ -64,7 +64,7 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	accessControl := worldtest.NewMockAccessPolicyEngine(t)
-	broadcaster := core.NewBroadcaster()
+	store := core.NewMemoryEventStore()
 
 	accessControl.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(executorID.String())}).
@@ -86,9 +86,9 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 		Args:          "Admin",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			World:       worldService,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			World:   worldService,
+			Events:  store,
 		}),
 	})
 
@@ -120,10 +120,7 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	accessControl := worldtest.NewMockAccessPolicyEngine(t)
-	broadcaster := core.NewBroadcaster()
-
-	// Subscribe to capture the notification event
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	accessControl.EXPECT().
 		Evaluate(mock.Anything, types.AccessRequest{Subject: access.CharacterSubject(executorID.String()), Action: "read", Resource: access.CharacterResource(executorID.String())}).
@@ -145,23 +142,22 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 		Args:          "Admin going to bed",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			World:       worldService,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			World:   worldService,
+			Events:  store,
 		}),
 	})
 
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify notification was sent
-	select {
-	case event := <-ch:
-		assert.Equal(t, core.EventTypeSystem, event.Type)
-		assert.Contains(t, string(event.Payload), "going to bed")
-	default:
-		t.Error("Expected notification event to be broadcast")
-	}
+	// Verify notification event was appended to session stream
+	events, replayErr := store.Replay(context.Background(), "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.EventTypeSystem, event.Type)
+	assert.Contains(t, string(event.Payload), "going to bed")
 }
 
 func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
@@ -478,7 +474,7 @@ func TestBootHandler_Success(t *testing.T) {
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	accessControl := worldtest.NewMockAccessPolicyEngine(t)
-	broadcaster := core.NewBroadcaster()
+	store := core.NewMemoryEventStore()
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
@@ -509,10 +505,10 @@ func TestBootHandler_Success(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			World:       worldService,
-			Engine:      policytest.AllowAllEngine(),
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			World:   worldService,
+			Engine:  policytest.AllowAllEngine(),
+			Events:  store,
 		}),
 	})
 
@@ -557,10 +553,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	accessControl := worldtest.NewMockAccessPolicyEngine(t)
-	broadcaster := core.NewBroadcaster()
-
-	// Subscribe to capture the notification event
-	ch := broadcaster.Subscribe("session:" + targetID.String())
+	store := core.NewMemoryEventStore()
 
 	// Session iteration order is non-deterministic, so executor lookup may or may not happen
 	accessControl.EXPECT().
@@ -591,10 +584,10 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 		Args:          "Troublemaker Being disruptive",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			World:       worldService,
-			Engine:      policytest.AllowAllEngine(),
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			World:   worldService,
+			Engine:  policytest.AllowAllEngine(),
+			Events:  store,
 		}),
 	})
 
@@ -611,15 +604,14 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 	assert.Contains(t, output, "booted")
 	assert.Contains(t, output, "Being disruptive")
 
-	// Verify notification was sent to target
-	select {
-	case event := <-ch:
-		assert.Equal(t, core.EventTypeSystem, event.Type)
-		assert.Contains(t, string(event.Payload), "Being disruptive")
-		assert.Contains(t, string(event.Payload), "Admin")
-	default:
-		t.Error("Expected notification event to be broadcast to target")
-	}
+	// Verify notification event was appended to target's session stream
+	events, replayErr := store.Replay(context.Background(), "session:"+targetID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.EventTypeSystem, event.Type)
+	assert.Contains(t, string(event.Payload), "Being disruptive")
+	assert.Contains(t, string(event.Payload), "Admin")
 }
 
 func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {

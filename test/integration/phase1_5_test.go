@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
@@ -32,6 +33,29 @@ import (
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// noopEventStore is a stub EventStore for tests that don't exercise event functionality.
+type noopEventStore struct{}
+
+func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (n *noopEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (n *noopEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
+	return ulid.ULID{}, nil
+}
+
+func (n *noopEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	events := make(chan ulid.ULID)
+	errs := make(chan error)
+	go func() {
+		<-ctx.Done()
+		close(events)
+		close(errs)
+	}()
+	return events, errs, nil
+}
 
 // testEnv holds all the resources needed for integration tests.
 type testEnv struct {
@@ -274,13 +298,13 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := core.NewMemoryEventStore()
-			broadcaster := core.NewBroadcaster()
+			eventStore := &noopEventStore{}
 			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions, broadcaster)
+			engine := core.NewEngine(eventStore, sessions)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -345,13 +369,13 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := core.NewMemoryEventStore()
-			broadcaster := core.NewBroadcaster()
+			eventStore := &noopEventStore{}
 			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions, broadcaster)
+			engine := core.NewEngine(eventStore, sessions)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 
@@ -509,12 +533,12 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
-			eventStore := core.NewMemoryEventStore()
-			broadcaster := core.NewBroadcaster()
+			eventStore := &noopEventStore{}
 			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions, broadcaster)
+			engine := core.NewEngine(eventStore, sessions)
 
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore())
+			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
 

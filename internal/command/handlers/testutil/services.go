@@ -21,10 +21,9 @@ type ServicesBuilder struct {
 func NewServicesBuilder() *ServicesBuilder {
 	return &ServicesBuilder{
 		config: command.ServicesConfig{
-			Session:     core.NewSessionManager(),
-			Engine:      policytest.AllowAllEngine(),
-			Events:      core.NewMemoryEventStore(),
-			Broadcaster: core.NewBroadcaster(),
+			Session: core.NewSessionManager(),
+			Engine:  policytest.AllowAllEngine(),
+			Events:  core.NewMemoryEventStore(),
 		},
 	}
 }
@@ -58,12 +57,6 @@ func (b *ServicesBuilder) WithEngine(engine types.AccessPolicyEngine) *ServicesB
 // WithEvents sets the event store.
 func (b *ServicesBuilder) WithEvents(events core.EventStore) *ServicesBuilder {
 	b.config.Events = events
-	return b
-}
-
-// WithBroadcaster sets the event broadcaster.
-func (b *ServicesBuilder) WithBroadcaster(broadcaster command.EventBroadcaster) *ServicesBuilder {
-	b.config.Broadcaster = broadcaster
 	return b
 }
 

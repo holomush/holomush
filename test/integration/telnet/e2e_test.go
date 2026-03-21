@@ -89,7 +89,7 @@ func (c *testTelnetClient) ReadUntil(pattern string, timeout time.Duration) stri
 			return line
 		}
 	}
-	Fail(fmt.Sprintf("timed out waiting for pattern %q; lines read: %v", pattern, lines))
+	Fail(fmt.Sprintf("timed out waiting for pattern %q; lines read: %v; scanner err: %v", pattern, lines, c.scanner.Err()))
 	return ""
 }
 
@@ -204,16 +204,16 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 		// 7. Create core components
 		sessions := core.NewSessionManager()
-		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		// 8. Create GuestAuthenticator
 		startLocation = ulid.Make()
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 9. Create gRPC server
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, session.NewMemStore(),
+		coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
 			grpcpkg.WithAuthenticator(guestAuth),
+			grpcpkg.WithEventStore(eventStore),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)

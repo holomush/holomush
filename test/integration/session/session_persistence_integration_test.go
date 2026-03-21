@@ -95,14 +95,13 @@ var _ = Describe("Session Persistence", func() {
 		// 5. Create core components
 		startLocation = ulid.Make()
 		sessions := core.NewSessionManager()
-		broadcaster := core.NewBroadcaster()
-		engine := core.NewEngine(eventStore, sessions, broadcaster)
+		engine := core.NewEngine(eventStore, sessions)
 
 		// 6. Create GuestAuthenticator
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 7. Create CoreServer with PostgresSessionStore and session defaults
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, broadcaster, sessionStore,
+		coreServer := grpcpkg.NewCoreServer(engine, sessions, sessionStore,
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
 			grpcpkg.WithSessionDefaults(grpcpkg.SessionDefaults{
@@ -198,10 +197,17 @@ var _ = Describe("Session Persistence", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Read the say event from the stream to advance the cursor
-			ev, err := stream.Recv()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ev.Type).To(Equal("say"))
+			// Read events until the say event to advance the cursor.
+			// With LISTEN/NOTIFY, arrive events from authentication may be
+			// delivered before the say (they were silently dropped by the
+			// old broadcaster).
+			var ev *corev1.SubscribeResponse
+			Eventually(func() string {
+				var recvErr error
+				ev, recvErr = stream.Recv()
+				Expect(recvErr).NotTo(HaveOccurred())
+				return ev.Type
+			}).Should(Equal("say"))
 
 			// Cancel the subscription (simulates disconnect)
 			subCancel()

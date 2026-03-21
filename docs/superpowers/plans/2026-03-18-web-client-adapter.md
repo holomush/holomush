@@ -92,6 +92,7 @@ all callers (gRPC server, telnet handler).
 **Files:**
 
 - Create: `internal/core/character.go`
+
 - Create: `internal/core/character_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -173,6 +174,7 @@ Replaces loose primitive parameters in engine method signatures."
 **Files:**
 
 - Modify: `internal/core/engine.go:15-162` (payload structs + all 4 Handle\* signatures)
+
 - Modify: `internal/core/engine_test.go` (all ~12 Handle\* call sites)
 
 - [ ] **Step 1: Update engine tests to use CharacterRef**
@@ -293,7 +295,9 @@ character_name field for protocol adapter display."
 **Files:**
 
 - Modify: `internal/grpc/server.go:187-196,282,288,405` (build CharacterRef from SessionInfo)
+
 - Modify: `internal/telnet/gateway_handler.go:304-328` (use character\_name from enriched payloads)
+
 - Modify: `internal/telnet/gateway_handler_test.go` (update test payloads + expected output)
 
 - [ ] **Step 1: Update gRPC server to build CharacterRef**
@@ -415,6 +419,7 @@ instead of truncated actor ULIDs for say/pose display."
 **Files:**
 
 - Create: `api/proto/holomush/web/v1/web.proto`
+
 - Reference: `api/proto/holomush/core/v1/core.proto`
 
 - [ ] **Step 1: Create the proto file**
@@ -510,7 +515,9 @@ Run: `task proto`
 Expected: New files generated in `pkg/proto/holomush/web/v1/`:
 
 - `web.pb.go` — protobuf message types
+
 - `web_grpc.pb.go` — standard gRPC server interface (unused, but harmless)
+
 - `webv1connect/web.connect.go` — ConnectRPC handler interface (`WebServiceHandler`, `NewWebServiceHandler`)
 
 - [ ] **Step 5: Verify generated code compiles**
@@ -2027,6 +2034,7 @@ No UI yet — just the build pipeline foundation."
 **Files:**
 
 - Create: `web/buf.gen.yaml`
+
 - Install: `@connectrpc/protoc-gen-connect-es`, `@bufbuild/protoc-gen-es` as dev deps
 
 - [ ] **Step 1: Install ConnectRPC and buf dependencies**
@@ -2079,6 +2087,7 @@ browser-to-gateway RPC calls."
 **Files:**
 
 - Create: `web/src/lib/transport.ts`
+
 - Modify: `web/src/routes/+page.svelte`
 
 - [ ] **Step 1: Create ConnectRPC transport**
@@ -2231,6 +2240,7 @@ No styling — visual design is sub-spec 2."
 **Files:**
 
 - Modify: `Taskfile.yaml`
+
 - Modify: `.gitignore` (add `web/node_modules/`, `web/build/`, `web/.svelte-kit/`)
 
 - [ ] **Step 1: Add .gitignore entries**
@@ -2437,6 +2447,7 @@ this sub-spec."
 **Files:**
 
 - Modify: `site/docs/operators/configuration.md` (if it exists)
+
 - Reference: `docs/specs/2026-03-18-web-client-adapter-design.md:390-397`
 
 - [ ] **Step 1: Check if configuration docs exist**

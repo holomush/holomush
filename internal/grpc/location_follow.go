@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -28,21 +27,18 @@ const systemSubjectID = "system"
 
 // locationFollower tracks the character's current location and handles
 // location-following when move events are detected. It also manages
-// dynamic broadcaster subscriptions so the client receives events
+// dynamic eventStore subscriptions so the client receives events
 // from the new location after a move.
 type locationFollower struct {
-	characterID  ulid.ULID
-	currentLocID ulid.ULID
-	worldQuerier WorldQuerier
-	sessionStore session.Store
-
-	// broadcaster, locCh, and locRelay enable dynamic subscription switching.
-	// When the character moves, the old location stream is unsubscribed
-	// and a new one is subscribed. Events flow: locCh -> locRelay -> merged.
-	broadcaster   *core.Broadcaster
+	characterID   ulid.ULID
+	currentLocID  ulid.ULID
+	worldQuerier  WorldQuerier
+	sessionStore  session.Store
+	eventStore    core.EventStore
 	locStreamName string
-	locCh         chan core.Event
-	locRelay      chan core.Event
+	locCancel     context.CancelFunc
+	notifyCh      chan<- streamNotification
+	errCh         chan<- error
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
@@ -106,62 +102,65 @@ func (lf *locationFollower) handleEvent(
 	lf.currentLocID = newLocID
 
 	// Switch the live broadcaster subscription to the new location stream
-	// so the client receives events from the destination room.
+	// so the client receives events from the destination location.
+	//
+	// Catch-up replay for the new stream is handled automatically: when the
+	// first notification arrives on the new stream, the live loop in
+	// Subscribe calls replayAndSend with lastSentID[newStream] == zero ULID,
+	// which replays all events from the beginning of the stream.
 	lf.switchLocationSubscription(ctx, newLocID)
 
 	return true
 }
 
-// switchLocationSubscription unsubscribes from the old location stream and
-// subscribes to the new one. A new relay goroutine is started to forward
-// events from the new broadcaster channel into the shared locRelay channel,
-// which feeds into the merged fan-in.
+// switchLocationSubscription subscribes to the new location stream, then
+// cancels the old one. Subscribing first ensures the stream always has an
+// active location feed — if the new subscribe fails, the old stays alive
+// and the error terminates the stream via errCh.
+//
+// Catch-up replay for the new location is handled by the caller: the first
+// LISTEN notification triggers replayAndSend with lastSentID[newStream]=zero,
+// replaying from the beginning of the destination stream.
 func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newLocID ulid.ULID) {
-	if lf.broadcaster == nil || lf.locRelay == nil {
+	if lf.eventStore == nil || lf.notifyCh == nil {
 		return
 	}
 
 	newStreamName := world.LocationStream(newLocID)
 
-	// Unsubscribe from old location stream (closes old channel, which
-	// causes the old relay goroutine to exit).
-	if lf.locStreamName != "" && lf.locCh != nil {
-		slog.DebugContext(ctx, "location-following: unsubscribing from old location stream",
-			"old_stream", lf.locStreamName,
-			"new_stream", newStreamName,
-		)
-		lf.broadcaster.Unsubscribe(lf.locStreamName, lf.locCh)
+	// Subscribe to the new stream BEFORE cancelling the old one.
+	locCtx, locCancel := context.WithCancel(ctx)
+	eventCh, subErrCh, err := lf.eventStore.Subscribe(locCtx, newStreamName)
+	if err != nil {
+		locCancel()
+		slog.WarnContext(ctx, "location-following: subscribe failed",
+			"stream", newStreamName, "error", err)
+		select {
+		case lf.errCh <- oops.With("stream", newStreamName).Wrap(err):
+		default:
+		}
+		return
 	}
 
-	// Subscribe to new location stream and start relay goroutine.
+	// New subscription succeeded — tear down the old one.
+	if lf.locCancel != nil {
+		lf.locCancel()
+	}
+	lf.locCancel = locCancel
 	lf.locStreamName = newStreamName
-	lf.locCh = lf.broadcaster.Subscribe(newStreamName)
-	startLocRelay(ctx, lf.locCh, lf.locRelay)
 
-	slog.DebugContext(ctx, "location-following: subscribed to new location stream",
-		"stream", newStreamName,
-	)
-}
+	startNotificationRelay(locCtx, newStreamName, eventCh, lf.notifyCh)
 
-// startLocRelay starts a goroutine that copies events from a broadcaster
-// channel (locCh) into the relay channel that feeds the merged fan-in.
-// The goroutine exits when locCh is closed (by Unsubscribe) or ctx is done.
-func startLocRelay(ctx context.Context, locCh <-chan core.Event, relay chan<- core.Event) {
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case ev, ok := <-locCh:
-				if !ok {
-					return
-				}
+		select {
+		case e, ok := <-subErrCh:
+			if ok && e != nil {
 				select {
-				case relay <- ev:
-				case <-ctx.Done():
-					return
+				case lf.errCh <- e:
+				default:
 				}
 			}
+		case <-locCtx.Done():
 		}
 	}()
 }
@@ -247,64 +246,4 @@ func convertExits(exits []*world.Exit) []core.LocationStateExit {
 		})
 	}
 	return result
-}
-
-// forwardLiveEventsWithLocationFollow reads from the merged channel and sends
-// events to the client stream. Location events arrive via the locRelay channel
-// which is part of merged. When a move event is detected for the session's
-// character, it sends a synthetic location_state and switches the room
-// subscription so subsequent events come from the new location.
-func (s *CoreServer) forwardLiveEventsWithLocationFollow(
-	ctx context.Context,
-	info *session.Info,
-	merged <-chan core.Event,
-	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
-	requestID string,
-	sessionID string,
-	lf *locationFollower,
-) error {
-	for {
-		select {
-		case <-ctx.Done():
-			slog.DebugContext(ctx, "subscription ended",
-				"request_id", requestID,
-				"session_id", sessionID,
-				"reason", ctx.Err(),
-			)
-			if ctx.Err() == context.Canceled {
-				return nil // normal client disconnect
-			}
-			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", sessionID).Wrap(ctx.Err())
-
-		case event, ok := <-merged:
-			if !ok {
-				return nil
-			}
-
-			// Skip move events from the character stream that duplicate the
-			// location stream event. The move event is emitted to both the
-			// destination location stream and the character stream. Only
-			// forward the one from the location stream to avoid duplicates.
-			if event.Type == core.EventTypeMove && strings.HasPrefix(event.Stream, world.StreamPrefixCharacter) {
-				// Handle location-following on the character stream copy.
-				// Only skip forwarding if the location_state was sent successfully.
-				if lf.handleEvent(ctx, event, stream) {
-					continue
-				}
-			}
-
-			if err := stream.Send(eventToProto(event)); err != nil {
-				slog.WarnContext(ctx, "failed to send event",
-					"request_id", requestID,
-					"session_id", sessionID,
-					"event_id", event.ID.String(),
-					"error", err,
-				)
-				return oops.Code("SEND_FAILED").With("session_id", sessionID).With("event_id", event.ID.String()).Wrap(err)
-			}
-
-			s.sessions.UpdateCursor(info.CharacterID, event.Stream, event.ID)
-			s.persistCursorAsync(sessionID, event.Stream, event.ID)
-		}
-	}
 }

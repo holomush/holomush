@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,18 +24,17 @@ import (
 // See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
 func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
+	ctx := context.Background()
 	executor := testutil.AdminPlayer()
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
-	broadcaster := core.NewBroadcaster()
-	// Subscribe to system stream to capture broadcast
-	ch := broadcaster.Subscribe("system")
+	store := core.NewMemoryEventStore()
 
 	services := testutil.NewServicesBuilder().
 		WithEngine(accessControl).
-		WithBroadcaster(broadcaster).
+		WithEvents(store).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
 		WithCharacter(executor).
@@ -42,38 +42,37 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 		WithServices(services).
 		Build()
 
-	err := ShutdownHandler(context.Background(), exec)
+	err := ShutdownHandler(ctx, exec)
 
 	// Should return ErrShutdownRequested sentinel
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))
 
-	// Verify broadcast warning was sent
-	select {
-	case event := <-ch:
-		assert.Equal(t, core.EventTypeSystem, event.Type)
-		assert.Contains(t, string(event.Payload), "[SHUTDOWN]")
-		assert.Contains(t, string(event.Payload), "NOW")
-	default:
-		t.Error("Expected shutdown warning to be broadcast")
-	}
+	// Verify system event was appended
+	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.EventTypeSystem, event.Type)
+	assert.Contains(t, string(event.Payload), "[SHUTDOWN]")
+	assert.Contains(t, string(event.Payload), "NOW")
 
 	// Verify executor feedback
 	assert.Contains(t, buf.String(), "Initiating server shutdown")
 }
 
 func TestShutdownHandler_DelayedShutdown(t *testing.T) {
+	ctx := context.Background()
 	executor := testutil.AdminPlayer()
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("system")
+	store := core.NewMemoryEventStore()
 
 	services := testutil.NewServicesBuilder().
 		WithEngine(accessControl).
-		WithBroadcaster(broadcaster).
+		WithEvents(store).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
 		WithCharacter(executor).
@@ -81,7 +80,7 @@ func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 		WithServices(services).
 		Build()
 
-	err := ShutdownHandler(context.Background(), exec)
+	err := ShutdownHandler(ctx, exec)
 
 	// Should return ErrShutdownRequested with delay context
 	require.Error(t, err)
@@ -92,15 +91,14 @@ func TestShutdownHandler_DelayedShutdown(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, int64(60), oopsErr.Context()["delay_seconds"])
 
-	// Verify broadcast warning mentions delay
-	select {
-	case event := <-ch:
-		assert.Equal(t, core.EventTypeSystem, event.Type)
-		assert.Contains(t, string(event.Payload), "[SHUTDOWN]")
-		assert.Contains(t, string(event.Payload), "60 seconds")
-	default:
-		t.Error("Expected shutdown warning to be broadcast")
-	}
+	// Verify system event mentions delay
+	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.EventTypeSystem, event.Type)
+	assert.Contains(t, string(event.Payload), "[SHUTDOWN]")
+	assert.Contains(t, string(event.Payload), "60 seconds")
 
 	// Verify executor feedback
 	assert.Contains(t, buf.String(), "60 seconds")
@@ -151,11 +149,8 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
-	broadcaster := core.NewBroadcaster()
-
 	services := testutil.NewServicesBuilder().
 		WithEngine(accessControl).
-		WithBroadcaster(broadcaster).
 		Build()
 	exec, _ := testutil.NewExecutionBuilder().
 		WithCharacter(executor).
@@ -169,21 +164,18 @@ func TestShutdownHandler_LogsAdminAction(t *testing.T) {
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))
 }
 
-func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
+func TestShutdownHandler_BroadcastsToSystemStream(t *testing.T) {
+	ctx := context.Background()
 	executor := testutil.AdminPlayer()
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
-	broadcaster := core.NewBroadcaster()
-
-	// Subscribe multiple streams to verify broadcast goes to system stream
-	// which should be watched by all players
-	systemCh := broadcaster.Subscribe("system")
+	store := core.NewMemoryEventStore()
 
 	services := testutil.NewServicesBuilder().
 		WithEngine(accessControl).
-		WithBroadcaster(broadcaster).
+		WithEvents(store).
 		Build()
 	exec, _ := testutil.NewExecutionBuilder().
 		WithCharacter(executor).
@@ -191,30 +183,30 @@ func TestShutdownHandler_BroadcastsToAllPlayers(t *testing.T) {
 		WithServices(services).
 		Build()
 
-	err := ShutdownHandler(context.Background(), exec)
+	err := ShutdownHandler(ctx, exec)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))
 
-	// Verify system broadcast
-	select {
-	case event := <-systemCh:
-		assert.Equal(t, core.EventTypeSystem, event.Type)
-		assert.Equal(t, core.ActorSystem, event.Actor.Kind)
-		assert.Contains(t, string(event.Payload), "[SHUTDOWN]")
-	default:
-		t.Error("Expected shutdown warning to be broadcast to system stream")
-	}
+	// Verify system stream received event
+	events, replayErr := store.Replay(ctx, "system", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.EventTypeSystem, event.Type)
+	assert.Equal(t, core.ActorSystem, event.Actor.Kind)
+	assert.Contains(t, string(event.Payload), "[SHUTDOWN]")
 }
 
-func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
+func TestShutdownHandler_WithNilEvents_IsNoOp(t *testing.T) {
 	executor := testutil.AdminPlayer()
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executor.CharacterID.String(), "execute", "admin.shutdown")
 
+	// Build with nil events — the default builder provides one, so override
 	services := testutil.NewServicesBuilder().
 		WithEngine(accessControl).
-		WithBroadcaster(nil).
+		WithEvents(nil).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
 		WithCharacter(executor).
@@ -222,7 +214,7 @@ func TestShutdownHandler_WithNilBroadcaster(t *testing.T) {
 		WithServices(services).
 		Build()
 
-	// Should still work, just skip broadcast
+	// Should still work, just skip event append
 	err := ShutdownHandler(context.Background(), exec)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, command.ErrShutdownRequested))

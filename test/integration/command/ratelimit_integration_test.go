@@ -26,11 +26,10 @@ import (
 // actually use the services.
 func stubServices() *command.Services {
 	svc, _ := command.NewServices(command.ServicesConfig{
-		World:       &world.Service{},
-		Session:     &stubSessionService{},
-		Engine:      policytest.NewGrantEngine(),
-		Events:      &stubEventStore{},
-		Broadcaster: &core.Broadcaster{},
+		World:   &world.Service{},
+		Session: &stubSessionService{},
+		Engine:  policytest.NewGrantEngine(),
+		Events:  &stubEventStore{},
 	})
 	return svc
 }

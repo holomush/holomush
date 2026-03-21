@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +16,7 @@ import (
 func TestEngine_HandleSay(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -45,7 +44,7 @@ func TestEngine_HandleSay(t *testing.T) {
 func TestEngine_HandlePose(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -70,89 +69,56 @@ func TestEngine_HandlePose(t *testing.T) {
 	assert.Equal(t, "waves hello", payload.Action)
 }
 
-func TestEngine_HandleSay_BroadcastsEvent(t *testing.T) {
+func TestEngine_HandleSay_AppendsToStore(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	broadcaster := NewBroadcaster()
-	engine := NewEngine(store, sessions, broadcaster)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
 	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
-	// Subscribe to the location stream before the event
 	stream := "location:" + locationID.String()
-	ch := broadcaster.Subscribe(stream)
-	defer broadcaster.Unsubscribe(stream, ch)
 
-	// Emit say event
 	err := engine.HandleSay(ctx, char, "Hello, world!")
 	require.NoError(t, err)
 
-	// Verify event was broadcast
-	select {
-	case event := <-ch:
-		assert.Equal(t, EventTypeSay, event.Type)
-		assert.Equal(t, stream, event.Stream)
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Timeout waiting for broadcast event")
-	}
+	// Verify event was appended to store
+	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, EventTypeSay, events[0].Type)
+	assert.Equal(t, stream, events[0].Stream)
 }
 
-func TestEngine_HandlePose_BroadcastsEvent(t *testing.T) {
+func TestEngine_HandlePose_AppendsToStore(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	broadcaster := NewBroadcaster()
-	engine := NewEngine(store, sessions, broadcaster)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
 	locationID := NewULID()
 	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
 
-	// Subscribe to the location stream before the event
 	stream := "location:" + locationID.String()
-	ch := broadcaster.Subscribe(stream)
-	defer broadcaster.Unsubscribe(stream, ch)
 
-	// Emit pose event
 	err := engine.HandlePose(ctx, char, "waves")
 	require.NoError(t, err)
 
-	// Verify event was broadcast
-	select {
-	case event := <-ch:
-		assert.Equal(t, EventTypePose, event.Type)
-		assert.Equal(t, stream, event.Stream)
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Timeout waiting for broadcast event")
-	}
-}
-
-func TestEngine_NilBroadcaster_DoesNotPanic(t *testing.T) {
-	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	// Pass nil broadcaster - should not panic
-	engine := NewEngine(store, sessions, nil)
-
-	ctx := context.Background()
-	charID := NewULID()
-	locationID := NewULID()
-	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
-
-	// These should not panic even with nil broadcaster
-	err := engine.HandleSay(ctx, char, "Hello")
+	// Verify event was appended to store
+	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
-
-	err = engine.HandlePose(ctx, char, "waves")
-	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, EventTypePose, events[0].Type)
+	assert.Equal(t, stream, events[0].Stream)
 }
 
 func TestEngine_ReplayEvents(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -175,7 +141,7 @@ func TestEngine_ReplayEvents(t *testing.T) {
 func TestEngine_ReplayEvents_WithCursor(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -235,7 +201,7 @@ func (e *storeError) Error() string {
 func TestEngine_HandleSay_StoreError(t *testing.T) {
 	store := &failingEventStore{}
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -250,7 +216,7 @@ func TestEngine_HandleSay_StoreError(t *testing.T) {
 func TestEngine_HandlePose_StoreError(t *testing.T) {
 	store := &failingEventStore{}
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -265,7 +231,7 @@ func TestEngine_HandlePose_StoreError(t *testing.T) {
 func TestEngine_ReplayEvents_StoreError(t *testing.T) {
 	store := &failingEventStore{}
 	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions, nil)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -278,8 +244,7 @@ func TestEngine_ReplayEvents_StoreError(t *testing.T) {
 func TestEngine_HandleConnect(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	broadcaster := NewBroadcaster()
-	engine := NewEngine(store, sessions, broadcaster)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -287,8 +252,6 @@ func TestEngine_HandleConnect(t *testing.T) {
 	char := CharacterRef{ID: charID, Name: "Alyssa", LocationID: locationID}
 
 	stream := "location:" + locationID.String()
-	ch := broadcaster.Subscribe(stream)
-	defer broadcaster.Unsubscribe(stream, ch)
 
 	err := engine.HandleConnect(ctx, char)
 	require.NoError(t, err)
@@ -306,22 +269,12 @@ func TestEngine_HandleConnect(t *testing.T) {
 	var payload ArrivePayload
 	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
 	assert.Equal(t, "Alyssa", payload.CharacterName)
-
-	// Verify broadcast
-	select {
-	case event := <-ch:
-		assert.Equal(t, EventTypeArrive, event.Type)
-		assert.Equal(t, stream, event.Stream)
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Timeout waiting for broadcast event")
-	}
 }
 
 func TestEngine_HandleDisconnect(t *testing.T) {
 	store := NewMemoryEventStore()
 	sessions := NewSessionManager()
-	broadcaster := NewBroadcaster()
-	engine := NewEngine(store, sessions, broadcaster)
+	engine := NewEngine(store, sessions)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -329,8 +282,6 @@ func TestEngine_HandleDisconnect(t *testing.T) {
 	char := CharacterRef{ID: charID, Name: "Alyssa", LocationID: locationID}
 
 	stream := "location:" + locationID.String()
-	ch := broadcaster.Subscribe(stream)
-	defer broadcaster.Unsubscribe(stream, ch)
 
 	err := engine.HandleDisconnect(ctx, char, "quit")
 	require.NoError(t, err)
@@ -349,13 +300,4 @@ func TestEngine_HandleDisconnect(t *testing.T) {
 	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
 	assert.Equal(t, "Alyssa", payload.CharacterName)
 	assert.Equal(t, "quit", payload.Reason)
-
-	// Verify broadcast
-	select {
-	case event := <-ch:
-		assert.Equal(t, EventTypeLeave, event.Type)
-		assert.Equal(t, stream, event.Stream)
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Timeout waiting for broadcast event")
-	}
 }
