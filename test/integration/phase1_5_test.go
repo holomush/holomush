@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
@@ -32,6 +33,20 @@ import (
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// noopEventStore is a stub EventStore for tests that don't exercise event functionality.
+type noopEventStore struct{}
+
+func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+func (n *noopEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+	return nil, nil
+}
+func (n *noopEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
+	return ulid.ULID{}, nil
+}
+func (n *noopEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	return nil, nil, nil
+}
 
 // testEnv holds all the resources needed for integration tests.
 type testEnv struct {
@@ -274,8 +289,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := core.NewMemoryEventStore()
-			broadcaster := core.NewBroadcaster()
+			eventStore := &noopEventStore{}
 			sessions := core.NewSessionManager()
 			engine := core.NewEngine(eventStore, sessions)
 
@@ -345,8 +359,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create core components
-			eventStore := core.NewMemoryEventStore()
-			broadcaster := core.NewBroadcaster()
+			eventStore := &noopEventStore{}
 			sessions := core.NewSessionManager()
 			engine := core.NewEngine(eventStore, sessions)
 
@@ -509,8 +522,7 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			serverTLS, err := tlscerts.LoadServerTLS(env.certsDir, "core")
 			Expect(err).NotTo(HaveOccurred())
 
-			eventStore := core.NewMemoryEventStore()
-			broadcaster := core.NewBroadcaster()
+			eventStore := &noopEventStore{}
 			sessions := core.NewSessionManager()
 			engine := core.NewEngine(eventStore, sessions)
 

@@ -19,7 +19,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -117,13 +116,12 @@ var _ = Describe("Alias Management Integration", func() {
 		// Create services with alias cache and registry
 		var err error
 		services, err = command.NewServices(command.ServicesConfig{
-			World:       &world.Service{},
-			Session:     &stubSessionService{},
-			Engine:      mockAccess,
-			Events:      &stubEventStore{},
-			Broadcaster: &core.Broadcaster{},
-			AliasCache:  aliasCache,
-			Registry:    registry,
+			World:      &world.Service{},
+			Session:    &stubSessionService{},
+			Engine:     mockAccess,
+			Events:     &stubEventStore{},
+			AliasCache: aliasCache,
+			Registry:   registry,
 		})
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -715,13 +713,12 @@ var _ = Describe("Alias Persistence Integration", func() {
 			cache1 := command.NewAliasCache()
 			mockAccess := policytest.NewGrantEngine()
 			services1, err := command.NewServices(command.ServicesConfig{
-				World:       &world.Service{},
-				Session:     &stubSessionService{},
-				Engine:      mockAccess,
-				Events:      &stubEventStore{},
-				Broadcaster: &core.Broadcaster{},
-				AliasCache:  cache1,
-				AliasRepo:   aliasRepo,
+				World:      &world.Service{},
+				Session:    &stubSessionService{},
+				Engine:     mockAccess,
+				Events:     &stubEventStore{},
+				AliasCache: cache1,
+				AliasRepo:  aliasRepo,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -768,13 +765,12 @@ var _ = Describe("Alias Persistence Integration", func() {
 			cache1 := command.NewAliasCache()
 			mockAccess := policytest.NewGrantEngine()
 			services1, err := command.NewServices(command.ServicesConfig{
-				World:       &world.Service{},
-				Session:     &stubSessionService{},
-				Engine:      mockAccess,
-				Events:      &stubEventStore{},
-				Broadcaster: &core.Broadcaster{},
-				AliasCache:  cache1,
-				AliasRepo:   aliasRepo,
+				World:      &world.Service{},
+				Session:    &stubSessionService{},
+				Engine:     mockAccess,
+				Events:     &stubEventStore{},
+				AliasCache: cache1,
+				AliasRepo:  aliasRepo,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -821,13 +817,12 @@ var _ = Describe("Alias Persistence Integration", func() {
 			cache := command.NewAliasCache()
 			mockAccess := policytest.NewGrantEngine()
 			services, err := command.NewServices(command.ServicesConfig{
-				World:       &world.Service{},
-				Session:     &stubSessionService{},
-				Engine:      mockAccess,
-				Events:      &stubEventStore{},
-				Broadcaster: &core.Broadcaster{},
-				AliasCache:  cache,
-				AliasRepo:   aliasRepo,
+				World:      &world.Service{},
+				Session:    &stubSessionService{},
+				Engine:     mockAccess,
+				Events:     &stubEventStore{},
+				AliasCache: cache,
+				AliasRepo:  aliasRepo,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -918,14 +913,13 @@ var _ = Describe("Session Termination Alias Cache Invalidation", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		services, err = command.NewServices(command.ServicesConfig{
-			World:       &world.Service{},
-			Session:     &stubSessionService{},
-			Engine:      mockAccess,
-			Events:      &stubEventStore{},
-			Broadcaster: &core.Broadcaster{},
-			AliasCache:  aliasCache,
-			AliasRepo:   aliasRepo,
-			Registry:    registry,
+			World:      &world.Service{},
+			Session:    &stubSessionService{},
+			Engine:     mockAccess,
+			Events:     &stubEventStore{},
+			AliasCache: aliasCache,
+			AliasRepo:  aliasRepo,
+			Registry:   registry,
 		})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -1213,14 +1207,13 @@ var _ = Describe("Alias Cache Startup Loading from Database", func() {
 			mockAccess := policytest.NewGrantEngine()
 			registry := command.NewRegistry()
 			services1, err := command.NewServices(command.ServicesConfig{
-				World:       &world.Service{},
-				Session:     &stubSessionService{},
-				Engine:      mockAccess,
-				Events:      &stubEventStore{},
-				Broadcaster: &core.Broadcaster{},
-				AliasCache:  cache1,
-				AliasRepo:   aliasRepo,
-				Registry:    registry,
+				World:      &world.Service{},
+				Session:    &stubSessionService{},
+				Engine:     mockAccess,
+				Events:     &stubEventStore{},
+				AliasCache: cache1,
+				AliasRepo:  aliasRepo,
+				Registry:   registry,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

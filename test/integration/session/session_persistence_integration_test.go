@@ -95,7 +95,6 @@ var _ = Describe("Session Persistence", func() {
 		// 5. Create core components
 		startLocation = ulid.Make()
 		sessions := core.NewSessionManager()
-		broadcaster := core.NewBroadcaster()
 		engine := core.NewEngine(eventStore, sessions)
 
 		// 6. Create GuestAuthenticator
