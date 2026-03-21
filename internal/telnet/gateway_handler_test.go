@@ -6,15 +6,20 @@ package telnet
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -60,7 +65,7 @@ func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 	return m.discResp, m.discErr
 }
 
-// readLines reads n lines from r, stripping \r\n.
+// readLines reads exactly n lines from r, stripping \r\n.
 func readLines(t *testing.T, r *bufio.Reader, n int) []string {
 	t.Helper()
 	lines := make([]string, 0, n)
@@ -182,6 +187,268 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	assert.Equal(t, "say Hello world", receivedCmd)
 
 	// Clean up.
+	cancel()
+	<-done
+}
+
+// mockSubscribeStream is a minimal implementation of
+// grpc.ServerStreamingClient[corev1.SubscribeResponse].
+type mockSubscribeStream struct {
+	events []*corev1.SubscribeResponse
+	idx    int
+	err    error // returned after all events are consumed
+}
+
+func (m *mockSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	if m.idx < len(m.events) {
+		ev := m.events[m.idx]
+		m.idx++
+		return ev, nil
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	return nil, io.EOF
+}
+
+func (m *mockSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (m *mockSubscribeStream) Trailer() metadata.MD          { return nil }
+func (m *mockSubscribeStream) CloseSend() error               { return nil }
+func (m *mockSubscribeStream) Context() context.Context       { return context.Background() }
+func (m *mockSubscribeStream) SendMsg(any) error              { return nil }
+func (m *mockSubscribeStream) RecvMsg(any) error              { return nil }
+
+// TestGatewayHandler_SendProtoEvent_CommandResponse tests that a command_response
+// event is forwarded to the client as plain text.
+func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	payload, err := json.Marshal(core.CommandResponsePayload{Text: "Hello from server!"})
+	require.NoError(t, err)
+
+	eventStream := &mockSubscribeStream{
+		events: []*corev1.SubscribeResponse{
+			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+		},
+	}
+
+	client := &mockCoreClient{
+		authResp: &corev1.AuthenticateResponse{
+			Success:       true,
+			SessionId:     "sess-cr",
+			ConnectionId:  "conn-cr",
+			CharacterName: "CRUser",
+		},
+		subStream: eventStream,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	r := bufio.NewReader(clientConn)
+	// Banner
+	readLines(t, r, 2)
+
+	_, err = clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+	// Welcome line
+	_, err = r.ReadString('\n')
+	require.NoError(t, err)
+
+	// The event should arrive on the event channel and be forwarded.
+	line, err := r.ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, "Hello from server!", strings.TrimRight(line, "\r\n"))
+
+	// Drain any remaining output (e.g. "Connection to server lost.") so the
+	// handler is not blocked on a write when we cancel.
+	go func() {
+		for {
+			_, readErr := r.ReadString('\n')
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+	cancel()
+	<-done
+}
+
+// TestGatewayHandler_SendProtoEvent_CorruptCommandResponse tests that a
+// command_response event with corrupt JSON is silently dropped (no panic).
+func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	eventStream := &mockSubscribeStream{
+		events: []*corev1.SubscribeResponse{
+			{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")},
+		},
+	}
+
+	client := &mockCoreClient{
+		authResp: &corev1.AuthenticateResponse{
+			Success:       true,
+			SessionId:     "sess-corrupt",
+			ConnectionId:  "conn-corrupt",
+			CharacterName: "CorruptUser",
+		},
+		subStream: eventStream,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+	_, err = r.ReadString('\n') // welcome
+	require.NoError(t, err)
+
+	// The corrupt event is dropped — no message forwarded. Drain any pending
+	// output (e.g. "Connection to server lost.") and then cancel the context
+	// to verify no panic occurred.
+	go func() {
+		for {
+			_, readErr := r.ReadString('\n')
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+}
+
+// TestGatewayHandler_DrainEvents verifies that drainEvents forwards pending
+// events before returning and respects the configured timeout.
+func TestGatewayHandler_DrainEvents(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	payload, err := json.Marshal(core.CommandResponsePayload{Text: "Goodbye!"})
+	require.NoError(t, err)
+
+	// Two events queued, plus EOF.
+	eventStream := &mockSubscribeStream{
+		events: []*corev1.SubscribeResponse{
+			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+		},
+	}
+
+	client := &mockCoreClient{
+		authResp: &corev1.AuthenticateResponse{
+			Success:       true,
+			SessionId:     "sess-drain",
+			ConnectionId:  "conn-drain",
+			CharacterName: "DrainUser",
+		},
+		subStream: eventStream,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client)
+	// Short drain timeout so the test doesn't block.
+	handler.drainTimeout = 200 * time.Millisecond
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err = clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+	_, err = r.ReadString('\n') // welcome
+	require.NoError(t, err)
+
+	// Send quit to trigger drainEvents path.
+	_, err = clientConn.Write([]byte("quit\n"))
+	require.NoError(t, err)
+
+	// Both queued "Goodbye!" messages should arrive.
+	// Read each event individually to verify both are forwarded.
+	event1 := readLines(t, r, 1)
+	assert.Equal(t, "Goodbye!", event1[0])
+	event2 := readLines(t, r, 1)
+	assert.Equal(t, "Goodbye!", event2[0])
+
+	<-done
+}
+
+// TestGatewayHandler_HandleGenericCommand_RPCError verifies that when
+// HandleCommand returns an RPC-level error the client sees an error message.
+func TestGatewayHandler_HandleGenericCommand_RPCError(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	client := &mockCoreClient{
+		authResp: &corev1.AuthenticateResponse{
+			Success:       true,
+			SessionId:     "sess-rpc-err",
+			ConnectionId:  "conn-rpc-err",
+			CharacterName: "RPCErrUser",
+		},
+		cmdFn: func(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+			return nil, errors.New("transport error")
+		},
+		subErr:   errors.New("no subscribe"),
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2)
+
+	_, err := clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+	_, err = r.ReadString('\n')
+	require.NoError(t, err)
+
+	// Issue a generic command that will trigger the RPC error path.
+	_, err = clientConn.Write([]byte("look\n"))
+	require.NoError(t, err)
+
+	line, err := r.ReadString('\n')
+	require.NoError(t, err)
+	line = strings.TrimRight(line, "\r\n")
+	assert.Contains(t, strings.ToLower(line), "error")
+
 	cancel()
 	<-done
 }

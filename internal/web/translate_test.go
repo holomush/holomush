@@ -258,3 +258,14 @@ func TestTranslateEvent_CorruptPayload(t *testing.T) {
 	got := translateEvent(ev)
 	assert.Nil(t, got)
 }
+
+func TestTranslateEvent_CommandResponse_CorruptPayload(t *testing.T) {
+	ev := &corev1.SubscribeResponse{
+		Type:    "command_response",
+		Payload: []byte(`not-valid-json`),
+	}
+
+	// Must not panic; corrupt payload is silently dropped (returns nil).
+	got := translateEvent(ev)
+	assert.Nil(t, got)
+}

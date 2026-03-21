@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -615,11 +616,16 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	// via a command_response event on the character stream.
 	assert.True(t, resp.Success, "unknown command should succeed at RPC level")
 
-	// Verify error command_response event was emitted
+	// Verify error command_response event was emitted with correct payload content.
 	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event")
 	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+
+	var crp core.CommandResponsePayload
+	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "command_response payload should be valid JSON")
+	assert.True(t, crp.IsError, "unknown command response should be an error")
+	assert.NotEmpty(t, crp.Text, "command_response text should not be empty")
 }
 
 func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
@@ -763,11 +769,16 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 	require.Len(t, locEvents, 1, "expected exactly one leave event")
 	assert.Equal(t, core.EventTypeLeave, locEvents[0].Type)
 
-	// command_response "Goodbye!" event should be emitted on character stream
+	// command_response "Goodbye!" event should be emitted on character stream.
 	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event on character stream")
 	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+
+	var crp core.CommandResponsePayload
+	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "quit command_response payload should be valid JSON")
+	assert.False(t, crp.IsError, "quit response should not be an error")
+	assert.Contains(t, crp.Text, "Goodbye", "quit response should contain Goodbye")
 
 	// Disconnect hooks should fire
 	assert.True(t, hookCalled, "disconnect hook should be called on quit")

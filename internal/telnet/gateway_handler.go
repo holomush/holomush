@@ -24,8 +24,14 @@ import (
 const (
 	// maxLineSize is the maximum line length from a telnet client (8 KiB).
 	maxLineSize = 8 * 1024
+	// maxCommandSize is the maximum length of a forwarded command (4 KiB).
+	maxCommandSize = 4096
 	// rpcTimeout is the per-call timeout for unary gRPC RPCs.
 	rpcTimeout = 10 * time.Second
+	// defaultDrainTimeout is the default window used by drainEvents.
+	defaultDrainTimeout = 500 * time.Millisecond
+	// drainMaxEvents caps the number of events forwarded during drainEvents.
+	drainMaxEvents = 10
 )
 
 // CoreClient is the gRPC interface used by GatewayHandler to communicate with
@@ -49,14 +55,16 @@ type GatewayHandler struct {
 	authed       bool
 	quitting     bool
 	eventCh      chan *corev1.SubscribeResponse
+	drainTimeout time.Duration
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
 func NewGatewayHandler(conn net.Conn, client CoreClient) *GatewayHandler {
 	return &GatewayHandler{
-		conn:   conn,
-		reader: bufio.NewReader(conn),
-		client: client,
+		conn:         conn,
+		reader:       bufio.NewReader(conn),
+		client:       client,
+		drainTimeout: defaultDrainTimeout,
 	}
 }
 
@@ -262,12 +270,17 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
 
-	if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
+	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId: h.sessionID,
 		Command:   "say " + message,
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("gateway: say command failed", "session_id", h.sessionID, "error", err)
 		h.send("Error: Your message could not be sent. Please try again.")
+		return
+	}
+	if !resp.GetSuccess() {
+		h.send("Error: " + resp.GetError())
 		return
 	}
 	// Output comes via broadcast say event on the location stream.
@@ -286,12 +299,17 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
 
-	if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
+	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
 		SessionId: h.sessionID,
 		Command:   "pose " + action,
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("gateway: pose command failed", "session_id", h.sessionID, "error", err)
 		h.send("Error: Your action could not be sent. Please try again.")
+		return
+	}
+	if !resp.GetSuccess() {
+		h.send("Error: " + resp.GetError())
 		return
 	}
 	// Output comes via broadcast pose event on the location stream.
@@ -306,6 +324,11 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 	fullCmd := cmd
 	if arg != "" {
 		fullCmd = cmd + " " + arg
+	}
+
+	if len(fullCmd) > maxCommandSize {
+		h.send("Command too long.")
+		return
 	}
 
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
@@ -339,14 +362,18 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 
 // drainEvents reads from the event channel for a short window, forwarding any
 // pending events (e.g. the "Goodbye!" command_response from quit) to the client
-// before the connection closes.
+// before the connection closes. At most drainMaxEvents are forwarded.
 func (h *GatewayHandler) drainEvents(eventRecv <-chan *corev1.SubscribeResponse) {
 	if eventRecv == nil {
 		return
 	}
-	timer := time.NewTimer(500 * time.Millisecond)
+	timeout := h.drainTimeout
+	if timeout <= 0 {
+		timeout = defaultDrainTimeout
+	}
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
-	for {
+	for count := 0; count < drainMaxEvents; count++ {
 		select {
 		case ev, ok := <-eventRecv:
 			if !ok {
