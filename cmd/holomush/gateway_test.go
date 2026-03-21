@@ -181,17 +181,25 @@ func TestGatewayCommand_Help(t *testing.T) {
 }
 
 func TestGatewayCommand_MissingCertificates(t *testing.T) {
-	// Set certs directory to a non-existent path
-	t.Setenv("XDG_CONFIG_HOME", "/nonexistent/path/that/does/not/exist")
+	// Gateway should poll for certs and eventually time out when they never appear.
+	cfg := &gatewayConfig{
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
+	}
 
-	cmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"gateway"})
+	deps := &GatewayDeps{
+		CertPollTimeout: time.Millisecond, // Fail fast in tests
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return "/nonexistent/path/certs", nil
+			},
+		},
+	}
 
-	err := cmd.Execute()
+	cmd := newMockCmd()
+	err := runGatewayWithDeps(context.Background(), cfg, cmd, deps)
 	require.Error(t, err, "Expected error when certificates are missing")
 
 	// Error should mention TLS or certificates
@@ -256,9 +264,9 @@ func TestGatewayCommand_CAExtractionFails(t *testing.T) {
 }
 
 func TestGatewayCommand_TLSLoadFails(t *testing.T) {
-	// Create a certs directory with a valid CA but invalid gateway certificate
+	// CA exists but gateway cert is missing — transient error that polls and times out.
 	tmpDir := t.TempDir()
-	certsDir := tmpDir + "/holomush/certs"
+	certsDir := filepath.Join(tmpDir, "holomush", "certs")
 
 	// Generate a valid CA
 	gameID := "test-gateway-tls-fail"
@@ -268,16 +276,24 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	// Save CA only (no gateway certificate)
 	require.NoError(t, tlscerts.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	cfg := &gatewayConfig{
+		TelnetAddr:  ":4201",
+		CoreAddr:    "localhost:9000",
+		ControlAddr: "127.0.0.1:9002",
+		LogFormat:   "json",
+	}
 
-	cmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(errBuf)
-	cmd.SetArgs([]string{"gateway"})
+	deps := &GatewayDeps{
+		CertPollTimeout: time.Millisecond, // Fail fast in tests
+		CommonDeps: CommonDeps{
+			CertsDirGetter: func() (string, error) {
+				return certsDir, nil
+			},
+		},
+	}
 
-	err = cmd.Execute()
+	cmd := newMockCmd()
+	err = runGatewayWithDeps(context.Background(), cfg, cmd, deps)
 	require.Error(t, err, "Expected error when TLS certificates are incomplete")
 
 	// Error should mention TLS or certificate
