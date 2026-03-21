@@ -71,11 +71,10 @@ func TestServices_HasAllDependencies(t *testing.T) {
 
 func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:       nil,
-		Session:     &mockSessionService{},
-		Engine:      &mockEngine{},
-		Events:      &mockEventStore{},
-		Broadcaster: &core.Broadcaster{},
+		World:   nil,
+		Session: &mockSessionService{},
+		Engine:  &mockEngine{},
+		Events:  &mockEventStore{},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "World")
@@ -83,11 +82,10 @@ func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
 
 func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:       &world.Service{},
-		Session:     nil,
-		Engine:      &mockEngine{},
-		Events:      &mockEventStore{},
-		Broadcaster: &core.Broadcaster{},
+		World:   &world.Service{},
+		Session: nil,
+		Engine:  &mockEngine{},
+		Events:  &mockEventStore{},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Session")
@@ -95,11 +93,10 @@ func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 
 func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:       &world.Service{},
-		Session:     &mockSessionService{},
-		Engine:      nil,
-		Events:      &mockEventStore{},
-		Broadcaster: &core.Broadcaster{},
+		World:   &world.Service{},
+		Session: &mockSessionService{},
+		Engine:  nil,
+		Events:  &mockEventStore{},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Engine")
@@ -107,26 +104,13 @@ func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 
 func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
-		World:       &world.Service{},
-		Session:     &mockSessionService{},
-		Engine:      &mockEngine{},
-		Events:      nil,
-		Broadcaster: &core.Broadcaster{},
+		World:   &world.Service{},
+		Session: &mockSessionService{},
+		Engine:  &mockEngine{},
+		Events:  nil,
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Events")
-}
-
-func TestNewServices_NilBroadcaster_ReturnsError(t *testing.T) {
-	_, err := NewServices(ServicesConfig{
-		World:       &world.Service{},
-		Session:     &mockSessionService{},
-		Engine:      &mockEngine{},
-		Events:      &mockEventStore{},
-		Broadcaster: nil,
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Broadcaster")
 }
 
 func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
@@ -134,32 +118,28 @@ func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
 	sessionSvc := &mockSessionService{}
 	engine := &mockEngine{}
 	eventStore := &mockEventStore{}
-	broadcaster := &core.Broadcaster{}
 
 	svc, err := NewServices(ServicesConfig{
-		World:       worldSvc,
-		Session:     sessionSvc,
-		Engine:      engine,
-		Events:      eventStore,
-		Broadcaster: broadcaster,
+		World:   worldSvc,
+		Session: sessionSvc,
+		Engine:  engine,
+		Events:  eventStore,
 	})
 	require.NoError(t, err)
 	assert.Same(t, worldSvc, svc.World())
 	assert.Same(t, sessionSvc, svc.Session())
 	assert.Same(t, engine, svc.Engine())
 	assert.Same(t, eventStore, svc.Events())
-	assert.Same(t, broadcaster, svc.Broadcaster())
 }
 
 func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
 	// When multiple fields are nil, should return error mentioning
 	// World since that's checked first
 	_, err := NewServices(ServicesConfig{
-		World:       nil,
-		Session:     nil,
-		Engine:      nil,
-		Events:      nil,
-		Broadcaster: nil,
+		World:   nil,
+		Session: nil,
+		Engine:  nil,
+		Events:  nil,
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "World")
@@ -440,17 +420,17 @@ func (m *mockWriter) Write(p []byte) (n int, err error) {
 
 // Tests for BroadcastSystemMessage
 
-func TestServices_BroadcastSystemMessage_NilBroadcaster_IsNoOp(t *testing.T) {
+func TestServices_BroadcastSystemMessage_NilEvents_IsNoOp(t *testing.T) {
 	t.Parallel()
 
-	// Create services with nil Broadcaster
+	// Create services with nil Events store
 	svc := NewTestServices(ServicesConfig{
-		Broadcaster: nil,
+		Events: nil,
 	})
 
 	// Should not panic - this is a silent no-op
 	assert.NotPanics(t, func() {
-		svc.BroadcastSystemMessage("test-stream", "test message")
+		svc.BroadcastSystemMessage(context.Background(), "test-stream", "test message")
 	})
 }
 
@@ -558,50 +538,44 @@ func TestCommandEntry_Handler_IsReadOnly(t *testing.T) {
 }
 
 func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {
-	// Create a real broadcaster so we can subscribe and capture the event
-	broadcaster := core.NewBroadcaster()
+	ctx := context.Background()
+	store := core.NewMemoryEventStore()
 	stream := "test-stream"
 	testMessage := "Server is shutting down"
 
-	// Subscribe before broadcasting
-	ch := broadcaster.Subscribe(stream)
-
 	svc := NewTestServices(ServicesConfig{
-		Broadcaster: broadcaster,
+		Events: store,
 	})
 
-	// Broadcast the message
-	svc.BroadcastSystemMessage(stream, testMessage)
+	// Append the message
+	svc.BroadcastSystemMessage(ctx, stream, testMessage)
 
-	// Receive the event
-	select {
-	case event := <-ch:
-		// Verify stream
-		assert.Equal(t, stream, event.Stream, "Stream should match input")
+	// Replay to retrieve the appended event
+	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
+	require.NoError(t, err, "Replay should succeed")
+	require.Len(t, events, 1, "Expected exactly one event")
 
-		// Verify event type
-		assert.Equal(t, core.EventTypeSystem, event.Type, "Type should be EventTypeSystem")
+	event := events[0]
 
-		// Verify actor
-		assert.Equal(t, core.ActorSystem, event.Actor.Kind, "Actor.Kind should be ActorSystem")
-		assert.Equal(t, "system", event.Actor.ID, "Actor.ID should be 'system'")
+	// Verify stream
+	assert.Equal(t, stream, event.Stream, "Stream should match input")
 
-		// Verify payload contains message
-		var payload map[string]string
-		err := json.Unmarshal(event.Payload, &payload)
-		require.NoError(t, err, "Payload should be valid JSON")
-		assert.Equal(t, testMessage, payload["message"], "Payload should contain the message")
+	// Verify event type
+	assert.Equal(t, core.EventTypeSystem, event.Type, "Type should be EventTypeSystem")
 
-		// Verify ID is set (non-zero)
-		assert.False(t, event.ID.IsZero(), "Event ID should be set")
+	// Verify actor
+	assert.Equal(t, core.ActorSystem, event.Actor.Kind, "Actor.Kind should be ActorSystem")
+	assert.Equal(t, "system", event.Actor.ID, "Actor.ID should be 'system'")
 
-		// Verify timestamp is recent
-		assert.WithinDuration(t, time.Now(), event.Timestamp, time.Second,
-			"Timestamp should be recent")
-	default:
-		t.Fatal("Expected to receive an event from the broadcaster")
-	}
+	// Verify payload contains message
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(event.Payload, &payload), "Payload should be valid JSON")
+	assert.Equal(t, testMessage, payload["message"], "Payload should contain the message")
 
-	// Cleanup
-	broadcaster.Unsubscribe(stream, ch)
+	// Verify ID is set (non-zero)
+	assert.False(t, event.ID.IsZero(), "Event ID should be set")
+
+	// Verify timestamp is recent
+	assert.WithinDuration(t, time.Now(), event.Timestamp, time.Second,
+		"Timestamp should be recent")
 }

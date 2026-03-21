@@ -66,7 +66,7 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	// Broadcast to all sessions
 	for _, session := range sessions {
 		stream := "session:" + session.CharacterID.String()
-		exec.Services().BroadcastSystemMessage(stream, announcement)
+		exec.Services().BroadcastSystemMessage(ctx, stream, announcement)
 	}
 
 	// Notify the executor

@@ -53,6 +53,7 @@ func TestWallHandler_InvalidArgs(t *testing.T) {
 // See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
 func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	targetID1 := ulid.Make()
 	targetID2 := ulid.Make()
@@ -66,12 +67,7 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-
-	// Subscribe to all session streams to capture events
-	ch1 := broadcaster.Subscribe("session:" + executorID.String())
-	ch2 := broadcaster.Subscribe("session:" + targetID1.String())
-	ch3 := broadcaster.Subscribe("session:" + targetID2.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -81,26 +77,26 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 		Args:          "Server going down in 5 minutes",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	// Verify all sessions received the broadcast
-	for i, ch := range []chan core.Event{ch1, ch2, ch3} {
-		select {
-		case event := <-ch:
-			assert.Equal(t, core.EventTypeSystem, event.Type, "Session %d: event type mismatch", i)
-			assert.Contains(t, string(event.Payload), "[ADMIN ANNOUNCEMENT]", "Session %d: missing announcement prefix", i)
-			assert.Contains(t, string(event.Payload), "Admin", "Session %d: missing admin name", i)
-			assert.Contains(t, string(event.Payload), "Server going down in 5 minutes", "Session %d: missing message", i)
-		default:
-			t.Errorf("Session %d: expected event but none received", i)
-		}
+	// Verify all sessions received events in the store
+	for i, charID := range []ulid.ULID{executorID, targetID1, targetID2} {
+		stream := "session:" + charID.String()
+		events, replayErr := store.Replay(ctx, stream, ulid.ULID{}, 10)
+		require.NoError(t, replayErr, "Session %d: replay failed", i)
+		require.Len(t, events, 1, "Session %d: expected one event", i)
+		event := events[0]
+		assert.Equal(t, core.EventTypeSystem, event.Type, "Session %d: event type mismatch", i)
+		assert.Contains(t, string(event.Payload), "[ADMIN ANNOUNCEMENT]", "Session %d: missing announcement prefix", i)
+		assert.Contains(t, string(event.Payload), "Admin", "Session %d: missing admin name", i)
+		assert.Contains(t, string(event.Payload), "Server going down in 5 minutes", "Session %d: missing message", i)
 	}
 
 	// Verify executor output
@@ -109,6 +105,7 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 }
 
 func TestWallHandler_Success_SingleSession(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -118,8 +115,7 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -129,23 +125,22 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 		Args:          "Test message",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	// Verify event was received
-	select {
-	case event := <-ch:
-		assert.Equal(t, core.EventTypeSystem, event.Type)
-		assert.Contains(t, string(event.Payload), "[ADMIN ANNOUNCEMENT]")
-	default:
-		t.Error("Expected event but none received")
-	}
+	// Verify event was stored
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.EventTypeSystem, event.Type)
+	assert.Contains(t, string(event.Payload), "[ADMIN ANNOUNCEMENT]")
 
 	// Verify output uses singular "session"
 	output := buf.String()
@@ -154,6 +149,7 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 }
 
 func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -163,7 +159,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -173,13 +169,13 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 		Args:          "Nobody will hear this",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
 	// Verify output indicates no sessions
@@ -188,6 +184,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 }
 
 func TestWallHandler_MessageFormat(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -197,8 +194,7 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -208,26 +204,25 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 		Args:          "Important announcement",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
 	// Verify exact message format: "[ADMIN ANNOUNCEMENT] Admin: message"
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "[ADMIN ANNOUNCEMENT] SuperAdmin: Important announcement")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "[ADMIN ANNOUNCEMENT] SuperAdmin: Important announcement")
 }
 
 func TestWallHandler_ActorIsSystem(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -237,8 +232,7 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -248,23 +242,22 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 		Args:          "Test",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
 	// Verify event actor is system
-	select {
-	case event := <-ch:
-		assert.Equal(t, core.ActorSystem, event.Actor.Kind)
-		assert.Equal(t, "system", event.Actor.ID)
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, core.ActorSystem, event.Actor.Kind)
+	assert.Equal(t, "system", event.Actor.ID)
 }
 
 func TestWallHandler_LogsAdminAction(t *testing.T) {
@@ -281,8 +274,7 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	_ = broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -292,9 +284,9 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 		Args:          "Logged message",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
@@ -306,7 +298,7 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 	// the handler succeeds and the slog.Info call exists in the implementation.
 }
 
-func TestWallHandler_NilBroadcaster(t *testing.T) {
+func TestWallHandler_NilEvents_IsNoOp(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -326,11 +318,11 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 		Services: command.NewTestServices(command.ServicesConfig{
 			Session: sessionMgr,
 			Engine:  accessControl,
-			// Broadcaster is nil
+			// Events is nil
 		}),
 	})
 
-	// Should not panic, but also won't broadcast
+	// Should not panic, but also won't append events
 	err := WallHandler(context.Background(), exec)
 	require.NoError(t, err)
 
@@ -340,6 +332,7 @@ func TestWallHandler_NilBroadcaster(t *testing.T) {
 }
 
 func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -349,8 +342,7 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -360,26 +352,25 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 		Args:          "  Message with   extra   spaces  ",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
 	// Verify message preserves internal whitespace (leading/trailing trimmed)
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "Message with   extra   spaces")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "Message with   extra   spaces")
 }
 
 func TestWallHandler_UrgencyInfo(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -389,8 +380,7 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -400,26 +390,25 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 		Args:          "info Test message",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "[ADMIN ANNOUNCEMENT]")
-		assert.Contains(t, payload, "Test message")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "[ADMIN ANNOUNCEMENT]")
+	assert.Contains(t, payload, "Test message")
 }
 
 func TestWallHandler_UrgencyWarning(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -429,8 +418,7 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -440,26 +428,25 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 		Args:          "warning Server maintenance soon",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "[ADMIN WARNING]")
-		assert.Contains(t, payload, "Server maintenance soon")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "[ADMIN WARNING]")
+	assert.Contains(t, payload, "Server maintenance soon")
 }
 
 func TestWallHandler_UrgencyCritical(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -469,8 +456,7 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -480,26 +466,25 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 		Args:          "critical EMERGENCY: Server going down NOW",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "[ADMIN CRITICAL]")
-		assert.Contains(t, payload, "EMERGENCY: Server going down NOW")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "[ADMIN CRITICAL]")
+	assert.Contains(t, payload, "EMERGENCY: Server going down NOW")
 }
 
 func TestWallHandler_UrgencyShorthand(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -509,8 +494,7 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -520,26 +504,25 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 		Args:          "crit Database issue detected",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "[ADMIN CRITICAL]")
-		assert.Contains(t, payload, "Database issue detected")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "[ADMIN CRITICAL]")
+	assert.Contains(t, payload, "Database issue detected")
 }
 
 func TestWallHandler_DefaultUrgency(t *testing.T) {
+	ctx := context.Background()
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
@@ -549,8 +532,7 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
 
-	broadcaster := core.NewBroadcaster()
-	ch := broadcaster.Subscribe("session:" + executorID.String())
+	store := core.NewMemoryEventStore()
 
 	var buf bytes.Buffer
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
@@ -560,23 +542,21 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 		Args:          "Hello everyone", // No urgency prefix, defaults to info
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session:     sessionMgr,
-			Engine:      accessControl,
-			Broadcaster: broadcaster,
+			Session: sessionMgr,
+			Engine:  accessControl,
+			Events:  store,
 		}),
 	})
 
-	err := WallHandler(context.Background(), exec)
+	err := WallHandler(ctx, exec)
 	require.NoError(t, err)
 
-	select {
-	case event := <-ch:
-		payload := string(event.Payload)
-		assert.Contains(t, payload, "[ADMIN ANNOUNCEMENT]") // Info is default
-		assert.Contains(t, payload, "Hello everyone")
-	default:
-		t.Error("Expected event but none received")
-	}
+	events, replayErr := store.Replay(ctx, "session:"+executorID.String(), ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	payload := string(events[0].Payload)
+	assert.Contains(t, payload, "[ADMIN ANNOUNCEMENT]") // Info is default
+	assert.Contains(t, payload, "Hello everyone")
 }
 
 func TestParseWallArgs(t *testing.T) {

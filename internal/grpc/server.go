@@ -49,6 +49,43 @@ type SessionDefaults struct {
 // defaultMaxReplay is used when MaxReplay is not configured.
 const defaultMaxReplay = 1000
 
+// streamNotification wraps a ULID event notification with the stream
+// it came from. Relay goroutines send these to a shared channel so the
+// live loop can select on a single source.
+type streamNotification struct {
+	stream  string
+	eventID ulid.ULID
+}
+
+// startNotificationRelay starts a goroutine that reads ULID notifications
+// from a subscription channel and forwards them as streamNotifications to
+// the shared notifyCh. The goroutine exits when the source channel closes
+// or ctx is cancelled.
+func startNotificationRelay(
+	ctx context.Context,
+	stream string,
+	source <-chan ulid.ULID,
+	notifyCh chan<- streamNotification,
+) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case id, ok := <-source:
+				if !ok {
+					return
+				}
+				select {
+				case notifyCh <- streamNotification{stream: stream, eventID: id}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+}
+
 // WorldQuerier provides read-only access to world model data for building
 // location_state payloads during event streaming. Satisfied by *world.Service.
 type WorldQuerier interface {
@@ -409,6 +446,14 @@ func (s *CoreServer) persistCursorAsync(sessionID, streamName string, eventID ul
 			slog.Warn("cursor persist failed", "session_id", sessionID, "error", err)
 		}
 	}()
+}
+
+// maxReplay returns the configured maximum replay count, or the default.
+func (s *CoreServer) maxReplay() int {
+	if s.sessionDefaults.MaxReplay > 0 {
+		return s.sessionDefaults.MaxReplay
+	}
+	return defaultMaxReplay
 }
 
 // eventToProto converts a core.Event to a proto Event.
