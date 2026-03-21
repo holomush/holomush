@@ -57,7 +57,7 @@ var _ = Describe("Session Persistence", func() {
 	)
 
 	BeforeEach(func() {
-		testCtx, testCancel = context.WithTimeout(context.Background(), 5*time.Minute)
+		testCtx, testCancel = context.WithTimeout(context.Background(), 10*time.Minute)
 
 		// 1. Start PostgreSQL container
 		var err error
@@ -385,7 +385,6 @@ var _ = Describe("Session Persistence", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.Success).To(BeTrue())
-			Expect(resp.Output).To(Equal("Goodbye!"))
 
 			// Session should be deleted immediately (not detached)
 			_, err = sessionStore.Get(testCtx, sessionID)

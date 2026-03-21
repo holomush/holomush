@@ -7,6 +7,7 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"log/slog"
 	"runtime/debug"
 	"strings"
@@ -349,8 +350,7 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 	}
 
 	// Parse and execute command
-	output, err := s.executeCommand(ctx, info, req.Command)
-	if err != nil {
+	if err := s.executeCommand(ctx, info, req.Command); err != nil {
 		slog.WarnContext(ctx, "command execution failed",
 			"request_id", requestID,
 			"session_id", req.SessionId,
@@ -367,18 +367,17 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 	return &corev1.HandleCommandResponse{
 		Meta:    responseMeta(requestID),
 		Success: true,
-		Output:  output,
 	}, nil
 }
 
-// executeCommand parses and executes a command.
-func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, command string) (string, error) {
+// executeCommand parses and executes a command. Output is delivered via
+// command_response events emitted to the character's personal stream.
+func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, command string) error {
 	parts := strings.SplitN(command, " ", 2)
-	if len(parts) == 0 {
-		return "", oops.Code("EMPTY_COMMAND").Errorf("empty command")
-	}
-
 	cmd := strings.ToLower(parts[0])
+	if cmd == "" {
+		return oops.Code("EMPTY_COMMAND").Errorf("empty command")
+	}
 	var arg string
 	if len(parts) > 1 {
 		arg = parts[1]
@@ -387,18 +386,25 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 	switch cmd {
 	case "say":
+		// Sender sees the broadcast say event from the location stream — no
+		// command_response needed.
 		if err := s.engine.HandleSay(ctx, char, arg); err != nil {
-			return "", oops.Code("COMMAND_FAILED").With("command", "say").Wrap(err)
+			return oops.Code("COMMAND_FAILED").With("command", "say").Wrap(err)
 		}
-		return "You say: " + arg, nil
+		return nil
 
 	case "pose", ":":
+		// Sender sees the broadcast pose event from the location stream — no
+		// command_response needed.
 		if err := s.engine.HandlePose(ctx, char, arg); err != nil {
-			return "", oops.Code("COMMAND_FAILED").With("command", "pose").Wrap(err)
+			return oops.Code("COMMAND_FAILED").With("command", "pose").Wrap(err)
 		}
-		return "", nil
+		return nil
 
 	case "quit":
+		// Emit a command_response with "Goodbye!" before disconnect.
+		s.emitCommandResponse(ctx, char, "Goodbye!", false)
+
 		// Explicit quit — terminate session immediately
 		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", err)
@@ -408,10 +414,49 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 		}
 		s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
 		s.runDisconnectHooks(ctx, *info)
-		return "Goodbye!", nil
+		return nil
 
 	default:
-		return "", oops.Code("UNKNOWN_COMMAND").With("command", cmd).Errorf("unknown command: %s", cmd)
+		// Emit an error command_response for unknown commands.
+		s.emitCommandResponse(ctx, char, "Unknown command: "+cmd, true)
+		return nil
+	}
+}
+
+// emitCommandResponse emits a command_response event to the character's
+// personal stream. Best-effort: errors are logged but not propagated.
+func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) {
+	payload, err := json.Marshal(core.CommandResponsePayload{
+		Text:    text,
+		IsError: isError,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to marshal command_response payload",
+			"character_id", char.ID.String(),
+			"error", err,
+		)
+		return
+	}
+
+	event := core.Event{
+		ID:        core.NewULID(),
+		Stream:    world.CharacterStream(char.ID),
+		Type:      core.EventTypeCommandResponse,
+		Timestamp: time.Now(),
+		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
+		Payload:   payload,
+	}
+
+	if s.eventStore == nil {
+		slog.Debug("emitCommandResponse: eventStore not configured, event not emitted")
+		return
+	}
+
+	if err := s.eventStore.Append(ctx, event); err != nil {
+		slog.WarnContext(ctx, "failed to append command_response event",
+			"character_id", char.ID.String(),
+			"error", err,
+		)
 	}
 }
 

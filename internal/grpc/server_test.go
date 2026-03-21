@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -581,17 +582,19 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	sessions := core.NewSessionManager()
 	sessions.Connect(charID, core.NewULID())
 
-	store := &mockEventStore{}
+	store := core.NewMemoryEventStore()
 	engine := core.NewEngine(store, sessions)
 
 	server := &CoreServer{
-		engine:   engine,
-		sessions: sessions,
+		engine:     engine,
+		sessions:   sessions,
+		eventStore: store,
 		sessionStore: newTestSessionStore(t, map[string]*session.Info{
 			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
+				CharacterID:   charID,
+				CharacterName: "Tester",
+				LocationID:    locationID,
+				Status:        session.StatusActive,
 			},
 		}),
 	}
@@ -609,8 +612,20 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	resp, err := server.HandleCommand(ctx, req)
 	require.NoError(t, err)
 
-	assert.False(t, resp.Success, "expected failure for unknown command")
-	assert.NotEmpty(t, resp.Error, "error should contain error message for unknown command")
+	// Unknown commands now succeed at the RPC level; the error is delivered
+	// via a command_response event on the character stream.
+	assert.True(t, resp.Success, "unknown command should succeed at RPC level")
+
+	// Verify error command_response event was emitted with correct payload content.
+	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	require.NotEmpty(t, charEvents, "expected command_response event")
+	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+
+	var crp core.CommandResponsePayload
+	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "command_response payload should be valid JSON")
+	assert.True(t, crp.IsError, "unknown command response should be an error")
+	assert.NotEmpty(t, crp.Text, "command_response text should not be empty")
 }
 
 func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
@@ -725,6 +740,7 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 
 	var hookCalled bool
 	server := NewCoreServer(engine, sessions, sessStore,
+		WithEventStore(store),
 		WithDisconnectHook(func(_ session.Info) {
 			hookCalled = true
 		}),
@@ -742,17 +758,27 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 	resp, err := server.HandleCommand(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
-	assert.Equal(t, "Goodbye!", resp.Output)
 
 	// Session should be deleted immediately
 	_, err = sessStore.Get(ctx, sessionID.String())
 	assert.Error(t, err, "session should be deleted after quit command")
 
-	// Leave event should be emitted
-	events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
+	// Leave event should be emitted on location stream
+	locEvents, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
-	require.Len(t, events, 1, "expected exactly one leave event")
-	assert.Equal(t, core.EventTypeLeave, events[0].Type)
+	require.Len(t, locEvents, 1, "expected exactly one leave event")
+	assert.Equal(t, core.EventTypeLeave, locEvents[0].Type)
+
+	// command_response "Goodbye!" event should be emitted on character stream.
+	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+	require.NotEmpty(t, charEvents, "expected command_response event on character stream")
+	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+
+	var crp core.CommandResponsePayload
+	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "quit command_response payload should be valid JSON")
+	assert.False(t, crp.IsError, "quit response should not be an error")
+	assert.Contains(t, crp.Text, "Goodbye", "quit response should contain Goodbye")
 
 	// Disconnect hooks should fire
 	assert.True(t, hookCalled, "disconnect hook should be called on quit")

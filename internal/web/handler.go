@@ -129,7 +129,6 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 
 	return connect.NewResponse(&webv1.SendCommandResponse{
 		Success:      resp.GetSuccess(),
-		Output:       resp.GetOutput(),
 		ErrorMessage: resp.GetError(),
 	}), nil
 }

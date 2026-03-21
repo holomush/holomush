@@ -6,6 +6,8 @@ export interface ThemeColors {
   system: string;
   arrive: string;
   leave: string;
+  'command.output': string;
+  'command.error': string;
   background: string;
   surface: string;
   border: string;

@@ -115,17 +115,14 @@ func connectAsGuest(c *testTelnetClient) string {
 	return match[1]
 }
 
-// waitForPipeline sends a probe command and waits for the echo, proving the
-// full command→event subscription pipeline is ready. Both the sender's own
-// broadcast (via the event stream) and peers' broadcasts are drained so probe
-// messages don't leak into subsequent assertions.
+// waitForPipeline sends a probe command and waits for the broadcast, proving
+// the full command→event subscription pipeline is ready. The sender sees their
+// own say broadcast via the event stream ("<Name> says, ..."). Peers' copies
+// are also drained so probe messages don't leak into subsequent assertions.
 func waitForPipeline(c *testTelnetClient, peers ...*testTelnetClient) {
 	probe := "__ready__:" + ulid.Make().String()
 	c.SendLine("say " + probe)
-	c.ReadUntil(fmt.Sprintf(`You say, "%s"`, probe), 5*time.Second)
-	// The sender also receives its own broadcast via the event stream as
-	// "<Name> says, "<probe>"". Drain it to prevent stale messages from
-	// interfering with subsequent ReadLine/ReadUntil assertions.
+	// Sender sees own broadcast via event stream (no inline echo).
 	c.ReadUntil(probe, 5*time.Second)
 	for _, p := range peers {
 		p.ReadUntil(probe, 5*time.Second)
@@ -339,16 +336,16 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			clientB.Close()
 		})
 
-		It("Player A says something and sees their own echo", func() {
+		It("Player A says something and sees their own broadcast", func() {
 			clientA.SendLine(`say Hello, world!`)
-			line := clientA.ReadLine()
-			Expect(line).To(ContainSubstring(`You say, "Hello, world!"`))
+			line := clientA.ReadUntil("Hello, world!", 5*time.Second)
+			Expect(line).To(ContainSubstring(`says, "Hello, world!"`))
 		})
 
 		It("Player B receives Player A's say via event stream", func() {
 			clientA.SendLine(`say Greetings!`)
-			// A sees own echo
-			_ = clientA.ReadLine()
+			// A sees own broadcast via event stream
+			_ = clientA.ReadUntil("Greetings!", 5*time.Second)
 			// B receives broadcast
 			line := clientB.ReadUntil("says,", 5*time.Second)
 			Expect(line).To(ContainSubstring(`says,`))
@@ -461,8 +458,8 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			waitForPipeline(client)
 
 			client.SendLine(`say Persistence test`)
-			line := client.ReadLine()
-			Expect(line).To(ContainSubstring(`You say, "Persistence test"`))
+			line := client.ReadUntil("Persistence test", 5*time.Second)
+			Expect(line).To(ContainSubstring(`says, "Persistence test"`))
 
 			// Poll for the specific "Persistence test" event (not readiness probes)
 			stream := "location:" + startLocation.String()

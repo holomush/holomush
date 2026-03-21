@@ -30,6 +30,10 @@
     <span class="system-text">{@html linkUrls(event.text)}</span>
   {:else if event.type === 'move'}
     <span class="move-text">{@html linkUrls(event.text)}</span>
+  {:else if event.type === 'command_response'}
+    <span class="command-output">{event.text}</span>
+  {:else if event.type === 'command_error'}
+    <span class="command-error">{event.text}</span>
   {:else if hasAnsiCodes(event.text)}
     <AnsiRenderer text={event.text} />
   {:else}
@@ -47,4 +51,6 @@
   .arrival, .departure { color: var(--color-arrive); }
   .system-text { color: var(--color-system); }
   .move-text { color: var(--color-system); }
+  .command-output { color: var(--color-command-output); }
+  .command-error { color: var(--color-command-error); }
 </style>

@@ -117,7 +117,6 @@ func TestHandler_SendCommand_Success(t *testing.T) {
 	client := &mockCoreClient{
 		cmdResp: &corev1.HandleCommandResponse{
 			Success: true,
-			Output:  "You say, \"hello\"",
 		},
 	}
 	h := NewHandler(client)
@@ -128,7 +127,6 @@ func TestHandler_SendCommand_Success(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "You say, \"hello\"", resp.Msg.GetOutput())
 }
 
 func TestHandler_Disconnect_Success(t *testing.T) {

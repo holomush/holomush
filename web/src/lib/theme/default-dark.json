@@ -8,6 +8,8 @@
     "system": "#ffb74d",
     "arrive": "#888888",
     "leave": "#888888",
+    "command.output": "#e0e0e0",
+    "command.error": "#e57373",
     "background": "#0d0d1a",
     "surface": "#12122a",
     "border": "#1a1a3e",

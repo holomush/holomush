@@ -24,6 +24,12 @@ type PosePayload struct {
 	Action        string `json:"action"`
 }
 
+// CommandResponsePayload is the JSON payload for command_response events.
+type CommandResponsePayload struct {
+	Text    string `json:"text"`
+	IsError bool   `json:"is_error,omitempty"`
+}
+
 // ArrivePayload is the JSON payload for arrive events.
 type ArrivePayload struct {
 	CharacterName string `json:"character_name"`

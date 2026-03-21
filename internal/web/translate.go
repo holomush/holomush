@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -44,7 +45,7 @@ type movePayload struct {
 // channelForType returns the EventChannel for the given event type string.
 func channelForType(eventType string) webv1.EventChannel {
 	switch eventType {
-	case "say", "pose", "system":
+	case "say", "pose", "system", "command_response":
 		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
 	case "location_state", "exit_update":
 		return webv1.EventChannel_EVENT_CHANNEL_STATE
@@ -164,6 +165,23 @@ func translateEvent(ev *corev1.SubscribeResponse) *webv1.GameEvent {
 			Text:          p.Message,
 			Timestamp:     ts,
 			Channel:       ch,
+		}
+
+	case "command_response":
+		var p core.CommandResponsePayload
+		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
+			slog.Error("web: failed to unmarshal command_response payload", "error", err)
+			return nil
+		}
+		eventType := "command_response"
+		if p.IsError {
+			eventType = "command_error"
+		}
+		return &webv1.GameEvent{
+			Type:      eventType,
+			Text:      p.Text,
+			Timestamp: ts,
+			Channel:   ch,
 		}
 
 	case "location_state", "exit_update":
