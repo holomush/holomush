@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { createClient } from '@connectrpc/connect';
+  import { onDestroy } from 'svelte';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
 
@@ -14,13 +15,18 @@
 
   let { sessionId, onSend }: Props = $props();
 
+  const DRAFT_KEY_PREFIX = 'holomush-draft:';
+  const DRAFT_DEBOUNCE_MS = 500;
+
   let text = $state('');
   let textarea: HTMLTextAreaElement;
   let history: string[] = $state([]);
   let historyIndex = $state(-1);
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
 
   const client = createClient(WebService, transport);
 
+  // Restore draft and load command history when session changes
   $effect(() => {
     if (!sessionId) {
       history = [];
@@ -28,12 +34,37 @@
       return;
     }
 
+    // Restore saved draft
+    const saved = localStorage.getItem(DRAFT_KEY_PREFIX + sessionId);
+    if (saved) {
+      text = saved;
+      requestAnimationFrame(autoGrow);
+    }
+
     const captured = sessionId;
     client.getCommandHistory({ sessionId }).then((resp) => {
-      if (captured !== sessionId) return; // stale response
+      if (captured !== sessionId) return;
       history = resp.commands ?? [];
     }).catch(() => { /* best-effort */ });
   });
+
+  // Debounced save of draft text to localStorage
+  $effect(() => {
+    const current = text;
+    const sid = sessionId;
+    if (!sid) return;
+
+    clearTimeout(draftTimer);
+    if (current) {
+      draftTimer = setTimeout(() => {
+        localStorage.setItem(DRAFT_KEY_PREFIX + sid, current);
+      }, DRAFT_DEBOUNCE_MS);
+    } else {
+      localStorage.removeItem(DRAFT_KEY_PREFIX + sid);
+    }
+  });
+
+  onDestroy(() => clearTimeout(draftTimer));
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -69,6 +100,8 @@
     history = [...history, cmd];
     historyIndex = -1;
     text = '';
+    clearTimeout(draftTimer);
+    if (sessionId) localStorage.removeItem(DRAFT_KEY_PREFIX + sessionId);
     onSend(cmd);
     requestAnimationFrame(() => {
       if (textarea) textarea.style.height = 'auto';
