@@ -28,18 +28,20 @@
 
   // Restore draft and load command history when session changes
   $effect(() => {
+    // Cancel any pending save from the previous session
+    clearTimeout(draftTimer);
+
     if (!sessionId) {
       history = [];
       historyIndex = -1;
+      text = '';
       return;
     }
 
-    // Restore saved draft
+    // Restore saved draft (or clear if none exists)
     const saved = localStorage.getItem(DRAFT_KEY_PREFIX + sessionId);
-    if (saved) {
-      text = saved;
-      requestAnimationFrame(autoGrow);
-    }
+    text = saved ?? '';
+    requestAnimationFrame(autoGrow);
 
     const captured = sessionId;
     client.getCommandHistory({ sessionId }).then((resp) => {
@@ -52,7 +54,10 @@
   $effect(() => {
     const current = text;
     const sid = sessionId;
-    if (!sid) return;
+    if (!sid) {
+      clearTimeout(draftTimer);
+      return;
+    }
 
     clearTimeout(draftTimer);
     if (current) {
