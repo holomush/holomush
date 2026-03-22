@@ -103,7 +103,7 @@ test.describe('Terminal UI', () => {
     await input.press('Enter');
 
     // After quit, the terminal shows disconnect UI (Reconnect/New Session buttons)
-    await expect(page.getByRole('button', { name: 'New Session' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 10000 });
 
     // Verify sessionStorage was cleared
     const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
@@ -208,10 +208,10 @@ test.describe('Terminal UI', () => {
     // Quit — clears session, shows disconnect UI
     await input.fill('quit');
     await input.press('Enter');
-    await expect(page.getByRole('button', { name: 'New Session' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 10000 });
 
-    // Click New Session to go back to landing, then reconnect as guest
-    await page.getByRole('button', { name: 'New Session' }).click();
+    // Click Sign In to go to login, then go to landing and reconnect as guest
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await connectAsGuest(page);
 
     // The textarea should be empty — no draft from the old session
