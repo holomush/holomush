@@ -866,6 +866,126 @@ func (x *DisconnectResponse) GetSuccess() bool {
 	return false
 }
 
+type GetCommandHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCommandHistoryRequest) Reset() {
+	*x = GetCommandHistoryRequest{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCommandHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCommandHistoryRequest) ProtoMessage() {}
+
+func (x *GetCommandHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCommandHistoryRequest.ProtoReflect.Descriptor instead.
+func (*GetCommandHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetCommandHistoryRequest) GetMeta() *RequestMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *GetCommandHistoryRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type GetCommandHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	Commands      []string               `protobuf:"bytes,3,rep,name=commands,proto3" json:"commands,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCommandHistoryResponse) Reset() {
+	*x = GetCommandHistoryResponse{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCommandHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCommandHistoryResponse) ProtoMessage() {}
+
+func (x *GetCommandHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCommandHistoryResponse.ProtoReflect.Descriptor instead.
+func (*GetCommandHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetCommandHistoryResponse) GetMeta() *ResponseMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *GetCommandHistoryResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *GetCommandHistoryResponse) GetCommands() []string {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *GetCommandHistoryResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_holomush_core_v1_core_proto protoreflect.FileDescriptor
 
 const file_holomush_core_v1_core_proto_rawDesc = "" +
@@ -933,17 +1053,27 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"b\n" +
 	"\x12DisconnectResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess*u\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\"l\n" +
+	"\x18GetCommandHistoryRequest\x121\n" +
+	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"\x9b\x01\n" +
+	"\x19GetCommandHistoryResponse\x122\n" +
+	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1a\n" +
+	"\bcommands\x18\x03 \x03(\tR\bcommands\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error*u\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xff\x02\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xed\x03\n" +
 	"\vCoreService\x12]\n" +
 	"\fAuthenticate\x12%.holomush.core.v1.AuthenticateRequest\x1a&.holomush.core.v1.AuthenticateResponse\x12`\n" +
 	"\rHandleCommand\x12&.holomush.core.v1.HandleCommandRequest\x1a'.holomush.core.v1.HandleCommandResponse\x12V\n" +
 	"\tSubscribe\x12\".holomush.core.v1.SubscribeRequest\x1a#.holomush.core.v1.SubscribeResponse0\x01\x12W\n" +
 	"\n" +
-	"Disconnect\x12#.holomush.core.v1.DisconnectRequest\x1a$.holomush.core.v1.DisconnectResponseB\xc3\x01\n" +
+	"Disconnect\x12#.holomush.core.v1.DisconnectRequest\x1a$.holomush.core.v1.DisconnectResponse\x12l\n" +
+	"\x11GetCommandHistory\x12*.holomush.core.v1.GetCommandHistoryRequest\x1a+.holomush.core.v1.GetCommandHistoryResponseB\xc3\x01\n" +
 	"\x14com.holomush.core.v1B\tCoreProtoP\x01Z>github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1\xa2\x02\x03HCX\xaa\x02\x10Holomush.Core.V1\xca\x02\x10Holomush\\Core\\V1\xe2\x02\x1cHolomush\\Core\\V1\\GPBMetadata\xea\x02\x12Holomush::Core::V1b\x06proto3"
 
 var (
@@ -959,50 +1089,56 @@ func file_holomush_core_v1_core_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_holomush_core_v1_core_proto_goTypes = []any{
-	(ControlSignal)(0),            // 0: holomush.core.v1.ControlSignal
-	(*RequestMeta)(nil),           // 1: holomush.core.v1.RequestMeta
-	(*ResponseMeta)(nil),          // 2: holomush.core.v1.ResponseMeta
-	(*AuthenticateRequest)(nil),   // 3: holomush.core.v1.AuthenticateRequest
-	(*AuthenticateResponse)(nil),  // 4: holomush.core.v1.AuthenticateResponse
-	(*HandleCommandRequest)(nil),  // 5: holomush.core.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil), // 6: holomush.core.v1.HandleCommandResponse
-	(*SubscribeRequest)(nil),      // 7: holomush.core.v1.SubscribeRequest
-	(*EventFrame)(nil),            // 8: holomush.core.v1.EventFrame
-	(*ControlFrame)(nil),          // 9: holomush.core.v1.ControlFrame
-	(*SubscribeResponse)(nil),     // 10: holomush.core.v1.SubscribeResponse
-	(*DisconnectRequest)(nil),     // 11: holomush.core.v1.DisconnectRequest
-	(*DisconnectResponse)(nil),    // 12: holomush.core.v1.DisconnectResponse
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(ControlSignal)(0),                // 0: holomush.core.v1.ControlSignal
+	(*RequestMeta)(nil),               // 1: holomush.core.v1.RequestMeta
+	(*ResponseMeta)(nil),              // 2: holomush.core.v1.ResponseMeta
+	(*AuthenticateRequest)(nil),       // 3: holomush.core.v1.AuthenticateRequest
+	(*AuthenticateResponse)(nil),      // 4: holomush.core.v1.AuthenticateResponse
+	(*HandleCommandRequest)(nil),      // 5: holomush.core.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil),     // 6: holomush.core.v1.HandleCommandResponse
+	(*SubscribeRequest)(nil),          // 7: holomush.core.v1.SubscribeRequest
+	(*EventFrame)(nil),                // 8: holomush.core.v1.EventFrame
+	(*ControlFrame)(nil),              // 9: holomush.core.v1.ControlFrame
+	(*SubscribeResponse)(nil),         // 10: holomush.core.v1.SubscribeResponse
+	(*DisconnectRequest)(nil),         // 11: holomush.core.v1.DisconnectRequest
+	(*DisconnectResponse)(nil),        // 12: holomush.core.v1.DisconnectResponse
+	(*GetCommandHistoryRequest)(nil),  // 13: holomush.core.v1.GetCommandHistoryRequest
+	(*GetCommandHistoryResponse)(nil), // 14: holomush.core.v1.GetCommandHistoryResponse
+	(*timestamppb.Timestamp)(nil),     // 15: google.protobuf.Timestamp
 }
 var file_holomush_core_v1_core_proto_depIdxs = []int32{
-	13, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
-	13, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
+	15, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
+	15, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
 	1,  // 2: holomush.core.v1.AuthenticateRequest.meta:type_name -> holomush.core.v1.RequestMeta
 	2,  // 3: holomush.core.v1.AuthenticateResponse.meta:type_name -> holomush.core.v1.ResponseMeta
 	1,  // 4: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
 	2,  // 5: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
 	1,  // 6: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	13, // 7: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
+	15, // 7: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
 	0,  // 8: holomush.core.v1.ControlFrame.signal:type_name -> holomush.core.v1.ControlSignal
 	8,  // 9: holomush.core.v1.SubscribeResponse.event:type_name -> holomush.core.v1.EventFrame
 	9,  // 10: holomush.core.v1.SubscribeResponse.control:type_name -> holomush.core.v1.ControlFrame
 	1,  // 11: holomush.core.v1.DisconnectRequest.meta:type_name -> holomush.core.v1.RequestMeta
 	2,  // 12: holomush.core.v1.DisconnectResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	3,  // 13: holomush.core.v1.CoreService.Authenticate:input_type -> holomush.core.v1.AuthenticateRequest
-	5,  // 14: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
-	7,  // 15: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
-	11, // 16: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
-	4,  // 17: holomush.core.v1.CoreService.Authenticate:output_type -> holomush.core.v1.AuthenticateResponse
-	6,  // 18: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
-	10, // 19: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
-	12, // 20: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
-	17, // [17:21] is the sub-list for method output_type
-	13, // [13:17] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	1,  // 13: holomush.core.v1.GetCommandHistoryRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	2,  // 14: holomush.core.v1.GetCommandHistoryResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	3,  // 15: holomush.core.v1.CoreService.Authenticate:input_type -> holomush.core.v1.AuthenticateRequest
+	5,  // 16: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
+	7,  // 17: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
+	11, // 18: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
+	13, // 19: holomush.core.v1.CoreService.GetCommandHistory:input_type -> holomush.core.v1.GetCommandHistoryRequest
+	4,  // 20: holomush.core.v1.CoreService.Authenticate:output_type -> holomush.core.v1.AuthenticateResponse
+	6,  // 21: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
+	10, // 22: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
+	12, // 23: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
+	14, // 24: holomush.core.v1.CoreService.GetCommandHistory:output_type -> holomush.core.v1.GetCommandHistoryResponse
+	20, // [20:25] is the sub-list for method output_type
+	15, // [15:20] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_holomush_core_v1_core_proto_init() }
@@ -1020,7 +1156,7 @@ func file_holomush_core_v1_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_core_v1_core_proto_rawDesc), len(file_holomush_core_v1_core_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

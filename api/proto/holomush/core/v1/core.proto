@@ -34,6 +34,9 @@ service CoreService {
 
   // Disconnect ends a session.
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+
+  // GetCommandHistory retrieves command history for a session.
+  rpc GetCommandHistory(GetCommandHistoryRequest) returns (GetCommandHistoryResponse);
 }
 
 message AuthenticateRequest {
@@ -110,4 +113,16 @@ message DisconnectRequest {
 message DisconnectResponse {
   ResponseMeta meta = 1;
   bool success = 2;
+}
+
+message GetCommandHistoryRequest {
+  RequestMeta meta = 1;
+  string session_id = 2;
+}
+
+message GetCommandHistoryResponse {
+  ResponseMeta meta = 1;
+  bool success = 2;
+  repeated string commands = 3;
+  string error = 4;
 }

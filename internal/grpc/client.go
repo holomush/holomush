@@ -128,6 +128,15 @@ func (c *Client) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) 
 	return resp, nil
 }
 
+// GetCommandHistory retrieves command history for a session.
+func (c *Client) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	resp, err := c.client.GetCommandHistory(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetCommandHistory").Wrap(err)
+	}
+	return resp, nil
+}
+
 // CoreClient returns the underlying gRPC CoreClient interface for advanced usage.
 func (c *Client) CoreClient() corev1.CoreServiceClient {
 	return c.client

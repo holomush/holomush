@@ -3558,3 +3558,79 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		assert.Empty(t, events, "no leave event when terminals remain")
 	})
 }
+
+func TestCoreServer_GetCommandHistory(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	ctx := context.Background()
+	store := session.NewMemStore()
+	require.NoError(t, store.Set(ctx, sessionID.String(), &session.Info{
+		ID:          sessionID.String(),
+		CharacterID: charID,
+		LocationID:  locationID,
+		Status:      session.StatusActive,
+		MaxHistory:  100,
+	}))
+
+	// Seed command history
+	require.NoError(t, store.AppendCommand(ctx, sessionID.String(), "look", 100))
+	require.NoError(t, store.AppendCommand(ctx, sessionID.String(), "say hello", 100))
+	require.NoError(t, store.AppendCommand(ctx, sessionID.String(), "go north", 100))
+
+	server := &CoreServer{
+		engine:       core.NewEngine(core.NewMemoryEventStore(), sessions),
+		sessions:     sessions,
+		sessionStore: store,
+	}
+
+	t.Run("returns commands for valid session", func(t *testing.T) {
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "hist-1", Timestamp: timestamppb.Now()},
+			SessionId: sessionID.String(),
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+		assert.Equal(t, []string{"look", "say hello", "go north"}, resp.Commands)
+		assert.Equal(t, "hist-1", resp.Meta.RequestId)
+	})
+
+	t.Run("returns error for missing session_id", func(t *testing.T) {
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta: &corev1.RequestMeta{RequestId: "hist-2"},
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.Success)
+		assert.Equal(t, "session_id is required", resp.Error)
+	})
+
+	t.Run("returns error for unknown session", func(t *testing.T) {
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "hist-3"},
+			SessionId: "nonexistent",
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.Success)
+		assert.Equal(t, "session not found", resp.Error)
+	})
+
+	t.Run("returns empty for session with no history", func(t *testing.T) {
+		emptySessionID := core.NewULID()
+		require.NoError(t, store.Set(ctx, emptySessionID.String(), &session.Info{
+			ID:          emptySessionID.String(),
+			CharacterID: core.NewULID(),
+			Status:      session.StatusActive,
+			MaxHistory:  100,
+		}))
+
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			SessionId: emptySessionID.String(),
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+		assert.Empty(t, resp.Commands)
+	})
+}

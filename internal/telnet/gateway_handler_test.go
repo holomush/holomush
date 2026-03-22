@@ -65,6 +65,10 @@ func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 	return m.discResp, m.discErr
 }
 
+func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	return &corev1.GetCommandHistoryResponse{Meta: &corev1.ResponseMeta{}, Success: true}, nil
+}
+
 // readLines reads exactly n lines from r, stripping \r\n.
 //nolint:unparam // n varies in future tests
 func readLines(t *testing.T, r *bufio.Reader, n int) []string {

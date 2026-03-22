@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticateRequest, AuthenticateResponse, DisconnectRequest, DisconnectResponse, HandleCommandRequest, HandleCommandResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticateRequest, AuthenticateResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -59,6 +59,17 @@ export const CoreService = {
       name: "Disconnect",
       I: DisconnectRequest,
       O: DisconnectResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetCommandHistory retrieves command history for a session.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.GetCommandHistory
+     */
+    getCommandHistory: {
+      name: "GetCommandHistory",
+      I: GetCommandHistoryRequest,
+      O: GetCommandHistoryResponse,
       kind: MethodKind.Unary,
     },
   }

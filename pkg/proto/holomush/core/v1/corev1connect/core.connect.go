@@ -46,6 +46,9 @@ const (
 	CoreServiceSubscribeProcedure = "/holomush.core.v1.CoreService/Subscribe"
 	// CoreServiceDisconnectProcedure is the fully-qualified name of the CoreService's Disconnect RPC.
 	CoreServiceDisconnectProcedure = "/holomush.core.v1.CoreService/Disconnect"
+	// CoreServiceGetCommandHistoryProcedure is the fully-qualified name of the CoreService's
+	// GetCommandHistory RPC.
+	CoreServiceGetCommandHistoryProcedure = "/holomush.core.v1.CoreService/GetCommandHistory"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -58,6 +61,8 @@ type CoreServiceClient interface {
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.SubscribeResponse], error)
 	// Disconnect ends a session.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
+	// GetCommandHistory retrieves command history for a session.
+	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -95,15 +100,22 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("Disconnect")),
 			connect.WithClientOptions(opts...),
 		),
+		getCommandHistory: connect.NewClient[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse](
+			httpClient,
+			baseURL+CoreServiceGetCommandHistoryProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("GetCommandHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // coreServiceClient implements CoreServiceClient.
 type coreServiceClient struct {
-	authenticate  *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
-	handleCommand *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
-	subscribe     *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
-	disconnect    *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	authenticate      *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
+	handleCommand     *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+	subscribe         *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
+	disconnect        *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	getCommandHistory *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
 }
 
 // Authenticate calls holomush.core.v1.CoreService.Authenticate.
@@ -126,6 +138,11 @@ func (c *coreServiceClient) Disconnect(ctx context.Context, req *connect.Request
 	return c.disconnect.CallUnary(ctx, req)
 }
 
+// GetCommandHistory calls holomush.core.v1.CoreService.GetCommandHistory.
+func (c *coreServiceClient) GetCommandHistory(ctx context.Context, req *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error) {
+	return c.getCommandHistory.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// Authenticate validates credentials and creates a session.
@@ -136,6 +153,8 @@ type CoreServiceHandler interface {
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.SubscribeResponse]) error
 	// Disconnect ends a session.
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
+	// GetCommandHistory retrieves command history for a session.
+	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -169,6 +188,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("Disconnect")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceGetCommandHistoryHandler := connect.NewUnaryHandler(
+		CoreServiceGetCommandHistoryProcedure,
+		svc.GetCommandHistory,
+		connect.WithSchema(coreServiceMethods.ByName("GetCommandHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceAuthenticateProcedure:
@@ -179,6 +204,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceSubscribeHandler.ServeHTTP(w, r)
 		case CoreServiceDisconnectProcedure:
 			coreServiceDisconnectHandler.ServeHTTP(w, r)
+		case CoreServiceGetCommandHistoryProcedure:
+			coreServiceGetCommandHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -202,4 +229,8 @@ func (UnimplementedCoreServiceHandler) Subscribe(context.Context, *connect.Reque
 
 func (UnimplementedCoreServiceHandler) Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.Disconnect is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.GetCommandHistory is not implemented"))
 }

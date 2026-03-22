@@ -159,8 +159,40 @@ test.describe('Terminal UI', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  // TODO: command history across reconnect requires a core RPC for
-  // GetCommandHistory — the gateway has no session store (gateway boundary
-  // invariant). Tracked by bead. The within-session history test above
-  // covers the client-side arrow key behavior.
+  test('command history persists across reconnect', async ({ page }) => {
+    await page.goto('/terminal');
+    await page.click('text=Connect as Guest');
+    await expect(page.locator('.terminal-layout')).toBeVisible();
+
+    // Send commands with unique tokens to avoid collision with other tests
+    const token = Date.now();
+    const input = page.locator('textarea');
+    await input.fill(`say first-${token}`);
+    await input.press('Enter');
+    await expect(
+      page.locator('[data-testid="event"]').filter({ hasText: `first-${token}` })
+    ).toBeVisible({ timeout: 10000 });
+    await input.fill(`say second-${token}`);
+    await input.press('Enter');
+    await expect(
+      page.locator('[data-testid="event"]').filter({ hasText: `second-${token}` })
+    ).toBeVisible({ timeout: 10000 });
+
+    // Reload — session persists, history loaded from server via GetCommandHistory RPC
+    await page.reload();
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // Wait for command history to load from server (async RPC in CommandInput $effect)
+    const inputAfter = page.locator('textarea');
+    await expect(inputAfter).toBeVisible();
+    // Poll: ArrowUp should eventually produce the last command once history loads
+    await expect(async () => {
+      await inputAfter.focus();
+      await inputAfter.press('ArrowUp');
+      const val = await inputAfter.inputValue();
+      expect(val).toBe(`say second-${token}`);
+    }).toPass({ timeout: 5000 });
+    await inputAfter.press('ArrowUp');
+    await expect(inputAfter).toHaveValue(`say first-${token}`);
+  });
 });
