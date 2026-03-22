@@ -6,9 +6,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Auth Flows', () => {
   test('landing page shows login and register links', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Register' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Try as Guest' })).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main.getByRole('link', { name: 'Login' })).toBeVisible();
+    await expect(main.getByRole('link', { name: 'Register' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Try as Guest' })).toBeVisible();
   });
 
   test('login page renders with form fields', async ({ page }) => {
@@ -25,7 +26,7 @@ test.describe('Auth Flows', () => {
 
   test('guest login from landing page enters terminal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Try as Guest' }).click();
+    await page.getByRole('main').getByRole('button', { name: 'Try as Guest' }).click();
     await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
   });

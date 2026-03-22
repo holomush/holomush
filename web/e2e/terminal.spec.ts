@@ -10,7 +10,7 @@ import { test, expect, type Page } from '@playwright/test';
  */
 async function connectAsGuest(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Try as Guest' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Try as Guest' }).click();
   await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
   await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
 }
@@ -206,8 +206,7 @@ test.describe('Terminal UI', () => {
     await input.press('Enter');
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
 
-    // Go back to landing and reconnect as a new guest
-    await page.goto('/');
+    // Reconnect as a new guest
     await connectAsGuest(page);
 
     // The textarea should be empty — no draft from the old session
