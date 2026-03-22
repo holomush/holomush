@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,15 @@ type CoreClient interface {
 	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 	GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error)
+	// Auth RPCs (two-phase login)
+	AuthenticatePlayer(ctx context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error)
+	SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error)
+	CreatePlayer(ctx context.Context, req *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error)
+	CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error)
+	ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error)
+	RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error)
+	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
+	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 }
 
 // GatewayHandler manages a single telnet connection, using gRPC to communicate
@@ -52,6 +62,11 @@ type GatewayHandler struct {
 	authed       bool
 	quitting     bool
 	eventCh      chan *corev1.SubscribeResponse
+
+	// Two-phase auth state.
+	playerToken string                   // set after AuthenticatePlayer, cleared after SelectCharacter
+	characters  []*corev1.CharacterSummary // available characters while in selectMode
+	selectMode  bool                     // true when waiting for PLAY/CREATE
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
@@ -165,6 +180,22 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 }
 
 func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.SubscribeResponse {
+	// In selectMode only PLAY, CREATE, and QUIT are accepted.
+	if h.selectMode {
+		lower := strings.ToLower(line)
+		switch {
+		case strings.HasPrefix(lower, "play "):
+			return h.handlePlay(ctx, strings.TrimSpace(line[5:]))
+		case strings.HasPrefix(lower, "create "):
+			return h.handleCreate(ctx, strings.TrimSpace(line[7:]))
+		case lower == "quit":
+			h.handleQuit(ctx)
+		default:
+			h.send("Use PLAY <name|number> or CREATE <name>. Type QUIT to disconnect.")
+		}
+		return nil
+	}
+
 	cmd, arg := core.ParseCommand(line)
 
 	switch cmd {
@@ -202,6 +233,17 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 		return nil
 	}
 
+	// Guest flow: use the legacy Authenticate RPC (unchanged).
+	if strings.EqualFold(username, "guest") {
+		return h.handleConnectGuest(ctx, username, password)
+	}
+
+	// Registered player: two-phase flow.
+	return h.handleConnectPlayer(ctx, username, password)
+}
+
+// handleConnectGuest handles the legacy guest login path.
+func (h *GatewayHandler) handleConnectGuest(ctx context.Context, username, password string) <-chan *corev1.SubscribeResponse {
 	authCtx, authCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer authCancel()
 
@@ -227,8 +269,161 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 
 	h.send(fmt.Sprintf("Welcome, %s!", h.charName))
 
-	// Subscribe to events for this session. The server defaults to the
-	// session's location stream when no explicit streams are provided.
+	return h.subscribeAndEnter(ctx)
+}
+
+// handleConnectPlayer handles the two-phase registered player login.
+func (h *GatewayHandler) handleConnectPlayer(ctx context.Context, username, password string) <-chan *corev1.SubscribeResponse {
+	authCtx, authCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer authCancel()
+
+	resp, err := h.client.AuthenticatePlayer(authCtx, &corev1.AuthenticatePlayerRequest{
+		Username: username,
+		Password: password,
+	})
+	if err != nil {
+		slog.Error("gateway: authenticate player RPC failed", "error", err)
+		h.send("Authentication error. Please try again.")
+		return nil
+	}
+	if !resp.GetSuccess() {
+		h.send("Login failed. Use `connect guest` to play.")
+		return nil
+	}
+
+	h.playerToken = resp.GetPlayerToken()
+	h.characters = resp.GetCharacters()
+	defaultID := resp.GetDefaultCharacterId()
+
+	// Auto-select if exactly one character and it is the default.
+	if len(h.characters) == 1 && defaultID == h.characters[0].GetCharacterId() {
+		return h.selectCharacter(ctx, h.characters[0])
+	}
+
+	// Multiple characters — show list and enter selectMode.
+	h.showCharacterList()
+	h.selectMode = true
+	return nil
+}
+
+// showCharacterList prints the character selection list to the client.
+func (h *GatewayHandler) showCharacterList() {
+	h.send("Your characters:")
+	for i, ch := range h.characters {
+		status := ""
+		if ch.GetHasActiveSession() {
+			status = " [active]"
+		}
+		h.send(fmt.Sprintf("  %d. %s%s", i+1, ch.GetCharacterName(), status))
+	}
+	h.send("Use PLAY <name|number> to select, or CREATE <name> for a new character.")
+}
+
+// handlePlay is called when the client sends PLAY <name|number> in selectMode.
+func (h *GatewayHandler) handlePlay(ctx context.Context, arg string) <-chan *corev1.SubscribeResponse {
+	if arg == "" {
+		h.send("Usage: PLAY <name|number>")
+		return nil
+	}
+
+	ch := h.resolveCharacter(arg)
+	if ch == nil {
+		h.send(fmt.Sprintf("No character matching %q. Use PLAY <name|number>.", arg))
+		return nil
+	}
+
+	return h.selectCharacter(ctx, ch)
+}
+
+// handleCreate is called when the client sends CREATE <name> in selectMode.
+func (h *GatewayHandler) handleCreate(ctx context.Context, name string) <-chan *corev1.SubscribeResponse {
+	if name == "" {
+		h.send("Usage: CREATE <name>")
+		return nil
+	}
+
+	createCtx, createCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer createCancel()
+
+	resp, err := h.client.CreateCharacter(createCtx, &corev1.CreateCharacterRequest{
+		PlayerToken:   h.playerToken,
+		CharacterName: name,
+	})
+	if err != nil {
+		slog.Error("gateway: create character RPC failed", "error", err)
+		h.send("Character creation error. Please try again.")
+		return nil
+	}
+	if !resp.GetSuccess() {
+		h.send("Could not create character: " + resp.GetErrorMessage())
+		return nil
+	}
+
+	// Auto-select the newly created character.
+	newChar := &corev1.CharacterSummary{
+		CharacterId:   resp.GetCharacterId(),
+		CharacterName: resp.GetCharacterName(),
+	}
+	return h.selectCharacter(ctx, newChar)
+}
+
+// resolveCharacter looks up a character by 1-based index or case-insensitive name.
+func (h *GatewayHandler) resolveCharacter(arg string) *corev1.CharacterSummary {
+	// Try numeric index.
+	if idx, err := strconv.Atoi(arg); err == nil {
+		if idx >= 1 && idx <= len(h.characters) {
+			return h.characters[idx-1]
+		}
+		return nil
+	}
+
+	// Try name match (case-insensitive).
+	lower := strings.ToLower(arg)
+	for _, ch := range h.characters {
+		if strings.ToLower(ch.GetCharacterName()) == lower {
+			return ch
+		}
+	}
+	return nil
+}
+
+// selectCharacter calls SelectCharacter RPC and, on success, enters the game.
+func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.CharacterSummary) <-chan *corev1.SubscribeResponse {
+	selCtx, selCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer selCancel()
+
+	resp, err := h.client.SelectCharacter(selCtx, &corev1.SelectCharacterRequest{
+		PlayerToken: h.playerToken,
+		CharacterId: ch.GetCharacterId(),
+	})
+	if err != nil {
+		slog.Error("gateway: select character RPC failed", "error", err)
+		h.send("Character selection error. Please try again.")
+		return nil
+	}
+	if !resp.GetSuccess() {
+		h.send("Could not select character: " + resp.GetErrorMessage())
+		return nil
+	}
+
+	h.sessionID = resp.GetSessionId()
+	h.charName = resp.GetCharacterName()
+	h.authed = true
+	h.selectMode = false
+	h.playerToken = ""
+	h.characters = nil
+
+	if resp.GetReattached() {
+		h.send("Reattaching to existing session...")
+	}
+	h.send(fmt.Sprintf("Welcome, %s!", h.charName))
+
+	return h.subscribeAndEnter(ctx)
+}
+
+// subscribeAndEnter subscribes to events for the current session and returns
+// the event channel. Called after successful auth (both guest and two-phase).
+func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.SubscribeResponse {
 	stream, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId: h.sessionID,
 	})
@@ -366,7 +561,6 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 	}
 	h.quitting = true
 }
-
 
 // drainUntilClosed reads from the event channel until a STREAM_CLOSED
 // control frame arrives or the channel closes or a timeout expires.
