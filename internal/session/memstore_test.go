@@ -243,7 +243,7 @@ func TestMemStore_WatchSession_NotifiesOnDelete(t *testing.T) {
 
 	ev, ok := <-ch
 	require.True(t, ok, "expected event on channel")
-	assert.Equal(t, SessionDestroyed, ev.Type)
+	assert.Equal(t, Destroyed, ev.Type)
 	assert.Equal(t, "Goodbye!", ev.Message)
 }
 

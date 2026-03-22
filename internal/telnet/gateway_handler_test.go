@@ -66,6 +66,7 @@ func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 }
 
 // readLines reads exactly n lines from r, stripping \r\n.
+//nolint:unparam // n varies in future tests
 func readLines(t *testing.T, r *bufio.Reader, n int) []string {
 	t.Helper()
 	lines := make([]string, 0, n)

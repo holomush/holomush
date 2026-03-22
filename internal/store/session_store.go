@@ -21,14 +21,14 @@ import (
 type PostgresSessionStore struct {
 	pool     poolIface
 	mu       sync.Mutex
-	watchers map[string][]chan session.SessionEvent
+	watchers map[string][]chan session.Event
 }
 
 // NewPostgresSessionStore creates a new Postgres-backed session store.
 func NewPostgresSessionStore(pool poolIface) *PostgresSessionStore {
 	return &PostgresSessionStore{
 		pool:     pool,
-		watchers: make(map[string][]chan session.SessionEvent),
+		watchers: make(map[string][]chan session.Event),
 	}
 }
 
@@ -221,11 +221,11 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 }
 
 // Delete removes a session and notifies any active WatchSession watchers.
-func (s *PostgresSessionStore) Delete(ctx context.Context, id string, reason string) error {
+func (s *PostgresSessionStore) Delete(ctx context.Context, id, reason string) error {
 	s.mu.Lock()
 	for _, ch := range s.watchers[id] {
 		select {
-		case ch <- session.SessionEvent{Type: session.SessionDestroyed, Message: reason}:
+		case ch <- session.Event{Type: session.Destroyed, Message: reason}:
 		default:
 		}
 		close(ch)
@@ -240,12 +240,12 @@ func (s *PostgresSessionStore) Delete(ctx context.Context, id string, reason str
 	return nil
 }
 
-// WatchSession returns a channel that receives a SessionEvent when
+// WatchSession returns a channel that receives an Event when
 // the session is destroyed.
-func (s *PostgresSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.SessionEvent, error) {
+func (s *PostgresSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ch := make(chan session.SessionEvent, 1)
+	ch := make(chan session.Event, 1)
 	s.watchers[sessionID] = append(s.watchers[sessionID], ch)
 	return ch, nil
 }

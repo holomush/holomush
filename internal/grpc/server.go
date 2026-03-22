@@ -729,8 +729,9 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			if !ok {
 				return nil // channel closed without event
 			}
-			if ev.Type == session.SessionDestroyed {
+			if ev.Type == session.Destroyed {
 				// Best-effort: send STREAM_CLOSED, ignore send errors.
+//nolint:errcheck // best-effort: client may already be disconnected
 				_ = stream.Send(&corev1.SubscribeResponse{
 					Frame: &corev1.SubscribeResponse_Control{
 						Control: &corev1.ControlFrame{

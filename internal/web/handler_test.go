@@ -365,7 +365,7 @@ func (m *mockSessionStore) Delete(_ context.Context, id string, _ string) error 
 	return fmt.Errorf("mockSessionStore.Delete(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.SessionEvent, error) {
+func (m *mockSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.Event, error) {
 	return nil, fmt.Errorf("mockSessionStore.WatchSession(%q): not implemented", sessionID)
 }
 

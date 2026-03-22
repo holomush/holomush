@@ -17,7 +17,7 @@ type MemStore struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Info
 	connections map[ulid.ULID]*Connection // keyed by connection ID
-	watchers    map[string][]chan SessionEvent
+	watchers    map[string][]chan Event
 }
 
 // NewMemStore creates a new in-memory session store.
@@ -25,7 +25,7 @@ func NewMemStore() *MemStore {
 	return &MemStore{
 		sessions:    make(map[string]*Info),
 		connections: make(map[ulid.ULID]*Connection),
-		watchers:    make(map[string][]chan SessionEvent),
+		watchers:    make(map[string][]chan Event),
 	}
 }
 
@@ -57,13 +57,13 @@ func (m *MemStore) Set(_ context.Context, id string, info *Info) error {
 
 // Delete removes a session and its associated connections.
 // It notifies any active WatchSession watchers with the given reason.
-func (m *MemStore) Delete(_ context.Context, id string, reason string) error {
+func (m *MemStore) Delete(_ context.Context, id, reason string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for _, ch := range m.watchers[id] {
 		select {
-		case ch <- SessionEvent{Type: SessionDestroyed, Message: reason}:
+		case ch <- Event{Type: Destroyed, Message: reason}:
 		default:
 		}
 		close(ch)
@@ -79,12 +79,12 @@ func (m *MemStore) Delete(_ context.Context, id string, reason string) error {
 	return nil
 }
 
-// WatchSession returns a channel that receives a SessionEvent when
+// WatchSession returns a channel that receives an Event when
 // the session is destroyed.
-func (m *MemStore) WatchSession(_ context.Context, sessionID string) (<-chan SessionEvent, error) {
+func (m *MemStore) WatchSession(_ context.Context, sessionID string) (<-chan Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	ch := make(chan SessionEvent, 1)
+	ch := make(chan Event, 1)
 	m.watchers[sessionID] = append(m.watchers[sessionID], ch)
 	return ch, nil
 }

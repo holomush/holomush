@@ -79,17 +79,17 @@ type Connection struct {
 	ConnectedAt time.Time
 }
 
-// SessionEventType enumerates session lifecycle events.
-type SessionEventType int
+// EventType enumerates session lifecycle events.
+type EventType int
 
 const (
-	// SessionDestroyed signals the session was destroyed (quit, kick, reap).
-	SessionDestroyed SessionEventType = iota
+	// Destroyed signals the session was destroyed (quit, kick, reap).
+	Destroyed EventType = iota
 )
 
-// SessionEvent signals a lifecycle change for a watched session.
-type SessionEvent struct {
-	Type    SessionEventType
+// Event signals a lifecycle change for a watched session.
+type Event struct {
+	Type    EventType
 	Message string
 }
 
@@ -106,10 +106,10 @@ type Store interface {
 	// active WatchSession watchers before the session is removed.
 	Delete(ctx context.Context, id string, reason string) error
 
-	// WatchSession returns a channel that receives a SessionEvent when
+	// WatchSession returns a channel that receives an Event when
 	// the session is destroyed. The channel is closed after the event
 	// is delivered.
-	WatchSession(ctx context.Context, sessionID string) (<-chan SessionEvent, error)
+	WatchSession(ctx context.Context, sessionID string) (<-chan Event, error)
 
 	// FindByCharacter returns the active or detached session for a character.
 	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
